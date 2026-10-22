@@ -8,11 +8,14 @@ Consumers import the public class from the package root.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
-from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
+from collections.abc import AsyncIterator, Mapping, Sequence
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from xr_ai_models import ChatMessage, ChatResponse, LLMService
 from xr_ai_routing import (
@@ -25,7 +28,7 @@ from xr_ai_routing import (
     current_turn_context,
     notify_response_started,
 )
-from xr_ai_runtime import Agent, Topic
+from xr_ai_runtime import Agent, AgentRuntime, RuntimeClosedError, Topic
 
 from ._context import (
     _clip,
@@ -43,6 +46,9 @@ from ._context import (
 )
 from ._context_update import ConversationContextUpdate
 from ._topics import make_context_subscriber
+
+if TYPE_CHECKING:
+    from xr_ai_voice import VoiceOutput
 
 _CORE_PROMPT = (Path(__file__).parent / "prompts" / "core.txt").read_text(encoding="utf-8").strip()
 _DEFAULT_DIALOGUE_BUDGET_BYTES = 8_000
@@ -64,6 +70,12 @@ class Conversation(RoutableAgent):
     :param dialogue_budget_bytes: UTF-8 byte budget for completed dialogue rendered into a request.
     :param topic_budget_bytes: UTF-8 byte budget for each topic's context rendered into a request:
         one value for every topic, or a mapping with a value for each configured topic.
+    :param runtime: Runtime used to publish routed answers; configure together with ``output_topic``.
+        Neither is needed by ``stream()``. The application owns runtime startup and shutdown.
+    :param output_topic: Explicit ``VoiceOutput`` topic for routed answers; requires ``xr-ai-conversation[voice]``.
+        The conversation publishes with its routing name as source, the turn ID as response ID,
+        and the originating timestamp. It owns stream framing, finalization, and failure recovery.
+        No default output or query topic is subscribed.
     :param compaction_input_budget_bytes: UTF-8 byte budget for the summary and entries in one
         compaction request; at least half the largest section budget plus 256 bytes.
 
@@ -82,7 +94,20 @@ class Conversation(RoutableAgent):
         dialogue_budget_bytes: int = _DEFAULT_DIALOGUE_BUDGET_BYTES,
         topic_budget_bytes: int | Mapping[str, int] = _DEFAULT_TOPIC_BUDGET_BYTES,
         compaction_input_budget_bytes: int = _DEFAULT_COMPACTION_INPUT_BUDGET_BYTES,
+        runtime: AgentRuntime | None = None,
+        output_topic: Topic[VoiceOutput] | None = None,
     ) -> None:
+        if (runtime is None) != (output_topic is None):
+            raise ValueError("Conversation runtime and output_topic must be configured together")
+        if output_topic is not None:
+            try:
+                from xr_ai_voice import VoiceOutput
+            except ModuleNotFoundError as error:
+                if error.name != "xr_ai_voice":
+                    raise
+                raise ImportError("voice output requires the xr-ai-conversation[voice] extra") from error
+            if output_topic.message_type is not VoiceOutput:
+                raise TypeError("Conversation output_topic must carry VoiceOutput")
         summary_names = self._validate_topic_names("summary_context_topics", summary_context_topics)
         incremental_names = self._validate_topic_names("incremental_context_topics", incremental_context_topics)
         names = (*summary_names, *incremental_names)
@@ -107,6 +132,8 @@ class Conversation(RoutableAgent):
         self._summary_context_topics = tuple(Topic(name, ConversationContextUpdate) for name in summary_names)
         self._incremental_context_topics = tuple(Topic(name, ConversationContextUpdate) for name in incremental_names)
         self._llm = llm
+        self._runtime = runtime
+        self._output_topic = output_topic
         self._context = _ConversationContext()
         self._dialogue_budget_bytes = dialogue_budget_bytes
         self._topic_budgets = topic_budgets
@@ -129,28 +156,85 @@ class Conversation(RoutableAgent):
     async def answer(
         self,
         turn: AgentTurn,
-        *,
-        emit: Callable[[str, str], Awaitable[None]],
     ) -> DestinationResult:
-        """Forward answer chunks with the general conversation source name.
+        """Publish a routed answer directly to the configured voice output topic.
 
-        Cancellation and stream errors propagate after the inner iterator is
-        closed. The first nonblank chunk notifies the active router before
-        delivery; the completed text remains available as routing context.
+        Requires ``runtime`` and ``output_topic``. The first nonblank ready chunk
+        notifies the active router before publication. The first body frame
+        interrupts older output, and a final frame closes a completed or failed
+        partial response. Cancellation and publication failures do not publish
+        further frames. A model failure before any output produces a finite
+        retry message. Failures propagate after closing the model iterator;
+        a successful answer returns the complete text as routing context.
         """
 
+        if self._runtime is None or self._output_topic is None:
+            raise ValueError("Conversation.answer requires configured runtime and output_topic")
+        from xr_ai_voice import VoiceOutput
+
         fragments: list[str] = []
-        response_started = False
         stream = self.stream(turn.query, turn.participant_id, history=turn.history)
+        opened = False
+        publication_failed = False
+        cancelled = False
         try:
             async for text in stream:
+                task = asyncio.current_task()
+                if task is not None and task.cancelling():
+                    raise asyncio.CancelledError
                 fragments.append(text)
-                if not response_started and text.strip():
+                if not opened and not text.strip():
+                    continue
+                if not opened:
                     notify_response_started()
-                    response_started = True
-                await emit(self._routing.name, text)
+                try:
+                    await self._runtime.publish(
+                        self._output_topic,
+                        VoiceOutput(
+                            text=text, response_id=turn.turn_id, final=False,
+                            interrupt=not opened, timestamp_us=turn.timestamp_us,
+                        ),
+                        participant_id=turn.participant_id,
+                        source=self._routing.name,
+                    )
+                except Exception:  # noqa: BLE001 -- failed publication must not be retried by fallback/finalization.
+                    publication_failed = True
+                    raise
+                opened = True
+            task = asyncio.current_task()
+            if task is not None and task.cancelling():
+                raise asyncio.CancelledError
+        except asyncio.CancelledError:
+            cancelled = True
+            raise
+        except Exception:  # noqa: BLE001 -- recover only a model failure before any voice frame was accepted.
+            task = asyncio.current_task()
+            if task is not None and task.cancelling():
+                raise asyncio.CancelledError from None
+            if not opened and not publication_failed:
+                notify_response_started()
+                with suppress(RuntimeClosedError):
+                    await self._runtime.publish(
+                        self._output_topic,
+                        VoiceOutput(
+                            text="I couldn't complete that request. Please try again.", timestamp_us=turn.timestamp_us,
+                        ),
+                        participant_id=turn.participant_id,
+                        source=self._routing.name,
+                    )
+            raise
         finally:
             await stream.aclose()
+            task = asyncio.current_task()
+            cancelled = cancelled or (task is not None and task.cancelling() > 0)
+            if opened and not cancelled and not publication_failed:
+                with suppress(RuntimeClosedError):
+                    await self._runtime.publish(
+                        self._output_topic,
+                        VoiceOutput(response_id=turn.turn_id, timestamp_us=turn.timestamp_us),
+                        participant_id=turn.participant_id,
+                        source=self._routing.name,
+                    )
         return DestinationResult("answer", "".join(fragments).strip())
 
     async def release(self, _participant_id: str) -> None:
@@ -245,6 +329,9 @@ class Conversation(RoutableAgent):
             close = getattr(events, "aclose", None)
             if close is not None:
                 await close()
+        task = asyncio.current_task()
+        if task is not None and task.cancelling():
+            raise asyncio.CancelledError
         answer = "".join(fragments)
         if not answer.strip():
             raise RuntimeError("conversation model returned no answer")

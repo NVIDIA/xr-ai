@@ -17,6 +17,22 @@ before updating the checkout. Start the updated services before restarting
 workers; launchers can reuse a running service whose identity matches even when
 its application code predates the update.
 
+### Routed agents publish their own output
+
+`RoutableAgent.answer()` now accepts only `turn`. Move destination answer
+publication out of the router's `emit` callback and into each agent. Return
+`DestinationResult.text` when completed response context is needed for later
+routing; `routing_aid(participant_id)` remains the explicit source of each
+agent's routing context. Call `notify_response_started()` when the first
+meaningful response is ready to suppress a pending acknowledgment.
+
+Configure `Conversation(runtime=runtime, output_topic=voice_output_topic)` when
+using it as a routed destination, and install `xr-ai-conversation[voice]`.
+Remove any previous `output` callable; Conversation now publishes directly and
+owns stream finalization and failure recovery. Standalone
+`Conversation.stream()` needs neither runtime nor voice output configuration.
+
+
 ### Persistent services after startup failure
 
 Stacks using `launch_mode="persist"` now retain services that had signaled

@@ -13,6 +13,8 @@ from dataclasses import FrozenInstanceError
 import pytest
 import xr_ai_routing as routing_module
 import xr_ai_routing._router as router_module
+from _routing_test_output import emit_destination as _emit_destination
+from _routing_test_output import route as _route
 from xr_ai_models import ChatResponse, DecisionAnswer, DecisionResponse
 from xr_ai_routing import (
     Admission,
@@ -68,8 +70,7 @@ async def test_direct_response_signal_cancels_blocked_ack_without_emitting_text(
     llm = _AcknowledgmentLLM(blocked=True)
 
     class Destination(_AckDestination):
-        async def answer(self, _turn, *, emit):
-            del emit
+        async def answer(self, _turn):
             await llm.started.wait()
             await respond.wait()
             notifications.extend((notify_response_started(), notify_response_started()))
@@ -117,8 +118,7 @@ async def test_response_signal_from_old_answer_cannot_affect_later_turn(ending):
             notifications.append(notify_response_started())
             return await super().admit(turn, focused=focused)
 
-        async def answer(self, turn, *, emit):
-            del emit
+        async def answer(self, turn):
             contexts[turn.query] = contextvars.copy_context()
             entered[turn.query].set()
             try:
@@ -167,11 +167,12 @@ async def test_response_signal_from_old_answer_cannot_affect_later_turn(ending):
 
 
 @pytest.mark.asyncio
-async def test_blank_emit_does_not_signal_and_explicit_signal_survives_first_text():
+async def test_direct_destination_output_keeps_its_source_and_explicit_progress():
     notifications = []
 
     class Destination(_AckDestination):
-        async def answer(self, _turn, *, emit):
+        async def answer(self, _turn):
+            emit = _emit_destination
             await emit("wrong-source", " ")
             notifications.append(notify_response_started())
             await emit("wrong-source", "answer")
@@ -182,7 +183,7 @@ async def test_blank_emit_does_not_signal_and_explicit_signal_survives_first_tex
     output = []
     await _ack_output(router, "request", output)
     assert notifications == [True, False]
-    assert output == [("destination", " "), ("destination", "answer")]
+    assert output == [("wrong-source", " "), ("wrong-source", "answer")]
     assert router._history["alice"] == [AgentExchange("request", "routing context")]
     assert len(router._first_answer_samples["alice"]["destination"]) == 1
 
@@ -199,16 +200,16 @@ async def test_response_notification_is_scoped_to_answer_and_inherited_by_child_
             notifications.append(("inner admission", notify_response_started()))
             return await super().admit(turn, focused=focused)
 
-        async def answer(self, _turn, *, emit):
-            del emit
+        async def answer(self, _turn):
             notifications.append(("inner answer", await asyncio.create_task(child_notification())))
             return DestinationResult()
 
     inner = AgentRouter({"destination": Inner()}, None, default_destination="destination")
 
     class Outer(_AckDestination):
-        async def answer(self, _turn, *, emit):
-            await inner.handle(AgentTurn("alice", "inner", "inner request"), emit=emit)
+        async def answer(self, _turn):
+            emit = _emit_destination
+            await _route(inner, AgentTurn("alice", "inner", "inner request"), emit=emit)
             notifications.append(("outer answer", await asyncio.create_task(child_notification())))
             return DestinationResult()
 
@@ -330,7 +331,8 @@ class _AckDestination:
     async def admit(self, _turn, *, focused):
         return Admission("accept", preamble=self.preamble)
 
-    async def answer(self, turn, *, emit):
+    async def answer(self, turn):
+        emit = _emit_destination
         self.calls.append(turn.query)
         self.answer_started.set()
         if self.blocked:
@@ -348,7 +350,7 @@ async def _ack_output(front_end, query, output, *, participant="alice"):
     async def emit(source, text):
         output.append((source, text))
 
-    return await front_end.handle(
+    return await _route(front_end,
         AgentTurn(participant, f"turn-{participant}-{query}", query),
         emit=emit,
     )
@@ -412,7 +414,8 @@ class _Destination:
         self.calls.append(("admit", turn.query, focused))
         return self.admissions.popleft() if self.admissions else Admission("accept")
 
-    async def answer(self, turn, *, emit):
+    async def answer(self, turn):
+        emit = _emit_destination
         self.calls.append(("answer", turn.query))
         self.answer_turns.append(turn)
         result = self.results.popleft() if self.results else DestinationResult()
@@ -430,7 +433,7 @@ async def _run(front_end, *, participant="alice", query="turn", history=()):
     async def emit(source, text):
         output.append((source, text))
 
-    result = await front_end.handle(
+    result = await _route(front_end,
         AgentTurn(participant, f"turn-{query}", query, history),
         emit=emit,
     )
@@ -742,7 +745,8 @@ async def test_destination_error_after_preamble_propagates_to_turn_caller():
             self.fail_once = True
             self.answer_histories = []
 
-        async def answer(self, turn, *, emit):
+        async def answer(self, turn):
+            emit = _emit_destination
             self.answer_histories.append(turn.history)
             if self.fail_once:
                 self.fail_once = False
@@ -758,10 +762,10 @@ async def test_destination_error_after_preamble_propagates_to_turn_caller():
         output.append((source, text))
 
     with pytest.raises(RuntimeError, match="destination failed"):
-        await front_end.handle(AgentTurn("alice", "turn-1", "Do it."), emit=emit)
+        await _route(front_end, AgentTurn("alice", "turn-1", "Do it."), emit=emit)
     assert output == [("xr", "I will try.")]
 
-    result = await front_end.handle(AgentTurn("alice", "turn-2", "Try again."), emit=emit)
+    result = await _route(front_end, AgentTurn("alice", "turn-2", "Try again."), emit=emit)
     assert result.text == "Recovered."
     assert output == [("xr", "I will try."), ("xr", "Recovered.")]
     assert destination.answer_histories == [(), ()]
@@ -1184,7 +1188,8 @@ async def test_replacement_turn_cancels_old_answer_before_it_can_emit():
             super().__init__("xr")
             self.started = asyncio.Event()
 
-        async def answer(self, turn, *, emit):
+        async def answer(self, turn):
+            emit = _emit_destination
             self.calls.append(("answer", turn.query))
             if turn.query == "Slow request":
                 self.started.set()
@@ -1207,13 +1212,13 @@ async def test_replacement_turn_cancels_old_answer_before_it_can_emit():
         output.append((source, text))
 
     task = asyncio.create_task(
-        front_end.handle(
+        _route(front_end,
             AgentTurn("alice", "turn-1", "Slow request"),
             emit=emit,
         )
     )
     await xr.started.wait()
-    result = await front_end.handle(
+    result = await _route(front_end,
         AgentTurn("alice", "turn-2", "Replacement request"),
         emit=emit,
     )
@@ -1283,12 +1288,12 @@ async def test_admission_release_reroute_receives_history_with_separate_exchange
     observed = {}
 
     class _ReroutedDestination(_Destination):
-        async def answer(self, turn, *, emit):
+        async def answer(self, turn):
             observed["history"] = turn.history
             observed["timestamps"] = _active_history_timestamps.get()
             observed["history_ids"] = _active_history_exchange_ids.get()
             observed["active_id"] = _active_exchange_id.get()
-            return await super().answer(turn, emit=emit)
+            return await super().answer(turn)
 
     releasing = _Destination(
         "scene",
@@ -1308,7 +1313,7 @@ async def test_admission_release_reroute_receives_history_with_separate_exchange
     async def emit(source, text):
         output.append((source, text))
 
-    result = await front_end.handle(
+    result = await _route(front_end,
         AgentTurn("alice", "turn-1", "Continue with the request."),
         emit=emit,
     )
@@ -1397,7 +1402,7 @@ async def test_confident_slow_prediction_acknowledges_then_records_only_real_ans
         output.append((source, text))
         emitted.set()
 
-    task = asyncio.create_task(front_end.handle(AgentTurn("alice", "turn-1", "Explain the request."), emit=emit))
+    task = asyncio.create_task(_route(front_end, AgentTurn("alice", "turn-1", "Explain the request."), emit=emit))
     await asyncio.wait_for(destination.answer_started.wait(), timeout=1)
     await asyncio.wait_for(decisions.called.wait(), timeout=1)
     await asyncio.wait_for(llm.started.wait(), timeout=1)
@@ -1443,7 +1448,7 @@ async def test_uncertain_prediction_uses_delay_fallback_and_admission_preamble_s
         emitted.set()
 
     task = asyncio.create_task(
-        front_end.handle(AgentTurn("alice", "turn-1", "An unfamiliar request."), emit=emit)
+        _route(front_end, AgentTurn("alice", "turn-1", "An unfamiliar request."), emit=emit)
     )
     await asyncio.wait_for(destination.answer_started.wait(), timeout=1)
     await asyncio.wait_for(emitted.wait(), timeout=1)
@@ -1519,7 +1524,7 @@ async def test_answer_does_not_reuse_interrupt_slot_after_ack_was_delivered():
             await acknowledgment_emit_release.wait()
 
     task = asyncio.create_task(
-        front_end.handle(AgentTurn("alice", "turn-1", "Wait on model output."), emit=emit)
+        _route(front_end, AgentTurn("alice", "turn-1", "Wait on model output."), emit=emit)
     )
     await asyncio.wait_for(acknowledgment_emit_started.wait(), timeout=1)
     destination.release_answer.set()
@@ -1557,7 +1562,7 @@ async def test_answer_timing_excludes_committed_acknowledgment_output(monkeypatc
             await acknowledgment_emit_release.wait()
 
     task = asyncio.create_task(
-        front_end.handle(AgentTurn("alice", "turn-1", "Wait on model output."), emit=emit)
+        _route(front_end, AgentTurn("alice", "turn-1", "Wait on model output."), emit=emit)
     )
     await asyncio.wait_for(acknowledgment_emit_started.wait(), timeout=1)
     now = 1.0
@@ -1614,7 +1619,7 @@ async def test_invalid_acknowledgment_uses_neutral_fallback_without_recording_it
             fallback_emitted.set()
 
     task = asyncio.create_task(
-        front_end.handle(AgentTurn("alice", "turn-1", "Continue with the next request."), emit=emit)
+        _route(front_end, AgentTurn("alice", "turn-1", "Continue with the next request."), emit=emit)
     )
     await asyncio.wait_for(destination.answer_started.wait(), timeout=1)
     await asyncio.wait_for(fallback_emitted.wait(), timeout=1)
@@ -1633,7 +1638,8 @@ async def test_invalid_acknowledgment_uses_neutral_fallback_without_recording_it
 @pytest.mark.asyncio
 async def test_completed_focus_and_release_answers_train_first_answer_timing(disposition):
     class Destination(_AckDestination):
-        async def answer(self, _turn, *, emit):
+        async def answer(self, _turn):
+            emit = _emit_destination
             await emit("destination", self.answer_text)
             return DestinationResult(disposition, self.answer_text)
 
@@ -1647,7 +1653,7 @@ async def test_completed_focus_and_release_answers_train_first_answer_timing(dis
     async def emit(_source, _text):
         pass
 
-    result = await front_end.handle(
+    result = await _route(front_end,
         AgentTurn("alice", "turn-1", "Wait on model output."),
         emit=emit,
     )

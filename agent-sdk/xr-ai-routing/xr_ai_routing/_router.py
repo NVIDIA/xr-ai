@@ -74,7 +74,7 @@ class AgentRouter:
     the fallback silence threshold; a confident prediction
     of a slower first answer can start the acknowledgment earlier. The
     destination still starts immediately. Its ``notify_response_started()``
-    notification or first nonblank answer chunk cancels any acknowledgment
+    notification cancels any acknowledgment
     that has not yet been emitted. This suppresses
     pending output, not audio already queued or played by downstream transports.
     The delay and timing examples start after admission and measure when the
@@ -135,7 +135,7 @@ class AgentRouter:
         *,
         emit: Callable[[str, str], Awaitable[None]],
     ) -> DestinationResult:
-        """Route and answer one turn, emitting source-tagged text chunks.
+        """Route one turn while emitting only router-owned control text.
 
         The supplied ``turn.history`` seeds this participant when the router
         has no completed history of its own. Later turns use the router's
@@ -143,9 +143,9 @@ class AgentRouter:
         The participant's current turn is kept separate from that history.
 
         Destination failures propagate to the caller, which owns any turn-level
-        recovery after already-emitted progress text. Cancellation suppresses
-        future chunks from the interrupted turn but cannot retract chunks
-        already delivered to ``emit``.
+        recovery after already-emitted progress text. Destinations own direct
+        output delivery, cancellation, and finalization. The router suppresses
+        interrupted control output but cannot retract already-published output.
 
         The application drives turns and lifecycle operations. Destination and
         output callbacks, including their child tasks, must not recursively
@@ -158,7 +158,7 @@ class AgentRouter:
         cancellation propagates after that operation completes.
 
         :param turn: Current request and optional initial completed history.
-        :param emit: Callback that receives destination-attributed text chunks.
+        :param emit: Callback receiving the route name and router-owned control text; never destination answer chunks.
         :return: The final answer, focus, release, or clarification disposition.
         """
 
@@ -200,6 +200,7 @@ class AgentRouter:
                 turn_id=turn.turn_id,
                 query=turn.query,
                 history=history,
+                timestamp_us=turn.timestamp_us,
             )
             generation = object()
             self._generation[participant_id] = generation
@@ -490,9 +491,7 @@ class AgentRouter:
             acknowledgment_task: asyncio.Task[None] | None = None
             answer_started = asyncio.Event()
             acknowledgment_committed = asyncio.Event()
-            output_lock = asyncio.Lock()
             first_answer_duration: float | None = None
-            first_answer_claimed = False
             response_open = True
             answer_started_at = _monotonic()
             answer_execution_started_at_unix_ns = time.time_ns()
@@ -529,52 +528,20 @@ class AgentRouter:
                     pass
                 return True
 
-            async def emit_answer(source: str, text: str) -> None:
-                nonlocal first_answer_claimed
-                is_first_answer_chunk = bool(text.strip()) and not first_answer_claimed
-                ready_duration = None
-                first_text_ready_at_unix_ns = None
-                if is_first_answer_chunk:
-                    first_answer_claimed = True
-                    ready_duration = _monotonic() - answer_started_at
-                    first_text_ready_at_unix_ns = time.time_ns()
-                    response_started()
-                async with output_lock:
-                    await emit(source, text)
-                    if is_first_answer_chunk:
-                        with nemo_relay.scope.scope(
-                            "conversation.first-meaningful-answer-text",
-                            nemo_relay.ScopeType.Agent,
-                            input={"query": turn.query},
-                            metadata={
-                                "participant_id": turn.participant_id,
-                                "destination": destination_name,
-                                "execution_started_at_unix_ns": answer_execution_started_at_unix_ns,
-                                "first_text_ready_at_unix_ns": first_text_ready_at_unix_ns,
-                                "first_text_emitted_at_unix_ns": time.time_ns(),
-                                "time_to_first_answer_ready_secs": ready_duration,
-                                "acknowledgment_delay_secs": self._acknowledgment_delay_secs,
-                                "prediction_choice": prediction_trace["choice"],
-                                "prediction_probabilities": prediction_trace["probabilities"],
-                            },
-                        ):
-                            pass
-
             async def emit_acknowledgment(source: str, text: str) -> None:
-                async with output_lock:
-                    if not answer_started.is_set():
-                        acknowledgment_committed.set()
-                        with nemo_relay.scope.scope(
-                            "conversation.intent-acknowledgment-emitted",
-                            nemo_relay.ScopeType.Agent,
-                            input={"text": text},
-                            metadata={
-                                "participant_id": turn.participant_id,
-                                "destination": source,
-                                "acknowledgment_delay_secs": self._acknowledgment_delay_secs,
-                            },
-                        ):
-                            await emit(source, text)
+                if not answer_started.is_set():
+                    acknowledgment_committed.set()
+                    with nemo_relay.scope.scope(
+                        "conversation.intent-acknowledgment-emitted",
+                        nemo_relay.ScopeType.Agent,
+                        input={"text": text},
+                        metadata={
+                            "participant_id": turn.participant_id,
+                            "destination": source,
+                            "acknowledgment_delay_secs": self._acknowledgment_delay_secs,
+                        },
+                    ):
+                        await emit(source, text)
 
             if (
                 self._acknowledgment_llm is not None
@@ -608,10 +575,7 @@ class AgentRouter:
                 )
             progress_token = _response_started.set(response_started)
             try:
-                result = await destination.answer(
-                    turn,
-                    emit=partial(_emit_from, emit_answer, destination_name),
-                )
+                result = await destination.answer(turn)
             finally:
                 response_open = False
                 _response_started.reset(progress_token)
@@ -703,6 +667,7 @@ class AgentRouter:
             turn_id=turn.turn_id,
             query=turn.query,
             history=history,
+            timestamp_us=turn.timestamp_us,
         )
 
     def _record_first_answer(self, turn: AgentTurn, destination: str, duration_secs: float) -> None:
@@ -1015,10 +980,6 @@ async def _drain_tasks(tasks: tuple[asyncio.Task, ...]) -> None:
         if failure is not None:
             raise asyncio.CancelledError from failure
         raise asyncio.CancelledError
-
-
-async def _emit_from(emit: _Emit, destination: str, _source: str, text: str) -> None:
-    await emit(destination, text)
 
 
 # isolation boundary: the optional acknowledgment task cannot fail the destination answer.

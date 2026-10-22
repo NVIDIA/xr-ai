@@ -122,7 +122,9 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `xr-ai-models` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
   - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
   - `xr-ai-routing` → [`xr-ai-routing`](agent-sdk/xr-ai-routing/) (local, editable)
-- Optional dependency groups: none
+- Optional dependency groups:
+  - `voice`:
+    - `xr-ai-voice` → [`xr-ai-voice`](agent-sdk/xr-ai-voice/) (local, editable)
 - Commands: none
 
 #### `xr-ai-hub-client` — [`agent-sdk/xr-ai-hub/`](agent-sdk/xr-ai-hub/)

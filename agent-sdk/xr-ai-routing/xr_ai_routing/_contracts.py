@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
@@ -56,6 +55,9 @@ class AgentTurn:
 
     history: tuple[AgentExchange, ...] = ()
     """Newest whole completed exchanges that fit the router's byte budget."""
+
+    timestamp_us: int | None = None
+    """Originating input time in Unix microseconds, when supplied by the caller."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -140,12 +142,10 @@ class RoutableAgent(Protocol):
     async def answer(
         self,
         turn: AgentTurn,
-        *,
-        emit: Callable[[str, str], Awaitable[None]],
     ) -> DestinationResult:
         """Answer a turn after admission or as the configured default fallback.
 
-        Stream chunks and return answer, focus, or release. After selected
+        Deliver output directly and return answer, focus, or release. After selected
         destinations decline through the bounded routing attempts, the front
         end may call an eligible configured default once without ``admit()``,
         unless that default already declined the current turn;
@@ -155,13 +155,13 @@ class RoutableAgent(Protocol):
         Returning ``DestinationResult("release")`` consumes the current request
         after the answer and clears focus; it does not reroute that request.
         Destination exceptions and task cancellation propagate to the caller.
-        Destinations delivering output directly can ignore ``emit`` and call
+        Destinations can call
         ``notify_response_started()`` before their first meaningful output or
         application action to suppress a pending acknowledgment. Completion
         and focus still use the return value, with optional response context
         in ``DestinationResult.text`` for the router's history.
-        The router suppresses later chunks after interruption but cannot
-        retract output already delivered to ``emit``.
+        Destinations own output publication, stream finalization, and failure handling.
+        Cancellation must drain their output and model work before returning.
         A routing ``clarify`` choice with usable scores selects the
         highest-scoring eligible destination through normal admission. Without
         eligible scores the router asks for clarification. After exhausted

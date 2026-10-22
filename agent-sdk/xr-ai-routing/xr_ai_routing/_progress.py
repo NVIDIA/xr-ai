@@ -17,8 +17,8 @@ def notify_response_started() -> bool:
     """Notify the active router that this destination is starting its response.
 
     Call immediately before delivering the first meaningful output or
-    application action, including when output bypasses the router's ``emit``
-    callback. The notification contains no response text, emits no output, and
+    application action. Destinations publish output independently of the router.
+    The notification contains no response text, emits no output, and
     suppresses an optional acknowledgment that has not already been committed
     to its output callback. It also supplies the first-response timing sample
     if this answer completes successfully. Calling it when work merely begins
@@ -32,9 +32,7 @@ def notify_response_started() -> bool:
     router state. Call from the answer's event loop; the destination owns and
     drains its child tasks before returning.
 
-    Existing destinations using ``emit`` need no change: their first nonblank
-    chunk supplies the same notification automatically. Return values and
-    exceptions continue to report completion, focus, and failure separately.
+    Return values and exceptions report completion, focus, and failure separately.
     """
 
     notify = _response_started.get()

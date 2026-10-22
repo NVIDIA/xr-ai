@@ -13,6 +13,8 @@ from unittest.mock import patch
 import pytest
 import xr_ai_conversation as conversation_package
 import xr_ai_conversation._conversation as conversation_module
+from _routing_test_output import emit_destination as _emit_destination
+from _routing_test_output import route as _route
 from xr_ai_conversation import Conversation, ConversationContextUpdate
 from xr_ai_conversation._context import (
     _BackgroundSection,
@@ -32,9 +34,18 @@ from xr_ai_routing import (
     notify_response_started,
 )
 from xr_ai_runtime import AgentRuntime, Topic
+from xr_ai_voice import VoiceOutput
 
 _NOON_US = 1_790_856_000_000_000
 _MINUTE_US = 60_000_000
+_OUTPUT_TOPIC = Topic("conversation-test.output", VoiceOutput)
+
+
+class _ConversationRuntime:
+    async def publish(self, _topic, message, *, source, **_kwargs):
+        if message.text:
+            await _emit_destination(source, message.text)
+
 
 
 def test_conversation_explicitly_implements_routable_agent():
@@ -125,16 +136,16 @@ async def _drain(context, participant="alice"):
 @pytest.mark.asyncio
 async def test_conversation_is_a_normal_front_end_destination_with_completed_history():
     llm = _LLM()
-    conversation = Conversation(llm)  # type: ignore[arg-type]
+    conversation = Conversation(llm, runtime=_ConversationRuntime(), output_topic=_OUTPUT_TOPIC)  # type: ignore[arg-type]
     front_end = AgentRouter({"conversation": conversation}, _Decisions())  # type: ignore[arg-type]
     output = []
 
     async def emit(source, text):
         output.append((source, text))
 
-    first = await front_end.handle(AgentTurn("alice", "turn-1", "Hello."), emit=emit)
+    first = await _route(front_end, AgentTurn("alice", "turn-1", "Hello."), emit=emit)
     await conversation.participant_left("alice")
-    second = await front_end.handle(AgentTurn("alice", "turn-2", "Say that again."), emit=emit)
+    second = await _route(front_end, AgentTurn("alice", "turn-2", "Say that again."), emit=emit)
 
     assert first.text == second.text == "Hello there."
     assert output == [("conversation", "Hello there."), ("conversation", "Hello there.")]
@@ -164,12 +175,11 @@ async def test_conversation_notifies_before_delivery_and_preserves_answer_contex
         events.append((source, text))
 
     monkeypatch.setattr(conversation_module, "notify_response_started", notify)
-    conversation = Conversation(LLM())
+    conversation = Conversation(LLM(), runtime=_ConversationRuntime(), output_topic=_OUTPUT_TOPIC)
     router = AgentRouter({"conversation": conversation}, _Decisions())
-    result = await router.handle(AgentTurn("alice", "turn-1", "Hello."), emit=emit)
+    result = await _route(router, AgentTurn("alice", "turn-1", "Hello."), emit=emit)
 
     assert events == [
-        ("conversation", " "),
         ("started", True),
         ("conversation", "Hello"),
         ("conversation", " there."),
@@ -206,7 +216,8 @@ async def test_conversation_reconciles_recent_front_end_window_after_another_des
         async def admit(self, _turn, *, focused):
             return Admission("accept")
 
-        async def answer(self, _turn, *, emit):
+        async def answer(self, _turn):
+            emit = _emit_destination
             answer = "Added the blue cube to the room."
             await emit("scene", answer)
             return DestinationResult("answer", answer)
@@ -215,7 +226,9 @@ async def test_conversation_reconciles_recent_front_end_window_after_another_des
             pass
 
     llm = _LLM()
-    conversation = Conversation(llm, dialogue_budget_bytes=4_000)  # type: ignore[arg-type]
+    conversation = Conversation(
+        llm, dialogue_budget_bytes=4_000, runtime=_ConversationRuntime(), output_topic=_OUTPUT_TOPIC,
+    )  # type: ignore[arg-type]
     front_end = AgentRouter(
         {"conversation": conversation, "scene": Scene()},
         Decisions(),  # type: ignore[arg-type]
@@ -226,22 +239,22 @@ async def test_conversation_reconciles_recent_front_end_window_after_another_des
         pass
 
     long_opening = "Please keep this opening exchange out of the front-end window. " * 4
-    await front_end.handle(AgentTurn("alice", "turn-1", long_opening), emit=emit)
-    await front_end.handle(AgentTurn("alice", "turn-2", "Add a blue cube."), emit=emit)
-    await front_end.handle(AgentTurn("alice", "turn-3", "What did you add?"), emit=emit)
+    await _route(front_end, AgentTurn("alice", "turn-1", long_opening), emit=emit)
+    await _route(front_end, AgentTurn("alice", "turn-2", "Add a blue cube."), emit=emit)
+    await _route(front_end, AgentTurn("alice", "turn-3", "What did you add?"), emit=emit)
 
     context = llm.messages[1][1].content
     assert "User: Add a blue cube.\nAssistant: “Added the blue cube to the room.”" in context
 
-    await front_end.handle(AgentTurn("alice", "turn-4", "What color was it?"), emit=emit)
+    await _route(front_end, AgentTurn("alice", "turn-4", "What color was it?"), emit=emit)
     repeated_context = llm.messages[2][1].content
     assert repeated_context.count("Added the blue cube to the room.") == 1
     assert "User: Add a blue cube." in repeated_context
 
     # The same scene result can happen again immediately. Causal exchange
     # identity, not timestamp distance or text equality, keeps both turns.
-    await front_end.handle(AgentTurn("alice", "turn-5", "Add a blue cube."), emit=emit)
-    await front_end.handle(AgentTurn("alice", "turn-6", "What did you add this time?"), emit=emit)
+    await _route(front_end, AgentTurn("alice", "turn-5", "Add a blue cube."), emit=emit)
+    await _route(front_end, AgentTurn("alice", "turn-6", "What did you add this time?"), emit=emit)
     latest_context = llm.messages[3][1].content
     assert latest_context.count("Added the blue cube to the room.") == 2
 
@@ -273,7 +286,8 @@ async def test_unknown_seed_does_not_mask_a_later_identical_routed_exchange():
         async def admit(self, _turn, *, focused):
             return Admission("accept")
 
-        async def answer(self, _turn, *, emit):
+        async def answer(self, _turn):
+            emit = _emit_destination
             answer = "Added the blue cube to the room."
             await emit("scene", answer)
             return DestinationResult("answer", answer)
@@ -282,7 +296,9 @@ async def test_unknown_seed_does_not_mask_a_later_identical_routed_exchange():
             pass
 
     llm = _LLM()
-    conversation = Conversation(llm, dialogue_budget_bytes=4_000)  # type: ignore[arg-type]
+    conversation = Conversation(
+        llm, dialogue_budget_bytes=4_000, runtime=_ConversationRuntime(), output_topic=_OUTPUT_TOPIC,
+    )  # type: ignore[arg-type]
     front_end = AgentRouter(
         {"conversation": conversation, "scene": Scene()},
         Decisions(),  # type: ignore[arg-type]
@@ -293,9 +309,9 @@ async def test_unknown_seed_does_not_mask_a_later_identical_routed_exchange():
         pass
 
     seed = AgentExchange("Add a blue cube.", "Added the blue cube to the room.")
-    await front_end.handle(AgentTurn("alice", "turn-1", "What should I do next?", history=(seed,)), emit=emit)
-    await front_end.handle(AgentTurn("alice", "turn-2", "Add a blue cube."), emit=emit)
-    await front_end.handle(AgentTurn("alice", "turn-3", "What did I add?"), emit=emit)
+    await _route(front_end, AgentTurn("alice", "turn-1", "What should I do next?", history=(seed,)), emit=emit)
+    await _route(front_end, AgentTurn("alice", "turn-2", "Add a blue cube."), emit=emit)
+    await _route(front_end, AgentTurn("alice", "turn-3", "What did I add?"), emit=emit)
 
     prompt_context = llm.messages[1][1].content
     assert prompt_context.count("Added the blue cube to the room.") == 2
@@ -328,14 +344,16 @@ async def test_admission_release_text_and_rerouted_answer_keep_separate_history_
         async def admit(self, _turn, *, focused):
             return Admission("release", text="Leaving the scene task.")
 
-        async def answer(self, _turn, *, emit):  # pragma: no cover - release skips answer
+        async def answer(self, _turn):  # pragma: no cover - release skips answer
             raise AssertionError("released destination must not answer")
 
         async def release(self, _participant_id):
             pass
 
     llm = _LLM()
-    conversation = Conversation(llm, dialogue_budget_bytes=4_000)  # type: ignore[arg-type]
+    conversation = Conversation(
+        llm, dialogue_budget_bytes=4_000, runtime=_ConversationRuntime(), output_topic=_OUTPUT_TOPIC,
+    )  # type: ignore[arg-type]
     front_end = AgentRouter(
         {"conversation": conversation, "scene": Scene()},
         Decisions(),  # type: ignore[arg-type]
@@ -345,8 +363,8 @@ async def test_admission_release_text_and_rerouted_answer_keep_separate_history_
     async def emit(_source, _text):
         pass
 
-    await front_end.handle(AgentTurn("alice", "turn-1", "What should happen next?"), emit=emit)
-    await front_end.handle(AgentTurn("alice", "turn-2", "What did we decide?"), emit=emit)
+    await _route(front_end, AgentTurn("alice", "turn-1", "What should happen next?"), emit=emit)
+    await _route(front_end, AgentTurn("alice", "turn-2", "What did we decide?"), emit=emit)
 
     prompt_context = llm.messages[1][1].content
     assert prompt_context.count("Leaving the scene task.") == 1
@@ -635,7 +653,7 @@ async def test_router_history_windows_larger_than_256_exchanges_are_not_replayed
     """Review finding: a window longer than the remembered identities replayed completed dialogue."""
 
     llm = _LLM()
-    conversation = Conversation(llm)  # type: ignore[arg-type]
+    conversation = Conversation(llm, runtime=_ConversationRuntime(), output_topic=_OUTPUT_TOPIC)  # type: ignore[arg-type]
     front_end = AgentRouter(
         {"conversation": conversation},
         _Decisions(),  # type: ignore[arg-type]
@@ -646,7 +664,7 @@ async def test_router_history_windows_larger_than_256_exchanges_are_not_replayed
         pass
 
     for index in range(300):
-        await front_end.handle(AgentTurn("alice", f"turn-{index}", f"Turn {index}."), emit=emit)
+        await _route(front_end, AgentTurn("alice", f"turn-{index}", f"Turn {index}."), emit=emit)
         await _settle(conversation, "alice")
 
     assert len(front_end._history["alice"]) > 256
@@ -1202,14 +1220,14 @@ async def test_cancelled_answer_closes_the_model_stream_and_records_nothing():
             self.stream = events()
             return self.stream
 
-    conversation = Conversation(_BlockingStreamLLM())  # type: ignore[arg-type]
+    class Runtime:
+        async def publish(self, *_args, **_kwargs):
+            first_chunk.set()
+            await asyncio.Event().wait()
 
-    async def emit(_source, _text):
-        # Barge-in arrives while the first chunk is being delivered, with the model stream paused at it.
-        first_chunk.set()
-        await asyncio.Event().wait()
+    conversation = Conversation(_BlockingStreamLLM(), runtime=Runtime(), output_topic=_OUTPUT_TOPIC)  # type: ignore[arg-type]
 
-    answering = asyncio.create_task(conversation.answer(AgentTurn("alice", "turn-1", "Tell me a story."), emit=emit))
+    answering = asyncio.create_task(conversation.answer(AgentTurn("alice", "turn-1", "Tell me a story.")))
     await asyncio.wait_for(first_chunk.wait(), 1)
     answering.cancel()
     with pytest.raises(asyncio.CancelledError):
@@ -1247,3 +1265,88 @@ async def test_every_conflict_case_seeds_the_shape_it_claims():
         finally:
             await conversation.close()
             await runtime.stop()
+
+
+async def test_answer_requires_output_without_starting_model_work():
+    llm = _LLM()
+    conversation = Conversation(llm)
+    with pytest.raises(ValueError, match="configured runtime and output_topic"):
+        await conversation.answer(AgentTurn("alice", "turn", "request"))
+    assert llm.messages == []
+    await conversation.close()
+
+
+def test_voice_output_configuration_requires_runtime_and_exact_topic_model():
+    with pytest.raises(ValueError, match="configured together"):
+        Conversation(_LLM(), runtime=AgentRuntime())
+    with pytest.raises(ValueError, match="configured together"):
+        Conversation(_LLM(), output_topic=_OUTPUT_TOPIC)
+    with pytest.raises(TypeError, match="VoiceOutput"):
+        Conversation(_LLM(), runtime=AgentRuntime(), output_topic=Topic("wrong", ConversationContextUpdate))
+
+
+async def test_output_failure_closes_model_without_recording_partial_context():
+    closed = asyncio.Event()
+
+    class LLM(_LLM):
+        def stream_events(self, _messages, **_kwargs):
+            async def response():
+                try:
+                    yield ChatStreamEvent(kind="text", text="first")
+                    yield ChatStreamEvent(kind="text", text="second")
+                finally:
+                    closed.set()
+
+            return response()
+
+    class Runtime:
+        def __init__(self):
+            self.attempts = 0
+
+        async def publish(self, *_args, **_kwargs):
+            self.attempts += 1
+            raise RuntimeError("output publication failed")
+
+    runtime = Runtime()
+    conversation = Conversation(LLM(), runtime=runtime, output_topic=_OUTPUT_TOPIC)
+    with pytest.raises(RuntimeError, match="output publication failed"):
+        await conversation.answer(AgentTurn("alice", "turn", "request"))
+    assert closed.is_set()
+    assert runtime.attempts == 1
+    assert conversation._context.transcript("alice") == ()
+    await conversation.close()
+
+
+async def test_stream_does_not_commit_context_when_model_suppresses_cancellation_and_returns():
+    started, closed = asyncio.Event(), asyncio.Event()
+    output = []
+
+    class LLM(_LLM):
+        def stream_events(self, _messages, **_kwargs):
+            async def response():
+                try:
+                    yield ChatStreamEvent(kind="text", text="partial")
+                    started.set()
+                    try:
+                        await asyncio.Event().wait()
+                    except asyncio.CancelledError:
+                        return
+                finally:
+                    closed.set()
+
+            return response()
+
+    conversation = Conversation(LLM())
+
+    async def consume():
+        async for text in conversation.stream("request", "alice"):
+            output.append(text)
+
+    consuming = asyncio.create_task(consume())
+    await started.wait()
+    consuming.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await consuming
+    assert closed.is_set() and output == ["partial"]
+    assert conversation._context.transcript("alice") == ()
+    await conversation.close()
