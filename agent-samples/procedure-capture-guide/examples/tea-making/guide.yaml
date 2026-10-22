@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Brewing reference: ../../tea-making-sample/rag-documents/tea-brewing.md
+# Brewing reference: ../../../tea-making-sample/rag-documents/tea-brewing.md
 # Chamomile uses 100 C / 212 F water and a 5–7 minute steep; choose five minutes.
 schema_version: 1
 task:

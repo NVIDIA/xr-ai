@@ -75,6 +75,25 @@ LLM execution intercepts must accept the new codec context parameter. Refer to t
 [Relay 0.10.0 migration notes](https://github.com/NVIDIA/NeMo-Relay/releases/tag/0.10.0)
 for the configuration and intercept changes.
 
+### Procedure guide selection by file path
+
+Procedure guide mode now takes a YAML file path instead of a guide name or ID.
+Run from `agent-samples/procedure-capture-guide/`:
+
+```bash
+uv run main.py --mode guide examples/tea-making/guide.yaml
+```
+
+This replaces `--mode guide "Tea Making"`. The maintained example moved from
+`guides/tea-making.guide.yaml` to `examples/tea-making/guide.yaml`. Keep your own
+guides in the Git-ignored `guides/` directory or pass an absolute path. Relative
+CLI paths resolve from the sample directory. Approval is still required; voice
+commands and capture behavior are unchanged.
+
+The guide configuration no longer uses `guides_dir`. Evaluation manifests now
+select `guide_path` instead of `guides_dir` plus `guide`; unlike CLI paths, relative
+manifest paths resolve from the manifest's directory.
+
 ### Persistent services after startup failure
 
 Stacks using `launch_mode="persist"` now retain services that had signaled
