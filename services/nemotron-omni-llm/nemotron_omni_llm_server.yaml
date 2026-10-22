@@ -33,7 +33,7 @@ model_cache: ../../models
 # The launcher defaults to 384 sequences, or 4 for the NVFP4 model when
 # spark_uma is enabled. Set max_num_seqs to override that hardware-aware default.
 tensor_parallel_size:   1
-max_model_len:          131072
+max_model_len:          32768
 gpu_memory_utilization: 0.85
 # Optional fixed KV-cache size in bytes per GPU. When this is set, vLLM still
 # uses gpu_memory_utilization for its initial free-memory admission check.
@@ -43,7 +43,7 @@ enforce_eager:          false
 # Video input — controls how video frames are sampled and pruned.
 video_pruning_rate: 0.5   # fraction of redundant video tokens to drop
 video_fps:          2     # FPS for video sampling
-video_num_frames:   256   # max frames per video clip
+video_num_frames:   64    # max frames per video clip
 
 # vLLM runtime. If this key is omitted, the wrapper falls back to pip;
 # the checked-in configuration below selects the NGC Docker container.

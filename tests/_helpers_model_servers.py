@@ -14,7 +14,7 @@ _DIRECTORY = TemporaryDirectory(prefix="test-model-configs-")
 def profile_config(basename: str, profile: str) -> Path:
     if basename == "stt_server":
         # Batch STT remains an explicit alternative, not a default sample service.
-        return _ROOT / "utils/xr-ai-model-server-stack/yaml/stt_server.yaml"
+        return _ROOT / "services/stt-server/stt_server.yaml"
     sample = "tea-making-sample" if basename == "embedding_server" else "lab-instrument-monitoring"
     services = ("speaker-stt", "tts", "omni", "embedding") if sample == "tea-making-sample" else (
         "speaker-stt", "tts", "omni", "vlm",

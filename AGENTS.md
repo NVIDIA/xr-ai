@@ -92,9 +92,8 @@ Applications that are not repository samples use the same internal layout
 under `apps/<kebab-name>/`. Repository dependency, lint, SPDX, sample catalog,
 and test discovery exclude that top-level directory.
 
-- Model-server convenience stacks use shared YAML under
-  `utils/xr-ai-model-server-stack/yaml/` and sample-owned overrides under
-  `model-servers/yaml/`. Stop the current stack before changing its settings,
+- Model-server convenience stacks start from each service's own YAML under
+  `services/` and apply sample-owned overrides under `model-servers/yaml/`. Stop the current stack before changing its settings,
   switching samples, or updating the checkout; these launchers need no launch
   history or cross-version reconciliation. Refer to
   [Model-server workflow](docs/source/guides/customizing-model-servers.md).

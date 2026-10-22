@@ -13,7 +13,7 @@ from xr_ai_launcher import Process, detect_gpu_config, require_credentials, run_
 from xr_ai_logging import setup_logging
 from xr_ai_vllm import stop_persistent_servers
 
-_COMMON = Path(__file__).resolve().parents[1] / "yaml"
+_SERVICES_DIR = Path(__file__).resolve().parents[3] / "services"
 # The explicit order leaves Omni's compilation ahead of Cosmos initialization.
 _SERVICES = {
     "speaker-stt": ("speaker-stt", "speaker_stt", "speaker_stt"),
@@ -49,7 +49,8 @@ def _configs(base: Path, services: tuple[str, ...], profile: str | None) -> dict
     for service in services:
         if service not in _SERVICES:
             raise ValueError(f"unknown model service {service!r}")
-        common_path = _COMMON / f"{_SERVICES[service][2]}.yaml"
+        project, _, basename = _SERVICES[service]
+        common_path = _SERVICES_DIR / project / f"{basename}.yaml"
         config = _read_yaml(common_path)
         override = overrides.get(service, {})
         if not isinstance(override, dict):
@@ -106,7 +107,7 @@ def run_model_stack(
     ``services`` selects from ``speaker-stt``, ``stt``, ``tts``, ``omni``, ``vlm``, and
     ``embedding``. The selected ``base/yaml/<gpu_profile>.yaml`` must contain
     exactly those server mappings. Each mapping overrides the corresponding
-    shared server YAML. Launch order is speaker ASR, batch STT, TTS, Omni, VLM, then embedding,
+    service's own YAML in ``services/``. Launch order is speaker ASR, batch STT, TTS, Omni, VLM, then embedding,
     omitting unselected services.
 
     ``gpu_profile`` selects a checked-in profile by filename stem; ``None``
