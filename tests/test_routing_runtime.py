@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections import deque
 from contextlib import asynccontextmanager
 
@@ -62,6 +63,14 @@ class _Status:
             await self.changed.wait()
 
 
+async def _settled(router):
+    """Wait until the router owns no turn, including its done-callback bookkeeping."""
+
+    while router._tasks:
+        await asyncio.wait(tuple(router._tasks.values()))
+        await asyncio.sleep(0)
+
+
 class _Destination:
     def __init__(self, runtime, name="conversation"):
         self.runtime = runtime
@@ -78,6 +87,7 @@ class _Destination:
         self.block = False
         self.cleanup_entered = asyncio.Event()
         self.cleanup_release = None
+        self.release_failures = 0
 
     def routing_aid(self, participant_id):
         self.aids.append((participant_id, self.description))
@@ -111,6 +121,9 @@ class _Destination:
         self.cleanup_entered.set()
         if self.cleanup_release is not None:
             await self.cleanup_release.wait()
+        if self.release_failures:
+            self.release_failures -= 1
+            raise ValueError("release failed")
 
 
 class _Decisions:
@@ -177,9 +190,9 @@ async def test_runtime_turn_failure_publishes_at_most_one_failure_message(starte
                 await started()
             raise RuntimeError("destination failed")
 
-    async with _app(lambda runtime: {"conversation": Failing(runtime)}) as (runtime, _router, _, output, status):
+    async with _app(lambda runtime: {"conversation": Failing(runtime)}) as (runtime, router, _, output, _status):
         await _query(runtime, "request")
-        await status.idle()
+        await _settled(router)
         texts = [value.text for value, _ in output.items]
         assert texts == ([] if started_first else ["I couldn't complete that request. Please try again."])
 
@@ -563,6 +576,21 @@ def test_runtime_topic_models_and_incomplete_configuration_rejected():
         AgentRouter(
             {"conversation": destination}, None, query_topic=Topic("wrong-query", VoiceOutput), output_topic=OUTPUT
         )
+    with pytest.raises(TypeError, match="VoiceOutput"):
+        AgentRouter(
+            {"conversation": destination}, None, query_topic=QUERIES, output_topic=Topic("wrong-output", UserQuery)
+        )
+    with pytest.raises(ValueError, match="distinct"):
+        AgentRouter(
+            {"conversation": destination}, None, query_topic=QUERIES, output_topic=Topic(QUERIES.name, VoiceOutput)
+        )
+    with pytest.raises(ValueError, match="participant_left_topic requires participant_joined_topic"):
+        AgentRouter(
+            {"conversation": destination}, None, query_topic=QUERIES, output_topic=OUTPUT, participant_left_topic=LEFT
+        )
+    for hook in ("initialize_participant", "cleanup_participant", "set_status"):
+        with pytest.raises(ValueError, match="runtime options"):
+            AgentRouter({"conversation": destination}, None, output=_control, **{hook: _control})
 
 
 async def test_no_runtime_topics_are_subscribed_without_explicit_configuration():
@@ -726,3 +754,84 @@ async def test_events_delivered_during_stop_cannot_reinitialize_after_cleanup(to
         assert len(destinations["conversation"].turns) == 1
         await runtime.publish(JOINED, VoiceParticipantJoined(), participant_id="alice")
         assert initialized == ["alice", "alice"]
+
+
+async def test_participant_left_during_successful_stop_waits_for_it():
+    async with _app() as (runtime, router, destinations, _output, status):
+        destination = destinations["conversation"]
+        await _query(runtime, "first")
+        await status.idle()
+        destination.cleanup_release = asyncio.Event()
+        stopping = asyncio.create_task(router.stop())
+        await destination.cleanup_entered.wait()
+        left = asyncio.create_task(runtime.publish(LEFT, VoiceParticipantLeft(), participant_id="alice"))
+        checkpoint = asyncio.Event()
+        asyncio.get_running_loop().call_soon(checkpoint.set)
+        await checkpoint.wait()
+        destination.cleanup_release.set()
+        await asyncio.gather(stopping, left)
+
+
+async def test_rejoin_retries_failed_departure_and_readmits_participant():
+    async with _app() as (runtime, router, destinations, _output, status):
+        destination = destinations["conversation"]
+        await _query(runtime, "first")
+        await status.idle()
+        destination.release_failures = 1
+        with pytest.raises(BaseExceptionGroup):
+            await runtime.publish(LEFT, VoiceParticipantLeft(), participant_id="alice")
+        await runtime.publish(JOINED, VoiceParticipantJoined(), participant_id="alice")
+        await _query(runtime, "after rejoin")
+        await _settled(router)
+        assert [turn.query for turn in destination.turns] == ["first", "after rejoin"]
+        assert destination.departures == ["alice", "alice"]
+
+
+async def test_status_failure_is_logged_and_does_not_fail_the_turn(caplog):
+    class FailingStatus:
+        def __init__(self):
+            self.items = []
+
+        async def __call__(self, status, participant):
+            self.items.append(status)
+            raise RuntimeError("status endpoint unavailable")
+
+    status = FailingStatus()
+    runtime = AgentRuntime()
+    output = runtime.register("output", _Output())
+    router = runtime.register(
+        "router",
+        AgentRouter(
+            {"conversation": _Destination(runtime)},
+            None,
+            query_topic=QUERIES,
+            output_topic=OUTPUT,
+            set_status=status,
+        ),
+    )
+    async with runtime:
+        try:
+            with caplog.at_level(logging.ERROR, logger="xr_ai_routing._router"):
+                await _query(runtime, "request")
+                await _settled(router)
+            assert [value.text for value, _ in output.items] == ["conversation: request"]
+            assert status.items == ["processing", "idle"]
+            assert sum("set_status" in record.getMessage() for record in caplog.records) == 2
+        finally:
+            await router.stop()
+
+
+async def test_runtime_logs_failed_turns_and_dropped_queries(caplog):
+    class Failing(_Destination):
+        async def answer(self, turn, *, started):
+            raise RuntimeError("destination failed")
+
+    async with _app(lambda runtime: {"conversation": Failing(runtime)}) as (runtime, router, *_):
+        with caplog.at_level(logging.WARNING, logger="xr_ai_routing._router"):
+            await _query(runtime, "fails")
+            await _settled(router)
+            await runtime.publish(LEFT, VoiceParticipantLeft(), participant_id="alice")
+            await _query(runtime, "dropped")
+        messages = [record.getMessage() for record in caplog.records]
+        assert any("runtime routing failed" in message for message in messages)
+        assert any("runtime query dropped" in message and "participant has left" in message for message in messages)

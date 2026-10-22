@@ -22,7 +22,7 @@ except ModuleNotFoundError as error:
         raise
     raise ImportError("runtime routing requires the xr-ai-routing[voice] extra") from error
 
-from ._contracts import AgentTurn, DestinationResult
+from ._contracts import AgentTurn
 
 if TYPE_CHECKING:
     from ._router import AgentRouter
@@ -110,20 +110,6 @@ class _RuntimeRouting:
             metadata={"destination": source},
         ):
             await state.context.publish(self._output_topic, VoiceOutput(text=text, timestamp_us=turn.timestamp_us))
-
-    async def run(
-        self,
-        turn: AgentTurn,
-        state: _RuntimeTurn,
-        route: Callable[[], Awaitable[DestinationResult]],
-    ) -> DestinationResult:
-        try:
-            if self._owner._set_status is not None:
-                await self._owner._call_hook(self._owner._set_status, "processing", turn.participant_id)
-            return await route()
-        finally:
-            if self._owner._set_status is not None:
-                await self._owner._call_hook(self._owner._set_status, "idle", turn.participant_id)
 
 
 def _participant(ctx: RuntimeContext) -> str:
