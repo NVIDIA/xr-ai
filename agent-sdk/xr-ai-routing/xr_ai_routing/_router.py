@@ -295,9 +295,7 @@ class AgentRouter:
             if not task.done():
                 if self._tasks.get(turn.participant_id) is task:
                     self._generation.pop(turn.participant_id, None)
-                if not task.cancelling():
-                    task.cancel()
-                await _drain_tasks((task,))
+                await _cancel_and_drain((task,))
 
     async def _submit(
         self,
@@ -487,9 +485,7 @@ class AgentRouter:
             if current is None or not current.cancelling():
                 # Departure, stop, or a newer turn canceled it; the next turn initializes again.
                 return
-            if not task.done():
-                task.cancel()
-                await _drain_tasks((task,))
+            await _cancel_and_drain((task,))
             raise
 
     def _discard_join(self, participant_id: str, task: asyncio.Task[None]) -> None:
@@ -534,12 +530,9 @@ class AgentRouter:
                 for task in (self._tasks.get(participant_id), self._join_tasks.get(participant_id))
                 if task is not None
             )
-        for task in tasks:
-            if not task.done() and not task.cancelling():
-                task.cancel()
         if tasks:
             try:
-                await _drain_tasks(tasks)
+                await _cancel_and_drain(tasks)
             finally:
                 for identity, task in tuple(self._tasks.items()):
                     if task in tasks and task.done():
@@ -818,7 +811,7 @@ class AgentRouter:
                     and not acknowledgment_task.done()
                     and not acknowledgment_committed.is_set()
                 ):
-                    acknowledgment_task.cancel()
+                    _cancel_once(acknowledgment_task)
                 with nemo_relay.scope.scope(
                     "conversation.response-started",
                     nemo_relay.ScopeType.Agent,
@@ -891,8 +884,7 @@ class AgentRouter:
                 response_open = False
                 if acknowledgment_task is not None:
                     if not acknowledgment_committed.is_set():
-                        if not acknowledgment_task.cancelling():
-                            acknowledgment_task.cancel()
+                        _cancel_once(acknowledgment_task)
                     await _drain_tasks((acknowledgment_task,))
             if self._generation.get(turn.participant_id) is not generation:
                 raise asyncio.CancelledError()
@@ -1023,8 +1015,7 @@ class AgentRouter:
                 await delay_task
             if answer_started.is_set():
                 return
-            if not prediction_task.done() and not prediction_task.cancelling():
-                prediction_task.cancel()
+            _cancel_once(prediction_task)
             messages = (
                 ChatMessage(role="system", content=_ACKNOWLEDGMENT_PROMPT),
                 ChatMessage(
@@ -1073,8 +1064,7 @@ class AgentRouter:
                 await emit(_ACKNOWLEDGMENT_FALLBACK + " ")
         finally:
             for task in (delay_task, prediction_task):
-                if not task.done() and not task.cancelling():
-                    task.cancel()
+                _cancel_once(task)
             drain = asyncio.gather(delay_task, prediction_task, return_exceptions=True)
             owner_cancelled = False
             while True:
@@ -1269,6 +1259,21 @@ class AgentRouter:
                 },
             )
         return selected
+
+
+def _cancel_once(task: asyncio.Task) -> None:
+    """Request cancellation unless one is already pending; a second request would interrupt the task's cleanup."""
+
+    if not task.done() and not task.cancelling():
+        task.cancel()
+
+
+async def _cancel_and_drain(tasks: tuple[asyncio.Task, ...]) -> None:
+    """Cancel owned tasks at most once and wait for their cleanup to finish."""
+
+    for task in tasks:
+        _cancel_once(task)
+    await _drain_tasks(tasks)
 
 
 async def _drain_tasks(tasks: tuple[asyncio.Task, ...]) -> None:

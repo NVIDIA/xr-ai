@@ -873,3 +873,34 @@ async def test_replacement_query_cancels_an_initializing_turn():
         assert calls == ["alice", "alice"]
         assert [turn.query for turn in destinations["conversation"].turns] == ["replacement"]
 
+
+async def test_canceled_join_waiter_does_not_interrupt_initializer_cleanup():
+    entered, cleanup_entered, cleanup_release = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    cleanup_finished = asyncio.Event()
+
+    async def initialize(_participant):
+        entered.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cleanup_entered.set()
+            await cleanup_release.wait()
+            cleanup_finished.set()
+
+    async with _app(initialize_participant=initialize) as (runtime, router, *_):
+        joined = asyncio.create_task(runtime.publish(JOINED, VoiceParticipantJoined(), participant_id="alice"))
+        await asyncio.wait_for(entered.wait(), 1)
+        initializing = router._join_tasks["alice"]
+        interrupting = asyncio.create_task(router.interrupt("alice"))
+        await asyncio.wait_for(cleanup_entered.wait(), 1)
+        joined.cancel()
+        for _ in range(5):
+            await asyncio.sleep(0)
+        assert not initializing.done() and not interrupting.done()
+        assert router._join_tasks == {"alice": initializing}
+        cleanup_release.set()
+        await asyncio.wait_for(interrupting, 1)
+        await asyncio.gather(joined, return_exceptions=True)
+        assert cleanup_finished.is_set()
+        assert router._join_tasks == {}
+
