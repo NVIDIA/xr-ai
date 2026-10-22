@@ -497,7 +497,7 @@ uv<span class="w"> </span>run<span class="w"> </span>clef_flash_model
 </pre></div>
 </div>
 <p>The sample starts <code class="docutils literal notranslate"><span class="pre">services/clef-server</span></code> persistently on <code class="docutils literal notranslate"><span class="pre">127.0.0.1:8120</span></code>.
-Its <code class="docutils literal notranslate"><span class="pre">yaml/clef_server.yaml</span></code> pins model revision
+Its <code class="docutils literal notranslate"><span class="pre">services/clef-server/clef_server.yaml</span></code> pins model revision
 <code class="docutils literal notranslate"><span class="pre">17f0b0ad64efb65d273590632833508766b2aae6</span></code> from the
 <code class="docutils literal notranslate"><span class="pre">Cloudflare/clef-flash</span></code> model repository. The service resolves the configured
 pinned snapshot from the repository’s ignored <code class="docutils literal notranslate"><span class="pre">models/</span></code> cache first and passes
@@ -524,7 +524,9 @@ limit receive HTTP 422; increase <code class="docutils literal notranslate"><spa
 <section id="updating-a-running-service">
 <span id="clef-service-updates"></span><h2>Updating a running service<a class="headerlink" href="#updating-a-running-service" title="Link to this heading">#</a></h2>
 <p>Before updating the checkout or changing server configuration, stop the service
-from the old checkout in <code class="docutils literal notranslate"><span class="pre">model-server-samples/clef-flash/</span></code>:</p>
+from the old checkout in <code class="docutils literal notranslate"><span class="pre">model-server-samples/clef-flash/</span></code>. The service
+configuration now lives in <code class="docutils literal notranslate"><span class="pre">services/clef-server/clef_server.yaml</span></code>; copy any edits
+you made to the sample’s former <code class="docutils literal notranslate"><span class="pre">yaml/clef_server.yaml</span></code> there:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">export</span><span class="w"> </span><span class="nv">UV_CONFIG_FILE</span><span class="o">=</span>../../uv.toml
 uv<span class="w"> </span>run<span class="w"> </span>clef_flash_model<span class="w"> </span>--stop
 </pre></div>

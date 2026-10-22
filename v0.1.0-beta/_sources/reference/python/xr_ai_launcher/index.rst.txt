@@ -65,6 +65,8 @@ Functions
    xr_ai_launcher.detect_gpu_config
    xr_ai_launcher.load_deployment_profile
    xr_ai_launcher.load_model_deployment
+   xr_ai_launcher.has_ownership_marker
+   xr_ai_launcher.pid_on_port_checked
    xr_ai_launcher.ManagedProcess
    xr_ai_launcher.run_stack
 
@@ -194,6 +196,20 @@ Package Contents
 .. py:function:: load_model_deployment(worker_config: pathlib.Path) -> ModelDeployment
 
    Load the JSON profile selected by a YAML worker configuration.
+
+
+.. py:function:: has_ownership_marker(pid: int, port: int, prefix: str) -> bool
+
+   Return whether *pid* was started with ``<prefix>_MANAGED=1`` and ``<prefix>_PORT=<port>``.
+
+
+.. py:function:: pid_on_port_checked(port: int) -> tuple[int | None, bool, bool]
+
+   Return the listening PID, inspection status, and listener presence.
+
+   Tries `ss` first (always present on modern Linux), falls back to `lsof`.
+   A listener without a visible PID is still reported so callers fail closed
+   instead of mistaking an uninspectable listener for an unused port.
 
 
 .. py:function:: ManagedProcess(name: str, cmd: list[str], cwd: pathlib.Path | None = None, env: dict[str, str] | None = None)

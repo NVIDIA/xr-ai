@@ -526,6 +526,12 @@ do not pull in the dependency chain of the processes they manage.</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_launcher.load_model_deployment" title="xr_ai_launcher.load_model_deployment"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_model_deployment</span></code></a>(→ ModelDeployment)</p></td>
 <td><p>Load the JSON profile selected by a YAML worker configuration.</p></td>
 </tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_launcher.has_ownership_marker" title="xr_ai_launcher.has_ownership_marker"><code class="xref py py-obj docutils literal notranslate"><span class="pre">has_ownership_marker</span></code></a>(→ bool)</p></td>
+<td><p>Return whether <em>pid</em> was started with <code class="docutils literal notranslate"><span class="pre">&lt;prefix&gt;_MANAGED=1</span></code> and <code class="docutils literal notranslate"><span class="pre">&lt;prefix&gt;_PORT=&lt;port&gt;</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_launcher.pid_on_port_checked" title="xr_ai_launcher.pid_on_port_checked"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pid_on_port_checked</span></code></a>(→ tuple[int | None, bool, bool])</p></td>
+<td><p>Return the listening PID, inspection status, and listener presence.</p></td>
+</tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_launcher.ManagedProcess" title="xr_ai_launcher.ManagedProcess"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ManagedProcess</span></code></a>(name, cmd[, cwd, env])</p></td>
 <td><p>Run <em>cmd</em> as a subprocess and terminate it cleanly when the context exits.</p></td>
 </tr>
@@ -676,6 +682,21 @@ replaces named config selection. It deliberately has no fallback.</p>
 <dt class="sig sig-object py" id="xr_ai_launcher.load_model_deployment">
 <span class="sig-prename descclassname"><span class="pre">xr_ai_launcher.</span></span><span class="sig-name descname"><span class="pre">load_model_deployment</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">worker_config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">pathlib.Path</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#xr_ai_launcher.ModelDeployment" title="xr_ai_launcher.ModelDeployment"><span class="pre">ModelDeployment</span></a></span></span><a class="headerlink" href="#xr_ai_launcher.load_model_deployment" title="Link to this definition">#</a></dt>
 <dd><p>Load the JSON profile selected by a YAML worker configuration.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="xr_ai_launcher.has_ownership_marker">
+<span class="sig-prename descclassname"><span class="pre">xr_ai_launcher.</span></span><span class="sig-name descname"><span class="pre">has_ownership_marker</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pid</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">port</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#xr_ai_launcher.has_ownership_marker" title="Link to this definition">#</a></dt>
+<dd><p>Return whether <em>pid</em> was started with <code class="docutils literal notranslate"><span class="pre">&lt;prefix&gt;_MANAGED=1</span></code> and <code class="docutils literal notranslate"><span class="pre">&lt;prefix&gt;_PORT=&lt;port&gt;</span></code>.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="xr_ai_launcher.pid_on_port_checked">
+<span class="sig-prename descclassname"><span class="pre">xr_ai_launcher.</span></span><span class="sig-name descname"><span class="pre">pid_on_port_checked</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">port</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">bool</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">bool</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#xr_ai_launcher.pid_on_port_checked" title="Link to this definition">#</a></dt>
+<dd><p>Return the listening PID, inspection status, and listener presence.</p>
+<p>Tries <cite>ss</cite> first (always present on modern Linux), falls back to <cite>lsof</cite>.
+A listener without a visible PID is still reported so callers fail closed
+instead of mistaking an uninspectable listener for an unused port.</p>
 </dd></dl>
 
 <dl class="py function">
@@ -931,6 +952,8 @@ and <code class="docutils literal notranslate"><span class="pre">Process.config<
 </li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.load_deployment_profile"><code class="docutils literal notranslate"><span class="pre">load_deployment_profile()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.load_model_deployment"><code class="docutils literal notranslate"><span class="pre">load_model_deployment()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.has_ownership_marker"><code class="docutils literal notranslate"><span class="pre">has_ownership_marker()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.pid_on_port_checked"><code class="docutils literal notranslate"><span class="pre">pid_on_port_checked()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.ManagedProcess"><code class="docutils literal notranslate"><span class="pre">ManagedProcess()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.Parallel"><code class="docutils literal notranslate"><span class="pre">Parallel</span></code></a><ul class="nav section-nav flex-column">
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.Parallel.processes"><code class="docutils literal notranslate"><span class="pre">processes</span></code></a></li>

@@ -501,8 +501,14 @@ docker path stays light even when pip vllm is not installed.</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_vllm.gpu_compute_major" title="xr_ai_vllm.gpu_compute_major"><code class="xref py py-obj docutils literal notranslate"><span class="pre">gpu_compute_major</span></code></a>(→ int)</p></td>
 <td><p>Return the first selected GPU's compute-capability major, or 0 if unknown.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_vllm.load_config" title="xr_ai_vllm.load_config"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_config</span></code></a>(→ tuple[dict, pathlib.Path, ...)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_vllm.gpu_is_dgx_spark" title="xr_ai_vllm.gpu_is_dgx_spark"><code class="xref py py-obj docutils literal notranslate"><span class="pre">gpu_is_dgx_spark</span></code></a>(→ bool)</p></td>
+<td><p>Return whether the selected GPU is the GB10 in a DGX Spark.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_vllm.load_config" title="xr_ai_vllm.load_config"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_config</span></code></a>(→ tuple[dict, pathlib.Path, ...)</p></td>
 <td><p>Parse <code class="docutils literal notranslate"><span class="pre">--config</span></code>/<code class="docutils literal notranslate"><span class="pre">--ready-file</span></code> and load the YAML config.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_vllm.parse_config_bool" title="xr_ai_vllm.parse_config_bool"><code class="xref py py-obj docutils literal notranslate"><span class="pre">parse_config_bool</span></code></a>(→ bool)</p></td>
+<td><p>Parse a YAML boolean without treating every non-empty string as true.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_vllm.resolve_model_cache" title="xr_ai_vllm.resolve_model_cache"><code class="xref py py-obj docutils literal notranslate"><span class="pre">resolve_model_cache</span></code></a>(→ pathlib.Path)</p></td>
 <td><p>Resolve <code class="docutils literal notranslate"><span class="pre">model_cache</span></code> (relative to the YAML dir) and ensure it exists.</p></td>
@@ -531,6 +537,12 @@ before calling. Logs a warning on failure and falls back to 0.</p>
 </dd></dl>
 
 <dl class="py function">
+<dt class="sig sig-object py" id="xr_ai_vllm.gpu_is_dgx_spark">
+<span class="sig-prename descclassname"><span class="pre">xr_ai_vllm.</span></span><span class="sig-name descname"><span class="pre">gpu_is_dgx_spark</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#xr_ai_vllm.gpu_is_dgx_spark" title="Link to this definition">#</a></dt>
+<dd><p>Return whether the selected GPU is the GB10 in a DGX Spark.</p>
+</dd></dl>
+
+<dl class="py function">
 <dt class="sig sig-object py" id="xr_ai_vllm.load_config">
 <span class="sig-prename descclassname"><span class="pre">xr_ai_vllm.</span></span><span class="sig-name descname"><span class="pre">load_config</span></span><span class="sig-paren">(</span>
 
@@ -544,6 +556,12 @@ before calling. Logs a warning on failure and falls back to 0.</p>
 launcher’s piped stdout. Returns <code class="docutils literal notranslate"><span class="pre">(cfg,</span> <span class="pre">yaml_dir,</span> <span class="pre">ready_file)</span></code>;
 <code class="docutils literal notranslate"><span class="pre">yaml_dir</span></code> is the config’s directory (cwd when no config is given),
 used as the base for relative paths like <code class="docutils literal notranslate"><span class="pre">model_cache</span></code>.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="xr_ai_vllm.parse_config_bool">
+<span class="sig-prename descclassname"><span class="pre">xr_ai_vllm.</span></span><span class="sig-name descname"><span class="pre">parse_config_bool</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">object</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#xr_ai_vllm.parse_config_bool" title="Link to this definition">#</a></dt>
+<dd><p>Parse a YAML boolean without treating every non-empty string as true.</p>
 </dd></dl>
 
 <dl class="py function">
@@ -719,7 +737,9 @@ identified as xr-ai services fail closed without sending a signal.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#functions">Functions</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#package-contents">Package Contents</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_vllm.gpu_compute_major"><code class="docutils literal notranslate"><span class="pre">gpu_compute_major()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_vllm.gpu_is_dgx_spark"><code class="docutils literal notranslate"><span class="pre">gpu_is_dgx_spark()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_vllm.load_config"><code class="docutils literal notranslate"><span class="pre">load_config()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_vllm.parse_config_bool"><code class="docutils literal notranslate"><span class="pre">parse_config_bool()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_vllm.resolve_model_cache"><code class="docutils literal notranslate"><span class="pre">resolve_model_cache()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_vllm.setup_hf_env"><code class="docutils literal notranslate"><span class="pre">setup_hf_env()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_vllm.DEFAULT_IMAGE"><code class="docutils literal notranslate"><span class="pre">DEFAULT_IMAGE</span></code></a></li>
