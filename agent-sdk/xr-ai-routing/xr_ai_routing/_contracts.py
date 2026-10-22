@@ -157,10 +157,13 @@ class RoutableAgent(Protocol):
         Destination exceptions and task cancellation propagate to the caller.
         Destinations can call
         ``notify_response_started()`` before their first meaningful output or
-        application action to suppress a pending acknowledgment. Completion
-        and focus still use the return value, with optional response context
-        in ``DestinationResult.text`` for the router's history.
-        Destinations own output publication, stream finalization, and failure handling.
+        application action to suppress a pending acknowledgment; its result
+        says whether that output leads the turn or follows router control text.
+        Completion and focus still use the return value, with optional response
+        context in ``DestinationResult.text`` for the router's history.
+        Destinations own output publication and stream finalization. A failure
+        before the response-start notification is reported to the participant
+        by the router; after it, the destination owns any failure output.
         Cancellation must drain their output and model work before returning.
         A routing ``clarify`` choice with usable scores selects the
         highest-scoring eligible destination through normal admission. Without

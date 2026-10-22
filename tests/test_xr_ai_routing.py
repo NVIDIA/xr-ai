@@ -56,8 +56,8 @@ def test_routable_agent_is_the_only_destination_protocol_export() -> None:
     ]
 
 
-def test_response_started_outside_a_routed_answer_is_ignored():
-    assert notify_response_started() is False
+def test_response_started_outside_a_routed_answer_leads_output():
+    assert notify_response_started() is True
 
 
 @pytest.mark.asyncio
@@ -96,7 +96,7 @@ async def test_direct_response_signal_cancels_blocked_ack_without_emitting_text(
     await asyncio.wait_for(llm.cancelled.wait(), timeout=1)
     assert not task.done()
     assert output == []
-    assert notifications == [True, False]
+    assert notifications == [True, True]
     now = 50.0
     finish.set()
     result = await asyncio.wait_for(task, timeout=1)
@@ -112,11 +112,10 @@ async def test_response_signal_from_old_answer_cannot_affect_later_turn(ending):
     contexts = {}
     entered = {name: asyncio.Event() for name in ("old", "new")}
     finish = {name: asyncio.Event() for name in ("old", "new")}
-    notifications = []
 
     class Destination(_AckDestination):
         async def admit(self, turn, *, focused):
-            notifications.append(notify_response_started())
+            notify_response_started()
             return await super().admit(turn, focused=focused)
 
         async def answer(self, turn):
@@ -125,7 +124,7 @@ async def test_response_signal_from_old_answer_cannot_affect_later_turn(ending):
             try:
                 await finish[turn.query].wait()
             except asyncio.CancelledError:
-                notifications.append(notify_response_started())
+                notify_response_started()
                 raise
             if ending == "failure" and turn.query == "old":
                 raise ValueError("destination failed")
@@ -154,14 +153,11 @@ async def test_response_signal_from_old_answer_cannot_affect_later_turn(ending):
     if ending not in {"completion", "failure"}:
         assert isinstance((await asyncio.gather(old, return_exceptions=True))[0], asyncio.CancelledError)
     assert contexts["old"].run(notify_response_started) is False
-    assert notify_response_started() is False
     assert contexts["new"].run(notify_response_started) is True
-    assert contexts["new"].run(notify_response_started) is False
     finish["new"].set()
     await asyncio.wait_for(new, timeout=1)
     assert contexts["new"].run(notify_response_started) is False
-    assert not any(notifications)
-    assert output == []
+    assert output == ([("destination", router_module._FAILURE_TEXT)] if ending == "failure" else [])
     assert router._history["alice"] == []
     assert router._focus == {}
     assert [query for query, _duration in router._first_answer_samples["alice"]["destination"]] == ["new"]
@@ -183,7 +179,7 @@ async def test_direct_destination_output_keeps_its_source_and_explicit_progress(
     router = AgentRouter({"destination": Destination()}, None, output=_emit_control, default_destination="destination")
     output = []
     await _ack_output(router, "request", output)
-    assert notifications == [True, False]
+    assert notifications == [True, True]
     assert output == [("wrong-source", " "), ("wrong-source", "answer")]
     assert router._history["alice"] == [AgentExchange("request", "routing context")]
     assert len(router._first_answer_samples["alice"]["destination"]) == 1
@@ -216,7 +212,7 @@ async def test_response_notification_is_scoped_to_answer_and_inherited_by_child_
 
     outer = AgentRouter({"destination": Outer()}, None, output=_emit_control, default_destination="destination")
     await _ack_output(outer, "outer request", [])
-    assert notifications == [("inner admission", False), ("inner answer", True), ("outer answer", True)]
+    assert notifications == [("inner admission", True), ("inner answer", True), ("outer answer", True)]
 
 
 class _Prediction:
@@ -741,7 +737,7 @@ async def test_stop_attempts_release_for_every_participant_after_failure():
 
 
 @pytest.mark.asyncio
-async def test_destination_error_after_preamble_propagates_to_turn_caller():
+async def test_destination_error_after_preamble_reports_failure_and_propagates():
     class _BrokenAnswer(_Destination):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
@@ -766,11 +762,12 @@ async def test_destination_error_after_preamble_propagates_to_turn_caller():
 
     with pytest.raises(RuntimeError, match="destination failed"):
         await _route(front_end, AgentTurn("alice", "turn-1", "Do it."), emit=emit)
-    assert output == [("xr", "I will try.")]
+    failure = ("xr", router_module._FAILURE_TEXT)
+    assert output == [("xr", "I will try."), failure]
 
     result = await _route(front_end, AgentTurn("alice", "turn-2", "Try again."), emit=emit)
     assert result.text == "Recovered."
-    assert output == [("xr", "I will try."), ("xr", "Recovered.")]
+    assert output == [("xr", "I will try."), failure, ("xr", "Recovered.")]
     assert destination.answer_histories == [(), ()]
 
 

@@ -12,6 +12,7 @@ import logging
 import math
 import time
 from collections.abc import Awaitable, Callable, Mapping
+from dataclasses import dataclass
 from functools import partial
 
 import nemo_relay
@@ -44,11 +45,26 @@ _ACKNOWLEDGMENT_PROMPT = (
 )
 _ACKNOWLEDGMENT_PREFIX = "Let me think through "
 _ACKNOWLEDGMENT_FALLBACK = "Let me think that through."
+_FAILURE_TEXT = "I couldn't complete that request. Please try again."
 _logger = logging.getLogger(__name__)
 _Emit = Callable[[AgentTurn, str, str], Awaitable[None]]
 _active_routers: contextvars.ContextVar[frozenset[object]] = contextvars.ContextVar(
     "xr_ai_routing_active_routers", default=frozenset(),
 )
+
+
+@dataclass(slots=True)
+class _TurnOutput:
+    """Output already produced for one routed turn."""
+
+    control: bool = False
+    """Router-owned control text was delivered or committed."""
+
+    control_failed: bool = False
+    """The control output callback raised."""
+
+    response: bool = False
+    """The destination signaled its response start."""
 
 
 class AgentRouter:
@@ -145,10 +161,13 @@ class AgentRouter:
         completed history rather than merging a new caller-supplied history.
         The participant's current turn is kept separate from that history.
 
-        Destination failures propagate to the caller, which owns any turn-level
-        recovery after already-emitted progress text. Destinations own direct
-        output delivery, cancellation, and finalization. The router suppresses
-        interrupted control output but cannot retract already-published output.
+        A turn that fails before its destination signals a response start
+        publishes one failure message through the router's output; once the
+        response starts, the destination owns failure output. Exceptions still
+        propagate to the caller for supervision, not for further user-facing
+        recovery. Destinations own direct output delivery, cancellation, and
+        finalization. The router suppresses interrupted control output but
+        cannot retract already-published output.
 
         The application drives turns and lifecycle operations. Destination and
         output callbacks, including their child tasks, must not recursively
@@ -206,10 +225,16 @@ class AgentRouter:
             )
             generation = object()
             self._generation[participant_id] = generation
+            turn_output = _TurnOutput()
 
             async def emit_if_current(output_turn: AgentTurn, source: str, text: str) -> None:
                 if self._generation.get(participant_id) is generation:
-                    await self._output(output_turn, source, text)
+                    turn_output.control = True
+                    try:
+                        await self._output(output_turn, source, text)
+                    except Exception:
+                        turn_output.control_failed = True
+                        raise
 
             async def run_handle() -> DestinationResult:
                 progress_token = _response_started.set(None)
@@ -217,7 +242,13 @@ class AgentRouter:
                 history_id_token = _active_history_exchange_ids.set(exchange_ids)
                 current_id_token = _active_exchange_id.set(current_exchange_id)
                 try:
-                    return await self._handle(current_turn, emit=emit_if_current, generation=generation)
+                    return await self._handle(
+                        current_turn, emit=emit_if_current, generation=generation, turn_output=turn_output,
+                    )
+                except Exception:
+                    if not turn_output.response and not turn_output.control_failed:
+                        await emit_if_current(current_turn, self._default_destination, _FAILURE_TEXT)
+                    raise
                 finally:
                     _active_exchange_id.reset(current_id_token)
                     _active_history_exchange_ids.reset(history_id_token)
@@ -388,7 +419,9 @@ class AgentRouter:
             raise ExceptionGroup("failed to release conversation destinations", errors)
         self._stop_task = None
 
-    async def _handle(self, turn: AgentTurn, *, emit: _Emit, generation: object) -> DestinationResult:
+    async def _handle(
+        self, turn: AgentTurn, *, emit: _Emit, generation: object, turn_output: _TurnOutput,
+    ) -> DestinationResult:
         # Route selection, admission, and answer commit are separate phases.
         focused = self._focus.get(turn.participant_id)
         candidates = [focused] if focused in self._destinations else list(self._destinations)
@@ -501,13 +534,12 @@ class AgentRouter:
 
             def response_started() -> bool:
                 nonlocal first_answer_duration
-                if (
-                    not response_open
-                    or self._generation.get(turn.participant_id) is not generation
-                    or answer_started.is_set()
-                ):
+                if not response_open or self._generation.get(turn.participant_id) is not generation:
                     return False
+                if answer_started.is_set():
+                    return not turn_output.control
                 answer_started.set()
+                turn_output.response = True
                 first_answer_duration = _monotonic() - answer_started_at
                 if (
                     acknowledgment_task is not None
@@ -528,7 +560,7 @@ class AgentRouter:
                     },
                 ):
                     pass
-                return True
+                return not turn_output.control
 
             async def emit_acknowledgment(source: str, text: str) -> None:
                 if not answer_started.is_set():

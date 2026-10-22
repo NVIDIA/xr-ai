@@ -46,8 +46,10 @@ The agent answers from its instructions, completed history, and configured
 context sources. Install `xr-ai-conversation[voice]` and configure the runtime
 and a typed voice output topic to use it as a routed destination. Conversation
 publishes its own response chunks with its routing name as source and the turn's
-response identity and timestamp. It finalizes partial responses after model
-failure and reports a failure before the first chunk with a brief retry message.
+response identity and timestamp. Its first chunk interrupts older speech
+unless router text such as a preamble already started the turn. It finalizes
+partial responses after model failure; the router reports a failure before the
+first chunk.
 Cancellation drains the model without publishing further frames. Model and
 publication failures propagate to the caller.
 

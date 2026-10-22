@@ -170,7 +170,9 @@ async def test_conversation_notifies_before_delivery_and_preserves_answer_contex
             return chunks()
 
     def notify():
-        events.append(("started", notify_response_started()))
+        leads = notify_response_started()
+        events.append(("started", leads))
+        return leads
 
     async def emit(source, text):
         events.append((source, text))
@@ -1348,8 +1350,6 @@ def test_voice_output_configuration_requires_runtime_and_exact_topic_model():
         Conversation(_LLM(), runtime=AgentRuntime())
     with pytest.raises(TypeError, match="runtime"):
         Conversation(_LLM(), output_topic=_OUTPUT_TOPIC)
-    with pytest.raises(ValueError, match="requires runtime and output_topic"):
-        Conversation(_LLM(), runtime=None, output_topic=_OUTPUT_TOPIC)
     with pytest.raises(TypeError, match="VoiceOutput"):
         Conversation(_LLM(), runtime=AgentRuntime(), output_topic=Topic("wrong", ConversationContextUpdate))
 

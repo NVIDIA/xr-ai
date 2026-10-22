@@ -95,12 +95,20 @@ response text. Destinations publish their output directly. It suppresses a pendi
 supplies the first-response timing sample if the answer completes successfully.
 It does not deliver output, complete the turn, change focus, or add history.
 Return a `DestinationResult` for completion and focus; exceptions still report
-failure to the caller.
+failure to the caller. A turn that fails before its destination notifies sends
+one brief failure message through the router's output; after the notification,
+the destination owns any failure output. Callers should not publish another.
+
+The notification returns whether the response leads the turn's output. It
+returns `False` when the router already delivered or committed control text for
+the turn, such as an admission preamble or acknowledgment; the destination
+should then follow that output instead of interrupting it.
 
 The notification applies only during the current destination's `answer()` call,
-including its child-task contexts. The first notification returns `True`;
-duplicates and calls outside an active answer return `False`. A retained
-context from a completed or interrupted answer cannot notify a later turn,
+including its child-task contexts. Only the first notification changes router
+state; repeated notifications return the same result, and calls outside a routed
+answer return `True`. A retained context from a completed or interrupted answer
+returns `False` and cannot notify a later turn,
 including after departure and rejoin. Destinations own and drain their child
 tasks before returning. Call the function from the answer's event loop.
 

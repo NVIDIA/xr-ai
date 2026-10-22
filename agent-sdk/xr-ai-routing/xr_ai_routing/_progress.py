@@ -24,16 +24,22 @@ def notify_response_started() -> bool:
     if this answer completes successfully. Calling it when work merely begins
     would suppress the acknowledgment before a response is ready.
 
+    Returns whether the response leads the turn's output. ``False`` means the
+    router already delivered or committed control text for this turn, such as
+    an admission preamble or acknowledgment, so the response should follow
+    that output instead of superseding it. Outside a routed answer nothing
+    precedes the response and the result is ``True``.
+
     The notification is bound to the current ``answer()`` execution through
-    its asynchronous context, including inherited child-task contexts. It
-    returns ``True`` only for the first notification of an active response.
-    Duplicate notifications, calls outside an active answer, and notifications
-    from completed or interrupted answers return ``False`` without changing
-    router state. Call from the answer's event loop; the destination owns and
-    drains its child tasks before returning.
+    its asynchronous context, including inherited child-task contexts. Only
+    the first notification of an active response changes router state;
+    repeated notifications return the same result. Notifications from
+    completed or interrupted answers return ``False`` without changing router
+    state. Call from the answer's event loop; the destination owns and drains
+    its child tasks before returning.
 
     Return values and exceptions report completion, focus, and failure separately.
     """
 
     notify = _response_started.get()
-    return notify() if notify is not None else False
+    return notify() if notify is not None else True

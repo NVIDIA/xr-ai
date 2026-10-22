@@ -73,7 +73,7 @@ class Conversation(RoutableAgent):
     :param runtime: Runtime used to publish answers. The application owns runtime startup and shutdown.
     :param output_topic: Explicit ``VoiceOutput`` topic for routed answers; requires ``xr-ai-conversation[voice]``.
         The conversation publishes with its routing name as source, the turn ID as response ID,
-        and the originating timestamp. It owns stream framing, finalization, and failure recovery.
+        and the originating timestamp. It owns stream framing and finalization.
         No default output or query topic is subscribed.
     :param compaction_input_budget_bytes: UTF-8 byte budget for the summary and entries in one
         compaction request; at least half the largest section budget plus 256 bytes.
@@ -96,8 +96,6 @@ class Conversation(RoutableAgent):
         runtime: AgentRuntime,
         output_topic: Topic[VoiceOutput],
     ) -> None:
-        if runtime is None or output_topic is None:
-            raise ValueError("Conversation requires runtime and output_topic")
         try:
             from xr_ai_voice import VoiceOutput
         except ModuleNotFoundError as error:
@@ -158,12 +156,13 @@ class Conversation(RoutableAgent):
         """Publish a routed answer directly to the configured voice output topic.
 
         Requires ``runtime`` and ``output_topic``. The first nonblank ready chunk
-        notifies the active router before publication. The first body frame
-        interrupts older output, and a final frame closes a completed or failed
-        partial response. Cancellation and publication failures do not publish
-        further frames. A model failure before any output produces a finite
-        retry message. Failures propagate after closing the model iterator;
-        a successful answer returns the complete text as routing context.
+        notifies the active router before publication. That body frame
+        interrupts older output unless router control text already started
+        this turn, and a final frame closes a completed or failed partial
+        response. Cancellation and publication failures do not publish further
+        frames. Failures propagate after closing the model iterator; the router
+        reports failures that occur before the first frame. A successful answer
+        returns the complete text as routing context.
         """
 
         from xr_ai_voice import VoiceOutput
@@ -172,57 +171,41 @@ class Conversation(RoutableAgent):
         stream = self._stream_response(turn.query, turn.participant_id, history=turn.history)
         opened = False
         publication_failed = False
-        cancelled = False
+        interrupt = False
         try:
             async for text in stream:
-                task = asyncio.current_task()
-                if task is not None and task.cancelling():
-                    raise asyncio.CancelledError
                 fragments.append(text)
                 if not opened and not text.strip():
                     continue
                 if not opened:
-                    notify_response_started()
+                    interrupt = notify_response_started()
+                task = asyncio.current_task()
+                # A model stream can swallow cancellation; never publish for a canceled answer.
+                if task is not None and task.cancelling():
+                    raise asyncio.CancelledError
                 try:
                     await self._runtime.publish(
                         self._output_topic,
                         VoiceOutput(
                             text=text, response_id=turn.turn_id, final=False,
-                            interrupt=not opened, timestamp_us=turn.timestamp_us,
+                            interrupt=interrupt and not opened, timestamp_us=turn.timestamp_us,
                         ),
                         participant_id=turn.participant_id,
                         source=self._routing.name,
                     )
-                except Exception:  # noqa: BLE001 -- failed publication must not be retried by fallback/finalization.
+                except Exception:
                     publication_failed = True
                     raise
                 opened = True
-            task = asyncio.current_task()
-            if task is not None and task.cancelling():
-                raise asyncio.CancelledError
-        except asyncio.CancelledError:
-            cancelled = True
-            raise
-        except Exception:  # noqa: BLE001 -- recover only a model failure before any voice frame was accepted.
+        except Exception:
             task = asyncio.current_task()
             if task is not None and task.cancelling():
                 raise asyncio.CancelledError from None
-            if not opened and not publication_failed:
-                notify_response_started()
-                with suppress(RuntimeClosedError):
-                    await self._runtime.publish(
-                        self._output_topic,
-                        VoiceOutput(
-                            text="I couldn't complete that request. Please try again.", timestamp_us=turn.timestamp_us,
-                        ),
-                        participant_id=turn.participant_id,
-                        source=self._routing.name,
-                    )
             raise
         finally:
             await stream.aclose()
             task = asyncio.current_task()
-            cancelled = cancelled or (task is not None and task.cancelling() > 0)
+            cancelled = task is not None and task.cancelling() > 0
             if opened and not cancelled and not publication_failed:
                 with suppress(RuntimeClosedError):
                     await self._runtime.publish(

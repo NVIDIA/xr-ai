@@ -12,6 +12,7 @@ from collections import deque
 
 import pytest
 import xr_ai_conversation._conversation as conversation_module
+import xr_ai_routing._router as router_module
 from xr_ai_conversation import Conversation, ConversationContextUpdate
 from xr_ai_models import ChatStreamEvent, DecisionAnswer, DecisionResponse
 from xr_ai_routing import Admission, AgentExchange, AgentRouter, AgentTurn, RoutingAid, notify_response_started
@@ -238,13 +239,50 @@ async def test_conversation_does_not_retry_or_finalize_failed_typed_publication(
 
 
 
+async def test_answer_after_router_preamble_does_not_interrupt_it():
+    class LLM:
+        def stream_events(self, _messages):
+            async def response():
+                yield ChatStreamEvent(kind="text", text="answer")
+
+            return response()
+
+    class Preambled(Conversation):
+        async def admit(self, _turn, *, focused):
+            return Admission("accept", preamble="One moment.")
+
+    control = []
+
+    async def record_control(_turn, source, text):
+        control.append((source, text))
+
+    runtime = AgentRuntime()
+    output = runtime.register("output", _Output())
+    conversation = Preambled(LLM(), runtime=runtime, output_topic=OUTPUT)
+    router = AgentRouter({"conversation": conversation}, None, output=record_control)
+    async with runtime:
+        try:
+            await router.handle(AgentTurn("alice", "request", "request"))
+            assert control == [("conversation", "One moment.")]
+            assert [(value.text, value.interrupt) for value, _ in output.items] == [("answer", False), ("", False)]
+        finally:
+            await router.stop()
+            await conversation.close()
+
+
 @pytest.mark.parametrize("partial", [False, True])
-async def test_conversation_owns_failure_fallback_and_stream_finalization(partial, monkeypatch):
+async def test_model_failure_is_reported_once_and_partial_stream_is_finalized(partial, monkeypatch):
     closed = asyncio.Event()
     notifications = []
+    control = []
 
     def notify():
-        notifications.append(notify_response_started())
+        leads = notify_response_started()
+        notifications.append(leads)
+        return leads
+
+    async def record_control(_turn, source, text):
+        control.append((source, text))
 
     monkeypatch.setattr(conversation_module, "notify_response_started", notify)
 
@@ -264,22 +302,23 @@ async def test_conversation_owns_failure_fallback_and_stream_finalization(partia
     output = runtime.register("output", _Output())
 
     conversation = Conversation(LLM(), runtime=runtime, output_topic=OUTPUT)
-    router = AgentRouter({"conversation": conversation}, None, output=_control)
+    router = AgentRouter({"conversation": conversation}, None, output=record_control)
     async with runtime:
         try:
             with pytest.raises(RuntimeError, match="model failed"):
                 await router.handle(AgentTurn("alice", "request", "request"))
             assert closed.is_set()
-            assert notifications == [True]
+            assert notifications == ([True] if partial else [])
             assert router._history["alice"] == []
             assert conversation._context.transcript("alice") == ()
             assert all(meta.source == "conversation" for _, meta in output.items)
             if partial:
                 assert [value.text for value, _ in output.items] == ["Partial answer", ""]
                 assert output.items[-1][0].final
+                assert control == []
             else:
-                assert len(output.items) == 1
-                assert "couldn't complete" in output.items[0][0].text
+                assert output.items == []
+                assert control == [("conversation", router_module._FAILURE_TEXT)]
         finally:
             await router.stop()
             await conversation.close()
