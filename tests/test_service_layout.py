@@ -21,7 +21,6 @@ _REQUIRED_SERVICES = {
     "magpie-tts",
     "nemotron-omni-llm",
     "nemotron3-nano-llm",
-    "ocr-server",
     "openxr-service",
     "pocket-tts",
     "rag-service",
@@ -45,7 +44,6 @@ _MODEL_SERVICES = {
         "nemotron3_nano_llm_server",
         8107,
     ),
-    "ocr-server": ("ocr-server", "ocr_server", 8112),
     "pocket-tts": ("pocket-tts-server", "pocket_tts_server", 8105),
     "speaker-stt": ("xr-ai-speaker-stt", "speaker_stt", 8102),
     "stt-server": ("stt-server", "stt_server", 8103),
@@ -389,13 +387,12 @@ def test_model_service_projects_preserve_their_public_contracts() -> None:
         assert metadata["project"]["name"] == package
         assert command in metadata["project"]["scripts"]
         assert config["port"] == port
-        expected_cache = _ROOT / "models"
-        assert Path(os.path.normpath(project / config["model_cache"])) == expected_cache, (
-            f"{directory}: model_cache must target {expected_cache}"
+        assert Path(os.path.normpath(project / config["model_cache"])) == _ROOT / "models", (
+            f"{directory}: model_cache must target the repo models directory"
         )
         default = _model_cache_default(project / command)
-        assert Path(os.path.normpath(project / default)) == expected_cache, (
-            f"{directory}: default model cache must target {expected_cache}"
+        assert Path(os.path.normpath(project / default)) == _ROOT / "models", (
+            f"{directory}: default model cache must target the repo models directory"
         )
 
 

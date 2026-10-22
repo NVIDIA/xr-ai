@@ -99,78 +99,6 @@ def launch_fingerprint(payload: dict[str, Any]) -> str:
     return hashlib.sha256(encoded).hexdigest()[:20]
 
 
-def container_label_args(port: int) -> list[str]:
-    """Labels for model-server discovery and optional GPU-test ownership.
-
-    Return Docker CLI arguments identifying the server's host *port*, plus
-    ``xr-ai-test-session`` when ``XR_AI_TEST_SESSION`` is nonempty. Include
-    these arguments before the image in a new container's ``docker run``.
-    Ownership is creation-time metadata, not part of the launch fingerprint:
-    changing test sessions must not make a foreign container replaceable.
-    """
-    argv = ["--label", f"xr-ai-vllm.port={port}"]
-    test_session = os.environ.get(TEST_SESSION_ENV)
-    if test_session:
-        argv += ["--label", f"{TEST_SESSION_LABEL}={test_session}"]
-    return argv
-
-
-def serve_container(
-    *,
-    image: str,
-    image_id: str,
-    container_name: str,
-    port: int,
-    model_cache: Path,
-    cuda_visible_devices: str,
-    environment: dict[str, str],
-    inherited_env: tuple[str, ...] = (),
-    container_port: int = 8000,
-    health_path: str = "/v1/health/ready",
-    log_prefix: str,
-    ready_file: Path | None = None,
-) -> None:
-    """Serve a custom GPU inference image using the shared container lifecycle.
-
-    Mount *model_cache* at ``/models`` and publish *container_port* on host
-    *port*. The image supplies its own entrypoint. *image_id* is its immutable
-    Docker image ID, so rebuilding the same tag invalidates persistent reuse.
-    *environment* contains non-secret settings; *inherited_env* names host
-    variables to pass through without putting their values in command arguments.
-    Changes to inherited values invalidate reuse through credential digests.
-
-    This owns discovery, test-session ownership, and configuration labels as
-    well as readiness, persistent reuse, and shutdown. Services must not add
-    their own lifecycle labels. Readiness probes use *health_path* on localhost;
-    *ready_file*, when supplied, is touched after the server is ready.
-    """
-    fingerprint = launch_fingerprint({
-        "image": image_id, "port": port, "container_port": container_port,
-        "model_cache": str(model_cache), "gpu": cuda_visible_devices,
-        "environment": environment,
-        "inherited_env": {key: credential_digest(os.environ.get(key)) for key in inherited_env},
-    })
-    argv = [
-        "docker", "run", "--name", container_name, *container_label_args(port),
-        "--label", f"{_CONFIG_LABEL}={fingerprint}",
-        "--runtime", "nvidia", "--ipc", "host",
-        "-e", f"NVIDIA_VISIBLE_DEVICES={cuda_visible_devices}",
-        "-e", "NVIDIA_DRIVER_CAPABILITIES=compute,utility",
-    ]
-    for key, value in environment.items():
-        argv += ["-e", f"{key}={value}"]
-    for key in inherited_env:
-        argv += ["-e", key]
-    argv += ["-p", f"{port}:{container_port}", "-v", f"{model_cache}:/models", image]
-    run_container(
-        argv=argv, image=image, container_name=container_name, log_prefix=log_prefix,
-        port=port, health_url=f"http://127.0.0.1:{port}{health_path}",
-        launch_banner=f"Loading {image} on GPU {cuda_visible_devices}",
-        reuse_banner=f"{log_prefix} already serving on :{port}",
-        ready_banner=f"{log_prefix} ready on :{port}", ready_file=ready_file,
-    )
-
-
 def build_run_argv(
     *,
     image: str,
@@ -210,7 +138,15 @@ def build_run_argv(
 
     argv: list[str] = ["docker", "run"]
     argv += ["--name", container_name]
-    argv += container_label_args(port)
+    # Label lets container_on_port find this container by port without the
+    # caller needing to know the container name — implementation detail stays
+    # inside this module.
+    argv += ["--label", f"xr-ai-vllm.port={port}"]
+    # Deliberately outside the launch fingerprint: it identifies who created
+    # the container, not how it is configured, so it must not force replacement.
+    test_session = os.environ.get(TEST_SESSION_ENV)
+    if test_session:
+        argv += ["--label", f"{TEST_SESSION_LABEL}={test_session}"]
     payload: dict[str, Any] = {
         "image": image,
         "port": port,

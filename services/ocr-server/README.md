@@ -6,10 +6,10 @@
 # OCR server
 
 Persistent GPU inference for the Hugging Face Nemotron OCR v2 multilingual
-model. The launcher builds an isolated CUDA container; the model stays local.
+model in an operator-managed CUDA container; the model stays local.
 
 Refer to [OCR serving](https://nvidia.github.io/xr-ai/latest/components/ai-services.html#ocr-serving)
 for setup, client usage, request limits, and hardware qualification.
-Service defaults live in [`ocr_server.yaml`](ocr_server.yaml).
-Sample stacks can select `ocr` through the shared model-stack launcher, using
-the same defaults and sample-owned GPU overrides. No supplied sample selects OCR.
+The Dockerfile and inference app live in `ocr_server/`. Configure inference
+through the container environment and connect through `xr_ai_models`.
+There is no host launcher or sample-stack registration. No supplied sample uses OCR.

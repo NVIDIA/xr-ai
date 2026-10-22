@@ -10,6 +10,7 @@ import importlib.util
 import io
 import json
 import os
+import runpy
 import subprocess
 import sys
 import threading
@@ -19,7 +20,6 @@ from types import SimpleNamespace
 
 import httpx
 import pytest
-import yaml
 from fastapi import HTTPException
 from PIL import Image, ImageDraw, ImageFont
 from xr_ai_models import (
@@ -33,7 +33,6 @@ from xr_ai_models import (
     make_ocr,
 )
 from xr_ai_models._ocr import NemotronOCR
-from xr_ai_vllm import _docker
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("ocr_server_app", ROOT / "services/ocr-server/ocr_server/_server.py")
@@ -61,6 +60,7 @@ def response():
 def config():
     return load_models_config_from_dict({"ocr": {
         "adapter": {"preset": "nemotron_ocr"}, "endpoint": {"base_url": "http://localhost:8112"},
+        "deployment": {"ownership": "external"},
     }})
 
 
@@ -242,17 +242,28 @@ def test_reject_wrong_adapter_category(kind, category):
         load_models_config_from_dict({"bad": {"category": category, "kind": kind, "base_url": "http://localhost"}})
 
 
-async def test_standalone_service_config():
-    local = ROOT / "services/ocr-server"
-    hf = yaml.safe_load((local / "ocr_server.yaml").read_text())
-    assert hf["cuda_arch"] == "12.0"
-    assert hf["cuda_visible_devices"] == "0"
-    assert hf["infer_length"] == 1024
-    assert hf["port"] == 8112
-    assert (local / hf["model_cache"]).resolve() == ROOT / "models"
+async def test_operator_owned_endpoint_config():
     models = config()
     assert isinstance(models.ocr("ocr"), OCRSpec)
     await make_ocr(models, "ocr").close()
+
+
+def test_container_entrypoint_serves_inference_without_a_host_launcher(monkeypatch):
+    context = ROOT / "services/ocr-server/ocr_server"
+    dockerfile = (context / "Dockerfile").read_text()
+    entrypoint = next(line.removeprefix("ENTRYPOINT ") for line in dockerfile.splitlines()
+                      if line.startswith("ENTRYPOINT "))
+    assert json.loads(entrypoint) == ["python", "-m", "ocr_server._server"]
+    assert "COPY __init__.py _server.py /app/ocr_server/" in dockerfile
+    calls = []
+    monkeypatch.setitem(sys.modules, "uvicorn", SimpleNamespace(
+        run=lambda app, **kwargs: calls.append((app, kwargs)),
+    ))
+    runpy.run_path(str(context / "_server.py"), run_name="__main__")
+    assert len(calls) == 1
+    app, options = calls[0]
+    assert options == {"host": "0.0.0.0", "port": 8000, "workers": 1}
+    assert {"/v1/ocr", "/v1/health/ready"} <= {route.path for route in app.routes}
 
 
 @pytest.mark.parametrize("url", [
@@ -497,14 +508,18 @@ async def test_busy_and_cancelled_requests_do_not_overlap():
                     await asyncio.sleep(0.01)
 
 
-def test_local_loader_pins_multilingual_and_bounds_chunks(monkeypatch):
+@pytest.mark.parametrize("length", [None, "640", "1024"])
+def test_local_loader_pins_multilingual_and_bounds_chunks(monkeypatch, length):
+    expected_length = int(length or "1024")
     downloads, options = [], []
     class Model:
         def __init__(self, **kwargs):
             options.append(kwargs)
         def __call__(self, image, **kwargs):
-            assert image.shape == (640, 640, 3)
-    monkeypatch.setenv("OCR_INFER_LENGTH", "640")
+            assert image.shape == (expected_length, expected_length, 3)
+    monkeypatch.delenv("OCR_INFER_LENGTH", raising=False)
+    if length is not None:
+        monkeypatch.setenv("OCR_INFER_LENGTH", length)
     monkeypatch.setenv("OCR_MODEL_REVISION", "pinned-revision")
     monkeypatch.setitem(sys.modules, "torch", SimpleNamespace(
         cuda=SimpleNamespace(is_available=lambda: True, synchronize=lambda: None),
@@ -520,50 +535,9 @@ def test_local_loader_pins_multilingual_and_bounds_chunks(monkeypatch):
         "revision": "pinned-revision", "allow_patterns": ["v2_multilingual/*"],
     })]
     assert options == [{
-        "model_dir": "/cache/snapshot/v2_multilingual", "lang": "multi", "infer_length": 640,
+        "model_dir": "/cache/snapshot/v2_multilingual", "lang": "multi", "infer_length": expected_length,
         "detector_max_batch_size": 1, "recognizer_chunk_size": 32, "relational_chunk_size": 32,
     }]
-
-
-@pytest.mark.parametrize("arch", ["8.9", "12.0", "12.1"])
-def test_local_launcher_uses_shared_lifecycle_and_image_fingerprint(monkeypatch, tmp_path, arch):
-    import_spec = importlib.util.spec_from_file_location(
-        "ocr_launcher", ROOT / "services/ocr-server/ocr_server/__main__.py",
-    )
-    launcher = importlib.util.module_from_spec(import_spec)
-    import_spec.loader.exec_module(launcher)
-    cfg = {"port": 8112, "infer_length": 640, "cuda_arch": arch, "cuda_visible_devices": "1",
-           "model_cache": "cache", "container_name": "xr-ai-ocr-test"}
-    monkeypatch.setattr(launcher, "setup_logging", lambda name: None)
-    monkeypatch.setattr(launcher, "load_config", lambda: (cfg, tmp_path, tmp_path / "ready"))
-    builds, runs = [], []
-    monkeypatch.setattr(launcher.subprocess, "run", lambda args, **kw: builds.append(args))
-    monkeypatch.setattr(launcher.subprocess, "check_output", lambda *a, **kw: "sha256:first")
-    monkeypatch.setattr(_docker, "run_container", lambda **kw: runs.append(kw))
-    monkeypatch.setenv("HF_TOKEN", "private-test-token")
-    monkeypatch.delenv(_docker.TEST_SESSION_ENV, raising=False)
-    launcher.run()
-    assert f"TORCH_CUDA_ARCH_LIST={arch}" in builds[0]
-    assert "--provenance=false" in builds[0]
-    assert runs[0]["ready_file"] == tmp_path / "ready"
-    assert "OCR_INFER_LENGTH=640" in runs[0]["argv"]
-    assert "NVIDIA_VISIBLE_DEVICES=1" in runs[0]["argv"]
-    assert "xr-ai-vllm.port=8112" in runs[0]["argv"]
-    assert "HF_TOKEN" in runs[0]["argv"] and "private-test-token" not in str(runs)
-    assert f"{tmp_path / 'cache'}:/models" in runs[0]["argv"]
-    monkeypatch.setattr(launcher.subprocess, "check_output", lambda *a, **kw: "sha256:second")
-    launcher.run()
-    assert runs[0]["argv"] != runs[1]["argv"]
-    # The same creation-time ownership contract as vLLM, independent of the
-    # model fingerprint and absent from ordinary user launches.
-    monkeypatch.setenv(_docker.TEST_SESSION_ENV, "ocr-test-session")
-    launcher.run()
-    label = f"{_docker.TEST_SESSION_LABEL}=ocr-test-session"
-    plain, tagged = runs[1]["argv"], runs[2]["argv"]
-    assert not any(arg.startswith(f"{_docker.TEST_SESSION_LABEL}=") for arg in plain)
-    label_index = tagged.index(label)
-    assert tagged[label_index - 1] == "--label"
-    assert tagged[:label_index - 1] + tagged[label_index + 1:] == plain
 
 
 @pytest.mark.parametrize("merge_level", ["word", "sentence", "paragraph"])

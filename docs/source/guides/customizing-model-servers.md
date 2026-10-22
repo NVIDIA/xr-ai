@@ -200,50 +200,6 @@ partial and cannot be passed directly to a service command. For a manually
 assembled stack, provide complete service YAML and tune the aggregate GPU use.
 Refer to {doc}`/components/ai-services` for the service entry points and lifecycle.
 
-(sample-ocr-service)=
-## Add OCR to a sample
-
-OCR is an available service, not an enabled dependency of any supplied sample.
-To add local OCR, keep these changes inside your sample:
-
-1. Add `"ocr"` to the service list passed to `run_model_stack` in
-   `model-servers/main.py`.
-2. Add an `ocr` mapping to each selected `model-servers/yaml/<gpu-profile>.yaml`.
-   Choose GPU placement and the matching `cuda_arch`: `"8.9"` for Ada,
-   `"12.0"` for Blackwell, or `"12.1"` for Spark. For example, on Spark:
-
-   ```yaml
-   ocr:
-     cuda_visible_devices: "0"
-     cuda_arch: "12.1"
-   ```
-
-3. Add the client role to the sample's consumer model profile:
-
-   ```json
-   "ocr": {
-     "adapter": {"preset": "nemotron_ocr"},
-     "endpoint": {"base_url": "http://localhost:8112"}
-   }
-   ```
-
-4. In the consuming worker or capability service, use `make_ocr(config, "ocr")`
-   from `xr_ai_models` and call `await ocr.read_text(image)`. Declare the
-   `xr-ai-models` dependency if the project does not already use it, and close
-   the client on shutdown. Application-specific image selection, tools, and
-   result handling remain sample-owned.
-
-The service-owned defaults in `services/ocr-server/ocr_server.yaml` provide port
-8112, persistent cache settings, and a detector length of 1024. OCR starts after
-embedding when both are selected. The normal
-stack start and stop commands include only selected services. Match any port
-override in the consumer profile and stop command. Qualify the combined GPU
-workload; registering OCR does not reserve memory or change other models' budgets.
-Refer to {ref}`ocr-serving` for inference limits and standalone operation.
-
-For an external NIM endpoint, configure the consumer role but omit `ocr` from
-the local launcher and its GPU profiles. Refer to {doc}`deploying-with-nim`.
-
 (rag-embedding-health)=
 ## RAG embedding health
 

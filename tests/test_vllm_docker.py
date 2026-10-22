@@ -137,55 +137,6 @@ class TestAlreadyLoggedIn:
             assert login.call_count == 2
 
 
-@pytest.mark.parametrize("change", [
-    {"image_id": "sha256:rebuilt"}, {"port": 9212}, {"container_port": 9000},
-    {"cuda_visible_devices": "1"}, {"environment": {"OCR_INFER_LENGTH": "640"}},
-    {"inherited_env": ()}, {"model_cache": Path("/other/cache")},
-])
-def test_custom_container_configuration_invalidates_reuse(monkeypatch, tmp_path, change):
-    runs = []
-    monkeypatch.setattr(_docker, "run_container", lambda **kw: runs.append(kw))
-    options = dict(
-        image="ocr:local", image_id="sha256:original", container_name="custom-reader",
-        port=8112, model_cache=tmp_path, cuda_visible_devices="0",
-        environment={"OCR_INFER_LENGTH": "1024"}, inherited_env=("HF_TOKEN",),
-        log_prefix="ocr", ready_file=tmp_path / "ready",
-    )
-    xr_ai_vllm.serve_container(**options)
-    xr_ai_vllm.serve_container(**(options | change))
-    assert _fingerprint_from_argv(runs[0]["argv"]) != _fingerprint_from_argv(runs[1]["argv"])
-
-
-def test_custom_container_ownership_and_secret_rotation(monkeypatch, tmp_path):
-    runs = []
-    monkeypatch.setattr(_docker, "run_container", lambda **kw: runs.append(kw))
-    monkeypatch.delenv(_docker.TEST_SESSION_ENV, raising=False)
-    monkeypatch.setenv("HF_TOKEN", "first-secret")
-    options = dict(
-        image="ocr:local", image_id="sha256:original", container_name="custom-reader",
-        port=8112, model_cache=tmp_path, cuda_visible_devices="1",
-        environment={"OCR_INFER_LENGTH": "640"}, inherited_env=("HF_TOKEN",),
-        log_prefix="ocr", ready_file=tmp_path / "ready",
-    )
-    xr_ai_vllm.serve_container(**options)
-    monkeypatch.setenv(_docker.TEST_SESSION_ENV, "mine")
-    xr_ai_vllm.serve_container(**options)
-    plain, owned = (run["argv"] for run in runs)
-    assert not any(arg.startswith(f"{_docker.TEST_SESSION_LABEL}=") for arg in plain)
-    assert f"{_docker.TEST_SESSION_LABEL}=mine" in owned
-    assert _fingerprint_from_argv(plain) == _fingerprint_from_argv(owned)
-    assert "xr-ai-vllm.port=8112" in owned
-    assert "HF_TOKEN" in owned
-    assert "NVIDIA_VISIBLE_DEVICES=1" in owned
-    assert f"{tmp_path}:/models" in owned
-    assert runs[0]["ready_file"] == tmp_path / "ready"
-    assert runs[0]["health_url"] == "http://127.0.0.1:8112/v1/health/ready"
-    monkeypatch.setenv("HF_TOKEN", "rotated-secret")
-    xr_ai_vllm.serve_container(**options)
-    assert _fingerprint_from_argv(owned) != _fingerprint_from_argv(runs[2]["argv"])
-    assert "first-secret" not in str(runs) and "rotated-secret" not in str(runs)
-
-
 class TestBuildRunArgv:
     def _base_kwargs(self, tmp_path: Path) -> dict:
         return dict(

@@ -29,11 +29,11 @@ recorded video, and document retrieval.
 | `services/nemotron-omni-llm/` | `nemotron_omni_llm_server` | 8108 | Nemotron-3-Nano-Omni-30B-A3B-Reasoning (NVFP4, FP8, or BF16, GPU-selected) | vLLM (pip or docker) — multimodal (text + video) |
 | `services/clef-server/` | `clef_server` | 8120 | Cloudflare Clef-Flash 9B | Native SystemOne choice decisions |
 | `services/embedding-server/` | `embedding_server` | 8109 | Nemotron-3-Embed-1B-BF16 | vLLM (pip or docker) |
-| `services/ocr-server/` | `ocr_server` | 8112 | Nemotron OCR v2 multilingual | Hugging Face in a local CUDA container |
+| `services/ocr-server/` | Operator-run container | 8000 (container); 8112 in example | Nemotron OCR v2 multilingual | Hugging Face in a local CUDA container |
 | `services/video-memory-service/` | `video_memory_service` | 8310 | — | Typed recorded-video capability |
 | `services/rag-service/` | `rag_service` | 8340 | — | Typed dense document retrieval capability |
 
-Local model artifacts land in the service's `model_cache` directory, set per
+Launcher-managed local model artifacts land in the service's `model_cache` directory, set per
 YAML and resolved relative to the YAML file. Operators configure self-hosted
 NIM caches for their optimized engines and weights; hosted endpoints keep no
 weights in this repository. Every `models/` tree is excluded from version
@@ -44,32 +44,50 @@ the exact layout per launch style is below.
 
 ## OCR serving
 
-The reusable `services/ocr-server` provides multilingual Nemotron OCR v2 on
-port `8112`. No supplied sample launches or consumes OCR. The launcher builds
-an isolated Python 3.12, PyTorch 2.9.1,
-CUDA 13 container, downloads NVIDIA's pinned Hugging Face source and
-`v2_multilingual` weights, and keeps the model loaded across requests.
+The reusable `services/ocr-server` provides multilingual Nemotron OCR v2 in
+an operator-managed container. No supplied sample launches or consumes OCR.
+The Dockerfile builds an isolated Python 3.12, PyTorch 2.9.1, CUDA 13 runtime
+with NVIDIA's pinned Hugging Face source. At startup, the service downloads
+`v2_multilingual` weights and keeps the model loaded across requests.
 Docker, NVIDIA Container Toolkit, and a CUDA 13-compatible NVIDIA driver
 are required; a host CUDA toolkit is not. The first build takes several minutes.
 Refer to the
 [upstream installation instructions](https://huggingface.co/nvidia/nemotron-ocr-v2/blob/main/quickstart.md).
 
-Set `cuda_visible_devices` and `cuda_arch` in
-`services/ocr-server/ocr_server.yaml` for the selected GPU: `8.9` for Ada,
-`12.0` for Blackwell, or `12.1` for Spark. From the repository root, launch:
+Set the build argument `TORCH_CUDA_ARCH_LIST` for the selected GPU: `8.9` for
+Ada, `12.0` for Blackwell, or `12.1` for Spark. From the repository root,
+build the image; this example targets Blackwell:
 
 ```bash
-uv --config-file uv.toml run --project services/ocr-server ocr_server \
-  --config services/ocr-server/ocr_server.yaml
+docker build --build-arg TORCH_CUDA_ARCH_LIST=12.0 \
+  -t xr-ai-nemotron-ocr:local services/ocr-server/ocr_server
 ```
 
-The service is also registered as `ocr` in the shared model-stack launcher,
-like embedding and VLM. Both launch paths use
-`services/ocr-server/ocr_server.yaml`; sample-owned GPU profiles override those
-service defaults. Refer to {ref}`sample-ocr-service` for opt-in integration entirely
-inside a sample. Provision GPU capacity before starting it alongside other
-services. Registration does not enable OCR in existing samples, change their
-GPU allocations, or qualify concurrent workloads on every supported GPU.
+Run it in the foreground on GPU 0, publishing the API only on localhost:
+
+```bash
+mkdir -p models
+docker run --rm --name xr-ai-ocr-manual --gpus device=0 --ipc=host \
+  -e HF_TOKEN -e OCR_INFER_LENGTH=1024 \
+  -p 127.0.0.1:8112:8000 -v "$PWD/models:/models" \
+  xr-ai-nemotron-ocr:local
+```
+
+The operator owns GPU placement, container startup and shutdown, cache mounts,
+and readiness checks. After startup completes, check readiness in another terminal:
+
+```bash
+curl --fail http://localhost:8112/v1/health/ready
+```
+
+The service loads and warms the model before accepting requests. There is no
+host `ocr_server` command or `run_model_stack` registration. Sample stack stop
+commands do not stop this container, and no automatic reuse or replacement is
+performed. Provision GPU capacity before running it alongside other services;
+no GPU allocations are changed and coexistence is not qualified.
+Repository GPU tests do not discover arbitrary operator-run containers. Stop
+this container before running GPU tests that use the same device; the HTTP-only
+OCR smoke test below can run against it without managing containers.
 
 For NIM, deploy Nemotron OCR v2 independently and configure its endpoint in the
 consumer profile. The operator selects the multilingual variant and owns GPU
@@ -138,25 +156,20 @@ that pass that limit but exceed the decoded image-file byte limit or padded
 pixel limit receive HTTP 413. Both limits apply before model inference;
 callers must reduce the encoded file size, downsample, or tile oversized inputs.
 The server serializes inference and rejects overlapping requests with HTTP 503.
-Its detector length is configured server-wide in `ocr_server.yaml` (640 or
-1024). NIM request limits and engine settings belong to the deployed version,
+Its detector length is configured server-wide by `OCR_INFER_LENGTH` (640 or
+1024, default 1024). NIM request limits and engine settings belong to the deployed version,
 not this local server configuration. Neither integration adds experimental
 text-dense cropping or sharpening; preprocessing remains caller-owned.
 
-Local weights and the torchvision backbone are cached beneath the OCR YAML's
-`model_cache`, which defaults to the repository `models/` directory, using
-`huggingface/` and `torch/` subdirectories. The compiled CUDA extension stays
-in the Docker image. An existing OCR-specific cache can still be selected with
-an explicit `model_cache` override; launching does not relocate or delete it.
-Changes to the local YAML or service source invalidate container reuse as
-needed. Stop the standalone container with `docker stop xr-ai-ocr` (or the
-configured `container_name`) before changing its settings, then repeat the launch
-command. Closing a client stops neither the local service nor an externally
-deployed NIM.
-
-When launched by a sample model stack, use that stack's normal stop command,
-including the GPU profile when it overrides the port. The shared launcher
-starts and stops OCR only when the sample explicitly selects `ocr`.
+Local weights and the torchvision backbone are cached at `/models/huggingface`
+and `/models/torch` inside the container. The example mounts the repository's
+`models/` directory there; change the host mount to use another persistent
+cache. The compiled CUDA extension stays in the Docker image.
+Stop only the container you launched with `docker stop xr-ai-ocr-manual`.
+The example's `--rm` removes the stopped container, not the mounted cache.
+Rebuild after source changes and rerun after configuration changes. Docker
+rejects an occupied name or port rather than replacing an existing service.
+Closing an SDK client stops neither the local service nor an externally deployed NIM.
 
 To test transcription against a running endpoint, run from the repository root:
 

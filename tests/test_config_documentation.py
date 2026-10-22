@@ -75,11 +75,6 @@ def test_config_catalog_preserves_source_and_language() -> None:
     scene = configs["agent-samples/xr-render-demo/scene/scene_service.yaml"]
     assert "lovr_bin" in scene.content
 
-    ocr = configs["services/ocr-server/ocr_server.yaml"]
-    assert ocr.sample == "Model-server defaults"
-    assert ocr.language == "yaml"
-    assert "infer_length: 1024" in ocr.content
-
     for path in (
         "agent-samples/simple-vlm-example/yaml/device_io_hub.yaml",
         "agent-samples/xr-render-demo/yaml/device_io_hub.yaml",

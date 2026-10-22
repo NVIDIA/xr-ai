@@ -143,59 +143,8 @@ def test_inventory_includes_stopped_foreign_and_excludes_own(monkeypatch):
 
     monkeypatch.setattr(helpers, "_docker", inventory)
     assert foreign_model_servers("mine") == ["xr-ai-vllm-stopped"]
-    assert len(calls) == 3
+    assert len(calls) == 2
     assert all(call[:2] == ("ps", "-a") for call in calls)
-
-
-@pytest.mark.parametrize("name", ["xr-ai-ocr", "custom-text-reader"])
-@pytest.mark.parametrize("running", [True, False])
-@pytest.mark.parametrize("owner", [None, "another-session", "mine"])
-def test_ocr_admission_and_cleanup_respect_ownership(monkeypatch, name, running, owner):
-    """Discover by model label, but remove only this session's immutable IDs."""
-    container_id = "c" * 64
-    inventory = {container_id: {
-        "name": name, "running": running,
-        "labels": {"xr-ai-vllm.port": "8112", TEST_SESSION_LABEL: owner},
-    }}
-    mutations = []
-
-    def docker_run(argv, **kwargs):
-        command = argv[1:]
-        if command[0] == "ps":
-            assert "-a" in command or "-aq" in command
-            query = command[command.index("--filter") + 1]
-            matches = []
-            for cid, record in inventory.items():
-                if query.startswith("label="):
-                    key, separator, value = query.removeprefix("label=").partition("=")
-                    matched = key in record["labels"] and (
-                        not separator or record["labels"][key] == value
-                    )
-                else:
-                    prefix = query.removeprefix("name=^")
-                    matched = record["name"].startswith(prefix)
-                if matched:
-                    matches.append(
-                        f'{record["name"]}\t{record["labels"][TEST_SESSION_LABEL] or ""}'
-                        if "--format" in command else cid
-                    )
-            return subprocess.CompletedProcess(argv, 0, stdout="\n".join(matches))
-        mutations.append(command)
-        assert command == ["rm", "-f", container_id]
-        del inventory[container_id]
-        return subprocess.CompletedProcess(argv, 0, stdout="")
-
-    monkeypatch.setattr(helpers.subprocess, "run", docker_run)
-    if owner != "mine":
-        with pytest.raises(pytest.skip.Exception, match=name):
-            with helpers.scoped_gpu_test_containers("mine"):
-                pytest.fail("foreign OCR must not admit GPU work")
-        assert container_id in inventory
-        assert mutations == []  # no stop, rm, or other Docker mutation
-    else:
-        with helpers.scoped_gpu_test_containers("mine"):
-            assert not inventory
-        assert mutations == [["rm", "-f", container_id]]
 
 
 def test_purge_targets_only_label_filtered_immutable_ids(monkeypatch):
