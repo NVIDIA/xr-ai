@@ -458,7 +458,7 @@
 <td><p>Text published on a configured conversation-context topic.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_conversation.Conversation" title="xr_ai_conversation.Conversation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Conversation</span></code></a></p></td>
-<td><p>Stream an application-instructed conversation with participant-scoped context.</p></td>
+<td><p>Application-instructed conversation agent with participant-scoped context.</p></td>
 </tr>
 </tbody>
 </table>
@@ -492,10 +492,12 @@
 <dd><em class="sig-param"><span class="n"><span class="pre">dialogue_budget_bytes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">_DEFAULT_DIALOGUE_BUDGET_BYTES</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">topic_budget_bytes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">collections.abc.Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">_DEFAULT_TOPIC_BUDGET_BYTES</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">compaction_input_budget_bytes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">_DEFAULT_COMPACTION_INPUT_BUDGET_BYTES</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">runtime</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../xr_ai_runtime/index.html#xr_ai_runtime.AgentRuntime" title="xr_ai_runtime.AgentRuntime"><span class="pre">xr_ai_runtime.AgentRuntime</span></a></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">output_topic</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../xr_ai_runtime/index.html#xr_ai_runtime.Topic" title="xr_ai_runtime.Topic"><span class="pre">xr_ai_runtime.Topic</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../xr_ai_voice/index.html#xr_ai_voice.VoiceOutput" title="xr_ai_voice.VoiceOutput"><span class="pre">xr_ai_voice.VoiceOutput</span></a><span class="p"><span class="pre">]</span></span></span></em>,</dd>
 </dl>
 
 <span class="sig-paren">)</span><a class="headerlink" href="#xr_ai_conversation.Conversation" title="Link to this definition">#</a></dt>
-<dd><p>Stream an application-instructed conversation with participant-scoped context.</p>
+<dd><p>Application-instructed conversation agent with participant-scoped context.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -507,6 +509,11 @@
 <li><p><strong>dialogue_budget_bytes</strong> – UTF-8 byte budget for completed dialogue rendered into a request.</p></li>
 <li><p><strong>topic_budget_bytes</strong> – UTF-8 byte budget for each topic’s context rendered into a request:
 one value for every topic, or a mapping with a value for each configured topic.</p></li>
+<li><p><strong>runtime</strong> – Runtime used to publish answers. The application owns runtime startup and shutdown.</p></li>
+<li><p><strong>output_topic</strong> – Explicit <code class="docutils literal notranslate"><span class="pre">VoiceOutput</span></code> topic for routed answers; requires <code class="docutils literal notranslate"><span class="pre">xr-ai-conversation[voice]</span></code>.
+The conversation publishes with its routing name as source, the turn ID as response ID,
+and the originating timestamp. It owns stream framing and finalization.
+No default output or query topic is subscribed.</p></li>
 <li><p><strong>compaction_input_budget_bytes</strong> – UTF-8 byte budget for the summary and entries in one
 compaction request; at least half the largest section budget plus 256 bytes.</p></li>
 </ul>
@@ -541,13 +548,21 @@ must be unique within and across both lists.</p>
 <dl>
 <dd><em class="sig-param"><span class="n"><span class="pre">turn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../xr_ai_routing/index.html#xr_ai_routing.AgentTurn" title="xr_ai_routing.AgentTurn"><span class="pre">xr_ai_routing.AgentTurn</span></a></span></em>,</dd>
 <dd><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">emit</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">collections.abc.Awaitable</span><span class="p"><span class="pre">[</span></span><span class="pre">None</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">started</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">collections.abc.Awaitable</span><span class="p"><span class="pre">[</span></span><span class="pre">bool</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>,</dd>
 </dl>
 
 <span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../xr_ai_routing/index.html#xr_ai_routing.DestinationResult" title="xr_ai_routing.DestinationResult"><span class="pre">xr_ai_routing.DestinationResult</span></a></span></span><a class="headerlink" href="#xr_ai_conversation.Conversation.answer" title="Link to this definition">#</a></dt>
-<dd><p>Forward answer chunks with the general conversation source name.</p>
-<p>Cancellation and stream errors propagate after the inner iterator is
-closed.</p>
+<dd><p>Publish a routed answer directly to the configured voice output topic.</p>
+<p>Requires <code class="docutils literal notranslate"><span class="pre">runtime</span></code> and <code class="docutils literal notranslate"><span class="pre">output_topic</span></code>. The first nonblank ready chunk
+awaits <code class="docutils literal notranslate"><span class="pre">started()</span></code> before publication. That body frame
+interrupts older output unless router control text already started
+this turn, and an empty final frame closes a completed, failed, or
+canceled response once opened. Canceled answers publish no further text,
+and a publication failure publishes no further frames. Failures
+propagate after closing the model iterator; the router reports
+failures that occur before the first frame. A successful answer
+returns the complete text as routing context. The exchange joins this
+conversation’s transcript only after its final frame is delivered.</p>
 </dd></dl>
 
 <dl class="py method">
@@ -581,42 +596,6 @@ closing model clients.</p>
 consumer. The constructor selects each topic’s update behavior; each
 publication carries only source-owned text. Configure at least one
 topic before calling this method.</p>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="xr_ai_conversation.Conversation.stream">
-<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">stream</span></span><span class="sig-paren">(</span>
-
-<dl>
-<dd><em class="sig-param"><span class="n"><span class="pre">request</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">participant_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">history</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../xr_ai_routing/index.html#xr_ai_routing.AgentExchange" title="xr_ai_routing.AgentExchange"><span class="pre">xr_ai_routing.AgentExchange</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Ellipsis</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">()</span></span></em>,</dd>
-</dl>
-
-<span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">collections.abc.AsyncIterator</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#xr_ai_conversation.Conversation.stream" title="Link to this definition">#</a></dt>
-<dd><p>Yield answer text for a participant’s request.</p>
-<p><code class="docutils literal notranslate"><span class="pre">history</span></code> is the completed dialogue context for this request. The
-current request is kept separate and is not clipped to fit a context
-budget. Close the iterator when the caller cancels consumption so the
-underlying model stream can be closed promptly.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>request</strong> – Current user request.</p></li>
-<li><p><strong>participant_id</strong> – Participant whose transcript and named context apply.</p></li>
-<li><p><strong>history</strong> – Completed exchanges to reconcile with this participant’s transcript.</p></li>
-</ul>
-</dd>
-<dt class="field-even">Yields<span class="colon">:</span></dt>
-<dd class="field-even"><p>Non-empty answer text chunks.</p>
-</dd>
-<dt class="field-odd">Raises<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>RuntimeError</strong> – If the conversation is closing or the model returns no answer.</p>
-</dd>
-</dl>
-<p>Cancellation and service errors propagate after the model stream is
-closed.</p>
 </dd></dl>
 
 </dd></dl>
@@ -687,7 +666,6 @@ closed.</p>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_conversation.Conversation.participant_left"><code class="docutils literal notranslate"><span class="pre">participant_left()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_conversation.Conversation.close"><code class="docutils literal notranslate"><span class="pre">close()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_conversation.Conversation.context_subscriber"><code class="docutils literal notranslate"><span class="pre">context_subscriber()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_conversation.Conversation.stream"><code class="docutils literal notranslate"><span class="pre">stream()</span></code></a></li>
 </ul>
 </li>
 </ul>

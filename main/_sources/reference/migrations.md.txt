@@ -17,6 +17,34 @@ before updating the checkout. Start the updated services before restarting
 workers; launchers can reuse a running service whose identity matches even when
 its application code predates the update.
 
+### Routed agents publish their own output
+
+`RoutableAgent.answer()` now accepts `turn` and a keyword-only `started`
+callable instead of `emit`. Move destination answer
+publication out of the router's `emit` callback and into each agent. Return
+`DestinationResult.text` when completed response context is needed for later
+routing; `routing_aid(participant_id)` remains the explicit source of each
+agent's routing context. Await `started()` when the first meaningful response
+is ready to suppress a pending acknowledgment.
+
+Move the router's own finite control callback from `handle(..., emit=callback)`
+to constructor configuration with `AgentRouter(..., output=callback)`, then call
+`handle(turn)`. The callback now receives `(turn, source, text)` so one configured
+publisher can preserve each participant's identity and originating timestamp.
+It receives acknowledgments, admission preambles, clarification or release
+messages, and the failure message for a turn that fails before its destination
+calls `started()`; it never receives destination answer text.
+
+Construct `Conversation(runtime=runtime, output_topic=voice_output_topic)` with
+both required arguments, and install `xr-ai-conversation[voice]`.
+Conversation now publishes directly and owns stream finalization. The router
+reports failures before the first chunk. `Conversation.stream()` has been
+removed. Route requests through `AgentRouter`, or call
+`await conversation.answer(AgentTurn(participant_id, turn_id, request), started=started)`
+with an async `started` callable; the conversation streams its answer to the
+configured output topic.
+
+
 ### Persistent services after startup failure
 
 Stacks using `launch_mode="persist"` now retain services that had signaled

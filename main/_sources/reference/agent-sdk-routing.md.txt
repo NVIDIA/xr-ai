@@ -13,9 +13,10 @@ model calls, application state, and resources.
 
 ## Route a turn
 
-Pass an `AgentTurn` to `AgentRouter.handle()` with an async
-callback that accepts the route name and text chunk. The router applies
-these steps:
+Configure `AgentRouter(output=...)` with an async callback for router-owned
+admission, clarification, and acknowledgment text. The callback receives the
+current `AgentTurn`, route name, and text, so it can preserve participant and
+response identity when publishing. Pass each request's `AgentTurn` to `handle()`. The router applies these steps:
 
 1. It serializes turns for one participant, cancels and drains that
    participant's previous response, and bounds the completed history supplied
@@ -34,9 +35,8 @@ these steps:
    available. Equal scores preserve candidate registration order. No eligible
    candidate or usable scores produces clarification. A destination can still
    explicitly request clarification during admission; that ends routing.
-5. An accepted destination streams chunks through the callback, tagged with its
-   registered route name. It returns an answer, keeps focus, or releases focus
-   after the answer. A post-answer release consumes the current query; it does
+5. An accepted destination delivers its output directly. It returns an answer,
+   keeps focus, or releases focus after the answer. A post-answer release consumes the current query; it does
    not send that query through routing again.
 
 ```python
@@ -45,17 +45,18 @@ from xr_ai_routing import AgentRouter, AgentTurn
 router = AgentRouter(
     {"conversation": general_destination, "scene": scene_destination},
     decision_service,
+    output=publish_router_control,
 )
 turn = AgentTurn(
     participant_id="participant-1",
     turn_id="turn-42",
     query="Add a blue cube.",
 )
-result = await router.handle(turn, emit=publish_chunk)
+result = await router.handle(turn)
 ```
 
-`AgentExchange` records a completed user request and its user-visible
-answer. The first turn for a participant uses the supplied `turn.history` as its
+`AgentExchange` records a completed user request and its destination-provided
+response context. The first turn for a participant uses the supplied `turn.history` as its
 initial history once. Later turns use history retained by the router. Only whole
 recent exchanges that fit `context_budget_bytes` are retained and passed to route decisions;
 the budget counts the serialized exchange and time label in UTF-8 bytes. An
@@ -85,6 +86,41 @@ while each destination's `admit()` method remains responsible for deciding
 whether it can accept the specific turn. Destinations decline or clarify before
 answer work begins. A clarification returned after answer work starts is an
 error.
+
+## Response progress and routing context
+
+The router calls `answer(turn, started=...)`. Destinations await `started()`
+immediately before their first meaningful output or application action. The
+signal contains no response text; destinations publish their output directly.
+It suppresses a pending optional acknowledgment and supplies the first-response
+timing sample if the answer completes successfully. It does not deliver output,
+complete the turn, change focus, or add history. Return a `DestinationResult`
+for completion and focus; exceptions still report failure to the caller. A turn
+that fails before its destination calls `started()` sends one brief failure
+message through the router's output; after that call, the destination owns any
+failure output. Callers should not publish another.
+
+If an acknowledgment is already committed, `started()` waits until it is
+delivered, so direct answer output never precedes it. It returns whether the
+response leads the turn's output. It returns
+`False` when the router already delivered or committed control text for the
+turn, such as an admission preamble or acknowledgment; the destination should
+then follow that output instead of interrupting it. Only the first call changes
+router state, and repeated calls return the same result. After `answer()`
+returns or is interrupted, the signal returns `False` and has no effect.
+
+`DestinationResult.text` remains optional response context for routing history.
+The router retains supplied text without delivering it as output. A destination
+can return a concise description of an application action, a completed text
+answer, or no context. Existing history budgets and route-selection behavior
+apply to any supplied context.
+
+`Conversation.answer()` notifies before publishing its first nonblank ready
+chunk to its configured voice output topic. Conversation owns publication and
+stream framing. Returning `DestinationResult.text` preserves
+routing history; it never substitutes for direct output or explicit per-agent
+`routing_aid(participant_id)` metadata. Dynamic routing aids are refreshed for
+selection on each turn.
 
 ## Focus, cancellation, and departure
 
@@ -126,14 +162,16 @@ should default to non-reasoning generation because per-call settings cannot
 override model-level behavior for every provider. A positive delay controls the
 fallback threshold. Measured first-answer examples can predict a slower response
 and start acknowledgment generation earlier, while destination work starts
-immediately. The first nonblank answer chunk cancels acknowledgment that has
-not yet been emitted. This cannot retract text already handed to the output
-callback or audio already queued by the application.
+immediately. An explicit response-start notification cancels acknowledgment that has not yet been emitted. This cannot
+retract text already handed to the output callback or audio already queued by
+the application.
 
 The timing sample begins after destination admission and ends when the
-destination produces its first nonblank text. It excludes route selection,
-admission, acknowledgment-output serialization, and downstream playback.
+destination signals its first meaningful response. It excludes route selection,
+admission, waiting for committed acknowledgment delivery, and downstream playback.
 Admission preambles suppress the optional acknowledgment for that turn.
+The `conversation.response-started` trace records that notification. A notification does
+not establish that output has been accepted or played by a downstream transport.
 If prediction or acknowledgment generation fails, the optional task logs the
 failure once and ends; the destination answer continues. The decision service
 does not define a separate expected-prediction-failure category, so errors are
@@ -142,9 +180,9 @@ work before replacement or resource cleanup; an operation that does not finish
 its cancellation cleanup can delay the next turn, rather than being detached
 behind an arbitrary timeout.
 
-The router does not depend on a voice transport or a particular application.
-An application adapter translates its incoming request into a
-`AgentTurn` and connects the callback to its output path.
+The routing engine does not depend on a voice transport or a particular
+application. Configure its control output once, then call `handle()` with
+`AgentTurn` values.
 
 ## Python API reference
 

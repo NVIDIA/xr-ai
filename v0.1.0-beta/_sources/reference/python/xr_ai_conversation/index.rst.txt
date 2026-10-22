@@ -35,11 +35,11 @@ Package Contents
 
 
 
-.. py:class:: Conversation(llm: xr_ai_models.LLMService, *, instructions: str = '', routing: xr_ai_routing.RoutingAid | None = None, summary_context_topics: collections.abc.Sequence[str] = (), incremental_context_topics: collections.abc.Sequence[str] = (), dialogue_budget_bytes: int = _DEFAULT_DIALOGUE_BUDGET_BYTES, topic_budget_bytes: int | collections.abc.Mapping[str, int] = _DEFAULT_TOPIC_BUDGET_BYTES, compaction_input_budget_bytes: int = _DEFAULT_COMPACTION_INPUT_BUDGET_BYTES)
+.. py:class:: Conversation(llm: xr_ai_models.LLMService, *, instructions: str = '', routing: xr_ai_routing.RoutingAid | None = None, summary_context_topics: collections.abc.Sequence[str] = (), incremental_context_topics: collections.abc.Sequence[str] = (), dialogue_budget_bytes: int = _DEFAULT_DIALOGUE_BUDGET_BYTES, topic_budget_bytes: int | collections.abc.Mapping[str, int] = _DEFAULT_TOPIC_BUDGET_BYTES, compaction_input_budget_bytes: int = _DEFAULT_COMPACTION_INPUT_BUDGET_BYTES, runtime: xr_ai_runtime.AgentRuntime, output_topic: xr_ai_runtime.Topic[xr_ai_voice.VoiceOutput])
 
 
 
-   Stream an application-instructed conversation with participant-scoped context.
+   Application-instructed conversation agent with participant-scoped context.
 
    :param llm: Typed streamed language model service.
    :param instructions: Application-owned prompt text defining domain, role, tone, and handling policy.
@@ -49,6 +49,11 @@ Package Contents
    :param dialogue_budget_bytes: UTF-8 byte budget for completed dialogue rendered into a request.
    :param topic_budget_bytes: UTF-8 byte budget for each topic's context rendered into a request:
        one value for every topic, or a mapping with a value for each configured topic.
+   :param runtime: Runtime used to publish answers. The application owns runtime startup and shutdown.
+   :param output_topic: Explicit ``VoiceOutput`` topic for routed answers; requires ``xr-ai-conversation[voice]``.
+       The conversation publishes with its routing name as source, the turn ID as response ID,
+       and the originating timestamp. It owns stream framing and finalization.
+       No default output or query topic is subscribed.
    :param compaction_input_budget_bytes: UTF-8 byte budget for the summary and entries in one
        compaction request; at least half the largest section budget plus 256 bytes.
 
@@ -70,14 +75,22 @@ Package Contents
 
 
 
-   .. py:method:: answer(turn: xr_ai_routing.AgentTurn, *, emit: collections.abc.Callable[[str, str], collections.abc.Awaitable[None]]) -> xr_ai_routing.DestinationResult
+   .. py:method:: answer(turn: xr_ai_routing.AgentTurn, *, started: collections.abc.Callable[[], collections.abc.Awaitable[bool]]) -> xr_ai_routing.DestinationResult
       :async:
 
 
-      Forward answer chunks with the general conversation source name.
+      Publish a routed answer directly to the configured voice output topic.
 
-      Cancellation and stream errors propagate after the inner iterator is
-      closed.
+      Requires ``runtime`` and ``output_topic``. The first nonblank ready chunk
+      awaits ``started()`` before publication. That body frame
+      interrupts older output unless router control text already started
+      this turn, and an empty final frame closes a completed, failed, or
+      canceled response once opened. Canceled answers publish no further text,
+      and a publication failure publishes no further frames. Failures
+      propagate after closing the model iterator; the router reports
+      failures that occur before the first frame. A successful answer
+      returns the complete text as routing context. The exchange joins this
+      conversation's transcript only after its final frame is delivered.
 
 
 
@@ -121,28 +134,6 @@ Package Contents
       consumer. The constructor selects each topic's update behavior; each
       publication carries only source-owned text. Configure at least one
       topic before calling this method.
-
-
-
-   .. py:method:: stream(request: str, participant_id: str, *, history: tuple[xr_ai_routing.AgentExchange, Ellipsis] = ()) -> collections.abc.AsyncIterator[str]
-      :async:
-
-
-      Yield answer text for a participant's request.
-
-      ``history`` is the completed dialogue context for this request. The
-      current request is kept separate and is not clipped to fit a context
-      budget. Close the iterator when the caller cancels consumption so the
-      underlying model stream can be closed promptly.
-
-      :param request: Current user request.
-      :param participant_id: Participant whose transcript and named context apply.
-      :param history: Completed exchanges to reconcile with this participant's transcript.
-      :yields: Non-empty answer text chunks.
-      :raises RuntimeError: If the conversation is closing or the model returns no answer.
-
-      Cancellation and service errors propagate after the model stream is
-      closed.
 
 
 

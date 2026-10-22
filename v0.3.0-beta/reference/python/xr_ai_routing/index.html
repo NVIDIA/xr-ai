@@ -461,13 +461,13 @@
 <td><p>Destination decision made before it speaks or starts work.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_routing.AgentExchange" title="xr_ai_routing.AgentExchange"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AgentExchange</span></code></a></p></td>
-<td><p>One completed user and assistant exchange.</p></td>
+<td><p>One completed user request and destination-provided response context.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_routing.AgentTurn" title="xr_ai_routing.AgentTurn"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AgentTurn</span></code></a></p></td>
 <td><p>The current user turn and complete exchanges selected for this destination.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_routing.DestinationResult" title="xr_ai_routing.DestinationResult"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DestinationResult</span></code></a></p></td>
-<td><p>Completed answer plus the router's post-answer focus transition.</p></td>
+<td><p>Optional completed response context and the router's focus transition.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_routing.RoutableAgent" title="xr_ai_routing.RoutableAgent"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RoutableAgent</span></code></a></p></td>
 <td><p>An agent that owns its state and handles admitted or fallback turns.</p></td>
@@ -528,7 +528,7 @@ returns the same query to ordinary routing.</p>
 <dl class="py class">
 <dt class="sig sig-object py" id="xr_ai_routing.AgentExchange">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_routing.</span></span><span class="sig-name descname"><span class="pre">AgentExchange</span></span><a class="headerlink" href="#xr_ai_routing.AgentExchange" title="Link to this definition">#</a></dt>
-<dd><p>One completed user and assistant exchange.</p>
+<dd><p>One completed user request and destination-provided response context.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="xr_ai_routing.AgentExchange.user">
 <span class="sig-name descname"><span class="pre">user</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#xr_ai_routing.AgentExchange.user" title="Link to this definition">#</a></dt>
@@ -538,7 +538,7 @@ returns the same query to ordinary routing.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="xr_ai_routing.AgentExchange.assistant">
 <span class="sig-name descname"><span class="pre">assistant</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#xr_ai_routing.AgentExchange.assistant" title="Link to this definition">#</a></dt>
-<dd><p>Completed user-visible reply, excluding progress acknowledgments.</p>
+<dd><p>Completed response context, excluding progress acknowledgments.</p>
 </dd></dl>
 
 </dd></dl>
@@ -571,12 +571,18 @@ returns the same query to ordinary routing.</p>
 <dd><p>Newest whole completed exchanges that fit the router’s byte budget.</p>
 </dd></dl>
 
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_routing.AgentTurn.timestamp_us">
+<span class="sig-name descname"><span class="pre">timestamp_us</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#xr_ai_routing.AgentTurn.timestamp_us" title="Link to this definition">#</a></dt>
+<dd><p>Originating input time in Unix microseconds, when supplied by the caller.</p>
+</dd></dl>
+
 </dd></dl>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="xr_ai_routing.DestinationResult">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_routing.</span></span><span class="sig-name descname"><span class="pre">DestinationResult</span></span><a class="headerlink" href="#xr_ai_routing.DestinationResult" title="Link to this definition">#</a></dt>
-<dd><p>Completed answer plus the router’s post-answer focus transition.</p>
+<dd><p>Optional completed response context and the router’s focus transition.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="xr_ai_routing.DestinationResult.disposition">
 <span class="sig-name descname"><span class="pre">disposition</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'answer'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'focus'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'release'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'clarify'</span></span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'answer'</span></em><a class="headerlink" href="#xr_ai_routing.DestinationResult.disposition" title="Link to this definition">#</a></dt>
@@ -588,7 +594,9 @@ reroute the request; use <code class="docutils literal notranslate"><span class=
 <dl class="py attribute">
 <dt class="sig sig-object py" id="xr_ai_routing.DestinationResult.text">
 <span class="sig-name descname"><span class="pre">text</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">''</span></em><a class="headerlink" href="#xr_ai_routing.DestinationResult.text" title="Link to this definition">#</a></dt>
-<dd><p>Completed answer to retain in history; progress acknowledgements are excluded.</p>
+<dd><p>Optional completed response context to retain in history.</p>
+<p>This text is not delivered as output by the router. Destinations can omit
+it when no routing context is needed; progress acknowledgements are excluded.</p>
 </dd></dl>
 
 </dd></dl>
@@ -622,12 +630,12 @@ this protocol.</p>
 <dl>
 <dd><em class="sig-param"><span class="n"><span class="pre">turn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#xr_ai_routing.AgentTurn" title="xr_ai_routing.AgentTurn"><span class="pre">AgentTurn</span></a></span></em>,</dd>
 <dd><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">emit</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">collections.abc.Awaitable</span><span class="p"><span class="pre">[</span></span><span class="pre">None</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">started</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">collections.abc.Awaitable</span><span class="p"><span class="pre">[</span></span><span class="pre">bool</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>,</dd>
 </dl>
 
 <span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#xr_ai_routing.DestinationResult" title="xr_ai_routing.DestinationResult"><span class="pre">DestinationResult</span></a></span></span><a class="headerlink" href="#xr_ai_routing.RoutableAgent.answer" title="Link to this definition">#</a></dt>
 <dd><p>Answer a turn after admission or as the configured default fallback.</p>
-<p>Stream chunks and return answer, focus, or release. After selected
+<p>Deliver output directly and return answer, focus, or release. After selected
 destinations decline through the bounded routing attempts, the front
 end may call an eligible configured default once without <code class="docutils literal notranslate"><span class="pre">admit()</span></code>,
 unless that default already declined the current turn;
@@ -636,14 +644,34 @@ destinations must support that standalone answer path.</p>
 Returning <code class="docutils literal notranslate"><span class="pre">DestinationResult(&quot;release&quot;)</span></code> consumes the current request
 after the answer and clears focus; it does not reroute that request.
 Destination exceptions and task cancellation propagate to the caller.
-The router suppresses later chunks after interruption but cannot
-retract output already delivered to <code class="docutils literal notranslate"><span class="pre">emit</span></code>.
+Await <code class="docutils literal notranslate"><span class="pre">started()</span></code> immediately before the first meaningful output or
+application action. It suppresses an acknowledgment that is not yet
+committed, waits until a committed one is delivered, supplies the
+first-response timing sample, and returns whether the response
+leads the turn’s output: <code class="docutils literal notranslate"><span class="pre">False</span></code> means router control text such as a
+preamble or acknowledgment already started this turn, so the response
+should follow it instead of interrupting it. Repeated calls return the
+same result, and calls after <code class="docutils literal notranslate"><span class="pre">answer()</span></code> returns have no effect.
+Completion and focus still use the return value, with optional response
+context in <code class="docutils literal notranslate"><span class="pre">DestinationResult.text</span></code> for the router’s history.
+Destinations own output publication and stream finalization. A failure
+before <code class="docutils literal notranslate"><span class="pre">started()</span></code> is reported to the participant by the router;
+after it, the destination owns any failure output.
+Cancellation must drain their output and model work before returning.
 A routing <code class="docutils literal notranslate"><span class="pre">clarify</span></code> choice with usable scores selects the
 highest-scoring eligible destination through normal admission. Without
 eligible scores the router asks for clarification. After exhausted
 declines, the default is not retried if
 it already declined this turn, and
 clarification is also used when the configured default is unavailable.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>turn</strong> – Current request and bounded completed history.</p></li>
+<li><p><strong>started</strong> – Response-start signal for this answer.</p></li>
+</ul>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py method">
@@ -741,6 +769,7 @@ an active routed turn, it contains <code class="docutils literal notranslate"><s
 <dd><em class="sig-param"><span class="n"><span class="pre">destinations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="#xr_ai_routing.RoutableAgent" title="xr_ai_routing.RoutableAgent"><span class="pre">xr_ai_routing.RoutableAgent</span></a><span class="p"><span class="pre">]</span></span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">decisions</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../xr_ai_models/index.html#xr_ai_models.DecisionService" title="xr_ai_models.DecisionService"><span class="pre">xr_ai_models.DecisionService</span></a></span></em>,</dd>
 <dd><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">output</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#xr_ai_routing.AgentTurn" title="xr_ai_routing.AgentTurn"><span class="pre">xr_ai_routing.AgentTurn</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">collections.abc.Awaitable</span><span class="p"><span class="pre">[</span></span><span class="pre">None</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">default_destination</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'conversation'</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">context_budget_bytes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">_DEFAULT_CONTEXT_BUDGET_BYTES</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">acknowledgment_llm</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../xr_ai_models/index.html#xr_ai_models.LLMService" title="xr_ai_models.LLMService"><span class="pre">xr_ai_models.LLMService</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
@@ -767,17 +796,21 @@ the per-call setting cannot override every provider’s model-level extras.
 Acknowledgments use a bounded output-token budget. A positive delay sets
 the fallback silence threshold; a confident prediction
 of a slower first answer can start the acknowledgment earlier. The
-destination still starts immediately, and its first nonblank answer chunk
-cancels any acknowledgment that has not yet been emitted. This suppresses
+destination still starts immediately. Its <code class="docutils literal notranslate"><span class="pre">started()</span></code> response signal
+cancels any acknowledgment
+that has not yet been emitted. This suppresses
 pending output, not audio already queued or played by downstream transports.
 The delay and timing examples start after admission and measure when the
-destination produces its first nonblank text, excluding routing, admission,
-acknowledgment-output serialization, and audio playback.</p>
+destination signals its first meaningful response, excluding routing, admission,
+waiting for committed acknowledgment delivery, and audio playback.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>destinations</strong> – Registered destinations keyed by their stable route names.</p></li>
 <li><p><strong>decisions</strong> – Typed Clef decision service used to select routes.</p></li>
+<li><p><strong>output</strong> – Async callback receiving the current <code class="docutils literal notranslate"><span class="pre">AgentTurn</span></code>, route name, and finite control text,
+including acknowledgments, admission preambles, and clarification or release messages.
+Destinations publish their own answer output directly.</p></li>
 <li><p><strong>default_destination</strong> – Registered route used for exhausted-decline fallback.</p></li>
 <li><p><strong>context_budget_bytes</strong> – UTF-8 byte budget for retained completed history and routing history input.</p></li>
 <li><p><strong>acknowledgment_llm</strong> – Optional non-reasoning client for intention acknowledgments and duration prediction.</p></li>
@@ -792,20 +825,21 @@ acknowledgment; requires <code class="docutils literal notranslate"><span class=
 
 <dl>
 <dd><em class="sig-param"><span class="n"><span class="pre">turn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#xr_ai_routing.AgentTurn" title="xr_ai_routing.AgentTurn"><span class="pre">xr_ai_routing.AgentTurn</span></a></span></em>,</dd>
-<dd><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">emit</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">collections.abc.Awaitable</span><span class="p"><span class="pre">[</span></span><span class="pre">None</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>,</dd>
 </dl>
 
 <span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#xr_ai_routing.DestinationResult" title="xr_ai_routing.DestinationResult"><span class="pre">xr_ai_routing.DestinationResult</span></a></span></span><a class="headerlink" href="#xr_ai_routing.AgentRouter.handle" title="Link to this definition">#</a></dt>
-<dd><p>Route and answer one turn, emitting source-tagged text chunks.</p>
+<dd><p>Route one turn while emitting only router-owned control text.</p>
 <p>The supplied <code class="docutils literal notranslate"><span class="pre">turn.history</span></code> seeds this participant when the router
 has no completed history of its own. Later turns use the router’s
 completed history rather than merging a new caller-supplied history.
 The participant’s current turn is kept separate from that history.</p>
-<p>Destination failures propagate to the caller, which owns any turn-level
-recovery after already-emitted progress text. Cancellation suppresses
-future chunks from the interrupted turn but cannot retract chunks
-already delivered to <code class="docutils literal notranslate"><span class="pre">emit</span></code>.</p>
+<p>A turn that fails before its destination signals a response start
+publishes one failure message through the router’s output; once the
+response starts, the destination owns failure output. Exceptions still
+propagate to the caller for supervision, not for further user-facing
+recovery. Destinations own direct output delivery, cancellation, and
+finalization. The router suppresses interrupted control output but
+cannot retract already-published output.</p>
 <p>The application drives turns and lifecycle operations. Destination and
 output callbacks, including their child tasks, must not recursively
 await this router’s operations, which would wait for their own response
@@ -816,10 +850,7 @@ Canceling a cleanup waiter does not abandon the owned operation;
 cancellation propagates after that operation completes.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>turn</strong> – Current request and optional initial completed history.</p></li>
-<li><p><strong>emit</strong> – Callback that receives destination-attributed text chunks.</p></li>
-</ul>
+<dd class="field-odd"><p><strong>turn</strong> – Current request and optional initial completed history.</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>The final answer, focus, release, or clarification disposition.</p>
@@ -935,6 +966,7 @@ participants too, and permits later turns to begin a fresh lifecycle.</p>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_routing.AgentTurn.turn_id"><code class="docutils literal notranslate"><span class="pre">turn_id</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_routing.AgentTurn.query"><code class="docutils literal notranslate"><span class="pre">query</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_routing.AgentTurn.history"><code class="docutils literal notranslate"><span class="pre">history</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_routing.AgentTurn.timestamp_us"><code class="docutils literal notranslate"><span class="pre">timestamp_us</span></code></a></li>
 </ul>
 </li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_routing.DestinationResult"><code class="docutils literal notranslate"><span class="pre">DestinationResult</span></code></a><ul class="nav section-nav flex-column">

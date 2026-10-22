@@ -466,8 +466,8 @@
 -->
 <section id="xr-ai-conversation">
 <h1>xr-ai-conversation<a class="headerlink" href="#xr-ai-conversation" title="Link to this heading">#</a></h1>
-<p><code class="docutils literal notranslate"><span class="pre">xr-ai-conversation</span></code> provides an application-instructed, text-only
-conversation engine with participant-scoped history and named
+<p><code class="docutils literal notranslate"><span class="pre">xr-ai-conversation</span></code> provides an application-instructed
+conversation agent with participant-scoped history and named
 background-context sources. It does not contain turn selection, focus
 management, or tools; routing contracts are provided by
 <a class="reference internal" href="agent-sdk-routing.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">xr-ai-routing</span></code></span></a>, and other capabilities, such as
@@ -478,17 +478,41 @@ questions about the camera view, belong in separate routed destinations.</p>
 <code class="docutils literal notranslate"><span class="pre">AgentRouter</span></code> alongside application-specific agents.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_conversation</span><span class="w"> </span><span class="kn">import</span> <span class="n">Conversation</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_routing</span><span class="w"> </span><span class="kn">import</span> <span class="n">AgentRouter</span><span class="p">,</span> <span class="n">AgentTurn</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_runtime</span><span class="w"> </span><span class="kn">import</span> <span class="n">AgentRuntime</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_voice</span><span class="w"> </span><span class="kn">import</span> <span class="n">VOICE_OUTPUT_TOPIC</span>
 
-<span class="n">conversation</span> <span class="o">=</span> <span class="n">Conversation</span><span class="p">(</span><span class="n">llm</span><span class="p">,</span> <span class="n">instructions</span><span class="o">=</span><span class="s2">"Answer general questions about the lab."</span><span class="p">)</span>
-<span class="n">front_end</span> <span class="o">=</span> <span class="n">AgentRouter</span><span class="p">({</span><span class="s2">"conversation"</span><span class="p">:</span> <span class="n">conversation</span><span class="p">},</span> <span class="n">decisions</span><span class="p">)</span>
-<span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">front_end</span><span class="o">.</span><span class="n">handle</span><span class="p">(</span>
-    <span class="n">AgentTurn</span><span class="p">(</span><span class="s2">"participant-1"</span><span class="p">,</span> <span class="s2">"turn-1"</span><span class="p">,</span> <span class="s2">"When is the calibration meeting?"</span><span class="p">),</span>
-    <span class="n">emit</span><span class="o">=</span><span class="n">publish_chunk</span><span class="p">,</span>
+<span class="n">runtime</span> <span class="o">=</span> <span class="n">AgentRuntime</span><span class="p">()</span>
+
+<span class="n">conversation</span> <span class="o">=</span> <span class="n">Conversation</span><span class="p">(</span>
+    <span class="n">llm</span><span class="p">,</span>
+    <span class="n">instructions</span><span class="o">=</span><span class="s2">"Answer general questions about the lab."</span><span class="p">,</span>
+    <span class="n">runtime</span><span class="o">=</span><span class="n">runtime</span><span class="p">,</span>
+    <span class="n">output_topic</span><span class="o">=</span><span class="n">VOICE_OUTPUT_TOPIC</span><span class="p">,</span>
 <span class="p">)</span>
+<span class="n">front_end</span> <span class="o">=</span> <span class="n">AgentRouter</span><span class="p">({</span><span class="s2">"conversation"</span><span class="p">:</span> <span class="n">conversation</span><span class="p">},</span> <span class="n">decisions</span><span class="p">,</span> <span class="n">output</span><span class="o">=</span><span class="n">publish_router_control</span><span class="p">)</span>
+<span class="k">async</span> <span class="k">with</span> <span class="n">runtime</span><span class="p">:</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">front_end</span><span class="o">.</span><span class="n">handle</span><span class="p">(</span>
+            <span class="n">AgentTurn</span><span class="p">(</span><span class="s2">"participant-1"</span><span class="p">,</span> <span class="s2">"turn-1"</span><span class="p">,</span> <span class="s2">"When is the calibration meeting?"</span><span class="p">),</span>
+        <span class="p">)</span>
+    <span class="k">finally</span><span class="p">:</span>
+        <span class="k">await</span> <span class="n">front_end</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
+<span class="k">await</span> <span class="n">conversation</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
 </pre></div>
 </div>
-<p>The engine answers from its instructions, completed history, and configured
-context sources.</p>
+<p>The agent answers from its instructions, completed history, and configured
+context sources. Install <code class="docutils literal notranslate"><span class="pre">xr-ai-conversation[voice]</span></code> and configure the runtime
+and a typed voice output topic to use it as a routed destination. Conversation
+publishes its own response chunks with its routing name as source and the turn’s
+response identity and timestamp. Its first chunk interrupts older speech
+unless router text such as a preamble already started the turn. It finalizes
+partial responses after model failure; the router reports a failure before the
+first chunk.
+Cancellation drains the model without publishing further frames. Model and
+publication failures propagate to the caller.</p>
+<p>The application starts the runtime before answering and stops it after draining
+routed work. <code class="docutils literal notranslate"><span class="pre">answer(turn,</span> <span class="pre">started=...)</span></code> is the public request handler; streaming model
+iteration is private to the conversation.</p>
 </section>
 <section id="named-context-topics">
 <h2>Named context topics<a class="headerlink" href="#named-context-topics" title="Link to this heading">#</a></h2>
@@ -497,6 +521,8 @@ The topic determines how its text updates that source; the payload contains only
 <code class="docutils literal notranslate"><span class="pre">ConversationContextUpdate.text</span></code>.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">conversation</span> <span class="o">=</span> <span class="n">Conversation</span><span class="p">(</span>
     <span class="n">llm</span><span class="p">,</span>
+    <span class="n">runtime</span><span class="o">=</span><span class="n">runtime</span><span class="p">,</span>
+    <span class="n">output_topic</span><span class="o">=</span><span class="n">VOICE_OUTPUT_TOPIC</span><span class="p">,</span>
     <span class="n">summary_context_topics</span><span class="o">=</span><span class="p">(</span><span class="s2">"sample.monitor-window"</span><span class="p">,),</span>
     <span class="n">incremental_context_topics</span><span class="o">=</span><span class="p">(</span><span class="s2">"sample.notes"</span><span class="p">,),</span>
 <span class="p">)</span>
@@ -604,7 +630,7 @@ speaks to this conversation, the application calls
 <p>An answer still streaming when its participant leaves is not stopped. When it
 completes, it records its exchange as the start of new context for that
 participant. Close the conversation before closing the shared model client,
-and drain caller-owned answer streams separately.</p>
+and drain in-flight answers separately.</p>
 </section>
 <section id="evaluations">
 <h2>Evaluations<a class="headerlink" href="#evaluations" title="Link to this heading">#</a></h2>

@@ -473,9 +473,10 @@ implements the public <code class="docutils literal notranslate"><span class="pr
 model calls, application state, and resources.</p>
 <section id="route-a-turn">
 <h2>Route a turn<a class="headerlink" href="#route-a-turn" title="Link to this heading">#</a></h2>
-<p>Pass an <code class="docutils literal notranslate"><span class="pre">AgentTurn</span></code> to <code class="docutils literal notranslate"><span class="pre">AgentRouter.handle()</span></code> with an async
-callback that accepts the route name and text chunk. The router applies
-these steps:</p>
+<p>Configure <code class="docutils literal notranslate"><span class="pre">AgentRouter(output=...)</span></code> with an async callback for router-owned
+admission, clarification, and acknowledgment text. The callback receives the
+current <code class="docutils literal notranslate"><span class="pre">AgentTurn</span></code>, route name, and text, so it can preserve participant and
+response identity when publishing. Pass each request’s <code class="docutils literal notranslate"><span class="pre">AgentTurn</span></code> to <code class="docutils literal notranslate"><span class="pre">handle()</span></code>. The router applies these steps:</p>
 <ol class="arabic simple">
 <li><p>It serializes turns for one participant, cancels and drains that
 participant’s previous response, and bounds the completed history supplied
@@ -494,9 +495,8 @@ eligible destination through normal admission when usable scores are
 available. Equal scores preserve candidate registration order. No eligible
 candidate or usable scores produces clarification. A destination can still
 explicitly request clarification during admission; that ends routing.</p></li>
-<li><p>An accepted destination streams chunks through the callback, tagged with its
-registered route name. It returns an answer, keeps focus, or releases focus
-after the answer. A post-answer release consumes the current query; it does
+<li><p>An accepted destination delivers its output directly. It returns an answer,
+keeps focus, or releases focus after the answer. A post-answer release consumes the current query; it does
 not send that query through routing again.</p></li>
 </ol>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_routing</span><span class="w"> </span><span class="kn">import</span> <span class="n">AgentRouter</span><span class="p">,</span> <span class="n">AgentTurn</span>
@@ -504,17 +504,18 @@ not send that query through routing again.</p></li>
 <span class="n">router</span> <span class="o">=</span> <span class="n">AgentRouter</span><span class="p">(</span>
     <span class="p">{</span><span class="s2">"conversation"</span><span class="p">:</span> <span class="n">general_destination</span><span class="p">,</span> <span class="s2">"scene"</span><span class="p">:</span> <span class="n">scene_destination</span><span class="p">},</span>
     <span class="n">decision_service</span><span class="p">,</span>
+    <span class="n">output</span><span class="o">=</span><span class="n">publish_router_control</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="n">turn</span> <span class="o">=</span> <span class="n">AgentTurn</span><span class="p">(</span>
     <span class="n">participant_id</span><span class="o">=</span><span class="s2">"participant-1"</span><span class="p">,</span>
     <span class="n">turn_id</span><span class="o">=</span><span class="s2">"turn-42"</span><span class="p">,</span>
     <span class="n">query</span><span class="o">=</span><span class="s2">"Add a blue cube."</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">router</span><span class="o">.</span><span class="n">handle</span><span class="p">(</span><span class="n">turn</span><span class="p">,</span> <span class="n">emit</span><span class="o">=</span><span class="n">publish_chunk</span><span class="p">)</span>
+<span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">router</span><span class="o">.</span><span class="n">handle</span><span class="p">(</span><span class="n">turn</span><span class="p">)</span>
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">AgentExchange</span></code> records a completed user request and its user-visible
-answer. The first turn for a participant uses the supplied <code class="docutils literal notranslate"><span class="pre">turn.history</span></code> as its
+<p><code class="docutils literal notranslate"><span class="pre">AgentExchange</span></code> records a completed user request and its destination-provided
+response context. The first turn for a participant uses the supplied <code class="docutils literal notranslate"><span class="pre">turn.history</span></code> as its
 initial history once. Later turns use history retained by the router. Only whole
 recent exchanges that fit <code class="docutils literal notranslate"><span class="pre">context_budget_bytes</span></code> are retained and passed to route decisions;
 the budget counts the serialized exchange and time label in UTF-8 bytes. An
@@ -541,6 +542,38 @@ while each destination’s <code class="docutils literal notranslate"><span clas
 whether it can accept the specific turn. Destinations decline or clarify before
 answer work begins. A clarification returned after answer work starts is an
 error.</p>
+</section>
+<section id="response-progress-and-routing-context">
+<h2>Response progress and routing context<a class="headerlink" href="#response-progress-and-routing-context" title="Link to this heading">#</a></h2>
+<p>The router calls <code class="docutils literal notranslate"><span class="pre">answer(turn,</span> <span class="pre">started=...)</span></code>. Destinations await <code class="docutils literal notranslate"><span class="pre">started()</span></code>
+immediately before their first meaningful output or application action. The
+signal contains no response text; destinations publish their output directly.
+It suppresses a pending optional acknowledgment and supplies the first-response
+timing sample if the answer completes successfully. It does not deliver output,
+complete the turn, change focus, or add history. Return a <code class="docutils literal notranslate"><span class="pre">DestinationResult</span></code>
+for completion and focus; exceptions still report failure to the caller. A turn
+that fails before its destination calls <code class="docutils literal notranslate"><span class="pre">started()</span></code> sends one brief failure
+message through the router’s output; after that call, the destination owns any
+failure output. Callers should not publish another.</p>
+<p>If an acknowledgment is already committed, <code class="docutils literal notranslate"><span class="pre">started()</span></code> waits until it is
+delivered, so direct answer output never precedes it. It returns whether the
+response leads the turn’s output. It returns
+<code class="docutils literal notranslate"><span class="pre">False</span></code> when the router already delivered or committed control text for the
+turn, such as an admission preamble or acknowledgment; the destination should
+then follow that output instead of interrupting it. Only the first call changes
+router state, and repeated calls return the same result. After <code class="docutils literal notranslate"><span class="pre">answer()</span></code>
+returns or is interrupted, the signal returns <code class="docutils literal notranslate"><span class="pre">False</span></code> and has no effect.</p>
+<p><code class="docutils literal notranslate"><span class="pre">DestinationResult.text</span></code> remains optional response context for routing history.
+The router retains supplied text without delivering it as output. A destination
+can return a concise description of an application action, a completed text
+answer, or no context. Existing history budgets and route-selection behavior
+apply to any supplied context.</p>
+<p><code class="docutils literal notranslate"><span class="pre">Conversation.answer()</span></code> notifies before publishing its first nonblank ready
+chunk to its configured voice output topic. Conversation owns publication and
+stream framing. Returning <code class="docutils literal notranslate"><span class="pre">DestinationResult.text</span></code> preserves
+routing history; it never substitutes for direct output or explicit per-agent
+<code class="docutils literal notranslate"><span class="pre">routing_aid(participant_id)</span></code> metadata. Dynamic routing aids are refreshed for
+selection on each turn.</p>
 </section>
 <section id="focus-cancellation-and-departure">
 <h2>Focus, cancellation, and departure<a class="headerlink" href="#focus-cancellation-and-departure" title="Link to this heading">#</a></h2>
@@ -580,13 +613,15 @@ should default to non-reasoning generation because per-call settings cannot
 override model-level behavior for every provider. A positive delay controls the
 fallback threshold. Measured first-answer examples can predict a slower response
 and start acknowledgment generation earlier, while destination work starts
-immediately. The first nonblank answer chunk cancels acknowledgment that has
-not yet been emitted. This cannot retract text already handed to the output
-callback or audio already queued by the application.</p>
+immediately. An explicit response-start notification cancels acknowledgment that has not yet been emitted. This cannot
+retract text already handed to the output callback or audio already queued by
+the application.</p>
 <p>The timing sample begins after destination admission and ends when the
-destination produces its first nonblank text. It excludes route selection,
-admission, acknowledgment-output serialization, and downstream playback.
+destination signals its first meaningful response. It excludes route selection,
+admission, waiting for committed acknowledgment delivery, and downstream playback.
 Admission preambles suppress the optional acknowledgment for that turn.
+The <code class="docutils literal notranslate"><span class="pre">conversation.response-started</span></code> trace records that notification. A notification does
+not establish that output has been accepted or played by a downstream transport.
 If prediction or acknowledgment generation fails, the optional task logs the
 failure once and ends; the destination answer continues. The decision service
 does not define a separate expected-prediction-failure category, so errors are
@@ -594,9 +629,9 @@ not silently converted into a delay fallback. Cancellation drains actual owned
 work before replacement or resource cleanup; an operation that does not finish
 its cancellation cleanup can delay the next turn, rather than being detached
 behind an arbitrary timeout.</p>
-<p>The router does not depend on a voice transport or a particular application.
-An application adapter translates its incoming request into a
-<code class="docutils literal notranslate"><span class="pre">AgentTurn</span></code> and connects the callback to its output path.</p>
+<p>The routing engine does not depend on a voice transport or a particular
+application. Configure its control output once, then call <code class="docutils literal notranslate"><span class="pre">handle()</span></code> with
+<code class="docutils literal notranslate"><span class="pre">AgentTurn</span></code> values.</p>
 </section>
 <section id="python-api-reference">
 <h2>Python API reference<a class="headerlink" href="#python-api-reference" title="Link to this heading">#</a></h2>
@@ -655,6 +690,7 @@ documents the exported names and their signatures, fields, and behavior.</p>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#route-a-turn">Route a turn</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#response-progress-and-routing-context">Response progress and routing context</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#focus-cancellation-and-departure">Focus, cancellation, and departure</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#optional-progress-acknowledgment">Optional progress acknowledgment</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#python-api-reference">Python API reference</a></li>

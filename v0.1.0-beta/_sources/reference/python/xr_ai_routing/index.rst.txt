@@ -71,7 +71,7 @@ Package Contents
 
 .. py:class:: AgentExchange
 
-   One completed user and assistant exchange.
+   One completed user request and destination-provided response context.
 
 
    .. py:attribute:: user
@@ -84,7 +84,7 @@ Package Contents
    .. py:attribute:: assistant
       :type:  str
 
-      Completed user-visible reply, excluding progress acknowledgments.
+      Completed response context, excluding progress acknowledgments.
 
 
 
@@ -123,9 +123,18 @@ Package Contents
 
 
 
+   .. py:attribute:: timestamp_us
+      :type:  int | None
+      :value: None
+
+
+      Originating input time in Unix microseconds, when supplied by the caller.
+
+
+
 .. py:class:: DestinationResult
 
-   Completed answer plus the router's post-answer focus transition.
+   Optional completed response context and the router's focus transition.
 
 
    .. py:attribute:: disposition
@@ -145,7 +154,10 @@ Package Contents
       :value: ''
 
 
-      Completed answer to retain in history; progress acknowledgements are excluded.
+      Optional completed response context to retain in history.
+
+      This text is not delivered as output by the router. Destinations can omit
+      it when no routing context is needed; progress acknowledgements are excluded.
 
 
 
@@ -177,13 +189,13 @@ Package Contents
 
 
 
-   .. py:method:: answer(turn: AgentTurn, *, emit: collections.abc.Callable[[str, str], collections.abc.Awaitable[None]]) -> DestinationResult
+   .. py:method:: answer(turn: AgentTurn, *, started: collections.abc.Callable[[], collections.abc.Awaitable[bool]]) -> DestinationResult
       :async:
 
 
       Answer a turn after admission or as the configured default fallback.
 
-      Stream chunks and return answer, focus, or release. After selected
+      Deliver output directly and return answer, focus, or release. After selected
       destinations decline through the bounded routing attempts, the front
       end may call an eligible configured default once without ``admit()``,
       unless that default already declined the current turn;
@@ -193,14 +205,29 @@ Package Contents
       Returning ``DestinationResult("release")`` consumes the current request
       after the answer and clears focus; it does not reroute that request.
       Destination exceptions and task cancellation propagate to the caller.
-      The router suppresses later chunks after interruption but cannot
-      retract output already delivered to ``emit``.
+      Await ``started()`` immediately before the first meaningful output or
+      application action. It suppresses an acknowledgment that is not yet
+      committed, waits until a committed one is delivered, supplies the
+      first-response timing sample, and returns whether the response
+      leads the turn's output: ``False`` means router control text such as a
+      preamble or acknowledgment already started this turn, so the response
+      should follow it instead of interrupting it. Repeated calls return the
+      same result, and calls after ``answer()`` returns have no effect.
+      Completion and focus still use the return value, with optional response
+      context in ``DestinationResult.text`` for the router's history.
+      Destinations own output publication and stream finalization. A failure
+      before ``started()`` is reported to the participant by the router;
+      after it, the destination owns any failure output.
+      Cancellation must drain their output and model work before returning.
       A routing ``clarify`` choice with usable scores selects the
       highest-scoring eligible destination through normal admission. Without
       eligible scores the router asks for clarification. After exhausted
       declines, the default is not retried if
       it already declined this turn, and
       clarification is also used when the configured default is unavailable.
+
+      :param turn: Current request and bounded completed history.
+      :param started: Response-start signal for this answer.
 
 
 
@@ -305,7 +332,7 @@ Package Contents
    an active routed turn, it contains ``None`` and empty history tuples.
 
 
-.. py:class:: AgentRouter(destinations: collections.abc.Mapping[str, xr_ai_routing.RoutableAgent], decisions: xr_ai_models.DecisionService, *, default_destination: str = 'conversation', context_budget_bytes: int = _DEFAULT_CONTEXT_BUDGET_BYTES, acknowledgment_llm: xr_ai_models.LLMService | None = None, acknowledgment_delay_secs: float | None = None)
+.. py:class:: AgentRouter(destinations: collections.abc.Mapping[str, xr_ai_routing.RoutableAgent], decisions: xr_ai_models.DecisionService, *, output: collections.abc.Callable[[xr_ai_routing.AgentTurn, str, str], collections.abc.Awaitable[None]], default_destination: str = 'conversation', context_budget_bytes: int = _DEFAULT_CONTEXT_BUDGET_BYTES, acknowledgment_llm: xr_ai_models.LLMService | None = None, acknowledgment_delay_secs: float | None = None)
 
    Route a turn, check admission before speech, and retain explicit focus.
 
@@ -328,15 +355,19 @@ Package Contents
    Acknowledgments use a bounded output-token budget. A positive delay sets
    the fallback silence threshold; a confident prediction
    of a slower first answer can start the acknowledgment earlier. The
-   destination still starts immediately, and its first nonblank answer chunk
-   cancels any acknowledgment that has not yet been emitted. This suppresses
+   destination still starts immediately. Its ``started()`` response signal
+   cancels any acknowledgment
+   that has not yet been emitted. This suppresses
    pending output, not audio already queued or played by downstream transports.
    The delay and timing examples start after admission and measure when the
-   destination produces its first nonblank text, excluding routing, admission,
-   acknowledgment-output serialization, and audio playback.
+   destination signals its first meaningful response, excluding routing, admission,
+   waiting for committed acknowledgment delivery, and audio playback.
 
    :param destinations: Registered destinations keyed by their stable route names.
    :param decisions: Typed Clef decision service used to select routes.
+   :param output: Async callback receiving the current ``AgentTurn``, route name, and finite control text,
+       including acknowledgments, admission preambles, and clarification or release messages.
+       Destinations publish their own answer output directly.
    :param default_destination: Registered route used for exhausted-decline fallback.
    :param context_budget_bytes: UTF-8 byte budget for retained completed history and routing history input.
    :param acknowledgment_llm: Optional non-reasoning client for intention acknowledgments and duration prediction.
@@ -344,21 +375,24 @@ Package Contents
        acknowledgment; requires ``acknowledgment_llm``.
 
 
-   .. py:method:: handle(turn: xr_ai_routing.AgentTurn, *, emit: collections.abc.Callable[[str, str], collections.abc.Awaitable[None]]) -> xr_ai_routing.DestinationResult
+   .. py:method:: handle(turn: xr_ai_routing.AgentTurn) -> xr_ai_routing.DestinationResult
       :async:
 
 
-      Route and answer one turn, emitting source-tagged text chunks.
+      Route one turn while emitting only router-owned control text.
 
       The supplied ``turn.history`` seeds this participant when the router
       has no completed history of its own. Later turns use the router's
       completed history rather than merging a new caller-supplied history.
       The participant's current turn is kept separate from that history.
 
-      Destination failures propagate to the caller, which owns any turn-level
-      recovery after already-emitted progress text. Cancellation suppresses
-      future chunks from the interrupted turn but cannot retract chunks
-      already delivered to ``emit``.
+      A turn that fails before its destination signals a response start
+      publishes one failure message through the router's output; once the
+      response starts, the destination owns failure output. Exceptions still
+      propagate to the caller for supervision, not for further user-facing
+      recovery. Destinations own direct output delivery, cancellation, and
+      finalization. The router suppresses interrupted control output but
+      cannot retract already-published output.
 
       The application drives turns and lifecycle operations. Destination and
       output callbacks, including their child tasks, must not recursively
@@ -371,7 +405,6 @@ Package Contents
       cancellation propagates after that operation completes.
 
       :param turn: Current request and optional initial completed history.
-      :param emit: Callback that receives destination-attributed text chunks.
       :return: The final answer, focus, release, or clarification disposition.
 
 
