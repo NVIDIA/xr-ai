@@ -886,9 +886,9 @@ def run_container(
     # ``container_name`` stays the requested name for logs and messages.
     container_ref = container_name
 
-    # On abort (Ctrl-C during model-servers startup) the launcher passes
-    # no_kill=set() and SIGTERMs every wrapper's process group. Without a
-    # handler, SIGTERM kills *this* wrapper but leaves the dockerd-managed
+    # On abort (Ctrl-C during model-servers startup) the launcher SIGTERMs
+    # each unfinished wrapper's process group. Without a handler, SIGTERM
+    # kills *this* wrapper but leaves the dockerd-managed
     # container running (still pulling the image / downloading weights). The
     # --stop path can't clean that up either: it gates on /health 200 and a
     # mid-download container is never healthy. So the wrapper cleans up a

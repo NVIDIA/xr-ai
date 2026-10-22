@@ -17,6 +17,16 @@ before updating the checkout. Start the updated services before restarting
 workers; launchers can reuse a running service whose identity matches even when
 its application code predates the update.
 
+### Persistent services after startup failure
+
+Stacks using `launch_mode="persist"` now retain services that had signaled
+readiness when cleanup began after a startup failure or cancellation. Owned
+processes and unfinished persistent wrappers are still stopped. Persistent
+pip-backend vLLM can keep loading in its separate session after its wrapper
+stops. If you relied on startup failure to clear the entire model stack, run
+the sample's model command with
+`--stop` explicitly. Refer to {doc}`/guides/customizing-model-servers`.
+
 ### Nemotron 3 embedding model
 
 The embedding server now defaults to `nvidia/Nemotron-3-Embed-1B-BF16`; the NIM

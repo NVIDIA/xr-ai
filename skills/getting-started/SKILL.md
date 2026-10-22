@@ -73,4 +73,9 @@ the pointers below to the answers.
   deployment guide before starting the application; skip local model-server
   startup.
 - **Launch failures:** follow `docs/source/guides/troubleshooting.md` and the
-  failure message's process context and run-log directory.
+  failure message's process context and run-log directory. Model servers that
+  had signaled readiness when cleanup began survive a startup failure or
+  cancellation; rerun the same model command to reuse them. If the fix changes
+  a server that already started, run the model command with `--stop` first so
+  the new settings take effect. Use `--stop` to clear retained servers. Refer to
+  `docs/source/guides/customizing-model-servers.md`.
