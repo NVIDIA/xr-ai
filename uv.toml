@@ -29,3 +29,8 @@ multidict = "2026-09-22T00:00:00Z"
 werkzeug = "2026-09-28T00:00:00Z"
 # CVE-2026-58659: qualify pytorch-lightning 2.6.6.
 pytorch-lightning = "2026-09-11T00:00:00Z"
+
+# Qualify the Pillow decoder fixes and MCP session cleanup independently.
+pillow = "2026-10-17T00:00:00Z"
+mcp = "2026-09-08T00:00:00Z"
+mcp-types = "2026-09-08T00:00:00Z"
