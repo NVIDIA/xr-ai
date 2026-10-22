@@ -12,6 +12,11 @@ from unittest.mock import patch
 
 import pytest
 import xr_ai_conversation as conversation_package
+from _routing_test_output import destination_output as _destination_output
+from _routing_test_output import emit_control as _emit_control
+from _routing_test_output import publish_output as _publish_output
+from _routing_test_output import route as _route
+from _routing_test_output import standalone_started as _standalone_started
 from xr_ai_conversation import Conversation, ConversationContextUpdate
 from xr_ai_conversation._context import (
     _BackgroundSection,
@@ -30,9 +35,18 @@ from xr_ai_routing import (
     RoutingAid,
 )
 from xr_ai_runtime import AgentRuntime, Topic
+from xr_ai_voice import VoiceOutput
 
 _NOON_US = 1_790_856_000_000_000
 _MINUTE_US = 60_000_000
+_OUTPUT_TOPIC = Topic("conversation-test.output", VoiceOutput)
+
+
+class _ConversationRuntime:
+    async def publish(self, _topic, message, *, source, **_kwargs):
+        if message.text:
+            await _publish_output(source, message.text)
+
 
 
 def test_conversation_explicitly_implements_routable_agent():
@@ -123,16 +137,16 @@ async def _drain(context, participant="alice"):
 @pytest.mark.asyncio
 async def test_conversation_is_a_normal_front_end_destination_with_completed_history():
     llm = _LLM()
-    conversation = Conversation(llm)  # type: ignore[arg-type]
-    front_end = AgentRouter({"conversation": conversation}, _Decisions())  # type: ignore[arg-type]
+    conversation = Conversation(llm, runtime=_ConversationRuntime(), output_topic=_OUTPUT_TOPIC)  # type: ignore[arg-type]
+    front_end = AgentRouter({"conversation": conversation}, _Decisions(), output=_emit_control)  # type: ignore[arg-type]
     output = []
 
     async def emit(source, text):
         output.append((source, text))
 
-    first = await front_end.handle(AgentTurn("alice", "turn-1", "Hello."), emit=emit)
+    first = await _route(front_end, AgentTurn("alice", "turn-1", "Hello."), emit=emit)
     await conversation.participant_left("alice")
-    second = await front_end.handle(AgentTurn("alice", "turn-2", "Say that again."), emit=emit)
+    second = await _route(front_end, AgentTurn("alice", "turn-2", "Say that again."), emit=emit)
 
     assert first.text == second.text == "Hello there."
     assert output == [("conversation", "Hello there."), ("conversation", "Hello there.")]
@@ -142,6 +156,43 @@ async def test_conversation_is_a_normal_front_end_destination_with_completed_his
     assert "max_tokens" not in llm.calls[0]
     assert "temperature" not in llm.calls[0]
     assert "enable_thinking" not in llm.calls[0]
+
+
+@pytest.mark.asyncio
+async def test_conversation_notifies_before_delivery_and_preserves_answer_context():
+    events = []
+
+    class LLM(_LLM):
+        def stream_events(self, _messages, **_kwargs):
+            async def chunks():
+                for text in (" ", "Hello", " there."):
+                    yield ChatStreamEvent(kind="text", text=text)
+            return chunks()
+
+    class Recording(Conversation):
+        async def answer(self, turn, *, started):
+            async def recorded():
+                leads = await started()
+                events.append(("started", leads))
+                return leads
+
+            return await super().answer(turn, started=recorded)
+
+    async def emit(source, text):
+        events.append((source, text))
+
+    conversation = Recording(LLM(), runtime=_ConversationRuntime(), output_topic=_OUTPUT_TOPIC)
+    router = AgentRouter({"conversation": conversation}, _Decisions(), output=_emit_control)
+    result = await _route(router, AgentTurn("alice", "turn-1", "Hello."), emit=emit)
+
+    assert events == [
+        ("started", True),
+        ("conversation", "Hello"),
+        ("conversation", " there."),
+    ]
+    assert result == DestinationResult("answer", "Hello there.")
+    assert router._history["alice"] == [AgentExchange("Hello.", "Hello there.")]
+    assert len(router._first_answer_samples["alice"]["conversation"]) == 1
 
 
 @pytest.mark.asyncio
@@ -171,7 +222,8 @@ async def test_conversation_reconciles_recent_front_end_window_after_another_des
         async def admit(self, _turn, *, focused):
             return Admission("accept")
 
-        async def answer(self, _turn, *, emit):
+        async def answer(self, _turn, *, started):
+            emit = _destination_output(started)
             answer = "Added the blue cube to the room."
             await emit("scene", answer)
             return DestinationResult("answer", answer)
@@ -180,10 +232,12 @@ async def test_conversation_reconciles_recent_front_end_window_after_another_des
             pass
 
     llm = _LLM()
-    conversation = Conversation(llm, dialogue_budget_bytes=4_000)  # type: ignore[arg-type]
+    conversation = Conversation(
+        llm, dialogue_budget_bytes=4_000, runtime=_ConversationRuntime(), output_topic=_OUTPUT_TOPIC,
+    )  # type: ignore[arg-type]
     front_end = AgentRouter(
         {"conversation": conversation, "scene": Scene()},
-        Decisions(),  # type: ignore[arg-type]
+        Decisions(), output=_emit_control,  # type: ignore[arg-type]
         context_budget_bytes=160,
     )
 
@@ -191,22 +245,22 @@ async def test_conversation_reconciles_recent_front_end_window_after_another_des
         pass
 
     long_opening = "Please keep this opening exchange out of the front-end window. " * 4
-    await front_end.handle(AgentTurn("alice", "turn-1", long_opening), emit=emit)
-    await front_end.handle(AgentTurn("alice", "turn-2", "Add a blue cube."), emit=emit)
-    await front_end.handle(AgentTurn("alice", "turn-3", "What did you add?"), emit=emit)
+    await _route(front_end, AgentTurn("alice", "turn-1", long_opening), emit=emit)
+    await _route(front_end, AgentTurn("alice", "turn-2", "Add a blue cube."), emit=emit)
+    await _route(front_end, AgentTurn("alice", "turn-3", "What did you add?"), emit=emit)
 
     context = llm.messages[1][1].content
     assert "User: Add a blue cube.\nAssistant: “Added the blue cube to the room.”" in context
 
-    await front_end.handle(AgentTurn("alice", "turn-4", "What color was it?"), emit=emit)
+    await _route(front_end, AgentTurn("alice", "turn-4", "What color was it?"), emit=emit)
     repeated_context = llm.messages[2][1].content
     assert repeated_context.count("Added the blue cube to the room.") == 1
     assert "User: Add a blue cube." in repeated_context
 
     # The same scene result can happen again immediately. Causal exchange
     # identity, not timestamp distance or text equality, keeps both turns.
-    await front_end.handle(AgentTurn("alice", "turn-5", "Add a blue cube."), emit=emit)
-    await front_end.handle(AgentTurn("alice", "turn-6", "What did you add this time?"), emit=emit)
+    await _route(front_end, AgentTurn("alice", "turn-5", "Add a blue cube."), emit=emit)
+    await _route(front_end, AgentTurn("alice", "turn-6", "What did you add this time?"), emit=emit)
     latest_context = llm.messages[3][1].content
     assert latest_context.count("Added the blue cube to the room.") == 2
 
@@ -238,7 +292,8 @@ async def test_unknown_seed_does_not_mask_a_later_identical_routed_exchange():
         async def admit(self, _turn, *, focused):
             return Admission("accept")
 
-        async def answer(self, _turn, *, emit):
+        async def answer(self, _turn, *, started):
+            emit = _destination_output(started)
             answer = "Added the blue cube to the room."
             await emit("scene", answer)
             return DestinationResult("answer", answer)
@@ -247,10 +302,12 @@ async def test_unknown_seed_does_not_mask_a_later_identical_routed_exchange():
             pass
 
     llm = _LLM()
-    conversation = Conversation(llm, dialogue_budget_bytes=4_000)  # type: ignore[arg-type]
+    conversation = Conversation(
+        llm, dialogue_budget_bytes=4_000, runtime=_ConversationRuntime(), output_topic=_OUTPUT_TOPIC,
+    )  # type: ignore[arg-type]
     front_end = AgentRouter(
         {"conversation": conversation, "scene": Scene()},
-        Decisions(),  # type: ignore[arg-type]
+        Decisions(), output=_emit_control,  # type: ignore[arg-type]
         context_budget_bytes=1_000,
     )
 
@@ -258,9 +315,9 @@ async def test_unknown_seed_does_not_mask_a_later_identical_routed_exchange():
         pass
 
     seed = AgentExchange("Add a blue cube.", "Added the blue cube to the room.")
-    await front_end.handle(AgentTurn("alice", "turn-1", "What should I do next?", history=(seed,)), emit=emit)
-    await front_end.handle(AgentTurn("alice", "turn-2", "Add a blue cube."), emit=emit)
-    await front_end.handle(AgentTurn("alice", "turn-3", "What did I add?"), emit=emit)
+    await _route(front_end, AgentTurn("alice", "turn-1", "What should I do next?", history=(seed,)), emit=emit)
+    await _route(front_end, AgentTurn("alice", "turn-2", "Add a blue cube."), emit=emit)
+    await _route(front_end, AgentTurn("alice", "turn-3", "What did I add?"), emit=emit)
 
     prompt_context = llm.messages[1][1].content
     assert prompt_context.count("Added the blue cube to the room.") == 2
@@ -293,25 +350,27 @@ async def test_admission_release_text_and_rerouted_answer_keep_separate_history_
         async def admit(self, _turn, *, focused):
             return Admission("release", text="Leaving the scene task.")
 
-        async def answer(self, _turn, *, emit):  # pragma: no cover - release skips answer
+        async def answer(self, _turn, *, started):  # pragma: no cover - release skips answer
             raise AssertionError("released destination must not answer")
 
         async def release(self, _participant_id):
             pass
 
     llm = _LLM()
-    conversation = Conversation(llm, dialogue_budget_bytes=4_000)  # type: ignore[arg-type]
+    conversation = Conversation(
+        llm, dialogue_budget_bytes=4_000, runtime=_ConversationRuntime(), output_topic=_OUTPUT_TOPIC,
+    )  # type: ignore[arg-type]
     front_end = AgentRouter(
         {"conversation": conversation, "scene": Scene()},
-        Decisions(),  # type: ignore[arg-type]
+        Decisions(), output=_emit_control,  # type: ignore[arg-type]
         context_budget_bytes=1_000,
     )
 
     async def emit(_source, _text):
         pass
 
-    await front_end.handle(AgentTurn("alice", "turn-1", "What should happen next?"), emit=emit)
-    await front_end.handle(AgentTurn("alice", "turn-2", "What did we decide?"), emit=emit)
+    await _route(front_end, AgentTurn("alice", "turn-1", "What should happen next?"), emit=emit)
+    await _route(front_end, AgentTurn("alice", "turn-2", "What did we decide?"), emit=emit)
 
     prompt_context = llm.messages[1][1].content
     assert prompt_context.count("Leaving the scene task.") == 1
@@ -325,8 +384,8 @@ async def test_admission_release_text_and_rerouted_answer_keep_separate_history_
 
 @pytest.mark.asyncio
 async def test_release_keeps_completed_context_and_departure_forgets_it():
-    conversation = Conversation(_LLM())  # type: ignore[arg-type]
-    _ = [chunk async for chunk in conversation.stream("Remember copper.", "alice")]
+    conversation = Conversation(_LLM(), runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC)  # type: ignore[arg-type]
+    _ = [chunk async for chunk in conversation._stream_response("Remember copper.", "alice")]
 
     # Routing calls release() when focus moves elsewhere; history must survive it.
     await conversation.release("alice")
@@ -336,7 +395,7 @@ async def test_release_keeps_completed_context_and_departure_forgets_it():
     assert conversation._context.transcript("alice") == ()
     await conversation.close()
     with pytest.raises(RuntimeError, match="closing"):
-        _ = [chunk async for chunk in conversation.stream("Hello.", "alice")]
+        _ = [chunk async for chunk in conversation._stream_response("Hello.", "alice")]
 
 
 # ---------------------------------------------------------------------------
@@ -344,7 +403,12 @@ async def test_release_keeps_completed_context_and_departure_forgets_it():
 
 
 def test_answer_request_keeps_instructions_context_and_request_separate():
-    conversation = Conversation(_LLM(), instructions="Answer like a lab assistant.")  # type: ignore[arg-type]
+    conversation = Conversation(
+        _LLM(),
+        runtime=AgentRuntime(),
+        output_topic=_OUTPUT_TOPIC,
+        instructions="Answer like a lab assistant.",
+    )  # type: ignore[arg-type]
     conversation._context.append("alice", "Question", "Answer", timestamp_us=_NOON_US)
 
     system, context, request = conversation._answer_messages("alice", "Current question")
@@ -369,7 +433,7 @@ def _positions(text, *needles):
 @pytest.mark.asyncio
 async def test_prompt_orders_every_section_by_time_so_corrections_follow_what_they_supersede():
     conversation = Conversation(
-        _LLM(),  # type: ignore[arg-type]
+        _LLM(), runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC,  # type: ignore[arg-type]
         summary_context_topics=("tea.status",),
         incremental_context_topics=("lab.notes",),
     )
@@ -408,7 +472,12 @@ async def test_prompt_orders_every_section_by_time_so_corrections_follow_what_th
 async def test_summary_renders_first_with_its_time_when_another_section_has_older_raw_updates():
     """A summary's span can overlap another section's raw update; both show their times for the model."""
 
-    conversation = Conversation(_LLM(), incremental_context_topics=("lab.notes",))  # type: ignore[arg-type]
+    conversation = Conversation(
+        _LLM(),
+        runtime=AgentRuntime(),
+        output_topic=_OUTPUT_TOPIC,
+        incremental_context_topics=("lab.notes",),
+    )  # type: ignore[arg-type]
     context = conversation._context
     memory = context._memory("alice")
     memory.context_order.append("lab.notes")
@@ -444,7 +513,7 @@ async def test_each_section_is_bounded_so_a_busy_topic_cannot_evict_another():
 
     llm = _StuckCompactionLLM()
     conversation = Conversation(
-        llm,  # type: ignore[arg-type]
+        llm, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC,  # type: ignore[arg-type]
         summary_context_topics=("instrument.status",),
         incremental_context_topics=("notes",),
         topic_budget_bytes={"instrument.status": 400, "notes": 1000},
@@ -474,7 +543,7 @@ async def test_each_section_is_bounded_so_a_busy_topic_cannot_evict_another():
 async def test_oversized_newest_exchange_is_clipped_in_the_prompt_instead_of_wiping_context():
     llm = _LLM()
     conversation = Conversation(
-        llm,  # type: ignore[arg-type]
+        llm, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC,  # type: ignore[arg-type]
         incremental_context_topics=("notes",),
         dialogue_budget_bytes=1500,
         topic_budget_bytes=1500,
@@ -483,9 +552,9 @@ async def test_oversized_newest_exchange_is_clipped_in_the_prompt_instead_of_wip
         "alice", "notes", ConversationContextUpdate(text="Bench 3 is usable."), mode="incremental"
     )
     pasted_log = "Controller log:\n" + "heartbeat ok\n" * 1500 + "ERROR interlock tripped code E-4471"
-    _ = [chunk async for chunk in conversation.stream(pasted_log, "alice")]
+    _ = [chunk async for chunk in conversation._stream_response(pasted_log, "alice")]
     await _settle(conversation, "alice")
-    _ = [chunk async for chunk in conversation.stream("What was the error code?", "alice")]
+    _ = [chunk async for chunk in conversation._stream_response("What was the error code?", "alice")]
 
     context = llm.messages[-1][-2].content
     assert len(context.encode("utf-8")) <= 3000 + 300
@@ -500,7 +569,7 @@ async def test_oversized_newest_exchange_is_clipped_in_the_prompt_instead_of_wip
 async def test_oversized_uncompacted_update_is_clipped_in_the_prompt_instead_of_dropped():
     llm = _LLM()
     conversation = Conversation(
-        llm,  # type: ignore[arg-type]
+        llm, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC,  # type: ignore[arg-type]
         incremental_context_topics=("notes",),
         topic_budget_bytes=1500,
     )
@@ -509,7 +578,7 @@ async def test_oversized_uncompacted_update_is_clipped_in_the_prompt_instead_of_
     )
     # Store a large raw update without letting compaction run before the next prompt.
     await conversation._context.update("alice", "notes", "incremental", "dump " * 2000 + "Purge started.")
-    _ = [chunk async for chunk in conversation.stream("Status?", "alice")]
+    _ = [chunk async for chunk in conversation._stream_response("Status?", "alice")]
 
     context = llm.messages[-1][-2].content
     assert "Purge started." in context
@@ -520,7 +589,7 @@ async def test_oversized_uncompacted_update_is_clipped_in_the_prompt_instead_of_
 @pytest.mark.asyncio
 async def test_oversized_summary_topic_state_is_clipped_to_its_budget(caplog):
     conversation = Conversation(
-        _LLM(),  # type: ignore[arg-type]
+        _LLM(), runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC,  # type: ignore[arg-type]
         summary_context_topics=("status",),
         topic_budget_bytes=200,
     )
@@ -600,10 +669,10 @@ async def test_router_history_windows_larger_than_256_exchanges_are_not_replayed
     """Review finding: a window longer than the remembered identities replayed completed dialogue."""
 
     llm = _LLM()
-    conversation = Conversation(llm)  # type: ignore[arg-type]
+    conversation = Conversation(llm, runtime=_ConversationRuntime(), output_topic=_OUTPUT_TOPIC)  # type: ignore[arg-type]
     front_end = AgentRouter(
         {"conversation": conversation},
-        _Decisions(),  # type: ignore[arg-type]
+        _Decisions(), output=_emit_control,  # type: ignore[arg-type]
         context_budget_bytes=64_000,
     )
 
@@ -611,7 +680,7 @@ async def test_router_history_windows_larger_than_256_exchanges_are_not_replayed
         pass
 
     for index in range(300):
-        await front_end.handle(AgentTurn("alice", f"turn-{index}", f"Turn {index}."), emit=emit)
+        await _route(front_end, AgentTurn("alice", f"turn-{index}", f"Turn {index}."), emit=emit)
         await _settle(conversation, "alice")
 
     assert len(front_end._history["alice"]) > 256
@@ -635,21 +704,22 @@ async def test_conversation_uses_dialogue_summary_and_keeps_newer_exchanges_verb
             return _response("The user identified a copper label.")
 
     llm = _DialogueLLM()
-    conversation = Conversation(llm, dialogue_budget_bytes=700)  # type: ignore[arg-type]
+    conversation = Conversation(llm, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC, dialogue_budget_bytes=700)  # type: ignore[arg-type]
     old_history = (
         AgentExchange("The label is copper." + " x" * 160, "The label was observed." + " y" * 160),
         AgentExchange("Check the facilities later." + " z" * 160, "That request remains open." + " w" * 160),
     )
-    assert [chunk async for chunk in conversation.stream("What is the label?", "alice", history=old_history)] == [
-        "Hello there."
+    chunks = [
+        chunk async for chunk in conversation._stream_response("What is the label?", "alice", history=old_history)
     ]
+    assert chunks == ["Hello there."]
     await _settle(conversation, "alice")
     assert conversation._context.dialogue_snapshot("alice")[0].text == (
         "The user identified a copper label and left the facilities check open."
     )
 
     current = AgentExchange("What is the label?", "Hello there.")
-    _ = [chunk async for chunk in conversation.stream("Remember?", "alice", history=old_history + (current,))]
+    _ = [chunk async for chunk in conversation._stream_response("Remember?", "alice", history=old_history + (current,))]
     prompt_context = llm.messages[-1][-2].content
     assert "The user identified a copper label and left the facilities check open." in prompt_context
     assert "User: What is the label?\nAssistant: “Hello there.”" in prompt_context
@@ -658,7 +728,7 @@ async def test_conversation_uses_dialogue_summary_and_keeps_newer_exchanges_verb
 
 
 def test_dialogue_trigger_is_half_the_section_budget_measured_as_rendered():
-    conversation = Conversation(_LLM(), dialogue_budget_bytes=2000)  # type: ignore[arg-type]
+    conversation = Conversation(_LLM(), runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC, dialogue_budget_bytes=2000)  # type: ignore[arg-type]
     limits = conversation._compaction_limits(2000)
     assert limits["trigger_budget_bytes"] == 1000
     assert limits["summary_budget_bytes"] == 500
@@ -675,9 +745,9 @@ def test_dialogue_trigger_is_half_the_section_budget_measured_as_rendered():
 async def test_short_turns_compact_before_the_prompt_omits_any_of_them(caplog):
     """Review finding: stored-size triggers let many short turns overflow the prompt before compaction."""
 
-    conversation = Conversation(_LLM())  # type: ignore[arg-type]
+    conversation = Conversation(_LLM(), runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC)  # type: ignore[arg-type]
     for index in range(200):
-        _ = [chunk async for chunk in conversation.stream(f"ok {index}", "alice")]
+        _ = [chunk async for chunk in conversation._stream_response(f"ok {index}", "alice")]
         await _settle(conversation, "alice")
     assert "omitting uncompacted context" not in caplog.text
     assert conversation._context.dialogue_snapshot("alice")[0].text == "Compacted source facts."
@@ -753,9 +823,14 @@ async def test_compaction_cut_off_at_the_token_limit_keeps_the_exchanges(caplog)
         async def chat(self, messages, **_kwargs):
             return _response("User's name is Al. User prefers tea. Cor", finish_reason="length")
 
-    conversation = Conversation(_CutOffLLM(), dialogue_budget_bytes=400)  # type: ignore[arg-type]
+    conversation = Conversation(
+        _CutOffLLM(),
+        runtime=AgentRuntime(),
+        output_topic=_OUTPUT_TOPIC,
+        dialogue_budget_bytes=400,
+    )  # type: ignore[arg-type]
     for index in range(6):
-        _ = [chunk async for chunk in conversation.stream(f"Fact {index}: " + "f" * 60, "alice")]
+        _ = [chunk async for chunk in conversation._stream_response(f"Fact {index}: " + "f" * 60, "alice")]
         await _settle(conversation, "alice")
 
     summary, recent = conversation._context.dialogue_snapshot("alice")
@@ -845,10 +920,10 @@ async def test_answers_stay_responsive_while_compaction_is_stuck_and_commit_late
             return _response("The user prefers nanometers.")
 
     llm = _SlowCompactionLLM()
-    conversation = Conversation(llm, dialogue_budget_bytes=600)  # type: ignore[arg-type]
+    conversation = Conversation(llm, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC, dialogue_budget_bytes=600)  # type: ignore[arg-type]
 
     async def answer(text):
-        return [chunk async for chunk in conversation.stream(text, "alice")]
+        return [chunk async for chunk in conversation._stream_response(text, "alice")]
 
     for index in range(4):
         await answer(f"Preference {index}: " + "p" * 80)
@@ -877,7 +952,7 @@ async def test_runtime_named_context_topics_use_configured_modes_per_participant
     tea = Topic("tea.status", ConversationContextUpdate)
     xr = Topic("xr.observations", ConversationContextUpdate)
     conversation = Conversation(
-        llm,  # type: ignore[arg-type]
+        llm, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC,  # type: ignore[arg-type]
         summary_context_topics=(tea.name,),
         incremental_context_topics=(xr.name,),
         topic_budget_bytes=200,
@@ -911,41 +986,86 @@ def test_context_topic_names_must_be_nonempty_and_unique():
     llm = _LLM()
 
     with pytest.raises(ValueError, match="sequence of topic names"):
-        Conversation(llm, summary_context_topics="tea.status")  # type: ignore[arg-type]
+        Conversation(llm, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC, summary_context_topics="tea.status")  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="non-empty strings"):
-        Conversation(llm, summary_context_topics=("tea.status", " "))  # type: ignore[arg-type]
+        Conversation(
+            llm,
+            runtime=AgentRuntime(),
+            output_topic=_OUTPUT_TOPIC,
+            summary_context_topics=("tea.status", " "),
+        )  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="non-empty strings"):
-        Conversation(llm, summary_context_topics=("tea.status", None))  # type: ignore[arg-type]
+        Conversation(
+            llm,
+            runtime=AgentRuntime(),
+            output_topic=_OUTPUT_TOPIC,
+            summary_context_topics=("tea.status", None),
+        )  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="unique"):
-        Conversation(llm, summary_context_topics=("tea.status", "tea.status"))  # type: ignore[arg-type]
+        Conversation(
+            llm,
+            runtime=AgentRuntime(),
+            output_topic=_OUTPUT_TOPIC,
+            summary_context_topics=("tea.status", "tea.status"),
+        )  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="across summary and incremental"):
-        Conversation(llm, summary_context_topics=("tea.status",), incremental_context_topics=("tea.status",))
+        Conversation(
+            llm,
+            runtime=AgentRuntime(),
+            output_topic=_OUTPUT_TOPIC,
+            summary_context_topics=("tea.status",),
+            incremental_context_topics=("tea.status",),
+        )
     with pytest.raises(ValueError, match="sequence of topic names"):
-        Conversation(llm, incremental_context_topics="tea.status")  # type: ignore[arg-type]
+        Conversation(llm, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC, incremental_context_topics="tea.status")  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="sequence of topic names"):
-        Conversation(llm, summary_context_topics=None)  # type: ignore[arg-type]
+        Conversation(llm, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC, summary_context_topics=None)  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="at least one context topic"):
-        Conversation(llm).context_subscriber()  # type: ignore[arg-type]
+        Conversation(llm, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC).context_subscriber()  # type: ignore[arg-type]
 
 
 def test_each_section_budget_is_validated():
     llm = _LLM()
     with pytest.raises(ValueError, match="one entry per configured topic"):
-        Conversation(llm, incremental_context_topics=("a", "b"), topic_budget_bytes={"a": 100})  # type: ignore[arg-type]
+        Conversation(
+            llm,
+            runtime=AgentRuntime(),
+            output_topic=_OUTPUT_TOPIC,
+            incremental_context_topics=("a", "b"),
+            topic_budget_bytes={"a": 100},
+        )  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="positive integers"):
-        Conversation(llm, incremental_context_topics=("a",), topic_budget_bytes={"a": 0})  # type: ignore[arg-type]
+        Conversation(
+            llm,
+            runtime=AgentRuntime(),
+            output_topic=_OUTPUT_TOPIC,
+            incremental_context_topics=("a",),
+            topic_budget_bytes={"a": 0},
+        )  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="positive integers"):
-        Conversation(llm, dialogue_budget_bytes=0)  # type: ignore[arg-type]
+        Conversation(llm, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC, dialogue_budget_bytes=0)  # type: ignore[arg-type]
     # A compaction request must hold a summary plus at least as many bytes of new entries.
     with pytest.raises(ValueError, match="compaction_input_budget_bytes"):
-        Conversation(llm, dialogue_budget_bytes=8000, compaction_input_budget_bytes=4255)  # type: ignore[arg-type]
-    Conversation(llm, dialogue_budget_bytes=8000, compaction_input_budget_bytes=4256)  # type: ignore[arg-type]
+        Conversation(
+            llm,
+            runtime=AgentRuntime(),
+            output_topic=_OUTPUT_TOPIC,
+            dialogue_budget_bytes=8000,
+            compaction_input_budget_bytes=4255,
+        )  # type: ignore[arg-type]
+    Conversation(
+        llm,
+        runtime=AgentRuntime(),
+        output_topic=_OUTPUT_TOPIC,
+        dialogue_budget_bytes=8000,
+        compaction_input_budget_bytes=4256,
+    )  # type: ignore[arg-type]
 
 
 @pytest.mark.asyncio
 async def test_each_topic_compacts_against_its_own_budget():
     conversation = Conversation(
-        _LLM(),  # type: ignore[arg-type]
+        _LLM(), runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC,  # type: ignore[arg-type]
         incremental_context_topics=("small", "large"),
         topic_budget_bytes={"small": 200, "large": 4000},
     )
@@ -995,7 +1115,7 @@ async def test_source_summary_near_budget_does_not_block_later_updates():
             return _response("s" * 800 if len(calls) <= 2 else "Latest corrections applied.")
 
     conversation = Conversation(
-        _SummaryLLM(),  # type: ignore[arg-type]
+        _SummaryLLM(), runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC,  # type: ignore[arg-type]
         incremental_context_topics=("notes",),
         topic_budget_bytes=1024,
     )
@@ -1074,7 +1194,12 @@ async def test_incremental_update_during_compaction_keeps_it_for_the_next_batch(
 
 @pytest.mark.asyncio
 async def test_context_update_without_participant_is_dropped(caplog):
-    conversation = Conversation(_LLM(), summary_context_topics=("tea",))  # type: ignore[arg-type]
+    conversation = Conversation(
+        _LLM(),
+        runtime=AgentRuntime(),
+        output_topic=_OUTPUT_TOPIC,
+        summary_context_topics=("tea",),
+    )  # type: ignore[arg-type]
     await conversation._update_context(None, "tea", ConversationContextUpdate(text="shared"), mode="summary")
     assert conversation._context.sections("alice") == ()
     assert "without participant" in caplog.text
@@ -1096,7 +1221,7 @@ async def test_departure_and_close_cancel_compaction_and_keep_participants_indep
 
     topic = Topic("test.notes", ConversationContextUpdate)
     conversation = Conversation(
-        _BlockingLLM(),  # type: ignore[arg-type]
+        _BlockingLLM(), runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC,  # type: ignore[arg-type]
         incremental_context_topics=(topic.name,),
         topic_budget_bytes=100,
     )
@@ -1111,7 +1236,7 @@ async def test_departure_and_close_cancel_compaction_and_keep_participants_indep
         assert job.cancelled()
         assert conversation._context.sections("alice") == ()
         # Another participant is unaffected.
-        assert [text async for text in conversation.stream("Hello", "bob")] == ["Hello there."]
+        assert [text async for text in conversation._stream_response("Hello", "bob")] == ["Hello there."]
 
         await runtime.publish(topic, ConversationContextUpdate(text="A note " * 10), participant_id="carol")
         await conversation.close()
@@ -1167,14 +1292,16 @@ async def test_cancelled_answer_closes_the_model_stream_and_records_nothing():
             self.stream = events()
             return self.stream
 
-    conversation = Conversation(_BlockingStreamLLM())  # type: ignore[arg-type]
+    class Runtime:
+        async def publish(self, *_args, **_kwargs):
+            first_chunk.set()
+            await asyncio.Event().wait()
 
-    async def emit(_source, _text):
-        # Barge-in arrives while the first chunk is being delivered, with the model stream paused at it.
-        first_chunk.set()
-        await asyncio.Event().wait()
+    conversation = Conversation(_BlockingStreamLLM(), runtime=Runtime(), output_topic=_OUTPUT_TOPIC)  # type: ignore[arg-type]
 
-    answering = asyncio.create_task(conversation.answer(AgentTurn("alice", "turn-1", "Tell me a story."), emit=emit))
+    answering = asyncio.create_task(
+        conversation.answer(AgentTurn("alice", "turn-1", "Tell me a story."), started=_standalone_started)
+    )
     await asyncio.wait_for(first_chunk.wait(), 1)
     answering.cancel()
     with pytest.raises(asyncio.CancelledError):
@@ -1212,3 +1339,103 @@ async def test_every_conflict_case_seeds_the_shape_it_claims():
         finally:
             await conversation.close()
             await runtime.stop()
+
+
+def test_answer_is_the_only_public_request_handler_and_requires_output():
+    assert not hasattr(Conversation, "stream")
+    parameters = inspect.signature(Conversation).parameters
+    assert parameters["runtime"].default is inspect.Parameter.empty
+    assert parameters["output_topic"].default is inspect.Parameter.empty
+    with pytest.raises(TypeError, match="runtime.*output_topic"):
+        Conversation(_LLM())
+
+
+def test_voice_output_configuration_requires_runtime_and_exact_topic_model():
+    with pytest.raises(TypeError, match="output_topic"):
+        Conversation(_LLM(), runtime=AgentRuntime())
+    with pytest.raises(TypeError, match="runtime"):
+        Conversation(_LLM(), output_topic=_OUTPUT_TOPIC)
+    with pytest.raises(TypeError, match="VoiceOutput"):
+        Conversation(_LLM(), runtime=AgentRuntime(), output_topic=Topic("wrong", ConversationContextUpdate))
+
+
+def test_conversation_construction_reports_missing_voice_extra(monkeypatch):
+    import builtins
+
+    original_import = builtins.__import__
+
+    def import_without_voice(name, *args, **kwargs):
+        if name == "xr_ai_voice":
+            raise ModuleNotFoundError("No module named 'xr_ai_voice'", name="xr_ai_voice")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", import_without_voice)
+    with pytest.raises(ImportError, match=r"xr-ai-conversation\[voice\]"):
+        Conversation(_LLM(), runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC)
+
+
+async def test_output_failure_closes_model_without_recording_partial_context():
+    closed = asyncio.Event()
+
+    class LLM(_LLM):
+        def stream_events(self, _messages, **_kwargs):
+            async def response():
+                try:
+                    yield ChatStreamEvent(kind="text", text="first")
+                    yield ChatStreamEvent(kind="text", text="second")
+                finally:
+                    closed.set()
+
+            return response()
+
+    class Runtime:
+        def __init__(self):
+            self.attempts = 0
+
+        async def publish(self, *_args, **_kwargs):
+            self.attempts += 1
+            raise RuntimeError("output publication failed")
+
+    runtime = Runtime()
+    conversation = Conversation(LLM(), runtime=runtime, output_topic=_OUTPUT_TOPIC)
+    with pytest.raises(RuntimeError, match="output publication failed"):
+        await conversation.answer(AgentTurn("alice", "turn", "request"), started=_standalone_started)
+    assert closed.is_set()
+    assert runtime.attempts == 1
+    assert conversation._context.transcript("alice") == ()
+    await conversation.close()
+
+
+async def test_stream_does_not_commit_context_when_model_suppresses_cancellation_and_returns():
+    started, closed = asyncio.Event(), asyncio.Event()
+    output = []
+
+    class LLM(_LLM):
+        def stream_events(self, _messages, **_kwargs):
+            async def response():
+                try:
+                    yield ChatStreamEvent(kind="text", text="partial")
+                    started.set()
+                    try:
+                        await asyncio.Event().wait()
+                    except asyncio.CancelledError:
+                        return
+                finally:
+                    closed.set()
+
+            return response()
+
+    conversation = Conversation(LLM(), runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC)
+
+    async def consume():
+        async for text in conversation._stream_response("request", "alice"):
+            output.append(text)
+
+    consuming = asyncio.create_task(consume())
+    await started.wait()
+    consuming.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await consuming
+    assert closed.is_set() and output == ["partial"]
+    assert conversation._context.transcript("alice") == ()
+    await conversation.close()

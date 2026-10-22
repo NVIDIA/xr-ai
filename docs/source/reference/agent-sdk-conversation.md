@@ -5,8 +5,8 @@
 
 # xr-ai-conversation
 
-`xr-ai-conversation` provides an application-instructed, text-only
-conversation engine with participant-scoped history and named
+`xr-ai-conversation` provides an application-instructed
+conversation agent with participant-scoped history and named
 background-context sources. It does not contain turn selection, focus
 management, or tools; routing contracts are provided by
 [`xr-ai-routing`](agent-sdk-routing.md), and other capabilities, such as
@@ -20,17 +20,42 @@ questions about the camera view, belong in separate routed destinations.
 ```python
 from xr_ai_conversation import Conversation
 from xr_ai_routing import AgentRouter, AgentTurn
+from xr_ai_runtime import AgentRuntime
+from xr_ai_voice import VOICE_OUTPUT_TOPIC
 
-conversation = Conversation(llm, instructions="Answer general questions about the lab.")
-front_end = AgentRouter({"conversation": conversation}, decisions)
-result = await front_end.handle(
-    AgentTurn("participant-1", "turn-1", "When is the calibration meeting?"),
-    emit=publish_chunk,
+runtime = AgentRuntime()
+
+conversation = Conversation(
+    llm,
+    instructions="Answer general questions about the lab.",
+    runtime=runtime,
+    output_topic=VOICE_OUTPUT_TOPIC,
 )
+front_end = AgentRouter({"conversation": conversation}, decisions, output=publish_router_control)
+async with runtime:
+    try:
+        result = await front_end.handle(
+            AgentTurn("participant-1", "turn-1", "When is the calibration meeting?"),
+        )
+    finally:
+        await front_end.stop()
+await conversation.close()
 ```
 
-The engine answers from its instructions, completed history, and configured
-context sources.
+The agent answers from its instructions, completed history, and configured
+context sources. Install `xr-ai-conversation[voice]` and configure the runtime
+and a typed voice output topic to use it as a routed destination. Conversation
+publishes its own response chunks with its routing name as source and the turn's
+response identity and timestamp. Its first chunk interrupts older speech
+unless router text such as a preamble already started the turn. It finalizes
+partial responses after model failure; the router reports a failure before the
+first chunk.
+Cancellation drains the model without publishing further frames. Model and
+publication failures propagate to the caller.
+
+The application starts the runtime before answering and stops it after draining
+routed work. `answer(turn, started=...)` is the public request handler; streaming model
+iteration is private to the conversation.
 
 ## Named context topics
 
@@ -41,6 +66,8 @@ The topic determines how its text updates that source; the payload contains only
 ```python
 conversation = Conversation(
     llm,
+    runtime=runtime,
+    output_topic=VOICE_OUTPUT_TOPIC,
     summary_context_topics=("sample.monitor-window",),
     incremental_context_topics=("sample.notes",),
 )
@@ -132,7 +159,7 @@ speaks to this conversation, the application calls
 An answer still streaming when its participant leaves is not stopped. When it
 completes, it records its exchange as the start of new context for that
 participant. Close the conversation before closing the shared model client,
-and drain caller-owned answer streams separately.
+and drain in-flight answers separately.
 
 ## Evaluations
 

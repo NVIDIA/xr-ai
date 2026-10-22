@@ -135,6 +135,12 @@ class ScriptedLLM:
         )
 
 
+async def standalone_started() -> bool:
+    """Response-start signal for answers called without a router."""
+
+    return True
+
+
 async def settle(conversation: Any, participant: str) -> None:
     """Wait until no compaction job is pending for the participant."""
 

@@ -32,13 +32,13 @@ class RoutingTurnContext:
 
 @dataclass(frozen=True, slots=True)
 class AgentExchange:
-    """One completed user and assistant exchange."""
+    """One completed user request and destination-provided response context."""
 
     user: str
     """User request in the completed exchange."""
 
     assistant: str
-    """Completed user-visible reply, excluding progress acknowledgments."""
+    """Completed response context, excluding progress acknowledgments."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,6 +56,9 @@ class AgentTurn:
 
     history: tuple[AgentExchange, ...] = ()
     """Newest whole completed exchanges that fit the router's byte budget."""
+
+    timestamp_us: int | None = None
+    """Originating input time in Unix microseconds, when supplied by the caller."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,7 +106,7 @@ class Admission:
 
 @dataclass(frozen=True, slots=True)
 class DestinationResult:
-    """Completed answer plus the router's post-answer focus transition."""
+    """Optional completed response context and the router's focus transition."""
 
     disposition: Literal["answer", "focus", "release", "clarify"] = "answer"
     """Destinations return answer, focus, or release; the router returns clarify before answer work.
@@ -113,7 +116,11 @@ class DestinationResult:
     """
 
     text: str = ""
-    """Completed answer to retain in history; progress acknowledgements are excluded."""
+    """Optional completed response context to retain in history.
+
+    This text is not delivered as output by the router. Destinations can omit
+    it when no routing context is needed; progress acknowledgements are excluded.
+    """
 
 
 class RoutableAgent(Protocol):
@@ -137,11 +144,11 @@ class RoutableAgent(Protocol):
         self,
         turn: AgentTurn,
         *,
-        emit: Callable[[str, str], Awaitable[None]],
+        started: Callable[[], Awaitable[bool]],
     ) -> DestinationResult:
         """Answer a turn after admission or as the configured default fallback.
 
-        Stream chunks and return answer, focus, or release. After selected
+        Deliver output directly and return answer, focus, or release. After selected
         destinations decline through the bounded routing attempts, the front
         end may call an eligible configured default once without ``admit()``,
         unless that default already declined the current turn;
@@ -151,14 +158,29 @@ class RoutableAgent(Protocol):
         Returning ``DestinationResult("release")`` consumes the current request
         after the answer and clears focus; it does not reroute that request.
         Destination exceptions and task cancellation propagate to the caller.
-        The router suppresses later chunks after interruption but cannot
-        retract output already delivered to ``emit``.
+        Await ``started()`` immediately before the first meaningful output or
+        application action. It suppresses an acknowledgment that is not yet
+        committed, waits until a committed one is delivered, supplies the
+        first-response timing sample, and returns whether the response
+        leads the turn's output: ``False`` means router control text such as a
+        preamble or acknowledgment already started this turn, so the response
+        should follow it instead of interrupting it. Repeated calls return the
+        same result, and calls after ``answer()`` returns have no effect.
+        Completion and focus still use the return value, with optional response
+        context in ``DestinationResult.text`` for the router's history.
+        Destinations own output publication and stream finalization. A failure
+        before ``started()`` is reported to the participant by the router;
+        after it, the destination owns any failure output.
+        Cancellation must drain their output and model work before returning.
         A routing ``clarify`` choice with usable scores selects the
         highest-scoring eligible destination through normal admission. Without
         eligible scores the router asks for clarification. After exhausted
         declines, the default is not retried if
         it already declined this turn, and
         clarification is also used when the configured default is unavailable.
+
+        :param turn: Current request and bounded completed history.
+        :param started: Response-start signal for this answer.
         """
 
     async def release(self, participant_id: str) -> None:

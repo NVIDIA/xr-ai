@@ -8,11 +8,14 @@ Consumers import the public class from the package root.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from xr_ai_models import ChatMessage, ChatResponse, LLMService
 from xr_ai_routing import (
@@ -24,7 +27,7 @@ from xr_ai_routing import (
     RoutingAid,
     current_turn_context,
 )
-from xr_ai_runtime import Agent, Topic
+from xr_ai_runtime import Agent, AgentRuntime, RuntimeClosedError, Topic
 
 from ._context import (
     _clip,
@@ -43,6 +46,9 @@ from ._context import (
 from ._context_update import ConversationContextUpdate
 from ._topics import make_context_subscriber
 
+if TYPE_CHECKING:
+    from xr_ai_voice import VoiceOutput
+
 _CORE_PROMPT = (Path(__file__).parent / "prompts" / "core.txt").read_text(encoding="utf-8").strip()
 _DEFAULT_DIALOGUE_BUDGET_BYTES = 8_000
 _DEFAULT_TOPIC_BUDGET_BYTES = 4_000
@@ -53,7 +59,7 @@ _logger = logging.getLogger(__name__)
 
 
 class Conversation(RoutableAgent):
-    """Stream an application-instructed conversation with participant-scoped context.
+    """Application-instructed conversation agent with participant-scoped context.
 
     :param llm: Typed streamed language model service.
     :param instructions: Application-owned prompt text defining domain, role, tone, and handling policy.
@@ -63,6 +69,11 @@ class Conversation(RoutableAgent):
     :param dialogue_budget_bytes: UTF-8 byte budget for completed dialogue rendered into a request.
     :param topic_budget_bytes: UTF-8 byte budget for each topic's context rendered into a request:
         one value for every topic, or a mapping with a value for each configured topic.
+    :param runtime: Runtime used to publish answers. The application owns runtime startup and shutdown.
+    :param output_topic: Explicit ``VoiceOutput`` topic for routed answers; requires ``xr-ai-conversation[voice]``.
+        The conversation publishes with its routing name as source, the turn ID as response ID,
+        and the originating timestamp. It owns stream framing and finalization.
+        No default output or query topic is subscribed.
     :param compaction_input_budget_bytes: UTF-8 byte budget for the summary and entries in one
         compaction request; at least half the largest section budget plus 256 bytes.
 
@@ -81,7 +92,17 @@ class Conversation(RoutableAgent):
         dialogue_budget_bytes: int = _DEFAULT_DIALOGUE_BUDGET_BYTES,
         topic_budget_bytes: int | Mapping[str, int] = _DEFAULT_TOPIC_BUDGET_BYTES,
         compaction_input_budget_bytes: int = _DEFAULT_COMPACTION_INPUT_BUDGET_BYTES,
+        runtime: AgentRuntime,
+        output_topic: Topic[VoiceOutput],
     ) -> None:
+        try:
+            from xr_ai_voice import VoiceOutput
+        except ModuleNotFoundError as error:
+            if error.name != "xr_ai_voice":
+                raise
+            raise ImportError("voice output requires the xr-ai-conversation[voice] extra") from error
+        if output_topic.message_type is not VoiceOutput:
+            raise TypeError("Conversation output_topic must carry VoiceOutput")
         summary_names = self._validate_topic_names("summary_context_topics", summary_context_topics)
         incremental_names = self._validate_topic_names("incremental_context_topics", incremental_context_topics)
         names = (*summary_names, *incremental_names)
@@ -106,6 +127,8 @@ class Conversation(RoutableAgent):
         self._summary_context_topics = tuple(Topic(name, ConversationContextUpdate) for name in summary_names)
         self._incremental_context_topics = tuple(Topic(name, ConversationContextUpdate) for name in incremental_names)
         self._llm = llm
+        self._runtime = runtime
+        self._output_topic = output_topic
         self._context = _ConversationContext()
         self._dialogue_budget_bytes = dialogue_budget_bytes
         self._topic_budgets = topic_budgets
@@ -129,23 +152,77 @@ class Conversation(RoutableAgent):
         self,
         turn: AgentTurn,
         *,
-        emit: Callable[[str, str], Awaitable[None]],
+        started: Callable[[], Awaitable[bool]],
     ) -> DestinationResult:
-        """Forward answer chunks with the general conversation source name.
+        """Publish a routed answer directly to the configured voice output topic.
 
-        Cancellation and stream errors propagate after the inner iterator is
-        closed.
+        Requires ``runtime`` and ``output_topic``. The first nonblank ready chunk
+        awaits ``started()`` before publication. That body frame
+        interrupts older output unless router control text already started
+        this turn, and an empty final frame closes a completed, failed, or
+        canceled response once opened. Canceled answers publish no further text,
+        and a publication failure publishes no further frames. Failures
+        propagate after closing the model iterator; the router reports
+        failures that occur before the first frame. A successful answer
+        returns the complete text as routing context. The exchange joins this
+        conversation's transcript only after its final frame is delivered.
         """
 
+        from xr_ai_voice import VoiceOutput
+
         fragments: list[str] = []
-        stream = self.stream(turn.query, turn.participant_id, history=turn.history)
+        stream = self._stream_response(turn.query, turn.participant_id, history=turn.history, commit=False)
+        opened = False
+        publication_failed = False
+        interrupt = False
+        finalized = False
         try:
             async for text in stream:
                 fragments.append(text)
-                await emit(self._routing.name, text)
+                if not opened and not text.strip():
+                    continue
+                if not opened:
+                    interrupt = await started()
+                task = asyncio.current_task()
+                # A model stream can swallow cancellation; never publish for a canceled answer.
+                if task is not None and task.cancelling():
+                    raise asyncio.CancelledError
+                try:
+                    await self._runtime.publish(
+                        self._output_topic,
+                        VoiceOutput(
+                            text=text, response_id=turn.turn_id, final=False,
+                            interrupt=interrupt and not opened, timestamp_us=turn.timestamp_us,
+                        ),
+                        participant_id=turn.participant_id,
+                        source=self._routing.name,
+                    )
+                except Exception:
+                    publication_failed = True
+                    raise
+                opened = True
+        except Exception:
+            task = asyncio.current_task()
+            if task is not None and task.cancelling():
+                raise asyncio.CancelledError from None
+            raise
         finally:
             await stream.aclose()
-        return DestinationResult("answer", "".join(fragments).strip())
+            # Close an opened stream even when canceled so later output does not queue behind it.
+            if opened and not publication_failed:
+                with suppress(RuntimeClosedError):
+                    await self._runtime.publish(
+                        self._output_topic,
+                        VoiceOutput(response_id=turn.turn_id, timestamp_us=turn.timestamp_us),
+                        participant_id=turn.participant_id,
+                        source=self._routing.name,
+                    )
+                    finalized = True
+        answer = "".join(fragments)
+        task = asyncio.current_task()
+        if finalized and not (task is not None and task.cancelling()):
+            self._commit_exchange(turn.participant_id, turn.query, answer)
+        return DestinationResult("answer", answer.strip())
 
     async def release(self, _participant_id: str) -> None:
         """Keep completed participant context; this destination holds no active resources.
@@ -183,12 +260,13 @@ class Conversation(RoutableAgent):
 
         return make_context_subscriber(self, self._summary_context_topics, self._incremental_context_topics)
 
-    async def stream(
+    async def _stream_response(
         self,
         request: str,
         participant_id: str,
         *,
         history: tuple[AgentExchange, ...] = (),
+        commit: bool = True,
     ) -> AsyncIterator[str]:
         """Yield answer text for a participant's request.
 
@@ -200,6 +278,7 @@ class Conversation(RoutableAgent):
         :param request: Current user request.
         :param participant_id: Participant whose transcript and named context apply.
         :param history: Completed exchanges to reconcile with this participant's transcript.
+        :param commit: Whether to add the completed exchange to the transcript when the stream ends.
         :yields: Non-empty answer text chunks.
         :raises RuntimeError: If the conversation is closing or the model returns no answer.
 
@@ -239,9 +318,16 @@ class Conversation(RoutableAgent):
             close = getattr(events, "aclose", None)
             if close is not None:
                 await close()
+        task = asyncio.current_task()
+        if task is not None and task.cancelling():
+            raise asyncio.CancelledError
         answer = "".join(fragments)
         if not answer.strip():
             raise RuntimeError("conversation model returned no answer")
+        if commit:
+            self._commit_exchange(participant_id, request, answer)
+
+    def _commit_exchange(self, participant_id: str, request: str, answer: str) -> None:
         self._context.append(
             participant_id,
             request,

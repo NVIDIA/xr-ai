@@ -12,6 +12,7 @@ import logging
 import math
 import time
 from collections.abc import Awaitable, Callable, Mapping
+from dataclasses import dataclass
 from functools import partial
 
 import nemo_relay
@@ -43,11 +44,26 @@ _ACKNOWLEDGMENT_PROMPT = (
 )
 _ACKNOWLEDGMENT_PREFIX = "Let me think through "
 _ACKNOWLEDGMENT_FALLBACK = "Let me think that through."
+_FAILURE_TEXT = "I couldn't complete that request. Please try again."
 _logger = logging.getLogger(__name__)
-_Emit = Callable[[str, str], Awaitable[None]]
+_Emit = Callable[[AgentTurn, str, str], Awaitable[None]]
 _active_routers: contextvars.ContextVar[frozenset[object]] = contextvars.ContextVar(
     "xr_ai_routing_active_routers", default=frozenset(),
 )
+
+
+@dataclass(slots=True)
+class _TurnOutput:
+    """Output already produced for one routed turn."""
+
+    control: bool = False
+    """Router-owned control text was delivered or committed."""
+
+    control_failed: bool = False
+    """The control output callback raised."""
+
+    response: bool = False
+    """The destination signaled its response start."""
 
 
 class AgentRouter:
@@ -72,15 +88,19 @@ class AgentRouter:
     Acknowledgments use a bounded output-token budget. A positive delay sets
     the fallback silence threshold; a confident prediction
     of a slower first answer can start the acknowledgment earlier. The
-    destination still starts immediately, and its first nonblank answer chunk
-    cancels any acknowledgment that has not yet been emitted. This suppresses
+    destination still starts immediately. Its ``started()`` response signal
+    cancels any acknowledgment
+    that has not yet been emitted. This suppresses
     pending output, not audio already queued or played by downstream transports.
     The delay and timing examples start after admission and measure when the
-    destination produces its first nonblank text, excluding routing, admission,
-    acknowledgment-output serialization, and audio playback.
+    destination signals its first meaningful response, excluding routing, admission,
+    waiting for committed acknowledgment delivery, and audio playback.
 
     :param destinations: Registered destinations keyed by their stable route names.
     :param decisions: Typed Clef decision service used to select routes.
+    :param output: Async callback receiving the current ``AgentTurn``, route name, and finite control text,
+        including acknowledgments, admission preambles, and clarification or release messages.
+        Destinations publish their own answer output directly.
     :param default_destination: Registered route used for exhausted-decline fallback.
     :param context_budget_bytes: UTF-8 byte budget for retained completed history and routing history input.
     :param acknowledgment_llm: Optional non-reasoning client for intention acknowledgments and duration prediction.
@@ -93,6 +113,7 @@ class AgentRouter:
         destinations: Mapping[str, RoutableAgent],
         decisions: DecisionService,
         *,
+        output: Callable[[AgentTurn, str, str], Awaitable[None]],
         default_destination: str = "conversation",
         context_budget_bytes: int = _DEFAULT_CONTEXT_BUDGET_BYTES,
         acknowledgment_llm: LLMService | None = None,
@@ -100,6 +121,7 @@ class AgentRouter:
     ) -> None:
         if not destinations or default_destination not in destinations:
             raise ValueError("default destination must be registered")
+        self._output = output
         self._destinations = dict(destinations)
         if context_budget_bytes <= 0:
             raise ValueError("context_budget_bytes must be positive")
@@ -130,20 +152,21 @@ class AgentRouter:
     async def handle(
         self,
         turn: AgentTurn,
-        *,
-        emit: Callable[[str, str], Awaitable[None]],
     ) -> DestinationResult:
-        """Route and answer one turn, emitting source-tagged text chunks.
+        """Route one turn while emitting only router-owned control text.
 
         The supplied ``turn.history`` seeds this participant when the router
         has no completed history of its own. Later turns use the router's
         completed history rather than merging a new caller-supplied history.
         The participant's current turn is kept separate from that history.
 
-        Destination failures propagate to the caller, which owns any turn-level
-        recovery after already-emitted progress text. Cancellation suppresses
-        future chunks from the interrupted turn but cannot retract chunks
-        already delivered to ``emit``.
+        A turn that fails before its destination signals a response start
+        publishes one failure message through the router's output; once the
+        response starts, the destination owns failure output. Exceptions still
+        propagate to the caller for supervision, not for further user-facing
+        recovery. Destinations own direct output delivery, cancellation, and
+        finalization. The router suppresses interrupted control output but
+        cannot retract already-published output.
 
         The application drives turns and lifecycle operations. Destination and
         output callbacks, including their child tasks, must not recursively
@@ -156,7 +179,6 @@ class AgentRouter:
         cancellation propagates after that operation completes.
 
         :param turn: Current request and optional initial completed history.
-        :param emit: Callback that receives destination-attributed text chunks.
         :return: The final answer, focus, release, or clarification disposition.
         """
 
@@ -198,20 +220,37 @@ class AgentRouter:
                 turn_id=turn.turn_id,
                 query=turn.query,
                 history=history,
+                timestamp_us=turn.timestamp_us,
             )
             generation = object()
             self._generation[participant_id] = generation
+            turn_output = _TurnOutput()
 
-            async def emit_if_current(source: str, text: str) -> None:
+            async def emit_if_current(output_turn: AgentTurn, source: str, text: str) -> None:
                 if self._generation.get(participant_id) is generation:
-                    await emit(source, text)
+                    turn_output.control = True
+                    try:
+                        await self._output(output_turn, source, text)
+                    except Exception:
+                        turn_output.control_failed = True
+                        raise
 
             async def run_handle() -> DestinationResult:
                 timestamp_token = _active_history_timestamps.set(timestamps)
                 history_id_token = _active_history_exchange_ids.set(exchange_ids)
                 current_id_token = _active_exchange_id.set(current_exchange_id)
                 try:
-                    return await self._handle(current_turn, emit=emit_if_current, generation=generation)
+                    return await self._handle(
+                        current_turn, emit=emit_if_current, generation=generation, turn_output=turn_output,
+                    )
+                except Exception:
+                    if not turn_output.response and not turn_output.control_failed:
+                        try:
+                            await emit_if_current(current_turn, self._default_destination, _FAILURE_TEXT)
+                        except Exception:  # noqa: BLE001
+                            # isolation boundary: the turn's own failure, not this message's, propagates.
+                            _logger.exception("failed to publish turn failure message participant=%r", participant_id)
+                    raise
                 finally:
                     _active_exchange_id.reset(current_id_token)
                     _active_history_exchange_ids.reset(history_id_token)
@@ -381,7 +420,9 @@ class AgentRouter:
             raise ExceptionGroup("failed to release conversation destinations", errors)
         self._stop_task = None
 
-    async def _handle(self, turn: AgentTurn, *, emit: _Emit, generation: object) -> DestinationResult:
+    async def _handle(
+        self, turn: AgentTurn, *, emit: _Emit, generation: object, turn_output: _TurnOutput,
+    ) -> DestinationResult:
         # Route selection, admission, and answer commit are separate phases.
         focused = self._focus.get(turn.participant_id)
         candidates = [focused] if focused in self._destinations else list(self._destinations)
@@ -405,7 +446,7 @@ class AgentRouter:
                 raise asyncio.CancelledError()
             if destination_name is None:
                 text = "Which part would you like help with?"
-                await emit(self._default_destination, text)
+                await emit(turn, self._default_destination, text)
                 self._remember(turn, text)
                 return DestinationResult("clarify", text)
             destination = self._destinations[destination_name]
@@ -419,7 +460,7 @@ class AgentRouter:
                     raise asyncio.CancelledError()
                 self._focus.pop(turn.participant_id, None)
                 if admission.text:
-                    await emit(destination_name, admission.text)
+                    await emit(turn, destination_name, admission.text)
                     self._remember(turn, admission.text)
                     turn = self._turn_with_latest_history(turn)
                 focused = None
@@ -427,13 +468,13 @@ class AgentRouter:
                 if not candidates or attempt == 1:
                     text = admission.text or "Which part would you like help with?"
                     if not admission.text:
-                        await emit(self._default_destination, text)
+                        await emit(turn, self._default_destination, text)
                         self._remember(turn, text)
                     return DestinationResult("clarify", text)
                 continue
             if admission.disposition == "clarify":
                 if admission.text:
-                    await emit(destination_name, admission.text)
+                    await emit(turn, destination_name, admission.text)
                     self._remember(turn, admission.text)
                 return DestinationResult("clarify", admission.text)
             if admission.disposition == "decline":
@@ -460,7 +501,7 @@ class AgentRouter:
                         if self._generation.get(turn.participant_id) is not generation:
                             raise asyncio.CancelledError()
                         text = admission.text or "Which part would you like help with?"
-                        await emit(destination_name, text)
+                        await emit(turn, destination_name, text)
                         self._remember(turn, text)
                         return DestinationResult("clarify", text)
                     # The default is about to answer; releasing it here could
@@ -480,72 +521,71 @@ class AgentRouter:
                     continue
 
             if admission.preamble:
-                await emit(destination_name, admission.preamble)
+                await emit(turn, destination_name, admission.preamble)
             if self._generation.get(turn.participant_id) is not generation:
                 raise asyncio.CancelledError()
             acknowledgment_task: asyncio.Task[None] | None = None
             answer_started = asyncio.Event()
             acknowledgment_committed = asyncio.Event()
-            output_lock = asyncio.Lock()
+            acknowledgment_delivered = asyncio.Event()
             first_answer_duration: float | None = None
-            first_answer_claimed = False
+            response_open = True
             answer_started_at = _monotonic()
             answer_execution_started_at_unix_ns = time.time_ns()
             prediction_trace: dict[str, object] = {"choice": "not_started", "probabilities": {}}
 
-            async def emit_answer(source: str, text: str) -> None:
-                nonlocal first_answer_duration, first_answer_claimed
-                is_first_answer_chunk = bool(text.strip()) and not first_answer_claimed
-                ready_duration = None
-                first_text_ready_at_unix_ns = None
-                if is_first_answer_chunk:
-                    first_answer_claimed = True
-                    answer_started.set()
-                    ready_duration = _monotonic() - answer_started_at
-                    first_text_ready_at_unix_ns = time.time_ns()
-                    if (
-                        acknowledgment_task is not None
-                        and not acknowledgment_task.done()
-                        and not acknowledgment_committed.is_set()
-                    ):
-                        acknowledgment_task.cancel()
-                async with output_lock:
-                    await emit(source, text)
-                    if is_first_answer_chunk:
-                        first_answer_duration = ready_duration
-                        with nemo_relay.scope.scope(
-                            "conversation.first-meaningful-answer-text",
-                            nemo_relay.ScopeType.Agent,
-                            input={"query": turn.query},
-                            metadata={
-                                "participant_id": turn.participant_id,
-                                "destination": destination_name,
-                                "execution_started_at_unix_ns": answer_execution_started_at_unix_ns,
-                                "first_text_ready_at_unix_ns": first_text_ready_at_unix_ns,
-                                "first_text_emitted_at_unix_ns": time.time_ns(),
-                                "time_to_first_answer_ready_secs": first_answer_duration,
-                                "acknowledgment_delay_secs": self._acknowledgment_delay_secs,
-                                "prediction_choice": prediction_trace["choice"],
-                                "prediction_probabilities": prediction_trace["probabilities"],
-                            },
-                        ):
-                            pass
+            async def response_started() -> bool:
+                nonlocal first_answer_duration
+                if not response_open or self._generation.get(turn.participant_id) is not generation:
+                    return False
+                if answer_started.is_set():
+                    if acknowledgment_committed.is_set():
+                        await acknowledgment_delivered.wait()
+                    return not turn_output.control
+                answer_started.set()
+                turn_output.response = True
+                first_answer_duration = _monotonic() - answer_started_at
+                if (
+                    acknowledgment_task is not None
+                    and not acknowledgment_task.done()
+                    and not acknowledgment_committed.is_set()
+                ):
+                    acknowledgment_task.cancel()
+                with nemo_relay.scope.scope(
+                    "conversation.response-started",
+                    nemo_relay.ScopeType.Agent,
+                    input={"query": turn.query},
+                    metadata={
+                        "participant_id": turn.participant_id,
+                        "destination": destination_name,
+                        "execution_started_at_unix_ns": answer_execution_started_at_unix_ns,
+                        "response_started_at_unix_ns": time.time_ns(),
+                        "time_to_response_started_secs": first_answer_duration,
+                    },
+                ):
+                    pass
+                # A committed acknowledgment is delivered before any direct answer output.
+                if acknowledgment_committed.is_set():
+                    await acknowledgment_delivered.wait()
+                return not turn_output.control
 
             async def emit_acknowledgment(source: str, text: str) -> None:
-                async with output_lock:
-                    if not answer_started.is_set():
-                        acknowledgment_committed.set()
-                        with nemo_relay.scope.scope(
-                            "conversation.intent-acknowledgment-emitted",
-                            nemo_relay.ScopeType.Agent,
-                            input={"text": text},
-                            metadata={
-                                "participant_id": turn.participant_id,
-                                "destination": source,
-                                "acknowledgment_delay_secs": self._acknowledgment_delay_secs,
-                            },
-                        ):
-                            await emit(source, text)
+                if not answer_started.is_set():
+                    acknowledgment_committed.set()
+                    with nemo_relay.scope.scope(
+                        "conversation.intent-acknowledgment-emitted",
+                        nemo_relay.ScopeType.Agent,
+                        input={"text": text},
+                        metadata={
+                            "participant_id": turn.participant_id,
+                            "destination": source,
+                            "acknowledgment_delay_secs": self._acknowledgment_delay_secs,
+                        },
+                    ):
+                        try:
+                            await emit(turn, source, text)
+                        finally:
+                            acknowledgment_delivered.set()
 
             if (
                 self._acknowledgment_llm is not None
@@ -578,11 +618,9 @@ class AgentRouter:
                     )
                 )
             try:
-                result = await destination.answer(
-                    turn,
-                    emit=partial(_emit_from, emit_answer, destination_name),
-                )
+                result = await destination.answer(turn, started=response_started)
             finally:
+                response_open = False
                 if acknowledgment_task is not None:
                     if not acknowledgment_committed.is_set():
                         if not acknowledgment_task.cancelling():
@@ -671,6 +709,7 @@ class AgentRouter:
             turn_id=turn.turn_id,
             query=turn.query,
             history=history,
+            timestamp_us=turn.timestamp_us,
         )
 
     def _record_first_answer(self, turn: AgentTurn, destination: str, duration_secs: float) -> None:
@@ -820,14 +859,14 @@ class AgentRouter:
         }
         question = DecisionQuestion(
             instructions=(
-                "Predict whether this destination's first meaningful answer text will arrive before the configured "
+                "Predict whether this destination's first meaningful response will start before the configured "
                 "silence delay, using only the destination description and the participant's measured examples. "
                 "Choose uncertain when examples are absent, mixed, or not relevant. Do not use total completion time."
             ),
             criteria={
-                "slow": "Relevant measured examples support first meaningful answer text arriving after the delay.",
+                "slow": "Relevant measured examples support a first meaningful response starting after the delay.",
                 "within_delay": (
-                    "Relevant measured examples support first meaningful answer text arriving by the delay."
+                    "Relevant measured examples support a first meaningful response starting by the delay."
                 ),
                 "uncertain": "There is not enough relevant measured evidence to predict first-answer timing.",
             },
@@ -983,10 +1022,6 @@ async def _drain_tasks(tasks: tuple[asyncio.Task, ...]) -> None:
         if failure is not None:
             raise asyncio.CancelledError from failure
         raise asyncio.CancelledError
-
-
-async def _emit_from(emit: _Emit, destination: str, _source: str, text: str) -> None:
-    await emit(destination, text)
 
 
 # isolation boundary: the optional acknowledgment task cannot fail the destination answer.

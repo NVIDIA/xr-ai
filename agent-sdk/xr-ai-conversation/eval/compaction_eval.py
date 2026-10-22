@@ -25,11 +25,14 @@ from _common import (
     normalize,
     parser,
     settle,
+    standalone_started,
     validate_suite,
 )
 from xr_ai_conversation import Conversation, ConversationContextUpdate
 from xr_ai_models import LLMService
+from xr_ai_routing import AgentTurn
 from xr_ai_runtime import AgentRuntime, Topic
+from xr_ai_voice import VoiceOutput
 
 SESSIONS = ("session_lab.yaml", "session_renovation.yaml")
 
@@ -40,13 +43,15 @@ async def run_session(llm: LLMService, name: str, sample_override: int | None) -
     participant, topic_name, budgets = session["participant"], session["topic"], session["budgets"]
     samples = sample_override or session["samples"]
     topic = Topic(topic_name, ConversationContextUpdate)
+    runtime = AgentRuntime()
     conversation = Conversation(
         llm,
+        runtime=runtime,
+        output_topic=Topic("conversation-eval.output", VoiceOutput),
         incremental_context_topics=(topic_name,),
         dialogue_budget_bytes=budgets["dialogue_bytes"],
         topic_budget_bytes=budgets["topic_bytes"],
     )
-    runtime = AgentRuntime()
     runtime.register("conversation-context", conversation.context_subscriber())
     failures: list[str] = []
     print(f"=== {name}")
@@ -61,8 +66,9 @@ async def run_session(llm: LLMService, name: str, sample_override: int | None) -
                             participant_id=participant,
                         )
                     started = time.perf_counter()
-                    async for _ in conversation.stream(expand(turn["user"]), participant):
-                        pass
+                    await conversation.answer(
+                        AgentTurn(participant, str(index), expand(turn["user"])), started=standalone_started,
+                    )
                     answered = time.perf_counter() - started
                     await settle(conversation, participant)
                     summary, recent = conversation._context.dialogue_snapshot(participant)

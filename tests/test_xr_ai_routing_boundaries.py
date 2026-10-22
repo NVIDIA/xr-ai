@@ -6,6 +6,9 @@
 import asyncio
 
 import pytest
+from _routing_test_output import destination_output as _destination_output
+from _routing_test_output import emit_control as _emit_control
+from _routing_test_output import route as _route
 from xr_ai_models import ChatResponse, DecisionAnswer, DecisionResponse
 from xr_ai_routing import Admission, AgentExchange, AgentRouter, AgentTurn, DestinationResult, RoutingAid
 
@@ -24,7 +27,8 @@ class _Destination:
     async def admit(self, _turn, *, focused):
         return Admission("accept")
 
-    async def answer(self, turn, *, emit):
+    async def answer(self, turn, *, started):
+        emit = _destination_output(started)
         self.answers.append(turn.query)
         self.histories.append(turn.history)
         await emit(self.name, "answer")
@@ -53,7 +57,7 @@ async def test_interruption_keeps_cleanup_owned_across_concurrent_operations(ope
     overlap = []
 
     class Destination(_Destination):
-        async def answer(self, turn, *, emit):
+        async def answer(self, turn, *, started):
             if turn.query == "old":
                 entered.set()
                 try:
@@ -64,7 +68,7 @@ async def test_interruption_keeps_cleanup_owned_across_concurrent_operations(ope
                     cleanup_done.set()
             if not cleanup_done.is_set():
                 overlap.append("answer")
-            return await super().answer(turn, emit=emit)
+            return await super().answer(turn, started=started)
 
         async def release(self, participant):
             if not cleanup_done.is_set():
@@ -72,13 +76,13 @@ async def test_interruption_keeps_cleanup_owned_across_concurrent_operations(ope
             await super().release(participant)
 
     destination = Destination()
-    router = AgentRouter({"conversation": destination}, None)
-    old = asyncio.create_task(router.handle(AgentTurn("alice", "old", "old"), emit=_emit))
+    router = AgentRouter({"conversation": destination}, None, output=_emit_control)
+    old = asyncio.create_task(_route(router, AgentTurn("alice", "old", "old"), emit=_emit))
     await entered.wait()
     interrupt = asyncio.create_task(router.interrupt("alice"))
     await cleaning.wait()
     if operation == "replacement":
-        followup = asyncio.create_task(router.handle(AgentTurn("alice", "new", "new"), emit=_emit))
+        followup = asyncio.create_task(_route(router, AgentTurn("alice", "new", "new"), emit=_emit))
     elif operation == "departure":
         followup = asyncio.create_task(router.participant_left("alice"))
     else:
@@ -113,7 +117,7 @@ async def test_repeated_interrupt_cancellation_does_not_cancel_child_cleanup_aga
     cleanup_done = asyncio.Event()
 
     class Destination(_Destination):
-        async def answer(self, turn, *, emit):
+        async def answer(self, turn, *, started):
             entered.set()
             try:
                 await asyncio.Event().wait()
@@ -122,8 +126,8 @@ async def test_repeated_interrupt_cancellation_does_not_cancel_child_cleanup_aga
                 await finish_cleanup.wait()
                 cleanup_done.set()
 
-    router = AgentRouter({"conversation": Destination()}, None)
-    old = asyncio.create_task(router.handle(AgentTurn("alice", "old", "old"), emit=_emit))
+    router = AgentRouter({"conversation": Destination()}, None, output=_emit_control)
+    old = asyncio.create_task(_route(router, AgentTurn("alice", "old", "old"), emit=_emit))
     await entered.wait()
     interrupt = asyncio.create_task(router.interrupt("alice"))
     await cleaning.wait()
@@ -149,7 +153,7 @@ async def test_cancelled_handle_keeps_its_response_owned_until_cleanup_finishes(
     cleanup_done = asyncio.Event()
 
     class Destination(_Destination):
-        async def answer(self, turn, *, emit):
+        async def answer(self, turn, *, started):
             entered.set()
             try:
                 await asyncio.Event().wait()
@@ -158,8 +162,8 @@ async def test_cancelled_handle_keeps_its_response_owned_until_cleanup_finishes(
                 await finish_cleanup.wait()
                 cleanup_done.set()
 
-    router = AgentRouter({"conversation": Destination()}, None)
-    handle = asyncio.create_task(router.handle(AgentTurn("alice", "old", "old"), emit=_emit))
+    router = AgentRouter({"conversation": Destination()}, None, output=_emit_control)
+    handle = asyncio.create_task(_route(router, AgentTurn("alice", "old", "old"), emit=_emit))
     await entered.wait()
     handle.cancel()
     await cleaning.wait()
@@ -192,8 +196,8 @@ async def test_interrupted_preamble_cannot_start_destination_answer():
             await finish_preamble.wait()
 
     destination = Destination()
-    router = AgentRouter({"conversation": destination}, None)
-    handle = asyncio.create_task(router.handle(AgentTurn("alice", "turn", "query"), emit=emit))
+    router = AgentRouter({"conversation": destination}, None, output=_emit_control)
+    handle = asyncio.create_task(_route(router, AgentTurn("alice", "turn", "query"), emit=emit))
     await entered.wait()
     interrupt = asyncio.create_task(router.interrupt("alice"))
     await _schedule_checkpoint()
@@ -219,8 +223,8 @@ async def test_eligibility_is_rechecked_after_model_inference():
 
     specialist = _Destination("specialist")
     default = _Destination()
-    router = AgentRouter({"conversation": default, "specialist": specialist}, Decisions())
-    handle = asyncio.create_task(router.handle(AgentTurn("alice", "turn", "query"), emit=_emit))
+    router = AgentRouter({"conversation": default, "specialist": specialist}, Decisions(), output=_emit_control)
+    handle = asyncio.create_task(_route(router, AgentTurn("alice", "turn", "query"), emit=_emit))
     await entered.wait()
     specialist.eligible = False
     finish.set()
@@ -240,7 +244,7 @@ async def test_failed_ineligible_focus_release_does_not_wedge_later_turns():
             )
 
     class Specialist(_Destination):
-        async def answer(self, _turn, *, emit):
+        async def answer(self, _turn, *, started):
             return DestinationResult("focus", "focused")
 
         async def release(self, participant):
@@ -248,38 +252,38 @@ async def test_failed_ineligible_focus_release_does_not_wedge_later_turns():
 
     specialist = Specialist("specialist")
     default = _Destination()
-    router = AgentRouter({"conversation": default, "specialist": specialist}, Decisions())
+    router = AgentRouter({"conversation": default, "specialist": specialist}, Decisions(), output=_emit_control)
     # Establish focus through actual admission and answer, without private state mutation.
     default.eligible = False
-    await router.handle(AgentTurn("alice", "one", "focus"), emit=_emit)
+    await _route(router, AgentTurn("alice", "one", "focus"), emit=_emit)
     specialist.eligible = False
     default.eligible = True
     with pytest.raises(RuntimeError, match="release failed"):
-        await router.handle(AgentTurn("alice", "two", "release"), emit=_emit)
-    assert (await router.handle(AgentTurn("alice", "three", "recover"), emit=_emit)).disposition == "answer"
+        await _route(router, AgentTurn("alice", "two", "release"), emit=_emit)
+    assert (await _route(router, AgentTurn("alice", "three", "recover"), emit=_emit)).disposition == "answer"
     assert "specialist" in router._destinations_used["alice"]
 
 
 async def test_stop_clears_history_only_participants_and_allows_fresh_reuse():
     destination = _Destination()
     destination.eligible = False
-    router = AgentRouter({"conversation": destination}, None)
-    await router.handle(AgentTurn("alice", "old", "unavailable"), emit=_emit)
+    router = AgentRouter({"conversation": destination}, None, output=_emit_control)
+    await _route(router, AgentTurn("alice", "old", "unavailable"), emit=_emit)
     await router.stop()
     assert not router._history
     assert not router._history_times
     assert not router._history_exchange_ids
     assert not router._locks
     destination.eligible = True
-    await router.handle(AgentTurn("alice", "new", "available"), emit=_emit)
+    await _route(router, AgentTurn("alice", "new", "available"), emit=_emit)
     assert destination.histories == [()]
 
 
 async def test_retained_history_is_bounded_and_an_empty_history_is_not_reseeded():
     destination = _Destination()
-    router = AgentRouter({"conversation": destination}, None, context_budget_bytes=1)
+    router = AgentRouter({"conversation": destination}, None, output=_emit_control, context_budget_bytes=1)
     for index in range(3):
-        await router.handle(
+        await _route(router,
             AgentTurn("alice", str(index), "query", (AgentExchange("seed", "seed"),)), emit=_emit,
         )
         assert router._history["alice"] == []
@@ -300,7 +304,7 @@ async def test_closed_admission_is_rechecked_after_replacement_drains_old_respon
     finish = asyncio.Event()
 
     class Destination(_Destination):
-        async def answer(self, turn, *, emit):
+        async def answer(self, turn, *, started):
             if turn.query == "old":
                 entered.set()
                 try:
@@ -308,13 +312,13 @@ async def test_closed_admission_is_rechecked_after_replacement_drains_old_respon
                 finally:
                     cleaning.set()
                     await finish.wait()
-            return await super().answer(turn, emit=emit)
+            return await super().answer(turn, started=started)
 
     destination = Destination()
-    router = AgentRouter({"conversation": destination}, None)
-    old = asyncio.create_task(router.handle(AgentTurn("alice", "old", "old"), emit=_emit))
+    router = AgentRouter({"conversation": destination}, None, output=_emit_control)
+    old = asyncio.create_task(_route(router, AgentTurn("alice", "old", "old"), emit=_emit))
     await entered.wait()
-    replacement = asyncio.create_task(router.handle(AgentTurn("alice", "new", "new"), emit=_emit))
+    replacement = asyncio.create_task(_route(router, AgentTurn("alice", "new", "new"), emit=_emit))
     await cleaning.wait()
     if operation == "departure":
         closing = asyncio.create_task(router.participant_left("alice"))
@@ -337,7 +341,7 @@ async def test_canceled_cleanup_waiter_owns_the_complete_transition(operation):
     finish_destination = asyncio.Event()
 
     class Destination(_Destination):
-        async def answer(self, turn, *, emit):
+        async def answer(self, turn, *, started):
             entered.set()
             try:
                 await asyncio.Event().wait()
@@ -351,8 +355,8 @@ async def test_canceled_cleanup_waiter_owns_the_complete_transition(operation):
             await super().release(participant)
 
     destination = Destination()
-    router = AgentRouter({"conversation": destination}, None)
-    response = asyncio.create_task(router.handle(AgentTurn("alice", "old", "old"), emit=_emit))
+    router = AgentRouter({"conversation": destination}, None, output=_emit_control)
+    response = asyncio.create_task(_route(router, AgentTurn("alice", "old", "old"), emit=_emit))
     await entered.wait()
     cleanup = asyncio.create_task(router.stop() if operation == "stop" else router.participant_left("alice"))
     await response_cleaning.wait()
@@ -365,7 +369,7 @@ async def test_canceled_cleanup_waiter_owns_the_complete_transition(operation):
         await asyncio.wait_for(destination_cleaning.wait(), timeout=1)
         assert not cleanup.done()
         with pytest.raises(RuntimeError):
-            await router.handle(AgentTurn("alice", "new", "new"), emit=_emit)
+            await _route(router, AgentTurn("alice", "new", "new"), emit=_emit)
     finally:
         finish_response.set()
         finish_destination.set()
@@ -389,8 +393,8 @@ async def test_concurrent_cleanup_waiters_join_one_destination_release(operation
             await finish.wait()
 
     destination = Destination()
-    router = AgentRouter({"conversation": destination}, None)
-    await router.handle(AgentTurn("alice", "old", "old"), emit=_emit)
+    router = AgentRouter({"conversation": destination}, None, output=_emit_control)
+    await _route(router, AgentTurn("alice", "old", "old"), emit=_emit)
     first = asyncio.create_task(router.stop() if operation == "stop" else router.participant_left("alice"))
     await cleaning.wait()
     second = asyncio.create_task(router.stop() if operation == "stop" else router.participant_left("alice"))
@@ -418,24 +422,24 @@ async def test_failed_cleanup_retains_admission_and_retries_only_owned_failures(
                 raise RuntimeError("cleanup failed")
 
     destination = Destination()
-    router = AgentRouter({"conversation": destination}, None)
-    await router.handle(AgentTurn("alice", "old", "old"), emit=_emit)
-    await router.handle(AgentTurn("bob", "old", "old"), emit=_emit)
+    router = AgentRouter({"conversation": destination}, None, output=_emit_control)
+    await _route(router, AgentTurn("alice", "old", "old"), emit=_emit)
+    await _route(router, AgentTurn("bob", "old", "old"), emit=_emit)
     with pytest.raises(ExceptionGroup, match="failed to release"):
         await (router.stop() if operation == "stop" else router.participant_left("alice"))
     with pytest.raises(RuntimeError):
-        await router.handle(AgentTurn("alice", "blocked", "blocked"), emit=_emit)
+        await _route(router, AgentTurn("alice", "blocked", "blocked"), emit=_emit)
     if operation == "departure":
-        assert (await router.handle(AgentTurn("bob", "new", "new"), emit=_emit)).disposition == "answer"
+        assert (await _route(router, AgentTurn("bob", "new", "new"), emit=_emit)).disposition == "answer"
     else:
         with pytest.raises(RuntimeError, match="router is stopping"):
-            await router.handle(AgentTurn("bob", "blocked", "blocked"), emit=_emit)
+            await _route(router, AgentTurn("bob", "blocked", "blocked"), emit=_emit)
     destination.fail = False
     await (router.stop() if operation == "stop" else router.participant_left("alice"))
     assert destination.releases.count("alice") == 2
     if operation == "stop":
         assert destination.releases.count("bob") == 1
-    assert (await router.handle(AgentTurn("alice", "reopened", "reopened"), emit=_emit)).disposition == "answer"
+    assert (await _route(router, AgentTurn("alice", "reopened", "reopened"), emit=_emit)).disposition == "answer"
 
 
 async def test_canceled_shutdown_preserves_a_cleanup_failure_as_its_cause():
@@ -448,8 +452,8 @@ async def test_canceled_shutdown_preserves_a_cleanup_failure_as_its_cause():
             await finish.wait()
             raise RuntimeError("cleanup failed")
 
-    router = AgentRouter({"conversation": Destination()}, None)
-    await router.handle(AgentTurn("alice", "old", "old"), emit=_emit)
+    router = AgentRouter({"conversation": Destination()}, None, output=_emit_control)
+    await _route(router, AgentTurn("alice", "old", "old"), emit=_emit)
     shutdown = asyncio.create_task(router.stop())
     await cleaning.wait()
     shutdown.cancel()
@@ -459,14 +463,15 @@ async def test_canceled_shutdown_preserves_a_cleanup_failure_as_its_cause():
         await shutdown
     assert isinstance(cancellation.value.__cause__, ExceptionGroup)
     with pytest.raises(RuntimeError, match="router is stopping"):
-        await router.handle(AgentTurn("alice", "blocked", "blocked"), emit=_emit)
+        await _route(router, AgentTurn("alice", "blocked", "blocked"), emit=_emit)
 
 
 @pytest.mark.parametrize("operation", ["interrupt", "departure", "stop", "handle"])
 @pytest.mark.parametrize("target", ["alice", "bob"])
 async def test_destination_cannot_deadlock_by_awaiting_router_operations(operation, target):
     class Destination(_Destination):
-        async def answer(self, turn, *, emit):
+        async def answer(self, turn, *, started):
+            emit = _destination_output(started)
             if operation == "interrupt":
                 await router.interrupt(target)
             elif operation == "departure":
@@ -474,11 +479,11 @@ async def test_destination_cannot_deadlock_by_awaiting_router_operations(operati
             elif operation == "stop":
                 await router.stop()
             else:
-                await router.handle(AgentTurn(target, "nested", "nested"), emit=emit)
+                await _route(router, AgentTurn(target, "nested", "nested"), emit=emit)
 
-    router = AgentRouter({"conversation": Destination()}, None)
+    router = AgentRouter({"conversation": Destination()}, None, output=_emit_control)
     with pytest.raises(RuntimeError, match="cannot await"):
-        await asyncio.wait_for(router.handle(AgentTurn("alice", "turn", "query"), emit=_emit), timeout=1)
+        await asyncio.wait_for(_route(router, AgentTurn("alice", "turn", "query"), emit=_emit), timeout=1)
 
 
 @pytest.mark.parametrize("child_callback", [False, True])
@@ -487,9 +492,9 @@ async def test_acknowledgment_callback_inherits_router_ownership(child_callback,
     callback_done = asyncio.Event()
 
     class Destination(_Destination):
-        async def answer(self, turn, *, emit):
+        async def answer(self, turn, *, started):
             await finish_answer.wait()
-            return await super().answer(turn, emit=emit)
+            return await super().answer(turn, started=started)
 
     class Decisions:
         async def decide(self, _state, _questions):
@@ -516,10 +521,10 @@ async def test_acknowledgment_callback_inherits_router_ownership(child_callback,
 
     destination = Destination()
     router = AgentRouter(
-        {"conversation": destination}, Decisions(),
+        {"conversation": destination}, Decisions(), output=_emit_control,
         acknowledgment_llm=Acknowledgment(), acknowledgment_delay_secs=10,
     )
-    response = asyncio.create_task(router.handle(AgentTurn("alice", "turn", "query"), emit=emit))
+    response = asyncio.create_task(_route(router, AgentTurn("alice", "turn", "query"), emit=emit))
     try:
         await asyncio.wait_for(callback_done.wait(), timeout=1)
     finally:
