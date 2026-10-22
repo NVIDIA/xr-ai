@@ -284,18 +284,6 @@ A per-call `enable_thinking=True` or `False` always applies to that call. A
 legacy `default_extras.chat_template_kwargs.enable_thinking: true` default could
 previously not be turned off per call. Refer to {ref}`agent-sdk-models-thinking`.
 
-- **`llama_nemotron` profiles:** requests now start the system message with
-  `detailed thinking off` unless a call passes `enable_thinking=True`; the model
-  previously reasoned by default and its preamble appeared in the response. To
-  keep reasoning on by default, set it in the profile:
-
-  ```yaml
-  adapter:
-    preset: llama_nemotron
-    thinking:
-      default: true
-  ```
-
 - **`thinking_budget` call argument:** now sent as vLLM's
   `thinking_token_budget` instead of `chat_template_kwargs.thinking_budget`,
   which the Nemotron chat templates ignored. The argument is omitted when
@@ -313,6 +301,15 @@ previously not be turned off per call. Refer to {ref}`agent-sdk-models-thinking`
   override it. It must now be a boolean, and a profile that also sets a
   different `thinking.default` is rejected. Prefer `thinking.default` in new
   profiles.
+
+### Llama Nemotron LLM removed
+
+The `services/llama-nemotron-llm` server (`llama_nemotron_llm_server`, port
+8106) and the `llama_nemotron` client preset are removed; no sample or
+deployment profile used them. Stop a running server with the old checkout
+before updating. Its Docker container is `xr-ai-vllm-llama-nemotron-llm-server`.
+Point custom profiles that set `preset: llama_nemotron` or
+`kind: preset:llama_nemotron` at another LLM, such as `nemotron3_nano`.
 
 ### Operator-visible runtime changes
 
