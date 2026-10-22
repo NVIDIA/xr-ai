@@ -62,6 +62,8 @@ Newly generated procedure guides use `guides/<slug>.yaml`, for example
 remain supported without renaming. The generation skills' reference examples
 are now `example.yaml`, `timer.yaml`, and `review-blocked.yaml`. Refresh both
 installed skill directories together so their links use the renamed examples.
+The evaluation fixture is now `eval/fixtures/indicator.yaml`; update any direct
+references to its former `indicator.guide.yaml` filename.
 
 ### Nemotron 3 embedding model
 

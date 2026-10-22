@@ -111,7 +111,7 @@ def test_packet_cli_uses_runtime_controls_and_unique_source_evidence(
 ):
     llm, vlm = runtime_models
     packet = make_packet(tmp_path, count, color)
-    guide = yaml.safe_load((_SAMPLE / "eval/fixtures/indicator.guide.yaml").read_text())
+    guide = yaml.safe_load((_SAMPLE / "eval/fixtures/indicator.yaml").read_text())
     guide["task"]["status"] = "draft"
     guide["steps"][1]["trigger"]["arguments"]["duration_s"] = 1
     guide["steps"][1]["finish_on_complete"] = automatic
@@ -161,7 +161,7 @@ def test_packet_cli_rejects_announcements_that_disagree_with_progress(
     from procedure_capture_guide_worker.guide.guiding import _Guide
 
     packet = make_packet(tmp_path)
-    guide = yaml.safe_load((_SAMPLE / "eval/fixtures/indicator.guide.yaml").read_text())
+    guide = yaml.safe_load((_SAMPLE / "eval/fixtures/indicator.yaml").read_text())
     guide["task"]["status"] = "draft"
     guide["steps"] = guide["steps"][:1]
     guide["steps"][0]["next"] = None

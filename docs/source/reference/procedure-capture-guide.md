@@ -529,7 +529,7 @@ Manifest mode continues scoring later probes after an answer or tool-call
 mismatch; a runtime exception or timeout still ends the run. Packet mode stops
 after a failed check because later steps depend on that progress.
 
-The checked-in `eval/guide_cases.yaml` and `eval/fixtures/indicator.guide.yaml`
+The checked-in `eval/guide_cases.yaml` and `eval/fixtures/indicator.yaml`
 provide a synthetic visual-and-timer scenario. `eval/guide_routing.yaml`
 exercises the composed foreground prompt with controls, polite requests,
 quoted commands, negation, requests to explain guide content, unsupported capture
