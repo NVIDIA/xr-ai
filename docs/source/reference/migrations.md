@@ -54,33 +54,6 @@ Replace `xr-ai-routing[voice]` with `xr-ai-routing[runtime]`. Remove the
 `[voice]` extra from `xr-ai-conversation`, which now depends on
 `xr-ai-interaction` directly.
 
-### Routed agents publish their own output
-
-`RoutableAgent.answer()` now accepts `turn` and a keyword-only `started`
-callable instead of `emit`. Move destination answer
-publication out of the router's `emit` callback and into each agent. Return
-`DestinationResult.text` when completed response context is needed for later
-routing; `routing_aid(participant_id)` remains the explicit source of each
-agent's routing context. Await `started()` when the first meaningful response
-is ready to suppress a pending acknowledgment.
-
-Move the router's own finite control callback from `handle(..., emit=callback)`
-to constructor configuration with `AgentRouter(..., output=callback)`, then call
-`handle(turn)`. The callback now receives `(turn, source, text)` so one configured
-publisher can preserve each participant's identity and originating timestamp.
-It receives acknowledgments, admission preambles, clarification or release
-messages, and the failure message for a turn that fails before its destination
-calls `started()`; it never receives destination answer text.
-
-Construct `Conversation(runtime=runtime, output_topic=voice_output_topic)` with
-both required arguments. Conversation now publishes directly and owns stream finalization. The router
-reports failures before the first chunk. `Conversation.stream()` has been
-removed. Route requests through `AgentRouter`, or call
-`await conversation.answer(AgentTurn(participant_id, turn_id, request), started=started)`
-with an async `started` callable; the conversation streams its answer to the
-configured output topic.
-
-
 ### Persistent services after startup failure
 
 Stacks using `launch_mode="persist"` now retain services that had signaled
@@ -99,34 +72,29 @@ standalone RAG now default to 2048 dimensions. The local endpoint remains on
 port 8109 with the served name `embed`.
 
 1. Stop the agent and its persistent embedding server **before updating**.
-   For the tea sample, run from the repository root:
+   For the `v0.3.0-beta` shared model stack, run from the old checkout's
+   repository root:
 
    ```bash
-   uv run --project agent-samples/tea-making-sample/model-servers tea_making_sample_model_servers --stop
+   uv run --project model-server-samples/model-servers model_servers --stop
    ```
 
    For a standalone deployment, stop the embedding process or container through
    the supervisor that started it. Check that its listener on port 8109 has
    stopped. Stopping only RAG or the embedding launcher does not stop persistent
    weights; the pip launcher reuses a healthy listener without comparing models.
-2. Update the checkout and change `embedding_dim: 768` to `embedding_dim: 2048`
-   in copied tea **and standalone** `rag_service.yaml` files. Restart the
-   embedding server before RAG. Verify the `embed` entry's `root` in
-   `/v1/models` identifies Nemotron 3 Embed, not the previous model.
-3. Restart the agent. Changing the default dimension from 768 to 2048 changes
-   the existing cache digest, so RAG rebuilds the index automatically. If a
-   copied configuration already used 2048 dimensions, set a new `cache_key` or
-   delete its generated cache before
-   restarting RAG; a local served alias such as `embed` does not identify weights.
-   If RAG started while the previous pip server was still listening, stop RAG,
-   verify the new model is serving, and delete the generated cache
+2. Update the checkout and change `embedding_dim: 768` to
+   `embedding_dim: 2048` in copied tea **and standalone** `rag_service.yaml`
+   files. While RAG is stopped, you can empty its generated cache directory
    (`models/tea-making-rag-cache` for tea, or the configured `.rag-cache` for
-   standalone RAG) or set a new `cache_key` before restarting RAG. Otherwise,
-   old-model vectors saved at 2048 dimensions remain reusable after the server
-   switches models. The Docker launcher recreates its container on model changes.
-
-Old 768-dimensional `.npz` caches are no longer used by the default
-configuration and can be deleted to reclaim space without losing documents.
+   standalone RAG) to reclaim space. Restart the embedding server before RAG.
+   Verify the `embed` entry's `root` in `/v1/models` identifies Nemotron 3
+   Embed, not the previous model. If it still reports the previous model, stop
+   the old listener, restart the updated embedding server, and repeat this
+   check before starting RAG.
+3. Restart the agent. RAG's new cache format rebuilds the `v0.3.0-beta` index
+   automatically, including caches that already used 2048 dimensions. Refer to
+   {ref}`embedding-service-identity-migration` for the endpoint requirements.
 
 Independently deployed NIM endpoints must serve the new model before using the
 updated NIM profile. For later model changes behind an unchanged profile, set
@@ -419,3 +387,7 @@ For current worker startup and model availability requirements, refer to
 For Clef updates between development checkouts, refer to
 {ref}`clef-service-updates`. For image inputs and model cache configuration,
 refer to {doc}`clef-flash`.
+
+(routed-agents-publish-their-own-output)=
+For routing and conversation output contracts, refer to
+{ref}`routing-response-progress` and {doc}`agent-sdk-conversation`.

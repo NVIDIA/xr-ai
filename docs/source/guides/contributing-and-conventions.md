@@ -30,7 +30,7 @@ Public Python references are generated from each enrolled module's literal
 change therefore updates the code, its co-located documentation, and tests; the
 strict documentation build rejects unresolved or undocumented exports. Update
 a narrative page when concepts, workflows, operations, or architecture change,
-and add a migration entry for a breaking change. Refer to
+and add a migration entry for a breaking change to released behavior. Refer to
 {ref}`migration-release-rollover` for the migration guide's release scope.
 
 The repository-wide README and documentation ownership rules live in the
@@ -104,10 +104,14 @@ that heading, before `Earlier releases`. Link to the baseline release's
 archived guide and {doc}`/reference/migration-history`; users skipping releases
 apply earlier guides in release order.
 
-For each breaking change, name who is affected, state the required action, and
-include a before-and-after example when useful. Update the entry when another
-change in the same development cycle supersedes it, so the instructions lead
-directly from the baseline release to the final behavior.
+Before adding an entry, check the baseline tag's code and configuration with
+`git show <baseline-tag>:<path>`. Changes affecting only interfaces introduced
+after the baseline belong in their canonical documentation.
+
+For each breaking change to released behavior, name who is affected, state the
+required action, and include a before-and-after example when useful. Update the
+entry when another change in the same development cycle supersedes it, so the
+instructions lead directly from the baseline release to the final behavior.
 
 Use this checklist for every release:
 

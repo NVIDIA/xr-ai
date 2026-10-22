@@ -87,6 +87,7 @@ whether it can accept the specific turn. Destinations decline or clarify before
 answer work begins. A clarification returned after answer work starts is an
 error.
 
+(routing-response-progress)=
 ## Response progress and routing context
 
 The router calls `answer(turn, started=...)`. Destinations await `started()`
