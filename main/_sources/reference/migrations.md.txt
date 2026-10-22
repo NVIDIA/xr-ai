@@ -69,6 +69,49 @@ updated NIM profile. For later model changes behind an unchanged profile, set
 an explicit model revision in `cache_key` and restart RAG. Do not change models
 while RAG is running; its document vectors must match query embeddings.
 
+(embedding-service-identity-migration)=
+### Embedding SDK identity and RAG cache contract
+
+`EmbeddingService` now requires `async model_identity() -> str | None`.
+Custom implementations must add this method to satisfy the runtime-checkable
+protocol and support RAG startup. Return a stable backing-model identifier when
+known, or `None` only when a successful lookup finds no identity metadata. Do
+not use an alias that can silently switch weights. Existing implementations
+without this method no longer satisfy the protocol.
+
+The built-in OpenAI-compatible client reads the matching model's `root` from
+`/v1/models`. HTTP failures, timeouts, invalid JSON, and malformed or ambiguous
+metadata raise `ModelServiceError`, exported by `xr_ai_models`, with the original
+transport or JSON error retained as the cause. Custom adapters must likewise
+raise this error for lookup failures instead of returning `None`.
+
+RAG permits retrieval without persistent cache reads or writes when a successful
+lookup returns `None`. It propagates lookup failures and fails startup: fix the
+endpoint, credentials, or metadata response before restarting. Cancellation
+continues to propagate. `cache_key` does not override missing identity or a
+failed lookup.
+
+The cache format now combines the reported identity, a hash of the resolved
+embedding role, manual `cache_key`, indexing settings, and document content.
+Existing caches are rebuilt once and can be deleted afterward. `cache_key`
+now supplements the role hash instead of replacing it. Unrelated LLM, VLM,
+or TTS edits and profile formatting changes do not rebuild the index.
+
+The reported identity is not a weight checksum. This repository's Docker
+launcher reports a resolved snapshot path; pip reports the Hugging Face
+repository ID. Switching backends can rebuild the cache, while a Hub revision
+change under the same pip model ID requires a new `cache_key`.
+
+The post-build check raises `ModelServiceError` if the reported identity changes,
+including appearing or disappearing, before saving or serving the vectors.
+A failed lookup also aborts startup. Metadata and embeddings are separate
+requests: matching before/after identities cannot detect a swap-and-restore
+or mixed replicas behind one endpoint. Every replica must remain on the same
+weights for the entire indexing run and serving lifetime. Health probes check
+availability, not model consistency. Stop RAG before changing models, bump
+`cache_key` if weights change under the same reported identity, and restart
+against the stable deployment.
+
 ### Shared accepted-query display
 
 Every `VoiceAgent` now returns accepted query text to its originating participant

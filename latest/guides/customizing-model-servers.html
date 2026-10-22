@@ -686,8 +686,17 @@ when changing the endpoint.</p>
 <p>For a hosted provider without a health route, set <code class="docutils literal notranslate"><span class="pre">readiness:</span> <span class="pre">none</span></code> in the
 embedding role’s <code class="docutils literal notranslate"><span class="pre">endpoint</span></code>. Otherwise use <code class="docutils literal notranslate"><span class="pre">readiness:</span> <span class="pre">health</span></code> and the
 provider’s <code class="docutils literal notranslate"><span class="pre">health_path</span></code>. Omitting these settings probes <code class="docutils literal notranslate"><span class="pre">/health</span></code>, which can
-prevent RAG startup when that route is absent. Refer to
-<a class="reference internal" href="deploying-with-nim.html"><span class="doc">Deploying samples with NIM endpoints</span></a> for native Riva speech and NIM configuration.</p>
+prevent RAG startup when that route is absent.</p>
+<p><code class="docutils literal notranslate"><span class="pre">readiness:</span> <span class="pre">none</span></code> disables only the health probe. The OpenAI-compatible
+embedding adapter still requires a successful <code class="docutils literal notranslate"><span class="pre">GET</span> <span class="pre">/v1/models</span></code> for model
+identity discovery during indexing, using the embedding role’s credentials.
+HTTP errors (including 401 and 404), transport failures, and invalid metadata
+abort startup; fix the endpoint or its access settings before retrying. A
+successful response with no matching backing <code class="docutils literal notranslate"><span class="pre">root</span></code> permits indexing without
+persistent caching, so documents are re-embedded on every startup. <code class="docutils literal notranslate"><span class="pre">cache_key</span></code>
+does not override missing metadata. Refer to <a class="reference internal" href="../reference/migrations.html#embedding-service-identity-migration"><span class="std std-ref">Embedding SDK identity and RAG cache contract</span></a>
+for the identity contract and <a class="reference internal" href="deploying-with-nim.html"><span class="doc">Deploying samples with NIM endpoints</span></a> for native Riva speech
+and NIM configuration.</p>
 </section>
 </section>
 
