@@ -418,9 +418,10 @@ sends `SIGTERM` or `SIGKILL`. Pocket TTS records the dedicated process group
 created by the launcher without leaving that group. Cleanup signals the
 complete group only after verifying both the listener marker and, when
 separate, the launcher's group-leader marker, so inference descendants cannot
-survive as orphans and launcher abort-time escalation can still reach Pocket
-TTS. It falls back to PID-only cleanup if group ownership cannot be verified;
-other local servers always retain PID-only cleanup. Unknown listeners and
+survive as orphans. Launcher abort-time escalation can reach Pocket TTS before
+it signals readiness; once its ready file exists when cleanup begins, the
+launcher preserves it. Explicit stop falls back to PID-only cleanup if group
+ownership cannot be verified; other local servers always retain PID-only cleanup. Unknown listeners and
 failed inspection abort cleanup without sending a signal, and
 the sample's model command with `--stop` exits nonzero if any target could not be stopped. Absent
 servers are silently skipped.
@@ -590,7 +591,10 @@ cleanup.
   wire format (`finish_reason: "tool_calls"`). Per-turn reasoning toggle via
   `"detailed thinking on"` or `"detailed thinking off"` in a system or user
   message. Without either phrase, this model reasons by default; the reasoning
-  preamble is **not** stripped server-side. To swap checkpoints, change `model`
+  preamble is **not** stripped server-side. The `llama_nemotron` client preset
+  therefore sends `detailed thinking off` unless a call passes
+  `enable_thinking=True`; refer to {ref}`agent-sdk-models-thinking`. To swap
+  checkpoints, change `model`
   only to one with a compatible chat template, and update `tool_call_parser`
   for the replacement model's tool syntax. Revisit `max_model_len`,
   `gpu_memory_utilization`, and `tensor_parallel_size` for its context and GPU
@@ -666,9 +670,21 @@ cleanup.
   with an `embedding` role. It chunks and embeds supported documents at
   startup, caches its index, and returns matches above `min_score`. Start the
   embedding service first, RAG second, and the consuming worker last. The cache
-  includes document content, indexing settings, and the model profile; change
-  `cache_key` when a remote endpoint changes its backing model without changing
-  that profile.
+  includes document content, indexing settings, the resolved embedding-role
+  hash, the server-reported `root` from the matching `/v1/models` entry, and
+  optional `cache_key`. Unrelated model-role edits do not invalidate the cache.
+  The reported identity is best-effort: this repository's Docker launcher serves
+  a resolved snapshot path, while pip serves the Hugging Face repository ID.
+  Switching backends can rebuild the cache, and changing a Hub revision under
+  the same pip model ID requires a new `cache_key`. A served alias such as
+  `embed` does not identify weights. Providers omitting `root` cause documents
+  to be re-embedded on every startup without persistent caching; `cache_key`
+  cannot opt back in. Failed metadata requests or invalid responses abort
+  startup. The manual key supplements the role hash and reported identity.
+  Every replica must remain on the same weights throughout indexing and serving;
+  health probes check availability, not model consistency. Restart RAG whenever
+  the embedding model changes. Refer to
+  {doc}`/reference/migrations` for upgrading existing indexes and servers.
 - **video-memory-service** owns recorded chunk queries, NVDEC, and PNG output
   behind typed msgpack over ZMQ on port 8310. Set `recordings_dir` in its YAML to
   enable recorded-video operations; the path must match the hub's

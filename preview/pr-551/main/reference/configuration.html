@@ -342,6 +342,7 @@
 </ul>
 </details></li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Reference</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="agent-sdk-conversation.html">xr-ai-conversation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-hub.html">xr-ai-hub</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-models.html">xr-ai-models</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-routing.html">xr-ai-routing</a></li>
@@ -401,6 +402,7 @@
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_conversation/index.html">xr_ai_conversation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_model_server_stack/index.html">xr_ai_model_server_stack</a></li>
 </ul>
 </details></li>
@@ -1943,30 +1945,6 @@ workflow.</p></li>
 </div>
 </section>
 </section>
-<section id="config-clef-flash">
-<h2>clef-flash<a class="headerlink" href="#config-clef-flash" title="Link to this heading">#</a></h2>
-<section id="config-clef-flash-yaml-clef-server-yaml">
-<h3>yaml/clef_server.yaml<a class="headerlink" href="#config-clef-flash-yaml-clef-server-yaml" title="Link to this heading">#</a></h3>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
-<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
-
-<span class="c1"># The pinned snapshot downloads into model_cache on first launch and is reused.</span>
-<span class="nt">model_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Cloudflare/clef-flash</span>
-<span class="nt">model_revision</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">17f0b0ad64efb65d273590632833508766b2aae6</span>
-<span class="nt">model_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../models</span>
-
-<span class="nt">host</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">127.0.0.1</span>
-<span class="c1"># Clef uses 8120, separate from the local model servers' 810x ports.</span>
-<span class="c1"># Port inventory: docs/source/components/ai-services.md.</span>
-<span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8120</span>
-<span class="nt">device</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cuda:0</span>
-<span class="nt">dtype</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bfloat16</span>
-<span class="nt">max_length</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4096</span>
-<span class="nt">max_body_bytes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1048576</span>
-</pre></div>
-</div>
-</section>
-</section>
 <section id="config-shared-model-server-defaults">
 <h2>Shared model-server defaults<a class="headerlink" href="#config-shared-model-server-defaults" title="Link to this heading">#</a></h2>
 <section id="config-shared-model-server-defaults-yaml-embedding-server-yaml">
@@ -2197,10 +2175,6 @@ workflow.</p></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo-yaml-video-memory-service-yaml">yaml/video_memory_service.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo-yaml-voice-gate-yaml">yaml/voice_gate.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo-yaml-xr-render-demo-worker-yaml">yaml/xr_render_demo_worker.yaml</a></li>
-</ul>
-</li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#config-clef-flash">clef-flash</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-clef-flash-yaml-clef-server-yaml">yaml/clef_server.yaml</a></li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#config-shared-model-server-defaults">Shared model-server defaults</a><ul class="nav section-nav flex-column">

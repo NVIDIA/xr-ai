@@ -317,6 +317,7 @@
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../reference/index.html">Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-conversation.html">xr-ai-conversation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-hub.html">xr-ai-hub</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-models.html">xr-ai-models</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-routing.html">xr-ai-routing</a></li>
@@ -376,6 +377,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_conversation/index.html">xr_ai_conversation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_model_server_stack/index.html">xr_ai_model_server_stack</a></li>
 </ul>
 </details></li>
@@ -505,6 +507,14 @@ profile overrides ports, pass that same <code class="docutils literal notranslat
 this applies its port settings without inspecting the GPU. GPU placement and
 memory budgets do not affect cleanup. Refer to <a class="reference internal" href="../reference/command-line.html"><span class="doc">Command-line reference</span></a> for each sample’s
 command. Each launcher has only <code class="docutils literal notranslate"><span class="pre">--stop</span></code> and <code class="docutils literal notranslate"><span class="pre">--gpu-profile</span></code>, besides help.</p>
+<p>If a later model fails to start, or startup is cancelled, servers that had
+signaled readiness when cleanup began stay running. Fix the failure and rerun
+the same model command to reuse them. If the fix changes a server that already
+started, run the model command with <code class="docutils literal notranslate"><span class="pre">--stop</span></code> first so the new settings take
+effect. You can also use <code class="docutils literal notranslate"><span class="pre">--stop</span></code> to clear retained servers. Unfinished Docker
+backend launches are stopped through their managed wrappers. Persistent
+pip-backend vLLM runs in a separate session and can keep loading after its
+wrapper is stopped; use <code class="docutils literal notranslate"><span class="pre">--stop</span></code> once it is listening to clear it.</p>
 <p>On startup failure, merged server YAML remains in a private <code class="docutils literal notranslate"><span class="pre">model-configs-*</span></code>
 directory under the existing run logs, at the paths printed in the failure
 summary. Successful startup removes those files. Credentials belong in the
@@ -690,8 +700,17 @@ when changing the endpoint.</p>
 <p>For a hosted provider without a health route, set <code class="docutils literal notranslate"><span class="pre">readiness:</span> <span class="pre">none</span></code> in the
 embedding role’s <code class="docutils literal notranslate"><span class="pre">endpoint</span></code>. Otherwise use <code class="docutils literal notranslate"><span class="pre">readiness:</span> <span class="pre">health</span></code> and the
 provider’s <code class="docutils literal notranslate"><span class="pre">health_path</span></code>. Omitting these settings probes <code class="docutils literal notranslate"><span class="pre">/health</span></code>, which can
-prevent RAG startup when that route is absent. Refer to
-<a class="reference internal" href="deploying-with-nim.html"><span class="doc">Deploying samples with NIM endpoints</span></a> for native Riva speech and NIM configuration.</p>
+prevent RAG startup when that route is absent.</p>
+<p><code class="docutils literal notranslate"><span class="pre">readiness:</span> <span class="pre">none</span></code> disables only the health probe. The OpenAI-compatible
+embedding adapter still requires a successful <code class="docutils literal notranslate"><span class="pre">GET</span> <span class="pre">/v1/models</span></code> for model
+identity discovery during indexing, using the embedding role’s credentials.
+HTTP errors (including 401 and 404), transport failures, and invalid metadata
+abort startup; fix the endpoint or its access settings before retrying. A
+successful response with no matching backing <code class="docutils literal notranslate"><span class="pre">root</span></code> permits indexing without
+persistent caching, so documents are re-embedded on every startup. <code class="docutils literal notranslate"><span class="pre">cache_key</span></code>
+does not override missing metadata. Refer to <a class="reference internal" href="../reference/migrations.html#embedding-service-identity-migration"><span class="std std-ref">Embedding SDK identity and RAG cache contract</span></a>
+for the identity contract and <a class="reference internal" href="deploying-with-nim.html"><span class="doc">Deploying samples with NIM endpoints</span></a> for native Riva speech
+and NIM configuration.</p>
 </section>
 </section>
 

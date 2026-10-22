@@ -65,6 +65,8 @@ Functions
    xr_ai_launcher.detect_gpu_config
    xr_ai_launcher.load_deployment_profile
    xr_ai_launcher.load_model_deployment
+   xr_ai_launcher.has_ownership_marker
+   xr_ai_launcher.pid_on_port_checked
    xr_ai_launcher.ManagedProcess
    xr_ai_launcher.run_stack
 
@@ -196,6 +198,20 @@ Package Contents
    Load the JSON profile selected by a YAML worker configuration.
 
 
+.. py:function:: has_ownership_marker(pid: int, port: int, prefix: str) -> bool
+
+   Return whether *pid* was started with ``<prefix>_MANAGED=1`` and ``<prefix>_PORT=<port>``.
+
+
+.. py:function:: pid_on_port_checked(port: int) -> tuple[int | None, bool, bool]
+
+   Return the listening PID, inspection status, and listener presence.
+
+   Tries `ss` first (always present on modern Linux), falls back to `lsof`.
+   A listener without a visible PID is still reported so callers fail closed
+   instead of mistaking an uninspectable listener for an unused port.
+
+
 .. py:function:: ManagedProcess(name: str, cmd: list[str], cwd: pathlib.Path | None = None, env: dict[str, str] | None = None)
    :async:
 
@@ -228,8 +244,9 @@ Package Contents
    The launcher spawns every member at once and waits for *all* of them to
    signal readiness before advancing to the next item in the stack sequence.
    A member that signals readiness remains monitored until the whole group is
-   ready. An unexpected exit during that interval shuts everything down. A
-   successful ``persist`` process may exit after readiness only when
+   ready. An unexpected exit during that interval stops owned processes and
+   persistent processes that have not signaled readiness. A successful
+   ``persist`` process may exit after readiness only when
    ``run_stack(..., exit_after_ready=True)`` permits bootstrap wrappers to
    outlive the launcher.
 
@@ -302,8 +319,9 @@ Package Contents
       Spawn and shutdown behavior.
 
       ``own`` starts the process and stops it with the stack. ``persist`` starts
-      it but leaves it running at shutdown. ``reuse`` assumes the process is
-      already running and neither starts nor stops it.
+      it but leaves it running at shutdown once it has signaled readiness,
+      including when another process fails during startup. ``reuse`` assumes
+      the process is already running and neither starts nor stops it.
 
 
 
@@ -349,6 +367,11 @@ Package Contents
    the remaining foreground processes are terminated. The launcher preserves
    a positive child status, maps a signal to ``128 + signal``, and maps an
    unexpected zero exit to 1.
+   Startup failure or cancellation stops owned processes and persistent
+   processes that have not signaled readiness. Already-ready persistent
+   processes and reused services are left running. SIGINT or SIGTERM during
+   startup exits with ``128 + signal``. After readiness, signals follow
+   normal shutdown.
    Spawn errors, readiness failures, and unexpected monitored exits print a
    concise summary with the constructed command and an existing configured
    run-log directory when available. Pass

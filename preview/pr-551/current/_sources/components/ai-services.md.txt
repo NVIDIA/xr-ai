@@ -91,9 +91,9 @@ config = load_models_config_from_dict({"ocr": {
     "deployment": {"ownership": "external"},
 }})
 async with make_ocr(config, "ocr") as ocr:
-    spans = await ocr.read_text(Path("image.png"))
-    for span in spans:
-        print(span.text, span.confidence, span.polygon)
+    regions = await ocr.read_text(Path("image.png"))
+    for region in regions:
+        print(region.text, region.confidence, region.polygon)
 ```
 
 Applications reuse the endpoint; an OCR tool does not load its own GPU model.
@@ -102,19 +102,42 @@ normalized polygons. Remote image URLs are intentionally unsupported.
 Word, sentence, and paragraph grouping are available; recognition results
 need not be identical across backends.
 
+Send an opaque image. The local Hugging Face server converts inputs to RGB
+without compositing transparency: opaque black text on a transparent black
+background becomes uniformly black, losing the visible text. Composite
+transparent PNGs onto an appropriate background before calling either backend.
+For dark text intended for a white background:
+
+```python
+from PIL import Image
+
+with Image.open("input.png") as source:
+    rgba = source.convert("RGBA")
+    opaque = Image.new("RGBA", rgba.size, "white")
+    opaque.alpha_composite(rgba)
+    opaque.convert("RGB").save("ocr-input.png")
+```
+
+Choose a contrasting background for light text. This preparation remains
+caller-owned; the service does not infer the intended background color.
+
 The Hugging Face server clips finite bounding-box coordinates to the image's
 normalized `[0, 1]` bounds while preserving recognized text and confidence.
 Non-finite model coordinates are an inference failure (HTTP 500), not valid
 detections. The SDK continues to reject malformed responses from any endpoint.
 
-The Hugging Face server accepts one image per request, at most 10 MiB encoded
-image bytes and 20 million pixels after full-resolution square padding:
+The Hugging Face server accepts one image per request, at most 10 MiB of PNG
+or JPEG file bytes after base64 decoding, and 20 million pixels after
+full-resolution square padding:
 `max(width, height)² <= 20,000,000` (longest side at most 4,472 pixels).
 This check runs before RGB conversion or inference because upstream pads the
 image on CUDA before resizing; lowering `infer_length` does not reduce that
 allocation. The padded FP16 RGB tensor alone is bounded to about 114 MiB;
-this is not a bound on total inference memory. Oversized inputs receive HTTP
-413; callers must downsample or tile them first.
+this is not a bound on total inference memory. Requests that exceed the schema's
+data-URL string-length limit receive HTTP 422 before image decoding. Requests
+that pass that limit but exceed the decoded image-file byte limit or padded
+pixel limit receive HTTP 413. Both limits apply before model inference;
+callers must reduce the encoded file size, downsample, or tile oversized inputs.
 The server serializes inference and rejects overlapping requests with HTTP 503.
 Its detector length is configured server-wide in `ocr_server.yaml` (640 or
 1024). NIM request limits and engine settings belong to the deployed version,
@@ -122,7 +145,10 @@ not this local server configuration. Neither integration adds experimental
 text-dense cropping or sharpening; preprocessing remains caller-owned.
 
 Local weights and the torchvision backbone are cached beneath the OCR YAML's
-`model_cache`; the compiled CUDA extension stays in the Docker image.
+`model_cache`, which defaults to the repository `models/` directory, using
+`huggingface/` and `torch/` subdirectories. The compiled CUDA extension stays
+in the Docker image. An existing OCR-specific cache can still be selected with
+an explicit `model_cache` override; launching does not relocate or delete it.
 Changes to the local YAML or service source invalidate container reuse as
 needed. Stop the standalone container with `docker stop xr-ai-ocr` (or the
 configured `container_name`) before changing its settings, then repeat the launch
@@ -143,6 +169,9 @@ XR_AI_OCR_TEST_URL=http://localhost:8112 uv --config-file uv.toml run --project 
 This opt-in HTTP test does not require a local GPU or Docker and never owns
 containers. It skips when `XR_AI_OCR_TEST_URL` is unset; do not mark it `gpu`
 or run it through container-management fixtures.
+The smoke test checks transcription on a square image, not polygon placement.
+CPU tests cover the response coordinate contract with mocked predictions;
+they do not establish real-model normalization on non-square images.
 
 ## Speaker-conditioned STT
 
@@ -522,9 +551,10 @@ sends `SIGTERM` or `SIGKILL`. Pocket TTS records the dedicated process group
 created by the launcher without leaving that group. Cleanup signals the
 complete group only after verifying both the listener marker and, when
 separate, the launcher's group-leader marker, so inference descendants cannot
-survive as orphans and launcher abort-time escalation can still reach Pocket
-TTS. It falls back to PID-only cleanup if group ownership cannot be verified;
-other local servers always retain PID-only cleanup. Unknown listeners and
+survive as orphans. Launcher abort-time escalation can reach Pocket TTS before
+it signals readiness; once its ready file exists when cleanup begins, the
+launcher preserves it. Explicit stop falls back to PID-only cleanup if group
+ownership cannot be verified; other local servers always retain PID-only cleanup. Unknown listeners and
 failed inspection abort cleanup without sending a signal, and
 the sample's model command with `--stop` exits nonzero if any target could not be stopped. Absent
 servers are silently skipped.
@@ -694,7 +724,10 @@ cleanup.
   wire format (`finish_reason: "tool_calls"`). Per-turn reasoning toggle via
   `"detailed thinking on"` or `"detailed thinking off"` in a system or user
   message. Without either phrase, this model reasons by default; the reasoning
-  preamble is **not** stripped server-side. To swap checkpoints, change `model`
+  preamble is **not** stripped server-side. The `llama_nemotron` client preset
+  therefore sends `detailed thinking off` unless a call passes
+  `enable_thinking=True`; refer to {ref}`agent-sdk-models-thinking`. To swap
+  checkpoints, change `model`
   only to one with a compatible chat template, and update `tool_call_parser`
   for the replacement model's tool syntax. Revisit `max_model_len`,
   `gpu_memory_utilization`, and `tensor_parallel_size` for its context and GPU
@@ -770,9 +803,21 @@ cleanup.
   with an `embedding` role. It chunks and embeds supported documents at
   startup, caches its index, and returns matches above `min_score`. Start the
   embedding service first, RAG second, and the consuming worker last. The cache
-  includes document content, indexing settings, and the model profile; change
-  `cache_key` when a remote endpoint changes its backing model without changing
-  that profile.
+  includes document content, indexing settings, the resolved embedding-role
+  hash, the server-reported `root` from the matching `/v1/models` entry, and
+  optional `cache_key`. Unrelated model-role edits do not invalidate the cache.
+  The reported identity is best-effort: this repository's Docker launcher serves
+  a resolved snapshot path, while pip serves the Hugging Face repository ID.
+  Switching backends can rebuild the cache, and changing a Hub revision under
+  the same pip model ID requires a new `cache_key`. A served alias such as
+  `embed` does not identify weights. Providers omitting `root` cause documents
+  to be re-embedded on every startup without persistent caching; `cache_key`
+  cannot opt back in. Failed metadata requests or invalid responses abort
+  startup. The manual key supplements the role hash and reported identity.
+  Every replica must remain on the same weights throughout indexing and serving;
+  health probes check availability, not model consistency. Restart RAG whenever
+  the embedding model changes. Refer to
+  {doc}`/reference/migrations` for upgrading existing indexes and servers.
 - **video-memory-service** owns recorded chunk queries, NVDEC, and PNG output
   behind typed msgpack over ZMQ on port 8310. Set `recordings_dir` in its YAML to
   enable recorded-video operations; the path must match the hub's

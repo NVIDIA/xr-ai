@@ -317,6 +317,7 @@
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../reference/index.html">Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-conversation.html">xr-ai-conversation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-hub.html">xr-ai-hub</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-models.html">xr-ai-models</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-routing.html">xr-ai-routing</a></li>
@@ -376,6 +377,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_conversation/index.html">xr_ai_conversation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_model_server_stack/index.html">xr_ai_model_server_stack</a></li>
 </ul>
 </details></li>
@@ -588,9 +590,9 @@ start an OCR NIM container or require a local HTTP proxy. Refer to
     <span class="s2">"deployment"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"ownership"</span><span class="p">:</span> <span class="s2">"external"</span><span class="p">},</span>
 <span class="p">}})</span>
 <span class="k">async</span> <span class="k">with</span> <span class="n">make_ocr</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="s2">"ocr"</span><span class="p">)</span> <span class="k">as</span> <span class="n">ocr</span><span class="p">:</span>
-    <span class="n">spans</span> <span class="o">=</span> <span class="k">await</span> <span class="n">ocr</span><span class="o">.</span><span class="n">read_text</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="s2">"image.png"</span><span class="p">))</span>
-    <span class="k">for</span> <span class="n">span</span> <span class="ow">in</span> <span class="n">spans</span><span class="p">:</span>
-        <span class="nb">print</span><span class="p">(</span><span class="n">span</span><span class="o">.</span><span class="n">text</span><span class="p">,</span> <span class="n">span</span><span class="o">.</span><span class="n">confidence</span><span class="p">,</span> <span class="n">span</span><span class="o">.</span><span class="n">polygon</span><span class="p">)</span>
+    <span class="n">regions</span> <span class="o">=</span> <span class="k">await</span> <span class="n">ocr</span><span class="o">.</span><span class="n">read_text</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="s2">"image.png"</span><span class="p">))</span>
+    <span class="k">for</span> <span class="n">region</span> <span class="ow">in</span> <span class="n">regions</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="n">region</span><span class="o">.</span><span class="n">text</span><span class="p">,</span> <span class="n">region</span><span class="o">.</span><span class="n">confidence</span><span class="p">,</span> <span class="n">region</span><span class="o">.</span><span class="n">polygon</span><span class="p">)</span>
 </pre></div>
 </div>
 <p>Applications reuse the endpoint; an OCR tool does not load its own GPU model.
@@ -598,25 +600,48 @@ The client sends one inline PNG or JPEG and returns text, confidence, and
 normalized polygons. Remote image URLs are intentionally unsupported.
 Word, sentence, and paragraph grouping are available; recognition results
 need not be identical across backends.</p>
+<p>Send an opaque image. The local Hugging Face server converts inputs to RGB
+without compositing transparency: opaque black text on a transparent black
+background becomes uniformly black, losing the visible text. Composite
+transparent PNGs onto an appropriate background before calling either backend.
+For dark text intended for a white background:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">PIL</span><span class="w"> </span><span class="kn">import</span> <span class="n">Image</span>
+
+<span class="k">with</span> <span class="n">Image</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="s2">"input.png"</span><span class="p">)</span> <span class="k">as</span> <span class="n">source</span><span class="p">:</span>
+    <span class="n">rgba</span> <span class="o">=</span> <span class="n">source</span><span class="o">.</span><span class="n">convert</span><span class="p">(</span><span class="s2">"RGBA"</span><span class="p">)</span>
+    <span class="n">opaque</span> <span class="o">=</span> <span class="n">Image</span><span class="o">.</span><span class="n">new</span><span class="p">(</span><span class="s2">"RGBA"</span><span class="p">,</span> <span class="n">rgba</span><span class="o">.</span><span class="n">size</span><span class="p">,</span> <span class="s2">"white"</span><span class="p">)</span>
+    <span class="n">opaque</span><span class="o">.</span><span class="n">alpha_composite</span><span class="p">(</span><span class="n">rgba</span><span class="p">)</span>
+    <span class="n">opaque</span><span class="o">.</span><span class="n">convert</span><span class="p">(</span><span class="s2">"RGB"</span><span class="p">)</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="s2">"ocr-input.png"</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Choose a contrasting background for light text. This preparation remains
+caller-owned; the service does not infer the intended background color.</p>
 <p>The Hugging Face server clips finite bounding-box coordinates to the image’s
 normalized <code class="docutils literal notranslate"><span class="pre">[0,</span> <span class="pre">1]</span></code> bounds while preserving recognized text and confidence.
 Non-finite model coordinates are an inference failure (HTTP 500), not valid
 detections. The SDK continues to reject malformed responses from any endpoint.</p>
-<p>The Hugging Face server accepts one image per request, at most 10 MiB encoded
-image bytes and 20 million pixels after full-resolution square padding:
+<p>The Hugging Face server accepts one image per request, at most 10 MiB of PNG
+or JPEG file bytes after base64 decoding, and 20 million pixels after
+full-resolution square padding:
 <code class="docutils literal notranslate"><span class="pre">max(width,</span> <span class="pre">height)²</span> <span class="pre">&lt;=</span> <span class="pre">20,000,000</span></code> (longest side at most 4,472 pixels).
 This check runs before RGB conversion or inference because upstream pads the
 image on CUDA before resizing; lowering <code class="docutils literal notranslate"><span class="pre">infer_length</span></code> does not reduce that
 allocation. The padded FP16 RGB tensor alone is bounded to about 114 MiB;
-this is not a bound on total inference memory. Oversized inputs receive HTTP
-413; callers must downsample or tile them first.
+this is not a bound on total inference memory. Requests that exceed the schema’s
+data-URL string-length limit receive HTTP 422 before image decoding. Requests
+that pass that limit but exceed the decoded image-file byte limit or padded
+pixel limit receive HTTP 413. Both limits apply before model inference;
+callers must reduce the encoded file size, downsample, or tile oversized inputs.
 The server serializes inference and rejects overlapping requests with HTTP 503.
 Its detector length is configured server-wide in <code class="docutils literal notranslate"><span class="pre">ocr_server.yaml</span></code> (640 or
 1024). NIM request limits and engine settings belong to the deployed version,
 not this local server configuration. Neither integration adds experimental
 text-dense cropping or sharpening; preprocessing remains caller-owned.</p>
 <p>Local weights and the torchvision backbone are cached beneath the OCR YAML’s
-<code class="docutils literal notranslate"><span class="pre">model_cache</span></code>; the compiled CUDA extension stays in the Docker image.
+<code class="docutils literal notranslate"><span class="pre">model_cache</span></code>, which defaults to the repository <code class="docutils literal notranslate"><span class="pre">models/</span></code> directory, using
+<code class="docutils literal notranslate"><span class="pre">huggingface/</span></code> and <code class="docutils literal notranslate"><span class="pre">torch/</span></code> subdirectories. The compiled CUDA extension stays
+in the Docker image. An existing OCR-specific cache can still be selected with
+an explicit <code class="docutils literal notranslate"><span class="pre">model_cache</span></code> override; launching does not relocate or delete it.
 Changes to the local YAML or service source invalidate container reuse as
 needed. Stop the standalone container with <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">stop</span> <span class="pre">xr-ai-ocr</span></code> (or the
 configured <code class="docutils literal notranslate"><span class="pre">container_name</span></code>) before changing its settings, then repeat the launch
@@ -632,7 +657,10 @@ starts and stops OCR only when the sample explicitly selects <code class="docuti
 </div>
 <p>This opt-in HTTP test does not require a local GPU or Docker and never owns
 containers. It skips when <code class="docutils literal notranslate"><span class="pre">XR_AI_OCR_TEST_URL</span></code> is unset; do not mark it <code class="docutils literal notranslate"><span class="pre">gpu</span></code>
-or run it through container-management fixtures.</p>
+or run it through container-management fixtures.
+The smoke test checks transcription on a square image, not polygon placement.
+CPU tests cover the response coordinate contract with mocked predictions;
+they do not establish real-model normalization on non-square images.</p>
 </section>
 <section id="speaker-conditioned-stt">
 <h2>Speaker-conditioned STT<a class="headerlink" href="#speaker-conditioned-stt" title="Link to this heading">#</a></h2>
@@ -1003,9 +1031,10 @@ sends <code class="docutils literal notranslate"><span class="pre">SIGTERM</span
 created by the launcher without leaving that group. Cleanup signals the
 complete group only after verifying both the listener marker and, when
 separate, the launcher’s group-leader marker, so inference descendants cannot
-survive as orphans and launcher abort-time escalation can still reach Pocket
-TTS. It falls back to PID-only cleanup if group ownership cannot be verified;
-other local servers always retain PID-only cleanup. Unknown listeners and
+survive as orphans. Launcher abort-time escalation can reach Pocket TTS before
+it signals readiness; once its ready file exists when cleanup begins, the
+launcher preserves it. Explicit stop falls back to PID-only cleanup if group
+ownership cannot be verified; other local servers always retain PID-only cleanup. Unknown listeners and
 failed inspection abort cleanup without sending a signal, and
 the sample’s model command with <code class="docutils literal notranslate"><span class="pre">--stop</span></code> exits nonzero if any target could not be stopped. Absent
 servers are silently skipped.</p>
@@ -1200,7 +1229,10 @@ the model’s chat template and the resulting tool calls come back in OpenAI
 wire format (<code class="docutils literal notranslate"><span class="pre">finish_reason:</span> <span class="pre">&quot;tool_calls&quot;</span></code>). Per-turn reasoning toggle via
 <code class="docutils literal notranslate"><span class="pre">&quot;detailed</span> <span class="pre">thinking</span> <span class="pre">on&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;detailed</span> <span class="pre">thinking</span> <span class="pre">off&quot;</span></code> in a system or user
 message. Without either phrase, this model reasons by default; the reasoning
-preamble is <strong>not</strong> stripped server-side. To swap checkpoints, change <code class="docutils literal notranslate"><span class="pre">model</span></code>
+preamble is <strong>not</strong> stripped server-side. The <code class="docutils literal notranslate"><span class="pre">llama_nemotron</span></code> client preset
+therefore sends <code class="docutils literal notranslate"><span class="pre">detailed</span> <span class="pre">thinking</span> <span class="pre">off</span></code> unless a call passes
+<code class="docutils literal notranslate"><span class="pre">enable_thinking=True</span></code>; refer to <a class="reference internal" href="../reference/agent-sdk-models.html#agent-sdk-models-thinking"><span class="std std-ref">Reasoning control</span></a>. To swap
+checkpoints, change <code class="docutils literal notranslate"><span class="pre">model</span></code>
 only to one with a compatible chat template, and update <code class="docutils literal notranslate"><span class="pre">tool_call_parser</span></code>
 for the replacement model’s tool syntax. Revisit <code class="docutils literal notranslate"><span class="pre">max_model_len</span></code>,
 <code class="docutils literal notranslate"><span class="pre">gpu_memory_utilization</span></code>, and <code class="docutils literal notranslate"><span class="pre">tensor_parallel_size</span></code> for its context and GPU
@@ -1276,9 +1308,21 @@ profiles leave attention-backend selection to vLLM. Refer to
 with an <code class="docutils literal notranslate"><span class="pre">embedding</span></code> role. It chunks and embeds supported documents at
 startup, caches its index, and returns matches above <code class="docutils literal notranslate"><span class="pre">min_score</span></code>. Start the
 embedding service first, RAG second, and the consuming worker last. The cache
-includes document content, indexing settings, and the model profile; change
-<code class="docutils literal notranslate"><span class="pre">cache_key</span></code> when a remote endpoint changes its backing model without changing
-that profile.</p></li>
+includes document content, indexing settings, the resolved embedding-role
+hash, the server-reported <code class="docutils literal notranslate"><span class="pre">root</span></code> from the matching <code class="docutils literal notranslate"><span class="pre">/v1/models</span></code> entry, and
+optional <code class="docutils literal notranslate"><span class="pre">cache_key</span></code>. Unrelated model-role edits do not invalidate the cache.
+The reported identity is best-effort: this repository’s Docker launcher serves
+a resolved snapshot path, while pip serves the Hugging Face repository ID.
+Switching backends can rebuild the cache, and changing a Hub revision under
+the same pip model ID requires a new <code class="docutils literal notranslate"><span class="pre">cache_key</span></code>. A served alias such as
+<code class="docutils literal notranslate"><span class="pre">embed</span></code> does not identify weights. Providers omitting <code class="docutils literal notranslate"><span class="pre">root</span></code> cause documents
+to be re-embedded on every startup without persistent caching; <code class="docutils literal notranslate"><span class="pre">cache_key</span></code>
+cannot opt back in. Failed metadata requests or invalid responses abort
+startup. The manual key supplements the role hash and reported identity.
+Every replica must remain on the same weights throughout indexing and serving;
+health probes check availability, not model consistency. Restart RAG whenever
+the embedding model changes. Refer to
+<a class="reference internal" href="../reference/migrations.html"><span class="doc">Release migration</span></a> for upgrading existing indexes and servers.</p></li>
 <li><p><strong>video-memory-service</strong> owns recorded chunk queries, NVDEC, and PNG output
 behind typed msgpack over ZMQ on port 8310. Set <code class="docutils literal notranslate"><span class="pre">recordings_dir</span></code> in its YAML to
 enable recorded-video operations; the path must match the hub’s

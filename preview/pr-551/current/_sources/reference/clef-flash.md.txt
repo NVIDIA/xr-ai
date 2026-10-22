@@ -41,7 +41,7 @@ uv run clef_flash_model
 ```
 
 The sample starts `services/clef-server` persistently on `127.0.0.1:8120`.
-Its `yaml/clef_server.yaml` pins model revision
+Its `services/clef-server/clef_server.yaml` pins model revision
 `17f0b0ad64efb65d273590632833508766b2aae6` from the
 `Cloudflare/clef-flash` model repository. The service resolves the configured
 pinned snapshot from the repository's ignored `models/` cache first and passes
@@ -71,7 +71,9 @@ limit receive HTTP 422; increase `max_length` only when GPU memory allows it.
 ## Updating a running service
 
 Before updating the checkout or changing server configuration, stop the service
-from the old checkout in `model-server-samples/clef-flash/`:
+from the old checkout in `model-server-samples/clef-flash/`. The service
+configuration now lives in `services/clef-server/clef_server.yaml`; copy any edits
+you made to the sample's former `yaml/clef_server.yaml` there:
 
 ```bash
 export UV_CONFIG_FILE=../../uv.toml

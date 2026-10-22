@@ -64,6 +64,15 @@ this applies its port settings without inspecting the GPU. GPU placement and
 memory budgets do not affect cleanup. Refer to {doc}`/reference/command-line` for each sample's
 command. Each launcher has only `--stop` and `--gpu-profile`, besides help.
 
+If a later model fails to start, or startup is cancelled, servers that had
+signaled readiness when cleanup began stay running. Fix the failure and rerun
+the same model command to reuse them. If the fix changes a server that already
+started, run the model command with `--stop` first so the new settings take
+effect. You can also use `--stop` to clear retained servers. Unfinished Docker
+backend launches are stopped through their managed wrappers. Persistent
+pip-backend vLLM runs in a separate session and can keep loading after its
+wrapper is stopped; use `--stop` once it is listening to clear it.
+
 On startup failure, merged server YAML remains in a private `model-configs-*`
 directory under the existing run logs, at the paths printed in the failure
 summary. Successful startup removes those files. Credentials belong in the
@@ -245,5 +254,15 @@ when changing the endpoint.
 For a hosted provider without a health route, set `readiness: none` in the
 embedding role's `endpoint`. Otherwise use `readiness: health` and the
 provider's `health_path`. Omitting these settings probes `/health`, which can
-prevent RAG startup when that route is absent. Refer to
-{doc}`deploying-with-nim` for native Riva speech and NIM configuration.
+prevent RAG startup when that route is absent.
+
+`readiness: none` disables only the health probe. The OpenAI-compatible
+embedding adapter still requires a successful `GET /v1/models` for model
+identity discovery during indexing, using the embedding role's credentials.
+HTTP errors (including 401 and 404), transport failures, and invalid metadata
+abort startup; fix the endpoint or its access settings before retrying. A
+successful response with no matching backing `root` permits indexing without
+persistent caching, so documents are re-embedded on every startup. `cache_key`
+does not override missing metadata. Refer to {ref}`embedding-service-identity-migration`
+for the identity contract and {doc}`deploying-with-nim` for native Riva speech
+and NIM configuration.

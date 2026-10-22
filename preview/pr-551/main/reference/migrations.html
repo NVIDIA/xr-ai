@@ -342,6 +342,7 @@
 </ul>
 </details></li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Reference</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="agent-sdk-conversation.html">xr-ai-conversation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-hub.html">xr-ai-hub</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-models.html">xr-ai-models</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-routing.html">xr-ai-routing</a></li>
@@ -401,6 +402,7 @@
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_conversation/index.html">xr_ai_conversation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_model_server_stack/index.html">xr_ai_model_server_stack</a></li>
 </ul>
 </details></li>
@@ -474,6 +476,16 @@ below. Refer to <a class="reference internal" href="migration-history.html"><spa
 before updating the checkout. Start the updated services before restarting
 workers; launchers can reuse a running service whose identity matches even when
 its application code predates the update.</p>
+<section id="persistent-services-after-startup-failure">
+<h3>Persistent services after startup failure<a class="headerlink" href="#persistent-services-after-startup-failure" title="Link to this heading">#</a></h3>
+<p>Stacks using <code class="docutils literal notranslate"><span class="pre">launch_mode=&quot;persist&quot;</span></code> now retain services that had signaled
+readiness when cleanup began after a startup failure or cancellation. Owned
+processes and unfinished persistent wrappers are still stopped. Persistent
+pip-backend vLLM can keep loading in its separate session after its wrapper
+stops. If you relied on startup failure to clear the entire model stack, run
+the sample’s model command with
+<code class="docutils literal notranslate"><span class="pre">--stop</span></code> explicitly. Refer to <a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a>.</p>
+</section>
 <section id="nemotron-3-embedding-model">
 <h3>Nemotron 3 embedding model<a class="headerlink" href="#nemotron-3-embedding-model" title="Link to this heading">#</a></h3>
 <p>The embedding server now defaults to <code class="docutils literal notranslate"><span class="pre">nvidia/Nemotron-3-Embed-1B-BF16</span></code>; the NIM
@@ -513,6 +525,43 @@ configuration and can be deleted to reclaim space without losing documents.</p>
 updated NIM profile. For later model changes behind an unchanged profile, set
 an explicit model revision in <code class="docutils literal notranslate"><span class="pre">cache_key</span></code> and restart RAG. Do not change models
 while RAG is running; its document vectors must match query embeddings.</p>
+</section>
+<section id="embedding-sdk-identity-and-rag-cache-contract">
+<span id="embedding-service-identity-migration"></span><h3>Embedding SDK identity and RAG cache contract<a class="headerlink" href="#embedding-sdk-identity-and-rag-cache-contract" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">EmbeddingService</span></code> now requires <code class="docutils literal notranslate"><span class="pre">async</span> <span class="pre">model_identity()</span> <span class="pre">-&gt;</span> <span class="pre">str</span> <span class="pre">|</span> <span class="pre">None</span></code>.
+Custom implementations must add this method to satisfy the runtime-checkable
+protocol and support RAG startup. Return a stable backing-model identifier when
+known, or <code class="docutils literal notranslate"><span class="pre">None</span></code> only when a successful lookup finds no identity metadata. Do
+not use an alias that can silently switch weights. Existing implementations
+without this method no longer satisfy the protocol.</p>
+<p>The built-in OpenAI-compatible client reads the matching model’s <code class="docutils literal notranslate"><span class="pre">root</span></code> from
+<code class="docutils literal notranslate"><span class="pre">/v1/models</span></code>. HTTP failures, timeouts, invalid JSON, and malformed or ambiguous
+metadata raise <code class="docutils literal notranslate"><span class="pre">ModelServiceError</span></code>, exported by <code class="docutils literal notranslate"><span class="pre">xr_ai_models</span></code>, with the original
+transport or JSON error retained as the cause. Custom adapters must likewise
+raise this error for lookup failures instead of returning <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p>
+<p>RAG permits retrieval without persistent cache reads or writes when a successful
+lookup returns <code class="docutils literal notranslate"><span class="pre">None</span></code>. It propagates lookup failures and fails startup: fix the
+endpoint, credentials, or metadata response before restarting. Cancellation
+continues to propagate. <code class="docutils literal notranslate"><span class="pre">cache_key</span></code> does not override missing identity or a
+failed lookup.</p>
+<p>The cache format now combines the reported identity, a hash of the resolved
+embedding role, manual <code class="docutils literal notranslate"><span class="pre">cache_key</span></code>, indexing settings, and document content.
+Existing caches are rebuilt once and can be deleted afterward. <code class="docutils literal notranslate"><span class="pre">cache_key</span></code>
+now supplements the role hash instead of replacing it. Unrelated LLM, VLM,
+or TTS edits and profile formatting changes do not rebuild the index.</p>
+<p>The reported identity is not a weight checksum. This repository’s Docker
+launcher reports a resolved snapshot path; pip reports the Hugging Face
+repository ID. Switching backends can rebuild the cache, while a Hub revision
+change under the same pip model ID requires a new <code class="docutils literal notranslate"><span class="pre">cache_key</span></code>.</p>
+<p>The post-build check raises <code class="docutils literal notranslate"><span class="pre">ModelServiceError</span></code> if the reported identity changes,
+including appearing or disappearing, before saving or serving the vectors.
+A failed lookup also aborts startup. Metadata and embeddings are separate
+requests: matching before/after identities cannot detect a swap-and-restore
+or mixed replicas behind one endpoint. Every replica must remain on the same
+weights for the entire indexing run and serving lifetime. Health probes check
+availability, not model consistency. Stop RAG before changing models, bump
+<code class="docutils literal notranslate"><span class="pre">cache_key</span></code> if weights change under the same reported identity, and restart
+against the stable deployment.</p>
 </section>
 <section id="shared-accepted-query-display">
 <h3>Shared accepted-query display<a class="headerlink" href="#shared-accepted-query-display" title="Link to this heading">#</a></h3>
@@ -649,6 +698,33 @@ during startup returns 130. Refer to
 <a class="reference internal" href="../components/launcher-and-process-model.html"><span class="doc">Launcher and process model</span></a> for failure diagnostics and
 shutdown behavior.</p>
 </section>
+<section id="model-reasoning-control">
+<h3>Model reasoning control<a class="headerlink" href="#model-reasoning-control" title="Link to this heading">#</a></h3>
+<p>Model profiles now declare reasoning with a typed <code class="docutils literal notranslate"><span class="pre">adapter.thinking</span></code> setting.
+A per-call <code class="docutils literal notranslate"><span class="pre">enable_thinking=True</span></code> or <code class="docutils literal notranslate"><span class="pre">False</span></code> always applies to that call. A
+legacy <code class="docutils literal notranslate"><span class="pre">default_extras.chat_template_kwargs.enable_thinking:</span> <span class="pre">true</span></code> default could
+previously not be turned off per call. Refer to <a class="reference internal" href="agent-sdk-models.html#agent-sdk-models-thinking"><span class="std std-ref">Reasoning control</span></a>.</p>
+<ul>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">llama_nemotron</span></code> profiles:</strong> requests now start the system message with
+<code class="docutils literal notranslate"><span class="pre">detailed</span> <span class="pre">thinking</span> <span class="pre">off</span></code> unless a call passes <code class="docutils literal notranslate"><span class="pre">enable_thinking=True</span></code>; the model
+previously reasoned by default and its preamble appeared in the response. To
+keep reasoning on by default, set it in the profile:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">adapter</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">preset</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">llama_nemotron</span>
+<span class="w">  </span><span class="nt">thinking</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">default</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</pre></div>
+</div>
+</li>
+<li><p><strong>Custom <code class="docutils literal notranslate"><span class="pre">LLMService</span></code> implementations:</strong> <code class="docutils literal notranslate"><span class="pre">enable_thinking</span></code> now defaults to
+<code class="docutils literal notranslate"><span class="pre">None</span></code> instead of <code class="docutils literal notranslate"><span class="pre">False</span></code>. Treat <code class="docutils literal notranslate"><span class="pre">None</span></code> as the endpoint’s configured default.</p></li>
+<li><p><strong>Profiles with the legacy key:</strong> no change is required. With a template-driven
+or presetless adapter, the value becomes <code class="docutils literal notranslate"><span class="pre">thinking.default</span></code>, so a call can
+override it. It must now be a boolean, and a profile that also sets a
+different <code class="docutils literal notranslate"><span class="pre">thinking.default</span></code> is rejected. Prefer <code class="docutils literal notranslate"><span class="pre">thinking.default</span></code> in new
+profiles.</p></li>
+</ul>
+</section>
 <section id="operator-visible-runtime-changes">
 <h3>Operator-visible runtime changes<a class="headerlink" href="#operator-visible-runtime-changes" title="Link to this heading">#</a></h3>
 <p>Recorded-video perception is enabled when <code class="docutils literal notranslate"><span class="pre">video_history_enabled</span></code> is omitted
@@ -724,7 +800,9 @@ refer to <a class="reference internal" href="clef-flash.html"><span class="doc">
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#changes-since-v0-3-0-beta">Changes since v0.3.0-beta</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#persistent-services-after-startup-failure">Persistent services after startup failure</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nemotron-3-embedding-model">Nemotron 3 embedding model</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#embedding-sdk-identity-and-rag-cache-contract">Embedding SDK identity and RAG cache contract</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#shared-accepted-query-display">Shared accepted-query display</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#session-recording-flag">Session recording flag</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#explicit-voice-interaction-modes">Explicit voice interaction modes</a></li>
@@ -734,6 +812,7 @@ refer to <a class="reference internal" href="clef-flash.html"><span class="doc">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#native-nim-endpoint-profiles">Native NIM endpoint profiles</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#livekit-sample-credentials">LiveKit sample credentials</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#launcher-failure-exit-statuses">Launcher failure exit statuses</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#model-reasoning-control">Model reasoning control</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#operator-visible-runtime-changes">Operator-visible runtime changes</a></li>
 </ul>
 </li>

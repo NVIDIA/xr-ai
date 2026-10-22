@@ -62,8 +62,10 @@ Test-mode launcher operations also check ownership before reusing, restarting,
 stopping, or removing a container. Ordinary sample launches are unchanged.
 
 If Docker ownership inventory fails or times out, the test is skipped rather
-than assuming the host is empty. Any foreign `xr-ai-vllm-*` or `xr-ai-nim-*`
-container, running or stopped, causes **all** GPU tests to skip, including
+than assuming the host is empty. Any foreign model-server container carrying
+the `xr-ai-vllm.port` label, including OCR with a custom container name, causes
+**all** GPU tests to skip. Legacy `xr-ai-vllm-*` and `xr-ai-nim-*` names are
+also recognized. This applies to running and stopped containers, and includes
 NVENC and LiveKit tests that launch no model server. This conservative guard
 avoids GPU contention and accidental reuse or replacement of stopped servers.
 
