@@ -25,7 +25,6 @@ recorded video, and document retrieval.
 | `services/speaker-stt/` | `speaker_stt` | 8102 | Nemotron 3 Diarization + Multitalker Parakeet | NeMo streaming ASR |
 | `services/magpie-tts/` | `magpie_tts_server` | 8104 | magpie_tts_multilingual_357m | NeMo TTS in-process |
 | `services/pocket-tts/` | `pocket_tts_server` | 8105 | kyutai/pocket-tts | Pocket TTS in-process |
-| `services/llama-nemotron-llm/` | `llama_nemotron_llm_server` | 8106 | Llama-3.1-Nemotron-Nano-8B-v1 | vLLM (pip or docker) |
 | `services/nemotron3-nano-llm/` | `nemotron3_nano_llm_server` | 8107 | NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8} | vLLM (pip or docker) |
 | `services/nemotron-omni-llm/` | `nemotron_omni_llm_server` | 8108 | Nemotron-3-Nano-Omni-30B-A3B-Reasoning (NVFP4, FP8, or BF16, GPU-selected) | vLLM (pip or docker) — multimodal (text + video) |
 | `services/clef-server/` | `clef_server` | 8120 | Cloudflare Clef-Flash 9B | Native SystemOne choice decisions |
@@ -341,7 +340,7 @@ configuration paths, smoke checks, and deployment qualification.
 
 ## Model-server persistence
 
-The persistent vLLM-backed servers (`vlm_server`, `llama_nemotron_llm_server`,
+The persistent vLLM-backed servers (`vlm_server`,
 `nemotron3_nano_llm_server`, `nemotron_omni_llm_server`, `embedding_server`)
 **survive agent restarts by design**: the sample's convenience launcher starts
 them and returns after readiness, leaving weights warm. Use the sample's model command with `--stop`
@@ -440,7 +439,7 @@ recognized service used by another sample or manual invocation. Refer to
 
 ## Choosing the vLLM runtime (pip vs Docker)
 
-All five vLLM-backed servers (`vlm_server`, `llama_nemotron_llm_server`,
+All four vLLM-backed servers (`vlm_server`,
 `nemotron3_nano_llm_server`, `nemotron_omni_llm_server`, `embedding_server`) accept a
 `vllm_backend:` key in their YAML to pick how vLLM is hosted:
 
@@ -536,11 +535,10 @@ The selected image reports this in-container vLLM version:
 | `nvcr.io/nvidia/vllm:26.09-py3` | 0.29.0+5013de39 |
 
 - Container name is deterministic per service: `xr-ai-vllm-vlm-server`,
-  `xr-ai-vllm-llama-nemotron-llm-server`,
   `xr-ai-vllm-nemotron3-nano-llm-server`,
   `xr-ai-vllm-nemotron-omni-llm-server`, and
   `xr-ai-vllm-embedding-server`.
-- Persistence parity: all five vLLM-backed wrappers launch their Docker
+- Persistence parity: all four vLLM-backed wrappers launch their Docker
   processes in separate sessions, so they survive launcher shutdowns like
   their pip-mode `start_new_session=True` counterparts.
 
@@ -584,31 +582,6 @@ cleanup.
   explicit `auto` restores vLLM's selection. Cold starts still include model
   loading and backend compilation. A healthy model HTTP endpoint is not a
   guarantee that sample inference warmup has completed.
-- **llama-nemotron-llm** is a thin wrapper around `vllm serve` for
-  `Llama-3.1-Nemotron-Nano-8B-v1`. vLLM handles native Llama-3.1 tool calling
-  via the `llama3_json` parser — `tools=[...]` in the request is rendered via
-  the model's chat template and the resulting tool calls come back in OpenAI
-  wire format (`finish_reason: "tool_calls"`). Per-turn reasoning toggle via
-  `"detailed thinking on"` or `"detailed thinking off"` in a system or user
-  message. Without either phrase, this model reasons by default; the reasoning
-  preamble is **not** stripped server-side. The `llama_nemotron` client preset
-  therefore sends `detailed thinking off` unless a call passes
-  `enable_thinking=True`; refer to {ref}`agent-sdk-models-thinking`. To swap
-  checkpoints, change `model`
-  only to one with a compatible chat template, and update `tool_call_parser`
-  for the replacement model's tool syntax. Revisit `max_model_len`,
-  `gpu_memory_utilization`, and `tensor_parallel_size` for its context and GPU
-  footprint. Keep `served_model_name: llm` to retain the built-in
-  `llama_nemotron` adapter, or update the model profile's adapter when changing
-  that name or any wire behavior. Hosting backend is selectable per YAML
-  (refer to *Choosing the vLLM runtime*). The
-  [model card](https://huggingface.co/nvidia/Llama-3.1-Nemotron-Nano-8B-v1)
-  recommends `temperature=0.6` and `top_p=0.95` with reasoning enabled, and
-  greedy decoding with reasoning disabled. It identifies the model as ready
-  for commercial use under the
-  [NVIDIA Open Model License](https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-open-model-license/)
-  and the
-  [Llama 3.1 Community License](https://github.com/meta-llama/llama-models/blob/main/models/llama3_1/LICENSE).
 - **nemotron3-nano-llm** is a thin wrapper around `vllm serve` for
   `NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8}` (auto-selected by GPU compute
   capability). vLLM handles tool calling (`qwen3_coder` parser), reasoning

@@ -492,49 +492,43 @@ recorded video, and document retrieval.</p>
 <td><p>kyutai/pocket-tts</p></td>
 <td><p>Pocket TTS in-process</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/llama-nemotron-llm/</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">llama_nemotron_llm_server</span></code></p></td>
-<td><p>8106</p></td>
-<td><p>Llama-3.1-Nemotron-Nano-8B-v1</p></td>
-<td><p>vLLM (pip or docker)</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/nemotron3-nano-llm/</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/nemotron3-nano-llm/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">nemotron3_nano_llm_server</span></code></p></td>
 <td><p>8107</p></td>
 <td><p>NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8}</p></td>
 <td><p>vLLM (pip or docker)</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/nemotron-omni-llm/</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/nemotron-omni-llm/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">nemotron_omni_llm_server</span></code></p></td>
 <td><p>8108</p></td>
 <td><p>Nemotron-3-Nano-Omni-30B-A3B-Reasoning (NVFP4, FP8, or BF16, GPU-selected)</p></td>
 <td><p>vLLM (pip or docker) — multimodal (text + video)</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/clef-server/</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/clef-server/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">clef_server</span></code></p></td>
 <td><p>8120</p></td>
 <td><p>Cloudflare Clef-Flash 9B</p></td>
 <td><p>Native SystemOne choice decisions</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/embedding-server/</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/embedding-server/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">embedding_server</span></code></p></td>
 <td><p>8109</p></td>
 <td><p>Nemotron-3-Embed-1B-BF16</p></td>
 <td><p>vLLM (pip or docker)</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/ocr-server/</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/ocr-server/</span></code></p></td>
 <td><p>Operator-run container</p></td>
 <td><p>8000 (container); 8112 in example</p></td>
 <td><p>Nemotron OCR v2 multilingual</p></td>
 <td><p>Hugging Face in a local CUDA container</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/video-memory-service/</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/video-memory-service/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">video_memory_service</span></code></p></td>
 <td><p>8310</p></td>
 <td><p>—</p></td>
 <td><p>Typed recorded-video capability</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/rag-service/</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/rag-service/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">rag_service</span></code></p></td>
 <td><p>8340</p></td>
 <td><p>—</p></td>
@@ -971,7 +965,7 @@ configuration paths, smoke checks, and deployment qualification.</p>
 </section>
 <section id="model-server-persistence">
 <h2>Model-server persistence<a class="headerlink" href="#model-server-persistence" title="Link to this heading">#</a></h2>
-<p>The persistent vLLM-backed servers (<code class="docutils literal notranslate"><span class="pre">vlm_server</span></code>, <code class="docutils literal notranslate"><span class="pre">llama_nemotron_llm_server</span></code>,
+<p>The persistent vLLM-backed servers (<code class="docutils literal notranslate"><span class="pre">vlm_server</span></code>,
 <code class="docutils literal notranslate"><span class="pre">nemotron3_nano_llm_server</span></code>, <code class="docutils literal notranslate"><span class="pre">nemotron_omni_llm_server</span></code>, <code class="docutils literal notranslate"><span class="pre">embedding_server</span></code>)
 <strong>survive agent restarts by design</strong>: the sample’s convenience launcher starts
 them and returns after readiness, leaving weights warm. Use the sample’s model command with <code class="docutils literal notranslate"><span class="pre">--stop</span></code>
@@ -1061,7 +1055,7 @@ recognized service used by another sample or manual invocation. Refer to
 </section>
 <section id="choosing-the-vllm-runtime-pip-vs-docker">
 <h2>Choosing the vLLM runtime (pip vs Docker)<a class="headerlink" href="#choosing-the-vllm-runtime-pip-vs-docker" title="Link to this heading">#</a></h2>
-<p>All five vLLM-backed servers (<code class="docutils literal notranslate"><span class="pre">vlm_server</span></code>, <code class="docutils literal notranslate"><span class="pre">llama_nemotron_llm_server</span></code>,
+<p>All four vLLM-backed servers (<code class="docutils literal notranslate"><span class="pre">vlm_server</span></code>,
 <code class="docutils literal notranslate"><span class="pre">nemotron3_nano_llm_server</span></code>, <code class="docutils literal notranslate"><span class="pre">nemotron_omni_llm_server</span></code>, <code class="docutils literal notranslate"><span class="pre">embedding_server</span></code>) accept a
 <code class="docutils literal notranslate"><span class="pre">vllm_backend:</span></code> key in their YAML to pick how vLLM is hosted:</p>
 <div class="pst-scrollable-table-container"><table class="table">
@@ -1182,11 +1176,10 @@ recreates a persistent container.</p></li>
 </div>
 <ul class="simple">
 <li><p>Container name is deterministic per service: <code class="docutils literal notranslate"><span class="pre">xr-ai-vllm-vlm-server</span></code>,
-<code class="docutils literal notranslate"><span class="pre">xr-ai-vllm-llama-nemotron-llm-server</span></code>,
 <code class="docutils literal notranslate"><span class="pre">xr-ai-vllm-nemotron3-nano-llm-server</span></code>,
 <code class="docutils literal notranslate"><span class="pre">xr-ai-vllm-nemotron-omni-llm-server</span></code>, and
 <code class="docutils literal notranslate"><span class="pre">xr-ai-vllm-embedding-server</span></code>.</p></li>
-<li><p>Persistence parity: all five vLLM-backed wrappers launch their Docker
+<li><p>Persistence parity: all four vLLM-backed wrappers launch their Docker
 processes in separate sessions, so they survive launcher shutdowns like
 their pip-mode <code class="docutils literal notranslate"><span class="pre">start_new_session=True</span></code> counterparts.</p></li>
 </ul>
@@ -1232,31 +1225,6 @@ custom images, and pip mode retain vLLM’s backend selection. The optional
 explicit <code class="docutils literal notranslate"><span class="pre">auto</span></code> restores vLLM’s selection. Cold starts still include model
 loading and backend compilation. A healthy model HTTP endpoint is not a
 guarantee that sample inference warmup has completed.</p></li>
-<li><p><strong>llama-nemotron-llm</strong> is a thin wrapper around <code class="docutils literal notranslate"><span class="pre">vllm</span> <span class="pre">serve</span></code> for
-<code class="docutils literal notranslate"><span class="pre">Llama-3.1-Nemotron-Nano-8B-v1</span></code>. vLLM handles native Llama-3.1 tool calling
-via the <code class="docutils literal notranslate"><span class="pre">llama3_json</span></code> parser — <code class="docutils literal notranslate"><span class="pre">tools=[...]</span></code> in the request is rendered via
-the model’s chat template and the resulting tool calls come back in OpenAI
-wire format (<code class="docutils literal notranslate"><span class="pre">finish_reason:</span> <span class="pre">&quot;tool_calls&quot;</span></code>). Per-turn reasoning toggle via
-<code class="docutils literal notranslate"><span class="pre">&quot;detailed</span> <span class="pre">thinking</span> <span class="pre">on&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;detailed</span> <span class="pre">thinking</span> <span class="pre">off&quot;</span></code> in a system or user
-message. Without either phrase, this model reasons by default; the reasoning
-preamble is <strong>not</strong> stripped server-side. The <code class="docutils literal notranslate"><span class="pre">llama_nemotron</span></code> client preset
-therefore sends <code class="docutils literal notranslate"><span class="pre">detailed</span> <span class="pre">thinking</span> <span class="pre">off</span></code> unless a call passes
-<code class="docutils literal notranslate"><span class="pre">enable_thinking=True</span></code>; refer to <a class="reference internal" href="../reference/agent-sdk-models.html#agent-sdk-models-thinking"><span class="std std-ref">Reasoning control</span></a>. To swap
-checkpoints, change <code class="docutils literal notranslate"><span class="pre">model</span></code>
-only to one with a compatible chat template, and update <code class="docutils literal notranslate"><span class="pre">tool_call_parser</span></code>
-for the replacement model’s tool syntax. Revisit <code class="docutils literal notranslate"><span class="pre">max_model_len</span></code>,
-<code class="docutils literal notranslate"><span class="pre">gpu_memory_utilization</span></code>, and <code class="docutils literal notranslate"><span class="pre">tensor_parallel_size</span></code> for its context and GPU
-footprint. Keep <code class="docutils literal notranslate"><span class="pre">served_model_name:</span> <span class="pre">llm</span></code> to retain the built-in
-<code class="docutils literal notranslate"><span class="pre">llama_nemotron</span></code> adapter, or update the model profile’s adapter when changing
-that name or any wire behavior. Hosting backend is selectable per YAML
-(refer to <em>Choosing the vLLM runtime</em>). The
-<a class="reference external" href="https://huggingface.co/nvidia/Llama-3.1-Nemotron-Nano-8B-v1">model card</a>
-recommends <code class="docutils literal notranslate"><span class="pre">temperature=0.6</span></code> and <code class="docutils literal notranslate"><span class="pre">top_p=0.95</span></code> with reasoning enabled, and
-greedy decoding with reasoning disabled. It identifies the model as ready
-for commercial use under the
-<a class="reference external" href="https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-open-model-license/">NVIDIA Open Model License</a>
-and the
-<a class="reference external" href="https://github.com/meta-llama/llama-models/blob/main/models/llama3_1/LICENSE">Llama 3.1 Community License</a>.</p></li>
 <li><p><strong>nemotron3-nano-llm</strong> is a thin wrapper around <code class="docutils literal notranslate"><span class="pre">vllm</span> <span class="pre">serve</span></code> for
 <code class="docutils literal notranslate"><span class="pre">NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8}</span></code> (auto-selected by GPU compute
 capability). vLLM handles tool calling (<code class="docutils literal notranslate"><span class="pre">qwen3_coder</span></code> parser), reasoning
