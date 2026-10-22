@@ -271,6 +271,41 @@ async def test_failed_final_frame_does_not_commit_the_exchange():
             await conversation.close()
 
 
+async def test_interrupted_final_frame_does_not_commit_the_exchange():
+    final_entered = asyncio.Event()
+
+    class LLM:
+        def stream_events(self, _messages):
+            async def response():
+                yield ChatStreamEvent(kind="text", text="answer")
+
+            return response()
+
+    class BlockingFinal(_Output):
+        @subscribe(OUTPUT)
+        async def receive(self, value: VoiceOutput, ctx: RuntimeContext):
+            await super().receive(value, ctx)
+            if value.final:
+                final_entered.set()
+                await asyncio.Event().wait()
+
+    runtime = AgentRuntime()
+    runtime.register("output", BlockingFinal())
+    conversation = Conversation(LLM(), runtime=runtime, output_topic=OUTPUT)
+    async with runtime:
+        try:
+            answering = asyncio.create_task(
+                conversation.answer(AgentTurn("alice", "turn", "request"), started=_standalone_started)
+            )
+            await asyncio.wait_for(final_entered.wait(), timeout=1)
+            answering.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await answering
+            assert conversation._context.transcript("alice") == ()
+        finally:
+            await conversation.close()
+
+
 async def test_answer_after_router_preamble_does_not_interrupt_it():
     class LLM:
         def stream_events(self, _messages):
