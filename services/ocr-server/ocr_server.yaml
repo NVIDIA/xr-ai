@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Standalone defaults. Sample stacks use utils/xr-ai-model-server-stack/yaml/.
+# Defaults for standalone launch and sample stacks; sample GPU profiles override these.
 port: 8112
 container_name: xr-ai-ocr
 # Relative to this file; weights persist across container restarts.

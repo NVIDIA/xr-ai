@@ -233,8 +233,9 @@ To add local OCR, keep these changes inside your sample:
    the client on shutdown. Application-specific image selection, tools, and
    result handling remain sample-owned.
 
-The shared defaults provide port 8112, persistent cache settings, and a detector
-length of 1024. OCR starts after embedding when both are selected. The normal
+The service-owned defaults in `services/ocr-server/ocr_server.yaml` provide port
+8112, persistent cache settings, and a detector length of 1024. OCR starts after
+embedding when both are selected. The normal
 stack start and stop commands include only selected services. Match any port
 override in the consumer profile and stop command. Qualify the combined GPU
 workload; registering OCR does not reserve memory or change other models' budgets.

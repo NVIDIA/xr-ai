@@ -64,9 +64,9 @@ uv --config-file uv.toml run --project services/ocr-server ocr_server \
 ```
 
 The service is also registered as `ocr` in the shared model-stack launcher,
-like embedding and VLM. Shared defaults live in
-`utils/xr-ai-model-server-stack/yaml/ocr_server.yaml`; sample-owned GPU profiles
-override them. Refer to {ref}`sample-ocr-service` for opt-in integration entirely
+like embedding and VLM. Both launch paths use
+`services/ocr-server/ocr_server.yaml`; sample-owned GPU profiles override those
+service defaults. Refer to {ref}`sample-ocr-service` for opt-in integration entirely
 inside a sample. Provision GPU capacity before starting it alongside other
 services. Registration does not enable OCR in existing samples, change their
 GPU allocations, or qualify concurrent workloads on every supported GPU.

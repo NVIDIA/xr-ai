@@ -425,7 +425,7 @@ def test_sample_owned_ocr_profile_launches_and_stops(monkeypatch, tmp_path, prof
     assert stopped == [("ocr", 9212), ("embedding", 8109)]
 
 
-def test_ocr_default_stop_uses_shared_port_without_gpu_or_credentials(monkeypatch, tmp_path):
+def test_ocr_default_stop_uses_service_port_without_gpu_or_credentials(monkeypatch, tmp_path):
     config = _stack._configs(tmp_path, ("ocr",), None)["ocr"]
     assert config["port"] == 8112
     assert config["infer_length"] == 1024
@@ -437,6 +437,23 @@ def test_ocr_default_stop_uses_shared_port_without_gpu_or_credentials(monkeypatc
     monkeypatch.setattr(_stack, "stop_persistent_servers", lambda targets: stopped.extend(targets) or True)
     run_model_stack(tmp_path, ("ocr",), stop=True)
     assert stopped == [("ocr", 8112)]
+
+
+def test_ocr_stack_reads_service_owned_defaults(monkeypatch, tmp_path):
+    service_path = _REPO_ROOT / "services/ocr-server/ocr_server.yaml"
+    defaults = yaml.safe_load(service_path.read_text())
+    expected = {**defaults, "model_cache": str((service_path.parent / defaults["model_cache"]).resolve())}
+    assert _stack._configs(tmp_path, ("ocr",), None)["ocr"] == expected
+
+    # Changing the service defaults must affect composition without a second YAML copy.
+    services = tmp_path / "services"
+    service = services / "ocr-server"
+    service.mkdir(parents=True)
+    defaults.update(port=9212, infer_length=640, model_cache="../weights")
+    (service / "ocr_server.yaml").write_text(yaml.safe_dump(defaults))
+    monkeypatch.setattr(_stack, "_SERVICES_DIR", services)
+    expected = {**defaults, "model_cache": str(services / "weights")}
+    assert _stack._configs(tmp_path, ("ocr",), None)["ocr"] == expected
 
 
 def test_stop_failure_is_reported(monkeypatch):
