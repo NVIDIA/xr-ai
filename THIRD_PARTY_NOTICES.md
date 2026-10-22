@@ -196,6 +196,22 @@ for Matplotlib's FreeType dependency. Portions of this software are copyright
 The complete upstream FreeType license notice, including its alternatives,
 is preserved in the Matplotlib notice directory.
 
+### OpenXR bindings
+
+`services/openxr-service` reads head tracking through `pyopenxr`, whose
+platform-independent wheel bundles the Khronos OpenXR loader (with jsoncpp
+statically linked) and OpenXR API layers. `pyopenxr` also requires `glfw`,
+whose Linux wheels bundle the GLFW library, and `PyOpenGL`; the service uses
+neither. XR AI uses these packages unmodified; their implementation is not
+copied into XR AI source.
+
+| Package | Version | License and notices | Dependency path |
+|---|---|---|---|
+| `pyopenxr` | 1.1.5301 | Apache-2.0; bundled OpenXR loader and API layers Apache-2.0; bundled jsoncpp public domain or MIT; [license texts](third_party_licenses/pyopenxr-1.1.5301/) | OpenXR service → `pyopenxr` |
+| `glfw` | 2.10.2 | MIT; bundled GLFW 3.4 Zlib; [license texts](third_party_licenses/glfw-2.10.2/) | OpenXR service → `pyopenxr` → `glfw` |
+| `PyOpenGL` | 3.1.10 | BSD-style PyOpenGL and OpenGL-ctypes licenses; [license text](third_party_licenses/PyOpenGL-3.1.10/) | OpenXR service → `pyopenxr` → `PyOpenGL` |
+
+
 ### NVIDIA CUTLASS DSL packages
 
 The following packages are covered by the NVIDIA CUTLASS DSL EULA. They are
@@ -306,6 +322,8 @@ refer to the component disclosures above for applicable license elections.
 |---|---|
 | `certifi-2026.7.22` | [`LICENSE`](third_party_licenses/certifi-2026.7.22/LICENSE) |
 | `flashinfer-python-0.6.18.post1` | [`LICENSE`](third_party_licenses/flashinfer-python-0.6.18.post1/LICENSE) |
+| `glfw-2.10.2` | [`LICENSE.glfw`](third_party_licenses/glfw-2.10.2/LICENSE.glfw) |
+| `glfw-2.10.2` | [`LICENSE.txt`](third_party_licenses/glfw-2.10.2/LICENSE.txt) |
 | `huggingface-hub-1.32.0` | [`LICENSE`](third_party_licenses/huggingface-hub-1.32.0/LICENSE) |
 | `humming-kernels-0.1.12` | [`LICENSE`](third_party_licenses/humming-kernels-0.1.12/LICENSE) |
 | `instanttensor-0.2.0` | [`LICENSE`](third_party_licenses/instanttensor-0.2.0/LICENSE) |
@@ -339,6 +357,10 @@ refer to the component disclosures above for applicable license elections.
 | `protobuf-7.36.0` | [`LICENSE`](third_party_licenses/protobuf-7.36.0/LICENSE) |
 | `pycountry-26.2.16` | [`LICENSE.txt`](third_party_licenses/pycountry-26.2.16/LICENSE.txt) |
 | `pyjwt-2.15.1` | [`LICENSE`](third_party_licenses/pyjwt-2.15.1/LICENSE) |
+| `PyOpenGL-3.1.10` | [`license.txt`](third_party_licenses/PyOpenGL-3.1.10/license.txt) |
+| `pyopenxr-1.1.5301` | [`LICENSE`](third_party_licenses/pyopenxr-1.1.5301/LICENSE) |
+| `pyopenxr-1.1.5301` | [`LICENSE.jsoncpp`](third_party_licenses/pyopenxr-1.1.5301/LICENSE.jsoncpp) |
+| `pyopenxr-1.1.5301` | [`LICENSE.openxr-sdk`](third_party_licenses/pyopenxr-1.1.5301/LICENSE.openxr-sdk) |
 | `pyzmq-27.2.0` | [`LICENSE`](third_party_licenses/pyzmq-27.2.0/LICENSE) |
 | `pyzmq-27.2.0` | [`LICENSE.libsodium`](third_party_licenses/pyzmq-27.2.0/LICENSE.libsodium) |
 | `pyzmq-27.2.0` | [`LICENSE.tornado`](third_party_licenses/pyzmq-27.2.0/LICENSE.tornado) |
