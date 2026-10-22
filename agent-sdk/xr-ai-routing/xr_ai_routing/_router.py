@@ -190,6 +190,8 @@ class AgentRouter:
         self._generation: dict[str, object] = {}
         self._locks: dict[str, asyncio.Lock] = {}
         self._departure_tasks: dict[str, asyncio.Task[None]] = {}
+        self._join_tasks: dict[str, asyncio.Task[None]] = {}
+        self._initialization_locks: dict[str, asyncio.Lock] = {}
         self._stop_task: asyncio.Task[None] | None = None
         self._history: dict[str, list[AgentExchange]] = {}
         self._history_times: dict[str, list[int | None]] = {}
@@ -370,14 +372,14 @@ class AgentRouter:
                     current_id_token = _active_exchange_id.set(current_exchange_id)
                     reported_status = False
                     try:
-                        async with lock:
-                            if not admitted():
-                                raise asyncio.CancelledError
-                            await self._initialize_once(participant_id, generation=generation)
-                            if self._generation.get(participant_id) is not generation:
-                                raise asyncio.CancelledError
-                            if not admitted():
-                                raise asyncio.CancelledError
+                        if not admitted():
+                            raise asyncio.CancelledError
+                        # Not under the participant lock, so a replacement turn can still cancel this one.
+                        await self._initialize_once(participant_id, generation=generation)
+                        if self._generation.get(participant_id) is not generation:
+                            raise asyncio.CancelledError
+                        if not admitted():
+                            raise asyncio.CancelledError
                         if runtime_turn is not None:
                             reported_status = True
                             await self._report_status("processing", participant_id)
@@ -435,7 +437,10 @@ class AgentRouter:
         return None
 
     async def _initialize_once(self, participant_id: str, *, generation: object | None = None) -> None:
-        if participant_id not in self._initialized:
+        # Only router-owned turn and join tasks initialize, so interruption can always cancel the holder.
+        async with self._initialization_locks.setdefault(participant_id, asyncio.Lock()):
+            if participant_id in self._initialized:
+                return
             if self._initialize_participant is not None:
                 await self._call_hook(self._initialize_participant, participant_id)
             task = asyncio.current_task()
@@ -464,7 +469,32 @@ class AgentRouter:
             ):
                 return
             self._departed.discard(participant_id)
-            await self._initialize_once(participant_id)
+            if participant_id in self._initialized:
+                return
+            task = self._join_tasks.get(participant_id)
+            if task is None:
+                task = asyncio.create_task(
+                    self._initialize_once(participant_id),
+                    name=f"routing-join:{participant_id}",
+                    context=self._owned_context(),
+                )
+                self._join_tasks[participant_id] = task
+                task.add_done_callback(partial(self._discard_join, participant_id))
+        try:
+            await asyncio.shield(task)
+        except asyncio.CancelledError:
+            current = asyncio.current_task()
+            if current is None or not current.cancelling():
+                # Departure, stop, or a newer turn canceled it; the next turn initializes again.
+                return
+            if not task.done():
+                task.cancel()
+                await _drain_tasks((task,))
+            raise
+
+    def _discard_join(self, participant_id: str, task: asyncio.Task[None]) -> None:
+        if self._join_tasks.get(participant_id) is task:
+            self._join_tasks.pop(participant_id)
 
     async def _report_status(self, status: Literal["processing", "idle"], participant_id: str) -> None:
         if self._set_status is None:
@@ -495,12 +525,15 @@ class AgentRouter:
 
     async def _interrupt_responses(self, participant_id: str | None = None) -> None:
         if participant_id is None:
-            tasks = tuple(self._tasks.values())
+            tasks = (*self._tasks.values(), *self._join_tasks.values())
             self._generation.clear()
         else:
-            task = self._tasks.get(participant_id)
             self._generation.pop(participant_id, None)
-            tasks = () if task is None else (task,)
+            tasks = tuple(
+                task
+                for task in (self._tasks.get(participant_id), self._join_tasks.get(participant_id))
+                if task is not None
+            )
         for task in tasks:
             if not task.done() and not task.cancelling():
                 task.cancel()
@@ -628,6 +661,7 @@ class AgentRouter:
             self._initialized.discard(participant_id)
             self._departure_tasks.pop(participant_id)
             self._locks.pop(participant_id, None)
+            self._initialization_locks.pop(participant_id, None)
 
     async def _run_stop(self) -> None:
         await self._interrupt_responses()

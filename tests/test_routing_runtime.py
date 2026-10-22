@@ -825,3 +825,51 @@ async def test_runtime_logs_failed_turns_and_dropped_queries(caplog):
         messages = [record.getMessage() for record in caplog.records]
         assert any("runtime routing failed" in message for message in messages)
         assert any("runtime query dropped" in message and "participant has left" in message for message in messages)
+
+
+@pytest.mark.parametrize("operation", ["participant_left", "stop"])
+async def test_cleanup_cancels_join_initialization_before_taking_the_participant_lock(operation):
+    entered, cancelled = asyncio.Event(), asyncio.Event()
+
+    async def initialize(_participant):
+        entered.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            cancelled.set()
+            raise
+
+    async with _app(initialize_participant=initialize) as (runtime, router, *_):
+        joined = asyncio.create_task(runtime.publish(JOINED, VoiceParticipantJoined(), participant_id="alice"))
+        await asyncio.wait_for(entered.wait(), 1)
+        cleanup = router.participant_left("alice") if operation == "participant_left" else router.stop()
+        await asyncio.wait_for(cleanup, 1)
+        await asyncio.wait_for(joined, 1)
+        assert cancelled.is_set()
+        assert router._join_tasks == {}
+
+
+async def test_replacement_query_cancels_an_initializing_turn():
+    entered, cancelled = asyncio.Event(), asyncio.Event()
+    calls = []
+
+    async def initialize(_participant):
+        calls.append(_participant)
+        if len(calls) > 1:
+            return
+        entered.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            cancelled.set()
+            raise
+
+    async with _app(initialize_participant=initialize) as (runtime, router, destinations, _output, _status):
+        await _query(runtime, "first")
+        await asyncio.wait_for(entered.wait(), 1)
+        await asyncio.wait_for(_query(runtime, "replacement"), 1)
+        await asyncio.wait_for(_settled(router), 1)
+        assert cancelled.is_set()
+        assert calls == ["alice", "alice"]
+        assert [turn.query for turn in destinations["conversation"].turns] == ["replacement"]
+
