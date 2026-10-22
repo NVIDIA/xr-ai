@@ -36,7 +36,7 @@ def select_guide(directory: Path, name: str) -> SelectedGuide:
     matches: list[SelectedGuide] = []
     invalid: list[str] = []
     for path in sorted(directory.rglob("*")):
-        if not path.name.endswith((".guide.yaml", ".guide.yml")):
+        if not path.name.endswith((".yaml", ".yml")):
             continue
         try:
             if path.is_symlink() or not path.resolve().is_relative_to(directory):

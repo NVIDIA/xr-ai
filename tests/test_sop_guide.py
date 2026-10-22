@@ -317,14 +317,15 @@ async def test_automatic_finish_reports_skipped_prerequisite(engine, document):
     assert not session.active
 
 
-def test_approved_exact_name_and_id_are_pinned(tmp_path, document):
-    path = write_guide(tmp_path, document)
+@pytest.mark.parametrize("filename", ["align-parts.yaml", "align-parts.yml", "test.guide.yaml", "test.guide.yml"])
+def test_approved_exact_name_and_id_are_pinned(tmp_path, document, filename):
+    path = write_guide(tmp_path, document, filename)
     original = path.read_bytes()
     guide = select_guide(tmp_path, "align parts")
     assert guide.sha256 == hashlib.sha256(original).hexdigest()
     assert select_guide(tmp_path, "ALIGN_PARTS").path == path
     document["task"]["status"] = "draft"
-    write_guide(tmp_path, document)
+    write_guide(tmp_path, document, filename)
     assert guide.workflow.status == "approved"
     with pytest.raises(ValueError, match="draft"):
         select_guide(tmp_path, "Align Parts")

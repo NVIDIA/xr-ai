@@ -22,9 +22,9 @@ use the packet's own narration, not speech from other recordings on the connecti
 
 All links below are relative to **this skill directory**, not the sample root.
 Read [the contract](references/packet-and-guide-schema.md) and
-[the visual example](references/example.guide.yaml). Read
-[the timer example](references/timer.guide.yaml) only for waits, and
-[the blocked example](references/review-blocked.guide.yaml) for an unresolved
+[the visual example](references/example.yaml). Read
+[the timer example](references/timer.yaml) only for waits, and
+[the blocked example](references/review-blocked.yaml) for an unresolved
 required identity or unsupported verification. Adapt structure, never example
 objects, counts, durations, or source IDs. These files are the authoring API;
 do not scan unrelated repository files or worker code unless validation exposes
@@ -115,8 +115,10 @@ commits. Prefer direct `evidence.commit`; uncertainty and failure never complete
 
 ## Write, validate, and review
 
-Write `agent-samples/procedure-capture-guide/guides/<slug>.guide.yaml` and the matching
-`<slug>.review.md`, or use the user's specified directory. Do not overwrite
+Write `agent-samples/procedure-capture-guide/guides/<slug>.yaml` and the matching
+`<slug>.review.md`, or use the user's specified directory. Derive a lowercase,
+hyphen-separated slug from the guide name, such as `assemble-toy.yaml`; do not
+insert `.guide` before `.yaml`. Do not overwrite
 without permission. Put the exact packet session ID in review notes, not in
 the strict guide YAML. Keep `task.status: draft`, a 1–5 word punctuation-free name, and a
 version increment for an authorized replacement. Use block-style YAML and
@@ -130,7 +132,7 @@ Preserve the linked step chain and user-controlled advancement.
 Validate from the repository root and repair YAML yourself until it passes:
 
 ```bash
-uv run --project agent-samples/procedure-capture-guide/worker python -m procedure_capture_guide_worker._validate_guide agent-samples/procedure-capture-guide/guides/<slug>.guide.yaml
+uv run --project agent-samples/procedure-capture-guide/worker python -m procedure_capture_guide_worker._validate_guide agent-samples/procedure-capture-guide/guides/<slug>.yaml
 ```
 
 Then compare each review-table row to the actual trigger and gate: no omitted

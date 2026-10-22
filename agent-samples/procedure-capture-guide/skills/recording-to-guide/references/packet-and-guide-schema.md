@@ -53,7 +53,9 @@ unquoted flow mappings (`{...}`) can silently create unintended fields.
 `foreground_prompt`, `complete_message`. Use a stable lowercase identifier
 matching `^[a-z][a-z0-9_-]*$`, a 1–5 word punctuation-free name, a positive integer
 version, and `status: draft`. Only human-reviewed `approved` guides may run in guide mode.
-Name, ID, and filename are separate. Use the same intended task in all prompts
+Name, ID, and filename are separate. Save the guide as `<slug>.yaml`, with a
+lowercase, hyphen-separated slug derived from its name, without a `.guide` infix.
+Use the same intended task in all prompts
 and completion messages; do not copy the worked example's wording.
 
 `state` maps identifiers to `{type, description, initial?}`. Types are `boolean`,
@@ -112,7 +114,7 @@ Trigger arguments can use `$state.<field>`. The field must be declared in state
 and in that step's `reads` or `writes`, with the argument's required type.
 These references are not general template substitutions for message text.
 
-For waits, read [the full timer example](timer.guide.yaml). Setup observes the
+For waits, read [the full timer example](timer.yaml). Setup observes the
 prerequisite and commits its own boolean. Set setup `complete_on_skip: true`
 when a skip must not enter a wait without that prerequisite. The wait uses
 `clock__timer` with only `duration_s`, `result_field: expired`,
@@ -143,7 +145,7 @@ verification, such as proving past ordering or a hidden fit from one image.
 Retain the action, not a fictitious verification.
 An unclear object identity can require this pattern without preventing a draft
 of the known action and target. Refer to
-[the complete blocked example](review-blocked.guide.yaml). Do not substitute a
+[the complete blocked example](review-blocked.yaml). Do not substitute a
 request for clarification for both requested output files when an action is known.
 Use a bounded `current_view` question about the observable context, a separate
 false-initialized completion field, and this never-matching evidence gate:

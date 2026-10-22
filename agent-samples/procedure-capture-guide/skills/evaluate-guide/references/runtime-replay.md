@@ -13,7 +13,7 @@ starts, stops, or substitutes model servers.
 From the repository root, using a new output directory:
 
 ```bash
-PYTHONPATH=agent-samples/procedure-capture-guide/worker uv run --project agent-samples/procedure-capture-guide/worker python agent-samples/procedure-capture-guide/eval/guide.py --packet /path/to/packet.json --guide /path/to/draft.guide.yaml --output /path/to/evaluation/run-001
+PYTHONPATH=agent-samples/procedure-capture-guide/worker uv run --project agent-samples/procedure-capture-guide/worker python agent-samples/procedure-capture-guide/eval/guide.py --packet /path/to/packet.json --guide /path/to/draft.yaml --output /path/to/evaluation/run-001
 ```
 
 The runner imports the runtime's YAML parser and uses the worker's model,
