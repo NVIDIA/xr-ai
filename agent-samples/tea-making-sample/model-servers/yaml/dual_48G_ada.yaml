@@ -9,13 +9,10 @@ speaker-stt:
 tts:
   cuda_visible_devices: '0'
 omni:
-  max_model_len: 32768
-  video_num_frames: 64
   cuda_visible_devices: '1'
   max_num_seqs: 8
   gpu_memory_utilization: 0.78
   kv_cache_memory_bytes: 2147483648
 embedding:
-  enforce_eager: true
   cuda_visible_devices: '0'
   gpu_memory_utilization: 0.08

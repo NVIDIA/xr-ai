@@ -29,7 +29,7 @@ max_model_len:          8192
 # the other vLLM servers (VLM, LLM) sharing the same GPU.  Raise to 0.30–0.40
 # if this server runs on a dedicated GPU.
 gpu_memory_utilization: 0.20
-enforce_eager:          false
+enforce_eager:          true
 # Optional vLLM attention backend; omit for automatic selection.
 # The tea sample's Spark profile selects TRITON_ATTN for GB10 compatibility.
 # attention_backend: TRITON_ATTN

@@ -9,7 +9,6 @@ speaker-stt:
 tts:
   cuda_visible_devices: '0'
 vlm:
-  enforce_eager: true
   gpu_memory_utilization: 0.23
   kv_cache_memory_bytes: 1610612736
   max_num_seqs: 4

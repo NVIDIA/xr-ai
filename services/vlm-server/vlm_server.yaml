@@ -35,7 +35,7 @@ gpu_memory_utilization: 0.85
 # Optional fixed KV-cache size in bytes per GPU. When this is set, vLLM still
 # uses gpu_memory_utilization for its initial free-memory admission check.
 # kv_cache_memory_bytes: 1610612736
-enforce_eager:          false
+enforce_eager:          true
 # Recommended by NVIDIA for the Cosmos3 Reasoner vLLM path.
 async_scheduling:       true
 mm_encoder_tp_mode:     data
