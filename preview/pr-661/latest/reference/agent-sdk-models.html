@@ -442,7 +442,7 @@
 <section id="xr-ai-models">
 <h1>xr-ai-models<a class="headerlink" href="#xr-ai-models" title="Link to this heading">#</a></h1>
 <p><a id="contract"></a></p>
-<p id="agent-sdk-models-contract"><code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code> defines typed LLM, VLM, STT, TTS, embedding, and decision protocols and
+<p id="agent-sdk-models-contract"><code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code> defines typed LLM, VLM, STT, TTS, embedding, decision, and OCR protocols and
 constructs concrete clients from deployment profiles. Workers depend on those
 protocols instead of hand-written HTTP or vendor SDK calls. Refer to
 <a class="reference internal" href="python/index.html"><span class="doc">API Reference</span></a> for exact classes, methods, fields, and defaults. Refer to
@@ -641,15 +641,19 @@ refer to <a class="reference internal" href="../components/launcher-and-process-
 <td><p>Embedding server</p></td>
 <td><p>OpenAI-compatible dense vectors</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">parakeet_stt</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">nemotron_ocr</span></code></p></td>
+<td><p>Hugging Face OCR server or OCR NIM 2.0</p></td>
+<td><p>Multilingual text, confidence, normalized polygons; <code class="docutils literal notranslate"><span class="pre">/v1/ocr</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">parakeet_stt</span></code></p></td>
 <td><p>STT server</p></td>
 <td><p>OpenAI-compatible transcription</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">pocket_tts</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">pocket_tts</span></code></p></td>
 <td><p>Pocket TTS</p></td>
 <td><p>OpenAI-compatible synthesis plus native PCM streaming</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">magpie_tts</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">magpie_tts</span></code></p></td>
 <td><p>Magpie TTS</p></td>
 <td><p>OpenAI-compatible speech synthesis</p></td>
 </tr>
