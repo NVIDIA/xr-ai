@@ -127,7 +127,7 @@ selection on each turn.
 Install `xr-ai-routing[voice]` to use the existing typed voice event models.
 The direct `handle()` path uses its configured control callback and does not
 import voice media. Runtime queries need no callback. Configure the query and
-output topics explicitly, then register the router itself:
+output topics explicitly, then register the router's runtime subscriber:
 
 ```python
 from xr_ai_runtime import AgentRuntime, Topic
@@ -136,12 +136,13 @@ from xr_ai_voice import UserQuery, VoiceOutput
 queries = Topic("my-app.query", UserQuery)
 outputs = Topic("my-app.output", VoiceOutput)
 runtime = AgentRuntime()
-router = runtime.register("router", AgentRouter(
+router = AgentRouter(
     {"conversation": conversation, "scene": scene_destination},
     decision_service,
     query_topic=queries,
     output_topic=outputs,
-))
+)
+runtime.register("router", router.runtime_subscriber())
 ```
 
 Use the same query topic on the input producer and register a consumer for the
@@ -252,8 +253,8 @@ work before replacement or resource cleanup; an operation that does not finish
 its cancellation cleanup can delay the next turn, rather than being detached
 behind an arbitrary timeout.
 
-Without runtime topics, routing does not import voice media or require a
-particular application. Configure its control output once, then call `handle()`
+Without runtime topics, routing imports neither the agent runtime nor voice
+packages and requires no particular application. Configure its control output once, then call `handle()`
 with `AgentTurn` values.
 
 ## Python API reference

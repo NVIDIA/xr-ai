@@ -19,9 +19,9 @@ from typing import TYPE_CHECKING, Literal
 
 import nemo_relay
 from xr_ai_models import ChatMessage, DecisionQuestion, DecisionService, LLMService
-from xr_ai_runtime import Agent, Topic
 
 if TYPE_CHECKING:
+    from xr_ai_runtime import Agent, Topic
     from xr_ai_voice import UserQuery, VoiceInterrupted, VoiceOutput, VoiceParticipantJoined, VoiceParticipantLeft
 
     from ._runtime import _RuntimeTurn
@@ -74,7 +74,7 @@ class _TurnOutput:
     """The destination signaled its response start."""
 
 
-class AgentRouter(Agent):
+class AgentRouter:
     """Route a turn, check admission before speech, and retain explicit focus.
 
     A focused destination receives the participant's next turn first. It can
@@ -104,10 +104,11 @@ class AgentRouter(Agent):
     destination signals its first meaningful response, excluding routing, admission,
     waiting for committed acknowledgment delivery, and audio playback.
 
-    Supply ``query_topic`` and ``output_topic`` together to register this router
-    directly with :class:`xr_ai_runtime.AgentRuntime`. This requires the
-    ``xr-ai-routing[voice]`` extra; ordinary ``handle()`` use never imports voice
-    media. No input or lifecycle topic is subscribed unless explicitly supplied.
+    Supply ``query_topic`` and ``output_topic`` together, then register
+    ``runtime_subscriber()`` with :class:`xr_ai_runtime.AgentRuntime`. This
+    requires the ``xr-ai-routing[voice]`` extra; ordinary ``handle()`` use never
+    imports the runtime or voice media. No input or lifecycle topic is
+    subscribed unless explicitly supplied.
     Runtime queries use their publication identity and originating timestamp.
     Destinations publish their own output; the router publishes only finite
     admission, clarification, acknowledgment, and failure messages for turns that
@@ -166,7 +167,6 @@ class AgentRouter(Agent):
         cleanup_participant: Callable[[str], Awaitable[None]] | None = None,
         set_status: Callable[[Literal["processing", "idle"], str], Awaitable[None]] | None = None,
     ) -> None:
-        super().__init__()
         if not destinations or default_destination not in destinations:
             raise ValueError("default destination must be registered")
         self._output = output
@@ -235,6 +235,17 @@ class AgentRouter(Agent):
                 participant_left_topic=participant_left_topic,
                 interrupted_topic=interrupted_topic,
             )
+
+    def runtime_subscriber(self) -> Agent:
+        """Return the runtime agent that delivers configured topics to this router.
+
+        Register it once with the application's ``AgentRuntime``. Requires
+        ``query_topic`` and ``output_topic`` on the constructor.
+        """
+
+        if self._runtime is None:
+            raise ValueError("runtime_subscriber() requires query_topic and output_topic")
+        return self._runtime.subscriber()
 
     async def handle(
         self,

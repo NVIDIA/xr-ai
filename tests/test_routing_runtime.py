@@ -152,21 +152,19 @@ async def _app(destinations=None, decisions=None, **kwargs):
         destinations = {"conversation": _Destination(runtime)}
     elif callable(destinations):
         destinations = destinations(runtime)
-    router = runtime.register(
-        "router",
-        AgentRouter(
-            destinations,
-            decisions,
-            output=_control,
-            query_topic=QUERIES,
-            output_topic=OUTPUT,
-            participant_joined_topic=JOINED,
-            participant_left_topic=LEFT,
-            interrupted_topic=INTERRUPTED,
-            set_status=status,
-            **kwargs,
-        ),
+    router = AgentRouter(
+        destinations,
+        decisions,
+        output=_control,
+        query_topic=QUERIES,
+        output_topic=OUTPUT,
+        participant_joined_topic=JOINED,
+        participant_left_topic=LEFT,
+        interrupted_topic=INTERRUPTED,
+        set_status=status,
+        **kwargs,
     )
+    runtime.register("router", router.runtime_subscriber())
     async with runtime:
         try:
             yield runtime, router, destinations, output, status
@@ -593,14 +591,10 @@ def test_runtime_topic_models_and_incomplete_configuration_rejected():
             AgentRouter({"conversation": destination}, None, output=_control, **{hook: _control})
 
 
-async def test_no_runtime_topics_are_subscribed_without_explicit_configuration():
-    runtime = AgentRuntime()
-    destination = _Destination(runtime)
-    router = runtime.register("router", AgentRouter({"conversation": destination}, None, output=_control))
-    async with runtime:
-        await _query(runtime, "request")
-        assert destination.turns == []
-        await router.stop()
+def test_runtime_subscriber_requires_explicit_topic_configuration():
+    router = AgentRouter({"conversation": _Destination(None)}, None, output=_control)
+    with pytest.raises(ValueError, match="runtime_subscriber"):
+        router.runtime_subscriber()
 
 
 async def test_runtime_control_uses_query_context_without_direct_output_callback():
@@ -617,16 +611,14 @@ async def test_runtime_control_uses_query_context_without_direct_output_callback
     status = _Status()
     destination = _Destination(runtime)
     destination.admissions.append(Admission("clarify", text="Which view?"))
-    router = runtime.register(
-        "router",
-        AgentRouter(
-            {"conversation": destination},
-            None,
-            query_topic=QUERIES,
-            output_topic=OUTPUT,
-            set_status=status,
-        ),
+    router = AgentRouter(
+        {"conversation": destination},
+        None,
+        query_topic=QUERIES,
+        output_topic=OUTPUT,
+        set_status=status,
     )
+    runtime.register("router", router.runtime_subscriber())
     async with runtime:
         try:
             with pytest.raises(ValueError, match="direct handle.*requires output"):
@@ -799,16 +791,14 @@ async def test_status_failure_is_logged_and_does_not_fail_the_turn(caplog):
     status = FailingStatus()
     runtime = AgentRuntime()
     output = runtime.register("output", _Output())
-    router = runtime.register(
-        "router",
-        AgentRouter(
-            {"conversation": _Destination(runtime)},
-            None,
-            query_topic=QUERIES,
-            output_topic=OUTPUT,
-            set_status=status,
-        ),
+    router = AgentRouter(
+        {"conversation": _Destination(runtime)},
+        None,
+        query_topic=QUERIES,
+        output_topic=OUTPUT,
+        set_status=status,
     )
+    runtime.register("router", router.runtime_subscriber())
     async with runtime:
         try:
             with caplog.at_level(logging.ERROR, logger="xr_ai_routing._router"):
