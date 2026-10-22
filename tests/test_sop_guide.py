@@ -345,6 +345,52 @@ def test_symlink_guide_is_rejected(tmp_path, document):
         load_guide(sub / "link.guide.yaml")
 
 
+@pytest.mark.parametrize("filename", ["guide.yaml", "assemble-toy.yaml", "tea.yml"])
+def test_directory_selects_only_top_level_yaml(tmp_path, document, filename):
+    path = write_guide(tmp_path, document, filename)
+    nested = tmp_path / "nested"
+    nested.mkdir()
+    write_guide(nested, document, "other.yaml")
+    (tmp_path / "review.md").write_text("Review notes")
+    (tmp_path / "directory.yaml").mkdir()
+    guide = load_guide(tmp_path)
+    assert guide.path == path
+    assert guide.sha256 == hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def test_directory_rejects_multiple_yaml_files_without_preferring_guide_yaml(tmp_path, document):
+    path = write_guide(tmp_path, document, "guide.yaml")
+    (tmp_path / "other.yml").write_text("invalid guide")
+    (tmp_path / "settings.yaml").write_text("{}")
+    with pytest.raises(ValueError) as error:
+        load_guide(tmp_path)
+    message = str(error.value)
+    assert "multiple YAML files" in message
+    assert "  guide.yaml\n  other.yml\n  settings.yaml" in message
+    assert "Provide the path to a specific guide YAML file" in message
+    assert load_guide(path).path == path
+
+
+def test_directory_does_not_search_nested_yaml_files(tmp_path, document):
+    nested = tmp_path / "nested"
+    nested.mkdir()
+    write_guide(nested, document, "guide.yaml")
+    with pytest.raises(ValueError, match="no YAML files at this directory level"):
+        load_guide(tmp_path)
+
+
+def test_directory_selection_preserves_approval_and_symlink_checks(tmp_path, document):
+    document["task"]["status"] = "draft"
+    path = write_guide(tmp_path, document, "guide.yaml")
+    with pytest.raises(ValueError, match="draft"):
+        load_guide(tmp_path)
+    linked = tmp_path / "linked"
+    linked.mkdir()
+    (linked / "guide.yaml").symlink_to(path)
+    with pytest.raises(ValueError, match="symbolic-link"):
+        load_guide(linked)
+
+
 @pytest.mark.parametrize("kind", ["missing", "directory", "oversize", "malformed"])
 def test_invalid_guide_file_is_rejected(tmp_path, kind):
     path = tmp_path / "guide.yaml"
@@ -1429,8 +1475,9 @@ def test_guide_eval_cli_runs_public_runtime_scenario(tmp_path, monkeypatch, time
 
 @pytest.mark.parametrize("session_recording", [False, True])
 @pytest.mark.parametrize("external", [False, True])
+@pytest.mark.parametrize("directory", [False, True])
 def test_cli_selects_guide_with_independent_session_recording(
-    monkeypatch, tmp_path, document, session_recording, external,
+    monkeypatch, tmp_path, document, session_recording, external, directory,
 ):
     spec = importlib.util.spec_from_file_location("sop_guide_main", _SAMPLE / "main.py")
     main = importlib.util.module_from_spec(spec)
@@ -1441,6 +1488,9 @@ def test_cli_selects_guide_with_independent_session_recording(
     selected = (str(write_guide(tmp_path, document, "external guide.yaml")) if external
                 else "examples/tea-making/guide.yaml")
     expected_path = Path(selected) if external else _SAMPLE / selected
+    if directory:
+        selected = str(Path(selected).parent)
+    configured_path = expected_path.parent if directory else expected_path
     monkeypatch.chdir(tmp_path)
 
     def launch(processes, base, *, health_port):
@@ -1450,7 +1500,7 @@ def test_cli_selects_guide_with_independent_session_recording(
         requests.append(json.loads(processes[-1].config.read_text()))
         config = load_config(processes[-1].config)
         assert config.mode == "guide" and config.capture is None
-        assert config.guide.guide_path == expected_path
+        assert config.guide.guide_path == configured_path
         assert load_guide(config.guide.guide_path).path == expected_path
         assert config.voice_gate_yaml == _SAMPLE / "yaml/voice_gate.guide.yaml"
         if session_recording:

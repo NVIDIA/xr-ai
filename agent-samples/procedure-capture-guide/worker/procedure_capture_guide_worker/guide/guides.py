@@ -3,8 +3,8 @@
 
 """Select an approved local procedure guide for the guide worker.
 
-Read the file selected on the command line, validate it through _workflow_spec.py,
-and require approved status. Retain the loaded guide and its content hash so
+Select a file directly or from a directory containing one YAML file. Validate it
+through _workflow_spec.py and require approved status. Retain its content hash so
 editing the source file does not change a running worker's instructions.
 """
 
@@ -27,10 +27,28 @@ class SelectedGuide:
 
 
 def load_guide(path: Path) -> SelectedGuide:
-    """Load only the selected file; pin validation and hashing to the same bytes."""
+    """Resolve an unambiguous guide; pin validation and hashing to the same bytes."""
     try:
         if path.is_symlink():
             raise ValueError("symbolic-link guides are not allowed")
+        if path.is_dir():
+            candidates = sorted(
+                child for child in path.iterdir()
+                if child.suffix.lower() in {".yaml", ".yml"} and child.is_file()
+            )
+            if not candidates:
+                raise ValueError(
+                    "no YAML files at this directory level; provide the path to a specific guide YAML file"
+                )
+            if len(candidates) > 1:
+                listing = "\n".join(f"  {candidate.name}" for candidate in candidates)
+                raise ValueError(
+                    f"multiple YAML files at this directory level:\n{listing}\n"
+                    "Provide the path to a specific guide YAML file."
+                )
+            path = candidates[0]
+            if path.is_symlink():
+                raise ValueError("symbolic-link guides are not allowed")
         path = path.resolve()
         with path.open("rb") as stream:
             content = stream.read(1_000_001)

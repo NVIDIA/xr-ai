@@ -381,11 +381,17 @@ results distinct from sample-level end-to-end regression results.
 
 ## Follow an approved guide
 
-Select a reviewed guide YAML file by path. The sample's `guides/` directory
+Select a reviewed guide YAML file or its containing directory by path. The sample's `guides/` directory
 remains available for local, Git-ignored guides; maintained examples live under
 `examples/`. Guides can also live outside the sample. Set `task.status` to
 `approved` only after reviewing the instructions, completion checks, timers,
-and safety constraints. The CLI loads only the specified file and rejects
+and safety constraints. For a directory, selection considers only files ending
+in `.yaml` or `.yml` at that level, not nested directories. Exactly one YAML
+file is required: `guide.yaml` works, as does any other single YAML filename.
+If multiple YAML files exist, the error lists all of them and asks for a specific
+file path; `guide.yaml` does not take priority over other files. An empty directory
+also produces an error. Explicit file paths bypass directory selection.
+The worker loads the selected file and rejects
 missing, draft, or invalid guides. It does not search by `task.name` or `task.id`.
 Relative paths resolve from `agent-samples/procedure-capture-guide/`, not the
 worker's working directory; absolute paths are also supported. Quote paths
@@ -393,6 +399,7 @@ containing spaces. Run from the sample directory:
 
 ```bash
 uv run main.py --mode guide guides/my-procedure.guide.yaml
+uv run main.py --mode guide examples/tea-making
 ```
 
 Start the shared models first, as for capture. Guide mode uses the LLM, VLM, STT,

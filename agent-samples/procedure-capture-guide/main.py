@@ -11,7 +11,7 @@ runs inside its own process and launches procedure_capture_guide_worker/app.py.
 This launcher supervises the hub and worker; model services must already be available.
 Choose --mode capture or --mode guide. In capture mode, say "start capture"
 to begin and "stop capture" to finish; --output-root selects the packet directory.
-Guide mode requires a guide file path after --mode guide. Say "start guide" to begin
+Guide mode requires a guide file or directory path after --mode guide. Say "start guide" to begin
 that guide and "stop guide" to cancel; connecting alone does not start it.
 In either mode, --session-recording independently records the whole participant
 connection; it does not start or stop procedure capture or guided execution.
@@ -61,7 +61,8 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--mode", choices=("capture", "guide"), default="capture", help="worker capability to run")
     parser.add_argument(
         "guide_path", nargs="?", metavar="GUIDE_PATH",
-        help="approved guide YAML path, absolute or relative to the sample directory (guide mode only)",
+        help=("approved guide YAML file or directory containing exactly one top-level YAML file; "
+              "absolute or relative to the sample directory (guide mode only)"),
     )
     parser.add_argument(
         "--output-root", type=Path, metavar="PATH",
