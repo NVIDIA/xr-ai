@@ -490,14 +490,13 @@ worker call finishes. <code class="docutils literal notranslate"><span class="pr
 same provenance fields.</p>
 <section id="launching">
 <h2>Launching<a class="headerlink" href="#launching" title="Link to this heading">#</a></h2>
-<p>From <code class="docutils literal notranslate"><span class="pre">model-server-samples/clef-flash/</span></code>, run:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">export</span><span class="w"> </span><span class="nv">UV_CONFIG_FILE</span><span class="o">=</span>../../uv.toml
-uv<span class="w"> </span>sync
-uv<span class="w"> </span>run<span class="w"> </span>clef_flash_model
+<p>Select <code class="docutils literal notranslate"><span class="pre">clef</span></code> in a sample’s model-server stack, or start the service from the
+repository root:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>uv.toml<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>services/clef-server<span class="w"> </span>clef_server<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--config<span class="w"> </span>services/clef-server/clef_server.yaml
 </pre></div>
 </div>
-<p>The sample starts <code class="docutils literal notranslate"><span class="pre">services/clef-server</span></code> persistently on <code class="docutils literal notranslate"><span class="pre">127.0.0.1:8120</span></code>.
-Its <code class="docutils literal notranslate"><span class="pre">yaml/clef_server.yaml</span></code> pins model revision
+<p>The service listens on <code class="docutils literal notranslate"><span class="pre">127.0.0.1:8120</span></code>. Its <code class="docutils literal notranslate"><span class="pre">services/clef-server/clef_server.yaml</span></code> pins model revision
 <code class="docutils literal notranslate"><span class="pre">17f0b0ad64efb65d273590632833508766b2aae6</span></code> from the
 <code class="docutils literal notranslate"><span class="pre">Cloudflare/clef-flash</span></code> model repository. The service resolves the configured
 pinned snapshot from the repository’s ignored <code class="docutils literal notranslate"><span class="pre">models/</span></code> cache first and passes
@@ -506,14 +505,10 @@ miss follows the online download path; with <code class="docutils literal notran
 model loading with the model, revision, and cache directory. Offline startup
 assumes a previously working cache. Refer to
 <a class="reference internal" href="../components/ai-services.html#starting-model-services-without-network-access"><span class="std std-ref">Starting without network access</span></a> for cache behavior.</p>
-<p>With <code class="docutils literal notranslate"><span class="pre">UV_CONFIG_FILE</span></code> still set, use <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">clef_flash_model</span> <span class="pre">--stop</span></code> from the
-sample directory to stop only a listener carrying the matching Clef ownership
-and port markers. It waits for that process to exit, including request and native
-inference cleanup, before reporting success; closing the HTTP listener alone
-does not complete shutdown. Linux process handles keep termination and timeout
-escalation tied to the same verified process. The stop command never treats a
-Docker container on that port as the Clef service. A server already listening on the configured port is reused
-only when it has those ownership markers and its health response matches the
+<p>A sample stack that selects <code class="docutils literal notranslate"><span class="pre">clef</span></code> stops it with its <code class="docutils literal notranslate"><span class="pre">--stop</span></code> command, which
+signals only a listener carrying the stack’s managed-port markers. A server
+already listening on the configured port is reused only when it has those
+ownership markers and its health response matches the
 complete requested server configuration; any other listener causes startup to
 fail before loading model weights.</p>
 <p>The YAML sets the bind address, port, device, inference dtype, maximum token
@@ -523,14 +518,8 @@ limit receive HTTP 422; increase <code class="docutils literal notranslate"><spa
 </section>
 <section id="updating-a-running-service">
 <span id="clef-service-updates"></span><h2>Updating a running service<a class="headerlink" href="#updating-a-running-service" title="Link to this heading">#</a></h2>
-<p>Before updating the checkout or changing server configuration, stop the service
-from the old checkout in <code class="docutils literal notranslate"><span class="pre">model-server-samples/clef-flash/</span></code>:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">export</span><span class="w"> </span><span class="nv">UV_CONFIG_FILE</span><span class="o">=</span>../../uv.toml
-uv<span class="w"> </span>run<span class="w"> </span>clef_flash_model<span class="w"> </span>--stop
-</pre></div>
-</div>
-<p>Update the checkout or configuration, then start the service with
-<code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">clef_flash_model</span></code>. Model and configuration identity do not identify the
+<p>Before updating the checkout or changing server configuration, stop the service,
+then start it again. Model and configuration identity do not identify the
 running application code version. Restarting ensures that requests reach the
 updated implementation, including support for image decisions.</p>
 </section>

@@ -412,7 +412,7 @@ uv --config-file uv.toml run --project agent-samples/simple-vlm-example/model-se
   simple_vlm_example_model_servers
 ```
 
-It composes shared `utils/xr-ai-model-server-stack/yaml/speaker_stt.yaml`
+It composes the `services/speaker-stt/speaker_stt.yaml`
 defaults with that sample's `model-servers/yaml/<gpu-profile>.yaml` placement
 and capacity overrides, waits for decoder warmup, and reuses matching warm
 instances. The sample's model command with `--stop` includes the speaker service. Stop the stack

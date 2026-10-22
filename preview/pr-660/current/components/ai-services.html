@@ -505,7 +505,7 @@ recorded video, and document retrieval.</p>
 <td><p>vLLM (pip or docker) — multimodal (text + video)</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/clef-server/</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">clef_server</span></code> via <code class="docutils literal notranslate"><span class="pre">model-server-samples/clef-flash/</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">clef_server</span></code></p></td>
 <td><p>8120</p></td>
 <td><p>Cloudflare Clef-Flash 9B</p></td>
 <td><p>Native SystemOne choice decisions</p></td>
@@ -906,14 +906,15 @@ sends <code class="docutils literal notranslate"><span class="pre">SIGTERM</span
 created by the launcher without leaving that group. Cleanup signals the
 complete group only after verifying both the listener marker and, when
 separate, the launcher’s group-leader marker, so inference descendants cannot
-survive as orphans and launcher abort-time escalation can still reach Pocket
-TTS. It falls back to PID-only cleanup if group ownership cannot be verified;
-other local servers always retain PID-only cleanup. Unknown listeners and
+survive as orphans. Launcher abort-time escalation can reach Pocket TTS before
+it signals readiness; once its ready file exists when cleanup begins, the
+launcher preserves it. Explicit stop falls back to PID-only cleanup if group
+ownership cannot be verified; other local servers always retain PID-only cleanup. Unknown listeners and
 failed inspection abort cleanup without sending a signal, and
 the sample’s model command with <code class="docutils literal notranslate"><span class="pre">--stop</span></code> exits nonzero if any target could not be stopped. Absent
 servers are silently skipped.</p>
 <p>Stop targets are only the servers listed by that sample’s convenience launcher,
-with ports read from the shared defaults and selected sample GPU overrides.
+with ports read from the service defaults and selected sample GPU overrides.
 Use the same explicit <code class="docutils literal notranslate"><span class="pre">--gpu-profile</span> <span class="pre">NAME</span></code> on start and stop. Stop does not
 require model-download credentials.</p>
 <p>Before switching samples, updating the checkout, or editing server settings,
@@ -1156,9 +1157,21 @@ profiles leave attention-backend selection to vLLM. Refer to
 with an <code class="docutils literal notranslate"><span class="pre">embedding</span></code> role. It chunks and embeds supported documents at
 startup, caches its index, and returns matches above <code class="docutils literal notranslate"><span class="pre">min_score</span></code>. Start the
 embedding service first, RAG second, and the consuming worker last. The cache
-includes document content, indexing settings, and the model profile; change
-<code class="docutils literal notranslate"><span class="pre">cache_key</span></code> when a remote endpoint changes its backing model without changing
-that profile.</p></li>
+includes document content, indexing settings, the resolved embedding-role
+hash, the server-reported <code class="docutils literal notranslate"><span class="pre">root</span></code> from the matching <code class="docutils literal notranslate"><span class="pre">/v1/models</span></code> entry, and
+optional <code class="docutils literal notranslate"><span class="pre">cache_key</span></code>. Unrelated model-role edits do not invalidate the cache.
+The reported identity is best-effort: this repository’s Docker launcher serves
+a resolved snapshot path, while pip serves the Hugging Face repository ID.
+Switching backends can rebuild the cache, and changing a Hub revision under
+the same pip model ID requires a new <code class="docutils literal notranslate"><span class="pre">cache_key</span></code>. A served alias such as
+<code class="docutils literal notranslate"><span class="pre">embed</span></code> does not identify weights. Providers omitting <code class="docutils literal notranslate"><span class="pre">root</span></code> cause documents
+to be re-embedded on every startup without persistent caching; <code class="docutils literal notranslate"><span class="pre">cache_key</span></code>
+cannot opt back in. Failed metadata requests or invalid responses abort
+startup. The manual key supplements the role hash and reported identity.
+Every replica must remain on the same weights throughout indexing and serving;
+health probes check availability, not model consistency. Restart RAG whenever
+the embedding model changes. Refer to
+<a class="reference internal" href="../reference/migrations.html"><span class="doc">Release migration</span></a> for upgrading existing indexes and servers.</p></li>
 <li><p><strong>video-memory-service</strong> owns recorded chunk queries, NVDEC, and PNG output
 behind typed msgpack over ZMQ on port 8310. Set <code class="docutils literal notranslate"><span class="pre">recordings_dir</span></code> in its YAML to
 enable recorded-video operations; the path must match the hub’s
@@ -1175,8 +1188,7 @@ When <code class="docutils literal notranslate"><span class="pre">recordings_dir
 and recorded-media operations return <code class="docutils literal notranslate"><span class="pre">recording_disabled</span></code>.</p></li>
 <li><p>Ports are configurable — avoid conflicts with LiveKit (7880–7882) and hub (8080, 8090).</p></li>
 <li><p>Standalone service YAMLs live beside services for direct single-service
-launches; they are not sample configuration. Sample convenience stacks combine shared defaults under
-<code class="docutils literal notranslate"><span class="pre">utils/xr-ai-model-server-stack/yaml/</span></code> with overrides under
+launches; they are not sample configuration. Sample convenience stacks start from those service YAMLs and apply overrides under
 <code class="docutils literal notranslate"><span class="pre">agent-samples/&lt;sample&gt;/model-servers/yaml/&lt;gpu-profile&gt;.yaml</span></code>. Workers
 consume the resulting endpoints through their models JSON.</p></li>
 </ul>

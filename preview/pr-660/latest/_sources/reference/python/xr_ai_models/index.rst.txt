@@ -38,6 +38,14 @@ Attributes
    xr_ai_models.ThinkingControl
 
 
+Exceptions
+----------
+
+.. autoapisummary::
+
+   xr_ai_models.ModelServiceError
+
+
 Classes
 -------
 
@@ -417,6 +425,23 @@ Package Contents
    Structural interface for text-embedding services.
 
 
+   .. py:method:: model_identity() -> str | None
+      :async:
+
+
+      Return a stable backing-model identity, or ``None`` when absent.
+
+      ``None`` means a successful lookup found no identity; it must not hide
+      a failed operation. This is not a weight checksum: deployments that
+      replace weights under the same identity need an explicit cache revision.
+      Consumers choose whether absence permits operation without caching.
+
+      Raises:
+          ModelServiceError: Identity lookup failed or returned invalid
+              metadata. Consumers own any fallback or retry policy.
+
+
+
    .. py:method:: embed(texts: Sequence[str], *, timeout: float | None = None) -> list[list[float]]
       :async:
 
@@ -439,6 +464,13 @@ Package Contents
 
       Release resources owned by the service.
 
+
+
+.. py:exception:: ModelServiceError
+
+
+
+   Failure to determine or maintain an embedding model's reported identity.
 
 
 .. py:data:: ImageInput
@@ -840,6 +872,23 @@ Package Contents
 
    The API key is read once from ``api_key_env`` during construction. An
    injected HTTP client remains owned by the caller and is not closed here.
+
+
+   .. py:method:: model_identity() -> str | None
+      :async:
+
+
+      Read the configured model's backing ``root`` from ``/v1/models``.
+
+      Return ``None`` only when a successful response has no matching model
+      or no backing identity. A served alias alone does not identify weights.
+      Uses the HTTP client's configured timeout; callers own fallback policy.
+
+      Raises:
+          ModelServiceError: The request failed or the response contains
+              invalid or ambiguous metadata. The original transport or JSON
+              exception is retained as the cause when available.
+
 
 
    .. py:method:: embed(texts: Sequence[str], *, timeout: float | None = None) -> list[list[float]]

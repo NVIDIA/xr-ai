@@ -469,11 +469,11 @@
 <code class="docutils literal notranslate"><span class="pre">&lt;repository&gt;/apps/&lt;application&gt;/model-servers</span></code>. Relative paths are
 resolved against the current working directory. Service projects are
 resolved under that repository’s <code class="docutils literal notranslate"><span class="pre">services/</span></code> directory.</p>
-<p><code class="docutils literal notranslate"><span class="pre">services</span></code> selects from <code class="docutils literal notranslate"><span class="pre">speaker-stt</span></code>, <code class="docutils literal notranslate"><span class="pre">stt</span></code>, <code class="docutils literal notranslate"><span class="pre">tts</span></code>, <code class="docutils literal notranslate"><span class="pre">omni</span></code>, <code class="docutils literal notranslate"><span class="pre">vlm</span></code>, and
-<code class="docutils literal notranslate"><span class="pre">embedding</span></code>. The selected <code class="docutils literal notranslate"><span class="pre">base/yaml/&lt;gpu_profile&gt;.yaml</span></code> must contain
+<p><code class="docutils literal notranslate"><span class="pre">services</span></code> selects from <code class="docutils literal notranslate"><span class="pre">speaker-stt</span></code>, <code class="docutils literal notranslate"><span class="pre">stt</span></code>, <code class="docutils literal notranslate"><span class="pre">tts</span></code>, <code class="docutils literal notranslate"><span class="pre">omni</span></code>, <code class="docutils literal notranslate"><span class="pre">vlm</span></code>,
+<code class="docutils literal notranslate"><span class="pre">clef</span></code>, and <code class="docutils literal notranslate"><span class="pre">embedding</span></code>. The selected <code class="docutils literal notranslate"><span class="pre">base/yaml/&lt;gpu_profile&gt;.yaml</span></code> must contain
 exactly those server mappings. Each mapping overrides the corresponding
-shared server YAML. Launch order is speaker ASR, batch STT, TTS, Omni, VLM, then embedding,
-omitting unselected services.</p>
+service’s own YAML in <code class="docutils literal notranslate"><span class="pre">services/</span></code>. Launch order is speaker ASR, batch STT, TTS,
+Omni, VLM, Clef, then embedding, omitting unselected services.</p>
 <p><code class="docutils literal notranslate"><span class="pre">gpu_profile</span></code> selects a checked-in profile by filename stem; <code class="docutils literal notranslate"><span class="pre">None</span></code>
 detects the hardware automatically for startup. <code class="docutils literal notranslate"><span class="pre">stop=False</span></code> requires <code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code>,
 waits for every server to become ready, and returns with servers running.

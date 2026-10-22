@@ -58,7 +58,9 @@ Functions
 .. autoapisummary::
 
    xr_ai_vllm.gpu_compute_major
+   xr_ai_vllm.gpu_is_dgx_spark
    xr_ai_vllm.load_config
+   xr_ai_vllm.parse_config_bool
    xr_ai_vllm.resolve_model_cache
    xr_ai_vllm.setup_hf_env
    xr_ai_vllm.serve
@@ -76,6 +78,11 @@ Package Contents
    before calling. Logs a warning on failure and falls back to 0.
 
 
+.. py:function:: gpu_is_dgx_spark() -> bool
+
+   Return whether the selected GPU is the GB10 in a DGX Spark.
+
+
 .. py:function:: load_config(argv: list[str] | None = None) -> tuple[dict, pathlib.Path, pathlib.Path | None]
 
    Parse ``--config``/``--ready-file`` and load the YAML config.
@@ -84,6 +91,11 @@ Package Contents
    launcher's piped stdout. Returns ``(cfg, yaml_dir, ready_file)``;
    ``yaml_dir`` is the config's directory (cwd when no config is given),
    used as the base for relative paths like ``model_cache``.
+
+
+.. py:function:: parse_config_bool(value: object, key: str) -> bool
+
+   Parse a YAML boolean without treating every non-empty string as true.
 
 
 .. py:function:: resolve_model_cache(cfg: dict, yaml_dir: pathlib.Path, *, default: str) -> pathlib.Path

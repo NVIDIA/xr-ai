@@ -466,7 +466,7 @@ sample’s separate <code class="docutils literal notranslate"><span class="pre"
 </div>
 <p>Samples may add capability or eval sub-projects. Each sample’s <code class="docutils literal notranslate"><span class="pre">model-servers/</span></code>
 project is a separate inference convenience launcher with no worker. It combines
-shared defaults under <code class="docutils literal notranslate"><span class="pre">utils/xr-ai-model-server-stack/yaml/</span></code> with sample-owned GPU
+each service’s own YAML under <code class="docutils literal notranslate"><span class="pre">services/</span></code> with sample-owned GPU
 profiles. Refer to <a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a> for configuration and
 startup, shutdown, and sample-switching workflows.</p>
 <p><strong>Configuration convention</strong> — the YAML configuration path for each process is declared
@@ -555,8 +555,9 @@ the launcher waits for it to signal ready before moving on.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">Parallel([p1,</span> <span class="pre">p2,</span> <span class="pre">...])</span></code> — all non-<code class="docutils literal notranslate"><span class="pre">reuse</span></code> processes in the group are started
 at once; the launcher waits for every spawned member to signal ready before
 the next item in the sequence begins. If any spawned member exits before
-signaling ready, the launcher shuts everything down, just as it would for a
-serial process.</p></li>
+signaling ready, the launcher stops owned processes and unfinished persistent
+wrappers, just as it would for a serial process. Persistent services that
+had signaled readiness when cleanup began stay running.</p></li>
 </ul>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">PROCESSES</span> <span class="o">=</span> <span class="p">[</span>
     <span class="n">Process</span><span class="p">(</span><span class="s2">"vlm"</span><span class="p">,</span> <span class="s2">"../../services/vlm-server"</span><span class="p">,</span> <span class="s2">"vlm_server"</span><span class="p">,</span>
@@ -610,7 +611,11 @@ alive so the launcher can continue monitoring it.</p>
 <p>The launcher injects <code class="docutils literal notranslate"><span class="pre">--ready-file</span> <span class="pre">&lt;path&gt;</span></code> into every spawned command. The
 process must <code class="docutils literal notranslate"><span class="pre">Path(path).touch()</span></code> the moment it is fully initialized and able
 to serve requests. The launcher blocks on the file’s existence; if the process
-exits before creating it, startup is aborted and the whole stack is torn down.
+exits before creating it, startup is aborted. Owned processes and unfinished
+persistent wrappers are stopped; persistent services that had signaled readiness
+when cleanup began stay running. A service in a separate session needs its
+wrapper to forward shutdown signals; persistent pip-backend vLLM does not
+forward them before readiness and can keep loading.
 This makes readiness explicit and process-defined: a model server signals ready
 after weights load, an HTTP server after it starts listening, a worker after
 its IPC receive loop is active.</p>
@@ -632,10 +637,18 @@ list documents the dependency; the launcher skips it entirely and does not
 kill it on shutdown.</p></li>
 </ul>
 <p>On a clean ready-exit, <code class="docutils literal notranslate"><span class="pre">persist</span></code> and <code class="docutils literal notranslate"><span class="pre">reuse</span></code> processes are left running. On an
-abort during startup (Ctrl-C, a process exiting before it signals ready, or an
-unexpected exit while other members of its parallel group start), the launcher
-tears down <strong>everything</strong>, including <code class="docutils literal notranslate"><span class="pre">persist</span></code> processes, so no half-started
-service is left behind.</p>
+abort during startup (SIGINT, SIGTERM, a process exiting before it signals ready,
+or an unexpected exit while other members of its parallel group start), the launcher
+stops <code class="docutils literal notranslate"><span class="pre">own</span></code> processes and <code class="docutils literal notranslate"><span class="pre">persist</span></code> wrappers that have not signaled readiness.
+Persistent services that had signaled readiness when cleanup began stay running,
+including ready members of a parallel group whose other members failed. For
+model-server stacks, use the sample’s model command with <code class="docutils literal notranslate"><span class="pre">--stop</span></code> to clear
+retained models. Externally
+started <code class="docutils literal notranslate"><span class="pre">reuse</span></code> services remain untouched. Signal handling stays active through
+cleanup; repeated SIGINT or SIGTERM does not interrupt cleanup or force early
+SIGKILL. A wrapper that ignores SIGTERM can take the full 20-second shutdown
+timeout plus up to 5 seconds waiting after SIGKILL. SIGKILL and launcher crashes
+cannot run this cleanup.</p>
 </section>
 </section>
 <section id="process-failures">
@@ -652,13 +665,15 @@ pipe open cannot hold up this wait indefinitely.</p>
 <p>An unexpected monitored exit is a stack failure even when the child exits
 with code 0; the launcher returns 1 in that case. Other child exit codes are
 preserved, and signal termination maps to <code class="docutils literal notranslate"><span class="pre">128</span> <span class="pre">+</span> <span class="pre">signal</span> <span class="pre">number</span></code>. Startup
-cancellation returns 130; cancellation after readiness follows normal
-shutdown. Summary errors do not replace the original failure. Members of a
+cancellation returns <code class="docutils literal notranslate"><span class="pre">128</span> <span class="pre">+</span> <span class="pre">signal</span> <span class="pre">number</span></code> (130 for SIGINT, 143 for SIGTERM);
+cancellation after readiness follows normal shutdown. Summary errors do not
+replace the original failure. Members of a
 parallel startup group remain monitored until the entire group is ready. An
-unexpected exit during that wait triggers startup cleanup, including when the
-process had already signaled ready. With <code class="docutils literal notranslate"><span class="pre">exit_after_ready=True</span></code>, a <code class="docutils literal notranslate"><span class="pre">persist</span></code>
-wrapper may exit successfully after signaling ready while its service keeps
-running.</p>
+unexpected exit during that wait triggers startup cleanup even if the exiting
+process had already signaled ready. Other persistent services that had signaled
+readiness when cleanup began stay running. With <code class="docutils literal notranslate"><span class="pre">exit_after_ready=True</span></code>, a
+<code class="docutils literal notranslate"><span class="pre">persist</span></code> wrapper may exit successfully after signaling ready while its service
+keeps running.</p>
 </section>
 <section id="adding-a-new-managed-process">
 <h2>Adding a new managed process<a class="headerlink" href="#adding-a-new-managed-process" title="Link to this heading">#</a></h2>

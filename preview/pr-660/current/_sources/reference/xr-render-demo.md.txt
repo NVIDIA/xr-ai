@@ -98,7 +98,7 @@ If `nvidia-smi` is missing, fails, reports no GPUs, or does not list the
 requested index, the wrapper logs a warning and skips pinning rather than
 failing startup.
 
-The model-side fields live under `utils/xr-ai-model-server-stack/yaml/` and
+The model-side fields live in the services' own YAML under `services/` and
 `agent-samples/xr-render-demo/model-servers/yaml/`. Set them
 to different GPUs so
 the XR compositor and the agentic LLM do not share a card.

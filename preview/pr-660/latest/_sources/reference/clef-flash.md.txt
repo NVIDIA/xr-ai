@@ -32,16 +32,15 @@ same provenance fields.
 
 ## Launching
 
-From `model-server-samples/clef-flash/`, run:
+Select `clef` in a sample's model-server stack, or start the service from the
+repository root:
 
 ```bash
-export UV_CONFIG_FILE=../../uv.toml
-uv sync
-uv run clef_flash_model
+uv --config-file uv.toml run --project services/clef-server clef_server \
+  --config services/clef-server/clef_server.yaml
 ```
 
-The sample starts `services/clef-server` persistently on `127.0.0.1:8120`.
-Its `yaml/clef_server.yaml` pins model revision
+The service listens on `127.0.0.1:8120`. Its `services/clef-server/clef_server.yaml` pins model revision
 `17f0b0ad64efb65d273590632833508766b2aae6` from the
 `Cloudflare/clef-flash` model repository. The service resolves the configured
 pinned snapshot from the repository's ignored `models/` cache first and passes
@@ -51,14 +50,10 @@ model loading with the model, revision, and cache directory. Offline startup
 assumes a previously working cache. Refer to
 {ref}`starting-model-services-without-network-access` for cache behavior.
 
-With `UV_CONFIG_FILE` still set, use `uv run clef_flash_model --stop` from the
-sample directory to stop only a listener carrying the matching Clef ownership
-and port markers. It waits for that process to exit, including request and native
-inference cleanup, before reporting success; closing the HTTP listener alone
-does not complete shutdown. Linux process handles keep termination and timeout
-escalation tied to the same verified process. The stop command never treats a
-Docker container on that port as the Clef service. A server already listening on the configured port is reused
-only when it has those ownership markers and its health response matches the
+A sample stack that selects `clef` stops it with its `--stop` command, which
+signals only a listener carrying the stack's managed-port markers. A server
+already listening on the configured port is reused only when it has those
+ownership markers and its health response matches the
 complete requested server configuration; any other listener causes startup to
 fail before loading model weights.
 
@@ -70,16 +65,8 @@ limit receive HTTP 422; increase `max_length` only when GPU memory allows it.
 (clef-service-updates)=
 ## Updating a running service
 
-Before updating the checkout or changing server configuration, stop the service
-from the old checkout in `model-server-samples/clef-flash/`:
-
-```bash
-export UV_CONFIG_FILE=../../uv.toml
-uv run clef_flash_model --stop
-```
-
-Update the checkout or configuration, then start the service with
-`uv run clef_flash_model`. Model and configuration identity do not identify the
+Before updating the checkout or changing server configuration, stop the service,
+then start it again. Model and configuration identity do not identify the
 running application code version. Restarting ensures that requests reach the
 updated implementation, including support for image decisions.
 
