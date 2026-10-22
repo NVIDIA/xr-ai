@@ -7,11 +7,9 @@ from __future__ import annotations
 
 import argparse
 import os
-import select
-import signal
 from pathlib import Path
 
-from xr_ai_launcher import Process, has_ownership_marker, pid_on_port_checked, read_config_scalar, run_stack
+from xr_ai_launcher import Process, read_config_scalar, run_stack, stop_marked_listener
 from xr_ai_logging import setup_logging
 
 _BASE = Path(__file__).resolve().parent
@@ -19,8 +17,6 @@ _BASE = Path(__file__).resolve().parent
 
 _CONFIG = _BASE.parents[1] / "services/clef-server/clef_server.yaml"
 _MARKER = "XR_AI_CLEF"
-_STOP_TIMEOUT_S = 20.0
-_KILL_TIMEOUT_S = 5.0
 
 
 def _port() -> int:
@@ -31,52 +27,6 @@ def _port() -> int:
     if not 1 <= port <= 65535:
         raise ValueError(f"{_CONFIG}: port must be between 1 and 65535")
     return port
-
-
-def _wait_for_process_exit(pidfd: int, timeout_s: float) -> bool:
-    # Uvicorn closes the listener before draining requests and native work.
-    # A pidfd becomes readable only when that exact process exits.
-    return bool(select.select([pidfd], [], [], timeout_s)[0])
-
-
-def _stop_clef(port: int) -> bool:
-    pid, checked, listening = pid_on_port_checked(port)
-    if not checked or (listening and pid is None):
-        print(f"clef-flash: cannot inspect ownership of port {port}; not stopping")
-        return False
-    if not listening:
-        print("clef-flash: no persistent Clef server is running")
-        return True
-    assert pid is not None
-    pidfd = None
-    try:
-        # Capture identity before verification; all later signals address this
-        # process handle even if Linux recycles its numeric PID during shutdown.
-        pidfd = os.pidfd_open(pid)
-        if not has_ownership_marker(pid, port, _MARKER):
-            print(f"clef-flash: listener on port {port} is not an owned Clef server; not stopping")
-            return False
-        if pid_on_port_checked(port) != (pid, True, True):
-            print(f"clef-flash: listener on port {port} changed during inspection; not stopping")
-            return False
-        signal.pidfd_send_signal(pidfd, signal.SIGTERM)
-        if _wait_for_process_exit(pidfd, _STOP_TIMEOUT_S):
-            print(f"clef-flash: stopped Clef server on port {port}")
-            return True
-        signal.pidfd_send_signal(pidfd, signal.SIGKILL)
-        if _wait_for_process_exit(pidfd, _KILL_TIMEOUT_S):
-            print(f"clef-flash: force-stopped Clef server on port {port}")
-            return True
-    except ProcessLookupError:
-        return True
-    except OSError as exc:
-        print(f"clef-flash: cannot track the configured Clef process: {exc}; not stopping")
-        return False
-    finally:
-        if pidfd is not None:
-            os.close(pidfd)
-    print(f"clef-flash: Clef server on port {port} is still running")
-    return False
 
 
 def run() -> None:
@@ -93,7 +43,7 @@ def run() -> None:
         os.environ.setdefault("UV_CONFIG_FILE", str(root_uv_config))
     port = _port()
     if args.stop:
-        if not _stop_clef(port):
+        if not stop_marked_listener(port, _MARKER, "clef-flash"):
             raise SystemExit("clef-flash: failed to stop the configured Clef server")
         return
     process = Process(

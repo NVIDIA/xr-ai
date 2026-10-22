@@ -9,7 +9,7 @@ import tempfile
 from pathlib import Path
 
 import yaml
-from xr_ai_launcher import Process, detect_gpu_config, require_credentials, run_stack
+from xr_ai_launcher import Process, detect_gpu_config, require_credentials, run_stack, stop_marked_listener
 from xr_ai_logging import setup_logging
 from xr_ai_vllm import stop_persistent_servers
 
@@ -21,8 +21,12 @@ _SERVICES = {
     "tts": ("pocket-tts", "pocket_tts_server", "pocket_tts_server"),
     "omni": ("nemotron-omni-llm", "nemotron_omni_llm_server", "nemotron_omni_llm_server"),
     "vlm": ("vlm-server", "vlm_server", "vlm_server"),
+    "clef": ("clef-server", "clef_server", "clef_server"),
     "embedding": ("embedding-server", "embedding_server", "embedding_server"),
 }
+
+# Services that are not vLLM servers are stopped by their process-ownership marker.
+_MARKED = {"clef": "XR_AI_CLEF"}
 
 
 def _read_yaml(path: Path) -> dict:
@@ -104,11 +108,11 @@ def run_model_stack(
     resolved against the current working directory. Service projects are
     resolved under that repository's ``services/`` directory.
 
-    ``services`` selects from ``speaker-stt``, ``stt``, ``tts``, ``omni``, ``vlm``, and
-    ``embedding``. The selected ``base/yaml/<gpu_profile>.yaml`` must contain
+    ``services`` selects from ``speaker-stt``, ``stt``, ``tts``, ``omni``, ``vlm``,
+    ``clef``, and ``embedding``. The selected ``base/yaml/<gpu_profile>.yaml`` must contain
     exactly those server mappings. Each mapping overrides the corresponding
-    service's own YAML in ``services/``. Launch order is speaker ASR, batch STT, TTS, Omni, VLM, then embedding,
-    omitting unselected services.
+    service's own YAML in ``services/``. Launch order is speaker ASR, batch STT, TTS, Omni, VLM,
+    Clef, then embedding, omitting unselected services.
 
     ``gpu_profile`` selects a checked-in profile by filename stem; ``None``
     detects the hardware automatically for startup. ``stop=False`` requires ``HF_TOKEN``,
@@ -132,7 +136,12 @@ def run_model_stack(
     log_file = setup_logging("orchestrator", namespace=f"{base.parent.name}-models")
     if stop:
         configs = _configs(base, services, gpu_profile)
-        if not stop_persistent_servers([(name, config["port"]) for name, config in configs.items()]):
+        persistent = [(name, config["port"]) for name, config in configs.items() if name not in _MARKED]
+        stopped = stop_persistent_servers(persistent) if persistent else True
+        for name, config in configs.items():
+            if name in _MARKED:
+                stopped = stop_marked_listener(config["port"], _MARKED[name], name) and stopped
+        if not stopped:
             raise RuntimeError("one or more configured model servers could not be stopped")
         return
     configs = _configs(base, services, gpu_profile or detect_gpu_config())

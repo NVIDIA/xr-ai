@@ -452,6 +452,48 @@ def test_override_paths_and_ports_are_used_for_stop(monkeypatch, tmp_path):
     assert stopped == [("stt", 9213)]
 
 
+def test_clef_is_explicitly_selected_with_service_defaults(tmp_path):
+    base = tmp_path / "model-servers"
+    (base / "yaml").mkdir(parents=True)
+    (base / "yaml/custom.yaml").write_text("clef: {device: cuda:1, port: 9210}\n")
+    configs = _stack._configs(base, ("clef",), "custom")
+    processes = _stack._processes(configs, tmp_path, _REPO_ROOT)
+    assert len(processes) == 1
+    process = processes[0]
+    assert (process.name, process.command, process.port) == ("clef", "clef_server", 9210)
+    assert Path(process.project) == _REPO_ROOT / "services/clef-server"
+    assert process.launch_mode == "persist"
+    config = yaml.safe_load(Path(process.config).read_text())
+    assert config["model_cache"] == str((_REPO_ROOT / "models").resolve())
+    assert config["device"] == "cuda:1"
+
+
+@pytest.mark.parametrize("profile,port", [(None, 8120), ("custom", 9210)])
+def test_clef_stop_uses_selected_port_without_gpu_or_credentials(monkeypatch, tmp_path, profile, port):
+    (tmp_path / "yaml").mkdir()
+    (tmp_path / "yaml/custom.yaml").write_text("clef: {port: 9210}\n")
+    monkeypatch.delenv("HF_TOKEN", raising=False)
+    monkeypatch.setattr(_stack, "detect_gpu_config", lambda: pytest.fail("stop detected GPU"))
+    monkeypatch.setattr(_stack, "require_credentials", lambda *_a: pytest.fail("stop required credentials"))
+    monkeypatch.setattr(_stack, "run_stack", lambda *_a, **_kw: pytest.fail("stop launched servers"))
+    monkeypatch.setattr(_stack, "stop_persistent_servers", lambda _targets: pytest.fail("Clef is not a vLLM server"))
+    stopped = []
+    monkeypatch.setattr(_stack, "stop_marked_listener", lambda *args: stopped.append(args) or True)
+    run_model_stack(tmp_path, ("clef",), stop=True, gpu_profile=profile)
+    assert stopped == [(port, "XR_AI_CLEF", "clef")]
+
+
+def test_clef_failing_to_stop_fails_the_stack_stop(monkeypatch, tmp_path):
+    (tmp_path / "yaml").mkdir()
+    (tmp_path / "yaml/custom.yaml").write_text("stt: {}\nclef: {}\n")
+    persistent = []
+    monkeypatch.setattr(_stack, "stop_persistent_servers", lambda targets: persistent.extend(targets) or True)
+    monkeypatch.setattr(_stack, "stop_marked_listener", lambda *_args: False)
+    with pytest.raises(RuntimeError, match="could not be stopped"):
+        run_model_stack(tmp_path, ("stt", "clef"), stop=True, gpu_profile="custom")
+    assert persistent == [("stt", 8103)]
+
+
 @pytest.mark.parametrize("body", [
     "{}", "stt: []", "stt: {port: 0}", "stt: {port: true}",
     "stt: {port: 65536}", "stt: [", "stt: {model_cache: null}",

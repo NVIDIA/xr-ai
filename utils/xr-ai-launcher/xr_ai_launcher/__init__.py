@@ -44,7 +44,7 @@ from ._credentials import (
 )
 from ._gpu import detect_gpu_config
 from ._models import ModelDeployment, load_deployment_profile, load_model_deployment
-from ._ownership import has_ownership_marker, pid_on_port_checked
+from ._ownership import has_ownership_marker, pid_on_port_checked, stop_marked_listener
 from ._processes import ManagedProcess
 from ._stack import Parallel, Process, run_stack
 
@@ -55,7 +55,7 @@ __all__ = [
     "read_config_scalar",
     "GPUInventoryError", "detect_gpu_config",
     "ModelDeployment", "load_deployment_profile", "load_model_deployment",
-    "has_ownership_marker", "pid_on_port_checked",
+    "has_ownership_marker", "pid_on_port_checked", "stop_marked_listener",
     "ManagedProcess",
     "Parallel", "Process", "run_stack",
 ]
