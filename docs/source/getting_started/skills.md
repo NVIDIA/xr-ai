@@ -32,11 +32,17 @@ paste it to your coding agent:
 
 Prefer to do it by hand? Follow {doc}`/getting_started/quickstart`.
 
+Choose `run-demo` to try xr-ai, `getting-started` to set up for development,
+or `build-your-app` to build an application.
+After installing `run-demo` using the procedure below, ask your agent:
+"Use run-demo to run xr-ai and give me the browser link."
+
 ## Available skills
 
 | Skill | What it does |
 |---|---|
 | [`getting-started`](https://github.com/NVIDIA/xr-ai/blob/main/skills/getting-started/SKILL.md) | Sets an agent up to build on xr-ai: repo, working contract, docs, reference sample |
+| [`run-demo`](https://github.com/NVIDIA/xr-ai/blob/main/skills/run-demo/SKILL.md) | Runs the Simple VLM browser demo and returns its connection link and verification status |
 | [`build-your-app`](https://github.com/NVIDIA/xr-ai/blob/main/skills/build-your-app/SKILL.md) | Guides your coding agent from checkout setup through building an application |
 | [`gh-review-xr-ai`](https://github.com/NVIDIA/xr-ai/blob/main/skills/gh-review-xr-ai/SKILL.md) | Reviews xr-ai PRs with strict scope discipline and comment-only feedback |
 | [`gh-manage-xr-ai-reviews`](https://github.com/NVIDIA/xr-ai/blob/main/skills/gh-manage-xr-ai-reviews/SKILL.md) | Tracks an XR-AI review inbox with overall status, next actions, and safe batching |
@@ -68,7 +74,7 @@ curl -fsSL --create-dirs -o "$SKILLS_DIR/$SKILL/agents/openai.yaml" \
   "https://raw.githubusercontent.com/NVIDIA/xr-ai/$REF/skills/$SKILL/agents/openai.yaml"
 ```
 
-If the selected release predates the skill bank, ask the user before using
-`main` for both the skill and the checkout. An agent without a skill
+If the requested skill is absent at the selected release, ask the user before
+using `main` for the skill, checkout, and documentation. An agent without a skill
 installation mechanism can read the downloaded `SKILL.md` and follow it
 directly in the current session.

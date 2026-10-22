@@ -14,6 +14,9 @@ walking you through the choices below. Refer to {doc}`skills` for how it works.
 :language: text
 ```
 
+To have your agent run the browser demo, install `run-demo` as described in
+{doc}`skills` and ask it to run xr-ai.
+
 The remainder of this quickstart is the manual path.
 
 Every sample follows the same pattern: **start the sample's model stack, wait for

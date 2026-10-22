@@ -5,8 +5,8 @@
 
 # xr-ai skill bank
 
-Setup skills that teach coding agents the xr-ai working contract, documentation,
-and reference sample. Each directory follows the open
+Skills that guide coding agents through xr-ai setup, demos, application
+development, and reviews. Each directory follows the open
 [Agent Skills](https://agentskills.io) specification.
 
 <!-- Compatibility anchors for headings consolidated into the documentation. -->
