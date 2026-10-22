@@ -33,11 +33,13 @@ publisher can preserve each participant's identity and originating timestamp.
 It receives only acknowledgments, admission preambles, and clarification or
 release messages.
 
-Configure `Conversation(runtime=runtime, output_topic=voice_output_topic)` when
-using it as a routed destination, and install `xr-ai-conversation[voice]`.
+Construct `Conversation(runtime=runtime, output_topic=voice_output_topic)` with
+both required arguments, and install `xr-ai-conversation[voice]`.
 Remove any previous `output` callable; Conversation now publishes directly and
-owns stream finalization and failure recovery. Standalone
-`Conversation.stream()` needs neither runtime nor voice output configuration.
+owns stream finalization and failure recovery.
+`Conversation.stream()` has been removed. Submit requests with
+`await conversation.answer(AgentTurn(participant_id, turn_id, request))`; the
+conversation streams its answer to the configured output topic.
 
 
 ### Persistent services after startup failure

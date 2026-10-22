@@ -371,9 +371,8 @@ async def test_finite_ack_does_not_block_direct_answer_in_bounded_voice_consumer
 
 @pytest.mark.parametrize("package", ["xr_ai_routing", "xr_ai_conversation"])
 def test_pure_package_import_does_not_load_voice_media(package):
-    construct = f"; {package}.Conversation(object())" if package == "xr_ai_conversation" else ""
     result = subprocess.run(
-        [sys.executable, "-c", f"import sys, {package}{construct}; assert 'xr_ai_voice' not in sys.modules"],
+        [sys.executable, "-c", f"import sys, {package}; assert 'xr_ai_voice' not in sys.modules"],
         capture_output=True,
         text=True,
         check=False,

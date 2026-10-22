@@ -16,7 +16,9 @@ from unittest.mock import patch
 
 from _common import ScriptedLLM, ask, load_cases, make_eval_llm, matches, normalize, parser, settle, validate_suite
 from xr_ai_conversation import Conversation, ConversationContextUpdate
+from xr_ai_routing import AgentTurn
 from xr_ai_runtime import AgentRuntime, Topic
+from xr_ai_voice import VoiceOutput
 
 _PARTICIPANT = "alice"
 _MINUTE_NS = 60_000_000_000
@@ -40,24 +42,25 @@ async def _seed(
 ) -> tuple[Conversation, AgentRuntime]:
     summary_topics = case.get("summary_topics", {})
     incremental_topics = case.get("incremental_topics", {})
+    runtime = AgentRuntime()
     conversation = Conversation(
         llm,
+        runtime=runtime,
+        output_topic=Topic("conversation-eval.output", VoiceOutput),
         summary_context_topics=tuple(summary_topics),
         incremental_context_topics=tuple(incremental_topics),
         dialogue_budget_bytes=case.get("dialogue_budget_bytes", 8_000),
         topic_budget_bytes={**summary_topics, **incremental_topics},
     )
-    runtime = AgentRuntime()
     if summary_topics or incremental_topics:
         runtime.register("conversation-context", conversation.context_subscriber())
     llm.summaries = dict(case.get("summaries", {}))
     await runtime.start()
-    for step in case["steps"]:
+    for index, step in enumerate(case["steps"]):
         clock.advance(step_minutes)
         if "say" in step:
             llm.answer = step["say"]["assistant"]
-            async for _ in conversation.stream(step["say"]["user"], _PARTICIPANT):
-                pass
+            await conversation.answer(AgentTurn(_PARTICIPANT, str(index), step["say"]["user"]))
         else:
             publication = step["publish"]
             await runtime.publish(

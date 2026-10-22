@@ -52,8 +52,8 @@ Cancellation drains the model without publishing further frames. Model and
 publication failures propagate to the caller.
 
 The application starts the runtime before answering and stops it after draining
-routed work. `Conversation.stream()` yields text without runtime or voice output
-configuration.
+routed work. `answer(turn)` is the public request handler; streaming model
+iteration is private to the conversation.
 
 ## Named context topics
 
@@ -64,6 +64,8 @@ The topic determines how its text updates that source; the payload contains only
 ```python
 conversation = Conversation(
     llm,
+    runtime=runtime,
+    output_topic=VOICE_OUTPUT_TOPIC,
     summary_context_topics=("sample.monitor-window",),
     incremental_context_topics=("sample.notes",),
 )

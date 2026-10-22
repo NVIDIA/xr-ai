@@ -60,7 +60,7 @@ _logger = logging.getLogger(__name__)
 
 
 class Conversation(RoutableAgent):
-    """Stream an application-instructed conversation with participant-scoped context.
+    """Application-instructed conversation agent with participant-scoped context.
 
     :param llm: Typed streamed language model service.
     :param instructions: Application-owned prompt text defining domain, role, tone, and handling policy.
@@ -70,8 +70,7 @@ class Conversation(RoutableAgent):
     :param dialogue_budget_bytes: UTF-8 byte budget for completed dialogue rendered into a request.
     :param topic_budget_bytes: UTF-8 byte budget for each topic's context rendered into a request:
         one value for every topic, or a mapping with a value for each configured topic.
-    :param runtime: Runtime used to publish routed answers; configure together with ``output_topic``.
-        Neither is needed by ``stream()``. The application owns runtime startup and shutdown.
+    :param runtime: Runtime used to publish answers. The application owns runtime startup and shutdown.
     :param output_topic: Explicit ``VoiceOutput`` topic for routed answers; requires ``xr-ai-conversation[voice]``.
         The conversation publishes with its routing name as source, the turn ID as response ID,
         and the originating timestamp. It owns stream framing, finalization, and failure recovery.
@@ -94,20 +93,19 @@ class Conversation(RoutableAgent):
         dialogue_budget_bytes: int = _DEFAULT_DIALOGUE_BUDGET_BYTES,
         topic_budget_bytes: int | Mapping[str, int] = _DEFAULT_TOPIC_BUDGET_BYTES,
         compaction_input_budget_bytes: int = _DEFAULT_COMPACTION_INPUT_BUDGET_BYTES,
-        runtime: AgentRuntime | None = None,
-        output_topic: Topic[VoiceOutput] | None = None,
+        runtime: AgentRuntime,
+        output_topic: Topic[VoiceOutput],
     ) -> None:
-        if (runtime is None) != (output_topic is None):
-            raise ValueError("Conversation runtime and output_topic must be configured together")
-        if output_topic is not None:
-            try:
-                from xr_ai_voice import VoiceOutput
-            except ModuleNotFoundError as error:
-                if error.name != "xr_ai_voice":
-                    raise
-                raise ImportError("voice output requires the xr-ai-conversation[voice] extra") from error
-            if output_topic.message_type is not VoiceOutput:
-                raise TypeError("Conversation output_topic must carry VoiceOutput")
+        if runtime is None or output_topic is None:
+            raise ValueError("Conversation requires runtime and output_topic")
+        try:
+            from xr_ai_voice import VoiceOutput
+        except ModuleNotFoundError as error:
+            if error.name != "xr_ai_voice":
+                raise
+            raise ImportError("voice output requires the xr-ai-conversation[voice] extra") from error
+        if output_topic.message_type is not VoiceOutput:
+            raise TypeError("Conversation output_topic must carry VoiceOutput")
         summary_names = self._validate_topic_names("summary_context_topics", summary_context_topics)
         incremental_names = self._validate_topic_names("incremental_context_topics", incremental_context_topics)
         names = (*summary_names, *incremental_names)
@@ -168,12 +166,10 @@ class Conversation(RoutableAgent):
         a successful answer returns the complete text as routing context.
         """
 
-        if self._runtime is None or self._output_topic is None:
-            raise ValueError("Conversation.answer requires configured runtime and output_topic")
         from xr_ai_voice import VoiceOutput
 
         fragments: list[str] = []
-        stream = self.stream(turn.query, turn.participant_id, history=turn.history)
+        stream = self._stream_response(turn.query, turn.participant_id, history=turn.history)
         opened = False
         publication_failed = False
         cancelled = False
@@ -273,7 +269,7 @@ class Conversation(RoutableAgent):
 
         return make_context_subscriber(self, self._summary_context_topics, self._incremental_context_topics)
 
-    async def stream(
+    async def _stream_response(
         self,
         request: str,
         participant_id: str,

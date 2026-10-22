@@ -379,8 +379,8 @@ async def test_admission_release_text_and_rerouted_answer_keep_separate_history_
 
 @pytest.mark.asyncio
 async def test_release_keeps_completed_context_and_departure_forgets_it():
-    conversation = Conversation(_LLM())  # type: ignore[arg-type]
-    _ = [chunk async for chunk in conversation.stream("Remember copper.", "alice")]
+    conversation = Conversation(_LLM(), runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC)  # type: ignore[arg-type]
+    _ = [chunk async for chunk in conversation._stream_response("Remember copper.", "alice")]
 
     # Routing calls release() when focus moves elsewhere; history must survive it.
     await conversation.release("alice")
@@ -390,7 +390,7 @@ async def test_release_keeps_completed_context_and_departure_forgets_it():
     assert conversation._context.transcript("alice") == ()
     await conversation.close()
     with pytest.raises(RuntimeError, match="closing"):
-        _ = [chunk async for chunk in conversation.stream("Hello.", "alice")]
+        _ = [chunk async for chunk in conversation._stream_response("Hello.", "alice")]
 
 
 # ---------------------------------------------------------------------------
@@ -398,7 +398,12 @@ async def test_release_keeps_completed_context_and_departure_forgets_it():
 
 
 def test_answer_request_keeps_instructions_context_and_request_separate():
-    conversation = Conversation(_LLM(), instructions="Answer like a lab assistant.")  # type: ignore[arg-type]
+    conversation = Conversation(
+        _LLM(),
+        runtime=AgentRuntime(),
+        output_topic=_OUTPUT_TOPIC,
+        instructions="Answer like a lab assistant.",
+    )  # type: ignore[arg-type]
     conversation._context.append("alice", "Question", "Answer", timestamp_us=_NOON_US)
 
     system, context, request = conversation._answer_messages("alice", "Current question")
@@ -423,7 +428,7 @@ def _positions(text, *needles):
 @pytest.mark.asyncio
 async def test_prompt_orders_every_section_by_time_so_corrections_follow_what_they_supersede():
     conversation = Conversation(
-        _LLM(),  # type: ignore[arg-type]
+        _LLM(), runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC,  # type: ignore[arg-type]
         summary_context_topics=("tea.status",),
         incremental_context_topics=("lab.notes",),
     )
@@ -462,7 +467,12 @@ async def test_prompt_orders_every_section_by_time_so_corrections_follow_what_th
 async def test_summary_renders_first_with_its_time_when_another_section_has_older_raw_updates():
     """A summary's span can overlap another section's raw update; both show their times for the model."""
 
-    conversation = Conversation(_LLM(), incremental_context_topics=("lab.notes",))  # type: ignore[arg-type]
+    conversation = Conversation(
+        _LLM(),
+        runtime=AgentRuntime(),
+        output_topic=_OUTPUT_TOPIC,
+        incremental_context_topics=("lab.notes",),
+    )  # type: ignore[arg-type]
     context = conversation._context
     memory = context._memory("alice")
     memory.context_order.append("lab.notes")
@@ -498,7 +508,7 @@ async def test_each_section_is_bounded_so_a_busy_topic_cannot_evict_another():
 
     llm = _StuckCompactionLLM()
     conversation = Conversation(
-        llm,  # type: ignore[arg-type]
+        llm, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC,  # type: ignore[arg-type]
         summary_context_topics=("instrument.status",),
         incremental_context_topics=("notes",),
         topic_budget_bytes={"instrument.status": 400, "notes": 1000},
@@ -528,7 +538,7 @@ async def test_each_section_is_bounded_so_a_busy_topic_cannot_evict_another():
 async def test_oversized_newest_exchange_is_clipped_in_the_prompt_instead_of_wiping_context():
     llm = _LLM()
     conversation = Conversation(
-        llm,  # type: ignore[arg-type]
+        llm, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC,  # type: ignore[arg-type]
         incremental_context_topics=("notes",),
         dialogue_budget_bytes=1500,
         topic_budget_bytes=1500,
@@ -537,9 +547,9 @@ async def test_oversized_newest_exchange_is_clipped_in_the_prompt_instead_of_wip
         "alice", "notes", ConversationContextUpdate(text="Bench 3 is usable."), mode="incremental"
     )
     pasted_log = "Controller log:\n" + "heartbeat ok\n" * 1500 + "ERROR interlock tripped code E-4471"
-    _ = [chunk async for chunk in conversation.stream(pasted_log, "alice")]
+    _ = [chunk async for chunk in conversation._stream_response(pasted_log, "alice")]
     await _settle(conversation, "alice")
-    _ = [chunk async for chunk in conversation.stream("What was the error code?", "alice")]
+    _ = [chunk async for chunk in conversation._stream_response("What was the error code?", "alice")]
 
     context = llm.messages[-1][-2].content
     assert len(context.encode("utf-8")) <= 3000 + 300
@@ -554,7 +564,7 @@ async def test_oversized_newest_exchange_is_clipped_in_the_prompt_instead_of_wip
 async def test_oversized_uncompacted_update_is_clipped_in_the_prompt_instead_of_dropped():
     llm = _LLM()
     conversation = Conversation(
-        llm,  # type: ignore[arg-type]
+        llm, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC,  # type: ignore[arg-type]
         incremental_context_topics=("notes",),
         topic_budget_bytes=1500,
     )
@@ -563,7 +573,7 @@ async def test_oversized_uncompacted_update_is_clipped_in_the_prompt_instead_of_
     )
     # Store a large raw update without letting compaction run before the next prompt.
     await conversation._context.update("alice", "notes", "incremental", "dump " * 2000 + "Purge started.")
-    _ = [chunk async for chunk in conversation.stream("Status?", "alice")]
+    _ = [chunk async for chunk in conversation._stream_response("Status?", "alice")]
 
     context = llm.messages[-1][-2].content
     assert "Purge started." in context
@@ -574,7 +584,7 @@ async def test_oversized_uncompacted_update_is_clipped_in_the_prompt_instead_of_
 @pytest.mark.asyncio
 async def test_oversized_summary_topic_state_is_clipped_to_its_budget(caplog):
     conversation = Conversation(
-        _LLM(),  # type: ignore[arg-type]
+        _LLM(), runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC,  # type: ignore[arg-type]
         summary_context_topics=("status",),
         topic_budget_bytes=200,
     )
@@ -689,21 +699,22 @@ async def test_conversation_uses_dialogue_summary_and_keeps_newer_exchanges_verb
             return _response("The user identified a copper label.")
 
     llm = _DialogueLLM()
-    conversation = Conversation(llm, dialogue_budget_bytes=700)  # type: ignore[arg-type]
+    conversation = Conversation(llm, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC, dialogue_budget_bytes=700)  # type: ignore[arg-type]
     old_history = (
         AgentExchange("The label is copper." + " x" * 160, "The label was observed." + " y" * 160),
         AgentExchange("Check the facilities later." + " z" * 160, "That request remains open." + " w" * 160),
     )
-    assert [chunk async for chunk in conversation.stream("What is the label?", "alice", history=old_history)] == [
-        "Hello there."
+    chunks = [
+        chunk async for chunk in conversation._stream_response("What is the label?", "alice", history=old_history)
     ]
+    assert chunks == ["Hello there."]
     await _settle(conversation, "alice")
     assert conversation._context.dialogue_snapshot("alice")[0].text == (
         "The user identified a copper label and left the facilities check open."
     )
 
     current = AgentExchange("What is the label?", "Hello there.")
-    _ = [chunk async for chunk in conversation.stream("Remember?", "alice", history=old_history + (current,))]
+    _ = [chunk async for chunk in conversation._stream_response("Remember?", "alice", history=old_history + (current,))]
     prompt_context = llm.messages[-1][-2].content
     assert "The user identified a copper label and left the facilities check open." in prompt_context
     assert "User: What is the label?\nAssistant: “Hello there.”" in prompt_context
@@ -712,7 +723,7 @@ async def test_conversation_uses_dialogue_summary_and_keeps_newer_exchanges_verb
 
 
 def test_dialogue_trigger_is_half_the_section_budget_measured_as_rendered():
-    conversation = Conversation(_LLM(), dialogue_budget_bytes=2000)  # type: ignore[arg-type]
+    conversation = Conversation(_LLM(), runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC, dialogue_budget_bytes=2000)  # type: ignore[arg-type]
     limits = conversation._compaction_limits(2000)
     assert limits["trigger_budget_bytes"] == 1000
     assert limits["summary_budget_bytes"] == 500
@@ -729,9 +740,9 @@ def test_dialogue_trigger_is_half_the_section_budget_measured_as_rendered():
 async def test_short_turns_compact_before_the_prompt_omits_any_of_them(caplog):
     """Review finding: stored-size triggers let many short turns overflow the prompt before compaction."""
 
-    conversation = Conversation(_LLM())  # type: ignore[arg-type]
+    conversation = Conversation(_LLM(), runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC)  # type: ignore[arg-type]
     for index in range(200):
-        _ = [chunk async for chunk in conversation.stream(f"ok {index}", "alice")]
+        _ = [chunk async for chunk in conversation._stream_response(f"ok {index}", "alice")]
         await _settle(conversation, "alice")
     assert "omitting uncompacted context" not in caplog.text
     assert conversation._context.dialogue_snapshot("alice")[0].text == "Compacted source facts."
@@ -807,9 +818,14 @@ async def test_compaction_cut_off_at_the_token_limit_keeps_the_exchanges(caplog)
         async def chat(self, messages, **_kwargs):
             return _response("User's name is Al. User prefers tea. Cor", finish_reason="length")
 
-    conversation = Conversation(_CutOffLLM(), dialogue_budget_bytes=400)  # type: ignore[arg-type]
+    conversation = Conversation(
+        _CutOffLLM(),
+        runtime=AgentRuntime(),
+        output_topic=_OUTPUT_TOPIC,
+        dialogue_budget_bytes=400,
+    )  # type: ignore[arg-type]
     for index in range(6):
-        _ = [chunk async for chunk in conversation.stream(f"Fact {index}: " + "f" * 60, "alice")]
+        _ = [chunk async for chunk in conversation._stream_response(f"Fact {index}: " + "f" * 60, "alice")]
         await _settle(conversation, "alice")
 
     summary, recent = conversation._context.dialogue_snapshot("alice")
@@ -899,10 +915,10 @@ async def test_answers_stay_responsive_while_compaction_is_stuck_and_commit_late
             return _response("The user prefers nanometers.")
 
     llm = _SlowCompactionLLM()
-    conversation = Conversation(llm, dialogue_budget_bytes=600)  # type: ignore[arg-type]
+    conversation = Conversation(llm, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC, dialogue_budget_bytes=600)  # type: ignore[arg-type]
 
     async def answer(text):
-        return [chunk async for chunk in conversation.stream(text, "alice")]
+        return [chunk async for chunk in conversation._stream_response(text, "alice")]
 
     for index in range(4):
         await answer(f"Preference {index}: " + "p" * 80)
@@ -931,7 +947,7 @@ async def test_runtime_named_context_topics_use_configured_modes_per_participant
     tea = Topic("tea.status", ConversationContextUpdate)
     xr = Topic("xr.observations", ConversationContextUpdate)
     conversation = Conversation(
-        llm,  # type: ignore[arg-type]
+        llm, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC,  # type: ignore[arg-type]
         summary_context_topics=(tea.name,),
         incremental_context_topics=(xr.name,),
         topic_budget_bytes=200,
@@ -965,41 +981,86 @@ def test_context_topic_names_must_be_nonempty_and_unique():
     llm = _LLM()
 
     with pytest.raises(ValueError, match="sequence of topic names"):
-        Conversation(llm, summary_context_topics="tea.status")  # type: ignore[arg-type]
+        Conversation(llm, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC, summary_context_topics="tea.status")  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="non-empty strings"):
-        Conversation(llm, summary_context_topics=("tea.status", " "))  # type: ignore[arg-type]
+        Conversation(
+            llm,
+            runtime=AgentRuntime(),
+            output_topic=_OUTPUT_TOPIC,
+            summary_context_topics=("tea.status", " "),
+        )  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="non-empty strings"):
-        Conversation(llm, summary_context_topics=("tea.status", None))  # type: ignore[arg-type]
+        Conversation(
+            llm,
+            runtime=AgentRuntime(),
+            output_topic=_OUTPUT_TOPIC,
+            summary_context_topics=("tea.status", None),
+        )  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="unique"):
-        Conversation(llm, summary_context_topics=("tea.status", "tea.status"))  # type: ignore[arg-type]
+        Conversation(
+            llm,
+            runtime=AgentRuntime(),
+            output_topic=_OUTPUT_TOPIC,
+            summary_context_topics=("tea.status", "tea.status"),
+        )  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="across summary and incremental"):
-        Conversation(llm, summary_context_topics=("tea.status",), incremental_context_topics=("tea.status",))
+        Conversation(
+            llm,
+            runtime=AgentRuntime(),
+            output_topic=_OUTPUT_TOPIC,
+            summary_context_topics=("tea.status",),
+            incremental_context_topics=("tea.status",),
+        )
     with pytest.raises(ValueError, match="sequence of topic names"):
-        Conversation(llm, incremental_context_topics="tea.status")  # type: ignore[arg-type]
+        Conversation(llm, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC, incremental_context_topics="tea.status")  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="sequence of topic names"):
-        Conversation(llm, summary_context_topics=None)  # type: ignore[arg-type]
+        Conversation(llm, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC, summary_context_topics=None)  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="at least one context topic"):
-        Conversation(llm).context_subscriber()  # type: ignore[arg-type]
+        Conversation(llm, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC).context_subscriber()  # type: ignore[arg-type]
 
 
 def test_each_section_budget_is_validated():
     llm = _LLM()
     with pytest.raises(ValueError, match="one entry per configured topic"):
-        Conversation(llm, incremental_context_topics=("a", "b"), topic_budget_bytes={"a": 100})  # type: ignore[arg-type]
+        Conversation(
+            llm,
+            runtime=AgentRuntime(),
+            output_topic=_OUTPUT_TOPIC,
+            incremental_context_topics=("a", "b"),
+            topic_budget_bytes={"a": 100},
+        )  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="positive integers"):
-        Conversation(llm, incremental_context_topics=("a",), topic_budget_bytes={"a": 0})  # type: ignore[arg-type]
+        Conversation(
+            llm,
+            runtime=AgentRuntime(),
+            output_topic=_OUTPUT_TOPIC,
+            incremental_context_topics=("a",),
+            topic_budget_bytes={"a": 0},
+        )  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="positive integers"):
-        Conversation(llm, dialogue_budget_bytes=0)  # type: ignore[arg-type]
+        Conversation(llm, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC, dialogue_budget_bytes=0)  # type: ignore[arg-type]
     # A compaction request must hold a summary plus at least as many bytes of new entries.
     with pytest.raises(ValueError, match="compaction_input_budget_bytes"):
-        Conversation(llm, dialogue_budget_bytes=8000, compaction_input_budget_bytes=4255)  # type: ignore[arg-type]
-    Conversation(llm, dialogue_budget_bytes=8000, compaction_input_budget_bytes=4256)  # type: ignore[arg-type]
+        Conversation(
+            llm,
+            runtime=AgentRuntime(),
+            output_topic=_OUTPUT_TOPIC,
+            dialogue_budget_bytes=8000,
+            compaction_input_budget_bytes=4255,
+        )  # type: ignore[arg-type]
+    Conversation(
+        llm,
+        runtime=AgentRuntime(),
+        output_topic=_OUTPUT_TOPIC,
+        dialogue_budget_bytes=8000,
+        compaction_input_budget_bytes=4256,
+    )  # type: ignore[arg-type]
 
 
 @pytest.mark.asyncio
 async def test_each_topic_compacts_against_its_own_budget():
     conversation = Conversation(
-        _LLM(),  # type: ignore[arg-type]
+        _LLM(), runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC,  # type: ignore[arg-type]
         incremental_context_topics=("small", "large"),
         topic_budget_bytes={"small": 200, "large": 4000},
     )
@@ -1049,7 +1110,7 @@ async def test_source_summary_near_budget_does_not_block_later_updates():
             return _response("s" * 800 if len(calls) <= 2 else "Latest corrections applied.")
 
     conversation = Conversation(
-        _SummaryLLM(),  # type: ignore[arg-type]
+        _SummaryLLM(), runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC,  # type: ignore[arg-type]
         incremental_context_topics=("notes",),
         topic_budget_bytes=1024,
     )
@@ -1128,7 +1189,12 @@ async def test_incremental_update_during_compaction_keeps_it_for_the_next_batch(
 
 @pytest.mark.asyncio
 async def test_context_update_without_participant_is_dropped(caplog):
-    conversation = Conversation(_LLM(), summary_context_topics=("tea",))  # type: ignore[arg-type]
+    conversation = Conversation(
+        _LLM(),
+        runtime=AgentRuntime(),
+        output_topic=_OUTPUT_TOPIC,
+        summary_context_topics=("tea",),
+    )  # type: ignore[arg-type]
     await conversation._update_context(None, "tea", ConversationContextUpdate(text="shared"), mode="summary")
     assert conversation._context.sections("alice") == ()
     assert "without participant" in caplog.text
@@ -1150,7 +1216,7 @@ async def test_departure_and_close_cancel_compaction_and_keep_participants_indep
 
     topic = Topic("test.notes", ConversationContextUpdate)
     conversation = Conversation(
-        _BlockingLLM(),  # type: ignore[arg-type]
+        _BlockingLLM(), runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC,  # type: ignore[arg-type]
         incremental_context_topics=(topic.name,),
         topic_budget_bytes=100,
     )
@@ -1165,7 +1231,7 @@ async def test_departure_and_close_cancel_compaction_and_keep_participants_indep
         assert job.cancelled()
         assert conversation._context.sections("alice") == ()
         # Another participant is unaffected.
-        assert [text async for text in conversation.stream("Hello", "bob")] == ["Hello there."]
+        assert [text async for text in conversation._stream_response("Hello", "bob")] == ["Hello there."]
 
         await runtime.publish(topic, ConversationContextUpdate(text="A note " * 10), participant_id="carol")
         await conversation.close()
@@ -1268,22 +1334,39 @@ async def test_every_conflict_case_seeds_the_shape_it_claims():
             await runtime.stop()
 
 
-async def test_answer_requires_output_without_starting_model_work():
-    llm = _LLM()
-    conversation = Conversation(llm)
-    with pytest.raises(ValueError, match="configured runtime and output_topic"):
-        await conversation.answer(AgentTurn("alice", "turn", "request"))
-    assert llm.messages == []
-    await conversation.close()
+def test_answer_is_the_only_public_request_handler_and_requires_output():
+    assert not hasattr(Conversation, "stream")
+    parameters = inspect.signature(Conversation).parameters
+    assert parameters["runtime"].default is inspect.Parameter.empty
+    assert parameters["output_topic"].default is inspect.Parameter.empty
+    with pytest.raises(TypeError, match="runtime.*output_topic"):
+        Conversation(_LLM())
 
 
 def test_voice_output_configuration_requires_runtime_and_exact_topic_model():
-    with pytest.raises(ValueError, match="configured together"):
+    with pytest.raises(TypeError, match="output_topic"):
         Conversation(_LLM(), runtime=AgentRuntime())
-    with pytest.raises(ValueError, match="configured together"):
+    with pytest.raises(TypeError, match="runtime"):
         Conversation(_LLM(), output_topic=_OUTPUT_TOPIC)
+    with pytest.raises(ValueError, match="requires runtime and output_topic"):
+        Conversation(_LLM(), runtime=None, output_topic=_OUTPUT_TOPIC)
     with pytest.raises(TypeError, match="VoiceOutput"):
         Conversation(_LLM(), runtime=AgentRuntime(), output_topic=Topic("wrong", ConversationContextUpdate))
+
+
+def test_conversation_construction_reports_missing_voice_extra(monkeypatch):
+    import builtins
+
+    original_import = builtins.__import__
+
+    def import_without_voice(name, *args, **kwargs):
+        if name == "xr_ai_voice":
+            raise ModuleNotFoundError("No module named 'xr_ai_voice'", name="xr_ai_voice")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", import_without_voice)
+    with pytest.raises(ImportError, match=r"xr-ai-conversation\[voice\]"):
+        Conversation(_LLM(), runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC)
 
 
 async def test_output_failure_closes_model_without_recording_partial_context():
@@ -1337,10 +1420,10 @@ async def test_stream_does_not_commit_context_when_model_suppresses_cancellation
 
             return response()
 
-    conversation = Conversation(LLM())
+    conversation = Conversation(LLM(), runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC)
 
     async def consume():
-        async for text in conversation.stream("request", "alice"):
+        async for text in conversation._stream_response("request", "alice"):
             output.append(text)
 
     consuming = asyncio.create_task(consume())
