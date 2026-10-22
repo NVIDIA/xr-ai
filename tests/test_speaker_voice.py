@@ -552,8 +552,9 @@ def _config(tmp_path, *, require_wake=False, conversation=True, speaker=True, st
 
 @pytest.mark.parametrize("enabled, backend", [(False, "required"), (False, "auto"), (True, "auto")])
 def test_public_voice_rejects_missing_batch_dependency_before_media(tmp_path, monkeypatch, enabled, backend):
+    from xr_ai_interaction import UserQuery
     from xr_ai_runtime import Topic
-    from xr_ai_voice import UserQuery, VoiceAgent, _session
+    from xr_ai_voice import VoiceAgent, _session
 
     monkeypatch.setattr(_session, "HubVoiceTransport", lambda: pytest.fail("media allocated"))
     with pytest.raises(ValueError, match="stt is required"):
@@ -562,8 +563,9 @@ def test_public_voice_rejects_missing_batch_dependency_before_media(tmp_path, mo
 
 
 async def test_required_speaker_without_batch_waits_before_media(tmp_path, monkeypatch):
+    from xr_ai_interaction import UserQuery
     from xr_ai_runtime import Topic
-    from xr_ai_voice import UserQuery, VoiceAgent, _session
+    from xr_ai_voice import VoiceAgent, _session
 
     waiting = asyncio.Event()
     ready = asyncio.Event()
@@ -602,9 +604,10 @@ async def test_required_speaker_without_batch_waits_before_media(tmp_path, monke
 
 @pytest.mark.parametrize("enabled, backend", [(False, "auto"), (False, "required"), (True, "auto")])
 async def test_batch_session_selection_and_private_vad_transcription(tmp_path, monkeypatch, enabled, backend):
+    from xr_ai_interaction import UserQuery
     from xr_ai_models import load_models_config_from_dict, make_stt
     from xr_ai_runtime import Topic
-    from xr_ai_voice import UserQuery, VoiceAgent, _session
+    from xr_ai_voice import VoiceAgent, _session
 
     real_client = httpx.AsyncClient
     calls = []
@@ -650,8 +653,9 @@ async def test_batch_session_selection_and_private_vad_transcription(tmp_path, m
 
 
 async def test_required_speaker_error_does_not_allocate_batch_or_media(tmp_path, monkeypatch):
+    from xr_ai_interaction import UserQuery
     from xr_ai_runtime import Topic
-    from xr_ai_voice import UserQuery, VoiceAgent, _session
+    from xr_ai_voice import VoiceAgent, _session
 
     monkeypatch.setattr(_session, "HubVoiceTransport", lambda: pytest.fail("media allocated"))
     monkeypatch.setattr(_SpeakerClient, "_available", AsyncMock(side_effect=RuntimeError("incompatible service")))
@@ -666,9 +670,10 @@ async def test_required_speaker_error_does_not_allocate_batch_or_media(tmp_path,
 async def test_native_nim_factory_remains_explicit_ordinary_speech(tmp_path, monkeypatch):
     from pathlib import Path
 
+    from xr_ai_interaction import UserQuery
     from xr_ai_models import load_models_config, make_stt
     from xr_ai_runtime import Topic
-    from xr_ai_voice import UserQuery, VoiceAgent, _session
+    from xr_ai_voice import VoiceAgent, _session
 
     profile = load_models_config(Path(__file__).resolve().parents[1] / "deployment/nim/models.yaml")
     client = make_stt(profile, "stt")

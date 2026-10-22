@@ -8,10 +8,10 @@ connections, and speech interruptions. Keeping the topic definitions together
 lets both sides share the same event contract, separate from capture narration.
 """
 
+from xr_ai_interaction import Interrupted, ParticipantJoined, ParticipantLeft, UserQuery
 from xr_ai_runtime import Topic
-from xr_ai_voice import UserQuery, VoiceInterrupted, VoiceParticipantJoined, VoiceParticipantLeft
 
 USER_QUERY_TOPIC = Topic("sop.guide.query", UserQuery)
-PARTICIPANT_JOINED_TOPIC = Topic("sop.guide.joined", VoiceParticipantJoined)
-PARTICIPANT_LEFT_TOPIC = Topic("sop.guide.left", VoiceParticipantLeft)
-INTERRUPTED_TOPIC = Topic("sop.guide.interrupted", VoiceInterrupted)
+PARTICIPANT_JOINED_TOPIC = Topic("sop.guide.joined", ParticipantJoined)
+PARTICIPANT_LEFT_TOPIC = Topic("sop.guide.left", ParticipantLeft)
+INTERRUPTED_TOPIC = Topic("sop.guide.interrupted", Interrupted)

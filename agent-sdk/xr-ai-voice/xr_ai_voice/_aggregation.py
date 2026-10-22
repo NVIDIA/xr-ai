@@ -13,14 +13,15 @@ from dataclasses import dataclass, field
 
 import nemo_relay
 from loguru import logger
+from xr_ai_interaction import ResponseOutput
 from xr_ai_models import ChatMessage, LLMService
 from xr_ai_runtime import Agent, RuntimeClosedError, RuntimeContext, Topic, subscribe
 
-from ._runtime import VOICE_OUTPUT_TOPIC, VoiceOutput
+from ._runtime import VOICE_OUTPUT_TOPIC
 
 VOICE_CONTRIBUTION_TOPIC = Topic(
     "voice.contribution",
-    VoiceOutput,
+    ResponseOutput,
     telemetry="none",
 )
 """Candidate spoken output consumed by :class:`VoiceAggregationAgent`."""
@@ -33,7 +34,7 @@ Use plain spoken prose with at most two sentences."""
 
 @dataclass(frozen=True, slots=True)
 class _Contribution:
-    output: VoiceOutput
+    output: ResponseOutput
     ctx: RuntimeContext
     participant_id: str
     source: str
@@ -124,7 +125,7 @@ class VoiceAggregationAgent(Agent):
         self._stopping = False
 
     @subscribe(VOICE_CONTRIBUTION_TOPIC)
-    async def contribute(self, output: VoiceOutput, ctx: RuntimeContext) -> None:
+    async def contribute(self, output: ResponseOutput, ctx: RuntimeContext) -> None:
         """Enqueue one finite response or incremental response fragment."""
 
         participant_id = ctx.metadata.participant_id
@@ -518,7 +519,7 @@ class VoiceAggregationAgent(Agent):
         try:
             await contribution.ctx.publish(
                 VOICE_OUTPUT_TOPIC,
-                VoiceOutput(
+                ResponseOutput(
                     text=contribution.output.text,
                     response_id=response_id,
                     final=contribution.output.final,
@@ -537,7 +538,7 @@ class VoiceAggregationAgent(Agent):
         try:
             await contribution.ctx.publish(
                 VOICE_OUTPUT_TOPIC,
-                VoiceOutput(
+                ResponseOutput(
                     response_id=response_id,
                     timestamp_us=contribution.output.timestamp_us,
                 ),
@@ -607,7 +608,7 @@ class VoiceAggregationAgent(Agent):
         )
         output_id = uuid.uuid4().hex
         output = _Contribution(
-            output=VoiceOutput(
+            output=ResponseOutput(
                 text=text,
                 response_id=output_id,
                 # The rewrite/raw batch is complete before playback pacing.

@@ -10,22 +10,17 @@ from collections.abc import Callable
 
 import nemo_relay
 from loguru import logger
+from xr_ai_interaction import Interrupted, ParticipantLeft, ResponseOutput, UserQuery
 from xr_ai_runtime import Agent, RuntimeContext, Topic, subscribe
-from xr_ai_voice import (
-    VOICE_OUTPUT_TOPIC,
-    UserQuery,
-    VoiceInterrupted,
-    VoiceOutput,
-    VoiceParticipantLeft,
-)
+from xr_ai_voice import VOICE_OUTPUT_TOPIC
 
 from .models import SceneRequest
 
 USER_QUERY_TOPIC: Topic[UserQuery] = Topic("xr-render.user-query", UserQuery)
-PARTICIPANT_LEFT_TOPIC: Topic[VoiceParticipantLeft] = Topic(
-    "xr-render.participant-left", VoiceParticipantLeft
+PARTICIPANT_LEFT_TOPIC: Topic[ParticipantLeft] = Topic(
+    "xr-render.participant-left", ParticipantLeft
 )
-INTERRUPTED_TOPIC: Topic[VoiceInterrupted] = Topic("xr-render.interrupted", VoiceInterrupted)
+INTERRUPTED_TOPIC: Topic[Interrupted] = Topic("xr-render.interrupted", Interrupted)
 
 
 class RenderAgent(Agent):
@@ -64,7 +59,7 @@ class RenderAgent(Agent):
 
     @subscribe(PARTICIPANT_LEFT_TOPIC)
     async def participant_left(
-        self, _event: VoiceParticipantLeft, ctx: RuntimeContext
+        self, _event: ParticipantLeft, ctx: RuntimeContext
     ) -> None:
         participant_id = ctx.metadata.participant_id
         if participant_id is None:
@@ -74,7 +69,7 @@ class RenderAgent(Agent):
             self._on_participant_left(participant_id)
 
     @subscribe(INTERRUPTED_TOPIC)
-    async def interrupted(self, _event: VoiceInterrupted, ctx: RuntimeContext) -> None:
+    async def interrupted(self, _event: Interrupted, ctx: RuntimeContext) -> None:
         participant_id = ctx.metadata.participant_id
         if participant_id is not None:
             await self._cancel(participant_id)
@@ -108,7 +103,7 @@ class RenderAgent(Agent):
         try:
             await ctx.publish(
                 VOICE_OUTPUT_TOPIC,
-                VoiceOutput(
+                ResponseOutput(
                     text=text,
                     response_id=response_id,
                     timestamp_us=query.timestamp_us,

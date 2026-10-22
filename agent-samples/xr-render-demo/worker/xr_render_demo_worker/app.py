@@ -8,6 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from loguru import logger
+from xr_ai_interaction import ResponseOutput
 from xr_ai_logging import setup_logging
 from xr_ai_models import ChatMessage, ToolDef, load_models_config, make_llm, make_tts, make_vlm
 from xr_ai_runtime import AgentRuntime
@@ -16,7 +17,7 @@ from xr_ai_tools.image import ImageRegistry
 from xr_ai_tools.text_memory import TextMemoryTools
 from xr_ai_tools.tracking import TrackingTools
 from xr_ai_tools.video_memory import VideoMemoryTools
-from xr_ai_voice import VOICE_OUTPUT_TOPIC, HubVoiceTransport, VadConfig, VoiceAgent, VoiceOutput
+from xr_ai_voice import VOICE_OUTPUT_TOPIC, HubVoiceTransport, VadConfig, VoiceAgent
 from xr_ai_voicegate import load_voice_gate_config
 from xr_render_scene import SceneTools
 
@@ -121,7 +122,7 @@ async def run_app(
             logger.warning("notifying {} of XR start failure: {}", participant_id, detail)
             await runtime.publish(
                 VOICE_OUTPUT_TOPIC,
-                VoiceOutput(text="The XR display failed to start. Please try again."),
+                ResponseOutput(text="The XR display failed to start. Please try again."),
                 participant_id=participant_id,
             )
 

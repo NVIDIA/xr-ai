@@ -124,17 +124,17 @@ selection on each turn.
 
 ## Register the router with a runtime
 
-Install `xr-ai-routing[voice]` to use the existing typed voice event models.
-The direct `handle()` path uses its configured control callback and does not
-import voice media. Runtime queries need no callback. Configure the query and
+Install `xr-ai-routing[runtime]` to use the typed `xr_ai_interaction` messages.
+The direct `handle()` path uses its configured control callback and imports
+neither the runtime nor those messages. Runtime queries need no callback. Configure the query and
 output topics explicitly, then register the router's runtime subscriber:
 
 ```python
+from xr_ai_interaction import ResponseOutput, UserQuery
 from xr_ai_runtime import AgentRuntime, Topic
-from xr_ai_voice import UserQuery, VoiceOutput
 
 queries = Topic("my-app.query", UserQuery)
-outputs = Topic("my-app.output", VoiceOutput)
+outputs = Topic("my-app.output", ResponseOutput)
 runtime = AgentRuntime()
 router = AgentRouter(
     {"conversation": conversation, "scene": scene_destination},
@@ -155,13 +155,13 @@ control messages under its own producer identity, so an acknowledgment never
 holds an open stream ahead of a direct answer.
 
 Optional join, leave, and interruption topics must also be supplied explicitly.
-Each uses the corresponding `VoiceParticipantJoined`, `VoiceParticipantLeft`,
-or `VoiceInterrupted` model. No query or lifecycle topics are subscribed by
+Each uses the corresponding `ParticipantJoined`, `ParticipantLeft`,
+or `Interrupted` model. No query or lifecycle topics are subscribed by
 default. Incorrect payload classes and incomplete topic pairs fail during
 construction. A leave topic requires a join topic, because only a join readmits
 a participant who left.
 
-Install `xr-ai-routing[voice]` and supply explicit query and output topics to
+Install `xr-ai-routing[runtime]` and supply explicit query and output topics to
 use runtime delivery; optional participant and interruption topics also require
 explicit configuration. Runtime queries use the configured output topic for
 router-owned control text; direct `handle(turn)` calls use the constructor

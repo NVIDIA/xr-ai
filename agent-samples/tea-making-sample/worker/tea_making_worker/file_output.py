@@ -15,8 +15,8 @@ from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel
+from xr_ai_interaction import ParticipantJoined, ParticipantLeft
 from xr_ai_runtime import Agent, RuntimeContext, subscribe
-from xr_ai_voice import VoiceParticipantJoined, VoiceParticipantLeft
 
 from .events import (
     BACKGROUND_FACT_TOPIC,
@@ -93,7 +93,7 @@ class FileOutputAgent(Agent):
     @subscribe(PARTICIPANT_JOINED_TOPIC)
     async def participant_joined(
         self,
-        _event: VoiceParticipantJoined,
+        _event: ParticipantJoined,
         ctx: RuntimeContext,
     ) -> None:
         participant_id = self._participant(ctx)
@@ -106,7 +106,7 @@ class FileOutputAgent(Agent):
     @subscribe(PARTICIPANT_LEFT_TOPIC)
     async def participant_left(
         self,
-        _event: VoiceParticipantLeft,
+        _event: ParticipantLeft,
         ctx: RuntimeContext,
     ) -> None:
         participant_id = self._participant(ctx)

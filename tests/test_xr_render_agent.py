@@ -11,6 +11,7 @@ from pathlib import Path
 
 from pydantic import BaseModel
 from xr_ai_hub import DataMessage
+from xr_ai_interaction import Interrupted, ParticipantLeft, ResponseOutput, UserQuery
 from xr_ai_runtime import (
     Agent,
     AgentRuntime,
@@ -19,13 +20,7 @@ from xr_ai_runtime import (
     subscribe,
 )
 from xr_ai_tools import Tool
-from xr_ai_voice import (
-    VOICE_OUTPUT_TOPIC,
-    UserQuery,
-    VoiceInterrupted,
-    VoiceOutput,
-    VoiceParticipantLeft,
-)
+from xr_ai_voice import VOICE_OUTPUT_TOPIC
 from xr_render_scene import EmptyRequest
 
 _WORKER_DIR = (
@@ -140,13 +135,13 @@ def _tool(name: str, handler=None) -> Tool:
 class _VoiceRecorder(Agent):
     def __init__(self) -> None:
         super().__init__()
-        self.events: list[tuple[VoiceOutput, MessageMetadata]] = []
+        self.events: list[tuple[ResponseOutput, MessageMetadata]] = []
         self.open_responses: set[str] = set()
         self.final = asyncio.Event()
         self.changed = asyncio.Event()
 
     @subscribe(VOICE_OUTPUT_TOPIC)
-    async def record(self, output: VoiceOutput, ctx: RuntimeContext) -> None:
+    async def record(self, output: ResponseOutput, ctx: RuntimeContext) -> None:
         if output.response_id:
             if output.final and not output.text:
                 if output.response_id not in self.open_responses:
@@ -232,7 +227,7 @@ async def test_interruption_cancels_participant_turn() -> None:
         await asyncio.wait_for(supervisor.started.wait(), 1.0)
         await runtime.publish(
             INTERRUPTED_TOPIC,
-            VoiceInterrupted(),
+            Interrupted(),
             participant_id="pid-1",
             source="voice",
         )
@@ -259,7 +254,7 @@ async def test_participant_departure_cancels_turn_and_fires_callback() -> None:
         await asyncio.wait_for(supervisor.started.wait(), 1.0)
         await runtime.publish(
             PARTICIPANT_LEFT_TOPIC,
-            VoiceParticipantLeft(),
+            ParticipantLeft(),
             participant_id="pid-1",
             source="voice",
         )
@@ -288,7 +283,7 @@ async def test_global_interruption_cancels_every_participant() -> None:
         await asyncio.wait_for(supervisor.all_started.wait(), 1.0)
         await runtime.publish(
             INTERRUPTED_TOPIC,
-            VoiceInterrupted(),
+            Interrupted(),
             participant_id=None,
             source="voice",
         )

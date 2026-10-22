@@ -17,21 +17,14 @@ from pathlib import Path
 
 import nemo_relay
 from loguru import logger
+from xr_ai_interaction import Interrupted, ParticipantJoined, ParticipantLeft, ResponseOutput, UserQuery
 from xr_ai_models import ChatMessage, ChatResponse, LLMService, ToolDef
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeClosedError, RuntimeContext, subscribe
 from xr_ai_tools import ToolSet
 from xr_ai_tools.current_frame import CurrentFrameTool
 from xr_ai_tools.tool_calling import run_tool_loop
 from xr_ai_tools.vision import ImageQueryTool
-from xr_ai_voice import (
-    VOICE_CONTRIBUTION_TOPIC,
-    UserQuery,
-    VoiceAggregationAgent,
-    VoiceInterrupted,
-    VoiceOutput,
-    VoiceParticipantJoined,
-    VoiceParticipantLeft,
-)
+from xr_ai_voice import VOICE_CONTRIBUTION_TOPIC, VoiceAggregationAgent
 
 from .events import INTERRUPTED_TOPIC, PARTICIPANT_JOINED_TOPIC, PARTICIPANT_LEFT_TOPIC, USER_QUERY_TOPIC
 from .guides import SelectedGuide
@@ -78,7 +71,7 @@ class GuideAgent(Agent):
         self._runtime = runtime
 
     @subscribe(INTERRUPTED_TOPIC)
-    async def interrupted(self, _event: VoiceInterrupted, ctx: RuntimeContext) -> None:
+    async def interrupted(self, _event: Interrupted, ctx: RuntimeContext) -> None:
         participant_id = ctx.metadata.participant_id
         participants = tuple(self._turns) if participant_id is None else (participant_id,)
         for pid in participants:
@@ -89,7 +82,7 @@ class GuideAgent(Agent):
     @subscribe(PARTICIPANT_JOINED_TOPIC)
     async def participant_joined(
         self,
-        _event: VoiceParticipantJoined,
+        _event: ParticipantJoined,
         ctx: RuntimeContext,
     ) -> None:
         participant_id = self._participant(ctx)
@@ -103,7 +96,7 @@ class GuideAgent(Agent):
     @subscribe(PARTICIPANT_LEFT_TOPIC)
     async def participant_left(
         self,
-        _event: VoiceParticipantLeft,
+        _event: ParticipantLeft,
         ctx: RuntimeContext,
     ) -> None:
         participant_id = self._participant(ctx)
@@ -131,7 +124,7 @@ class GuideAgent(Agent):
         if runtime is not None and runtime.running:
             await runtime.publish(
                 VOICE_CONTRIBUTION_TOPIC,
-                VoiceOutput(text=text, interrupt=True),
+                ResponseOutput(text=text, interrupt=True),
                 participant_id=participant_id,
                 source="sop-guide",
             )
@@ -166,7 +159,7 @@ class GuideAgent(Agent):
         if runtime is not None and runtime.running:
             try:
                 await runtime.publish(
-                    VOICE_CONTRIBUTION_TOPIC, VoiceOutput(text=text),
+                    VOICE_CONTRIBUTION_TOPIC, ResponseOutput(text=text),
                     participant_id=participant_id, source="sop-guide",
                 )
             except RuntimeClosedError:
@@ -187,7 +180,7 @@ class GuideAgent(Agent):
         try:
             await runtime.publish(
                 VOICE_CONTRIBUTION_TOPIC,
-                VoiceOutput(
+                ResponseOutput(
                     text=response, interrupt=True, timestamp_us=query.timestamp_us,
                 ),
                 participant_id=participant_id,

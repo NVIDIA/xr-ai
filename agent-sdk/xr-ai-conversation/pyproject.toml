@@ -15,11 +15,9 @@ dependencies = [
     "pydantic>=2.10",
     "xr-ai-models",
     "xr-ai-agent-runtime",
+    "xr-ai-interaction",
     "xr-ai-routing",
 ]
-
-[project.optional-dependencies]
-voice = ["xr-ai-voice"]
 
 [dependency-groups]
 # Live-model evals in eval/ read their YAML case files.
@@ -28,8 +26,8 @@ eval = ["pyyaml>=6.0"]
 [tool.uv.sources]
 xr-ai-models = { path = "../xr-ai-models", editable = true }
 xr-ai-agent-runtime = { path = "../xr-ai-runtime", editable = true }
+xr-ai-interaction = { path = "../xr-ai-interaction", editable = true }
 xr-ai-routing = { path = "../xr-ai-routing", editable = true }
-xr-ai-voice = { path = "../xr-ai-voice", editable = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["xr_ai_conversation"]

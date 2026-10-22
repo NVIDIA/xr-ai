@@ -8,13 +8,8 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+from xr_ai_interaction import Interrupted, ParticipantJoined, ParticipantLeft, UserQuery
 from xr_ai_runtime import Topic
-from xr_ai_voice import (
-    UserQuery,
-    VoiceInterrupted,
-    VoiceParticipantJoined,
-    VoiceParticipantLeft,
-)
 
 
 class _Event(BaseModel):
@@ -95,13 +90,13 @@ class ParticipantCleanupComplete(_Event):
 USER_QUERY_TOPIC = Topic("tea-making.user-query", UserQuery)
 PARTICIPANT_JOINED_TOPIC = Topic(
     "tea-making.participant-joined",
-    VoiceParticipantJoined,
+    ParticipantJoined,
 )
 PARTICIPANT_LEFT_TOPIC = Topic(
     "tea-making.participant-left",
-    VoiceParticipantLeft,
+    ParticipantLeft,
 )
-INTERRUPTED_TOPIC = Topic("tea-making.interrupted", VoiceInterrupted)
+INTERRUPTED_TOPIC = Topic("tea-making.interrupted", Interrupted)
 FOREGROUND_RECORD_TOPIC = Topic("tea-making.foreground-record", ForegroundRecord)
 GUIDANCE_RECORD_TOPIC = Topic("tea-making.guidance-record", GuidanceRecord)
 GUIDANCE_NOTICE_TOPIC = Topic("tea-making.guidance-notice", GuidanceNotice)

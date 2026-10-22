@@ -5,8 +5,9 @@
 
 from __future__ import annotations
 
+from xr_ai_interaction import ResponseOutput
 from xr_ai_runtime import Agent, RuntimeContext, subscribe
-from xr_ai_voice import VOICE_CONTRIBUTION_TOPIC, VoiceOutput
+from xr_ai_voice import VOICE_CONTRIBUTION_TOPIC
 
 from .events import GUIDANCE_NOTICE_TOPIC, GuidanceNotice
 
@@ -21,7 +22,7 @@ class GuidanceVoiceAgent(Agent):
     async def notify(self, notice: GuidanceNotice, ctx: RuntimeContext) -> None:
         await ctx.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(text=notice.text, timestamp_us=notice.timestamp_us),
+            ResponseOutput(text=notice.text, timestamp_us=notice.timestamp_us),
         )
 
 

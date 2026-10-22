@@ -18,9 +18,10 @@ from pipecat.processors.frame_processor import FrameDirection
 from speaker_stt.__main__ import _build_app, _Server
 from speaker_stt._inference import _Session
 from websockets.asyncio.server import serve
+from xr_ai_interaction import UserQuery
 from xr_ai_models._speaker_stream import _SpeakerStream
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, Topic, subscribe
-from xr_ai_voice import UserQuery, VadConfig, VoiceAgent
+from xr_ai_voice import VadConfig, VoiceAgent
 from xr_ai_voice._frames import ParticipantJoinedFrame, ParticipantLeftFrame
 from xr_ai_voice._pipeline import _build_voice_pipeline
 from xr_ai_voice._processors.io import _VoiceIOProcessor

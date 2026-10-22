@@ -6,8 +6,8 @@
 from __future__ import annotations
 
 from pydantic import BaseModel, JsonValue
+from xr_ai_interaction import ParticipantJoined, ParticipantLeft
 from xr_ai_runtime import Agent, RuntimeContext, subscribe
-from xr_ai_voice import VoiceParticipantJoined, VoiceParticipantLeft
 from xr_ai_web_events import WEB_EVENT_TOPIC, WebEvent
 
 from .events import (
@@ -111,7 +111,7 @@ class TeaWebEventsAgent(Agent):
     @subscribe(PARTICIPANT_JOINED_TOPIC)
     async def participant_joined(
         self,
-        _event: VoiceParticipantJoined,
+        _event: ParticipantJoined,
         ctx: RuntimeContext,
     ) -> None:
         await self._publish_payload(
@@ -124,7 +124,7 @@ class TeaWebEventsAgent(Agent):
     @subscribe(PARTICIPANT_LEFT_TOPIC)
     async def participant_left(
         self,
-        _event: VoiceParticipantLeft,
+        _event: ParticipantLeft,
         ctx: RuntimeContext,
     ) -> None:
         await self._publish_payload(

@@ -20,15 +20,16 @@ configuration, then register one `VoiceAgent` with their runtime:
 ```python
 from pathlib import Path
 
+from xr_ai_interaction import Interrupted, UserQuery
 from xr_ai_models import load_models_config
 from xr_ai_runtime import Topic
-from xr_ai_voice import UserQuery, VadConfig, VoiceAgent, VoiceInterrupted
+from xr_ai_voice import VadConfig, VoiceAgent
 from xr_ai_voicegate import load_voice_gate_config
 
 models = load_models_config("yaml/models.json")
 voice_gate = load_voice_gate_config(Path("yaml/voice_gate.yaml"))
 queries = Topic("my-sample.user-query", UserQuery)
-interruptions = Topic("my-sample.interrupted", VoiceInterrupted)
+interruptions = Topic("my-sample.interrupted", Interrupted)
 voice = VoiceAgent.from_models(
     models=models,
     query_topic=queries,
@@ -78,7 +79,7 @@ processor. `VoiceAgent` cancels and awaits all owned delivery tasks on shutdown.
 (voice-tuning-and-data-echo)=
 ## Voice output and interruption
 
-Applications publish finite or incremental `VoiceOutput` values. Chunks in one
+Applications publish finite or incremental `ResponseOutput` values. Chunks in one
 stream share `response_id` and end with `final=True`. Output is serialized per
 participant; `interrupt=True` flushes queued hub audio and replaces active
 speech. Without aggregation, producer identity is part of the stream key so
@@ -90,7 +91,7 @@ warning for that participant, producer, and `response_id`. Streams close by
 finalization, cancellation, or eviction; waiting does not reopen a retained
 key. Use one identifier per inbound query, such as
 `ctx.metadata.message_id`, or omit `response_id` when publishing a finite
-response in one `VoiceOutput`.
+response in one `ResponseOutput`.
 
 `text_topic` controls the completed-response data echo and defaults to
 `agent.response`. Set it to an empty string when the application owns its own
@@ -116,7 +117,8 @@ register one `VoiceAggregationAgent`. Producers publish to
 `VOICE_OUTPUT_TOPIC`.
 
 ```python
-from xr_ai_voice import VOICE_CONTRIBUTION_TOPIC, VoiceAggregationAgent, VoiceOutput
+from xr_ai_interaction import ResponseOutput
+from xr_ai_voice import VOICE_CONTRIBUTION_TOPIC, VoiceAggregationAgent
 
 aggregation = runtime.register(
     "voice-aggregation",
@@ -125,7 +127,7 @@ aggregation = runtime.register(
 
 await ctx.publish(
     VOICE_CONTRIBUTION_TOPIC,
-    VoiceOutput(text="The timer is done."),
+    ResponseOutput(text="The timer is done."),
 )
 ```
 

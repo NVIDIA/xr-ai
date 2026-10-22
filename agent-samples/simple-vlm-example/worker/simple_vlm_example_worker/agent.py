@@ -11,6 +11,7 @@ from contextlib import suppress
 
 import nemo_relay
 from xr_ai_hub import FrameUnavailable
+from xr_ai_interaction import Interrupted, ParticipantLeft, ResponseOutput, UserQuery
 from xr_ai_runtime import (
     Agent,
     RuntimeClosedError,
@@ -20,20 +21,14 @@ from xr_ai_runtime import (
 )
 from xr_ai_tools.current_frame import CurrentFrameRequest, CurrentFrameTool
 from xr_ai_tools.vision import ImageQueryRequest, StreamingImageQueryTool
-from xr_ai_voice import (
-    VOICE_OUTPUT_TOPIC,
-    UserQuery,
-    VoiceInterrupted,
-    VoiceOutput,
-    VoiceParticipantLeft,
-)
+from xr_ai_voice import VOICE_OUTPUT_TOPIC
 
 USER_QUERY_TOPIC = Topic("simple-vlm.user-query", UserQuery)
 PARTICIPANT_LEFT_TOPIC = Topic(
     "simple-vlm.participant-left",
-    VoiceParticipantLeft,
+    ParticipantLeft,
 )
-INTERRUPTED_TOPIC = Topic("simple-vlm.interrupted", VoiceInterrupted)
+INTERRUPTED_TOPIC = Topic("simple-vlm.interrupted", Interrupted)
 
 
 class SimpleVlmAgent(Agent):
@@ -73,7 +68,7 @@ class SimpleVlmAgent(Agent):
     @subscribe(PARTICIPANT_LEFT_TOPIC)
     async def participant_left(
         self,
-        _event: VoiceParticipantLeft,
+        _event: ParticipantLeft,
         ctx: RuntimeContext,
     ) -> None:
         """Release this agent's work and frame state for a departed participant."""
@@ -88,7 +83,7 @@ class SimpleVlmAgent(Agent):
     @subscribe(INTERRUPTED_TOPIC)
     async def interrupted(
         self,
-        _event: VoiceInterrupted,
+        _event: Interrupted,
         ctx: RuntimeContext,
     ) -> None:
         """Cancel participant-scoped or global vision work."""
@@ -140,7 +135,7 @@ class SimpleVlmAgent(Agent):
                     raise
                 await ctx.publish(
                     VOICE_OUTPUT_TOPIC,
-                    VoiceOutput(
+                    ResponseOutput(
                         text=unavailable,
                         response_id=response_id,
                         final=False,
@@ -157,7 +152,7 @@ class SimpleVlmAgent(Agent):
                 async for chunk in stream:
                     await ctx.publish(
                         VOICE_OUTPUT_TOPIC,
-                        VoiceOutput(
+                        ResponseOutput(
                             text=chunk.text,
                             response_id=response_id,
                             final=False,
@@ -181,7 +176,7 @@ class SimpleVlmAgent(Agent):
                 with suppress(RuntimeClosedError):
                     await ctx.publish(
                         VOICE_OUTPUT_TOPIC,
-                        VoiceOutput(
+                        ResponseOutput(
                             response_id=response_id,
                             timestamp_us=request.timestamp_us,
                         ),

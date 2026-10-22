@@ -15,9 +15,10 @@ from typing import Any
 
 import nemo_relay
 from loguru import logger
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 from xr_ai_hub import DataMessage
 from xr_ai_hub._capture import CAPTURE_STT_TOPIC
+from xr_ai_interaction import Interrupted, ParticipantJoined, ParticipantLeft, ResponseOutput, UserQuery
 from xr_ai_models import ModelsConfig, STTService, TTSService, make_stt
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, Topic, subscribe
 from xr_ai_voicegate import VoiceGateConfig
@@ -36,18 +37,6 @@ class VoiceStreamClosedError(ValueError):
     """Raised when output targets a voice stream the consumer already closed."""
 
 
-class UserQuery(BaseModel):
-    """One accepted user query emitted by the voice input boundary."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    text: str = Field(min_length=1)
-    """Gate-accepted speech or direct typed text."""
-
-    timestamp_us: int = Field(ge=0)
-    """Input presentation time as Unix microseconds."""
-
-
 class VoiceTranscript(BaseModel):
     """One final STT result emitted before voice-gate filtering."""
 
@@ -60,57 +49,6 @@ class VoiceTranscript(BaseModel):
     """Speech presentation time as Unix microseconds."""
 
 
-class VoiceParticipantJoined(BaseModel):
-    """Notification that one participant joined the voice transport."""
-
-    model_config = ConfigDict(extra="forbid")
-
-
-class VoiceParticipantLeft(BaseModel):
-    """Notification that one participant left the voice transport."""
-
-    model_config = ConfigDict(extra="forbid")
-
-
-class VoiceInterrupted(BaseModel):
-    """Notification that participant-scoped or global voice work was interrupted."""
-
-    model_config = ConfigDict(extra="forbid")
-
-
-class VoiceOutput(BaseModel):
-    """One complete response or one chunk of an incremental voice response."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    text: str = ""
-    """Complete response text or one incremental fragment."""
-
-    response_id: str | None = Field(default=None, min_length=1)
-    """Identifier shared by incremental chunks; recent reuse is ignored with one warning."""
-
-    final: bool = True
-    """Whether this message completes the response."""
-
-    interrupt: bool = False
-    """Whether the first response message supersedes active voice output."""
-
-    timestamp_us: int | None = Field(default=None, ge=0)
-    """Optional originating input timestamp propagated to TTS."""
-
-    @model_validator(mode="after")
-    def validate_boundary(self) -> VoiceOutput:
-        """Require identity for incremental output and text for finite output."""
-
-        if not self.final and self.response_id is None:
-            raise ValueError("non-final voice output needs a response_id")
-        if self.response_id is None and not self.text.strip():
-            raise ValueError("complete voice output must contain text")
-        if self.interrupt and self.response_id is not None and not self.text.strip():
-            raise ValueError("an empty stream terminator cannot interrupt output")
-        return self
-
-
 VOICE_TRANSCRIPT_TOPIC = Topic("voice.transcript", VoiceTranscript)
 """Non-empty final STT results queued for publication before gate filtering.
 
@@ -118,7 +56,7 @@ Delivery is best effort: the bounded queue drops its oldest pending item on
 overflow, and shutdown discards queued items that have not been published.
 """
 
-VOICE_OUTPUT_TOPIC = Topic("voice.output", VoiceOutput, telemetry="none")
+VOICE_OUTPUT_TOPIC = Topic("voice.output", ResponseOutput, telemetry="none")
 """Finite or incremental responses consumed by :class:`VoiceAgent`."""
 
 
@@ -243,9 +181,9 @@ class VoiceAgent(Agent):
         transport: HubVoiceTransport | None = None,
         response_capacity: int = 32,
         text_input: bool = True,
-        participant_joined_topic: Topic[VoiceParticipantJoined] | None = None,
-        participant_left_topic: Topic[VoiceParticipantLeft] | None = None,
-        interrupted_topic: Topic[VoiceInterrupted] | None = None,
+        participant_joined_topic: Topic[ParticipantJoined] | None = None,
+        participant_left_topic: Topic[ParticipantLeft] | None = None,
+        interrupted_topic: Topic[Interrupted] | None = None,
         interrupt_on_supersede: bool = False,
     ) -> None:
         if response_capacity <= 0:
@@ -300,9 +238,9 @@ class VoiceAgent(Agent):
         transport: HubVoiceTransport | None = None,
         response_capacity: int = 32,
         text_input: bool = True,
-        participant_joined_topic: Topic[VoiceParticipantJoined] | None = None,
-        participant_left_topic: Topic[VoiceParticipantLeft] | None = None,
-        interrupted_topic: Topic[VoiceInterrupted] | None = None,
+        participant_joined_topic: Topic[ParticipantJoined] | None = None,
+        participant_left_topic: Topic[ParticipantLeft] | None = None,
+        interrupted_topic: Topic[Interrupted] | None = None,
         interrupt_on_supersede: bool = False,
     ) -> VoiceAgent:
         """Construct voice input from loaded models and voice-gate settings.
@@ -403,7 +341,7 @@ class VoiceAgent(Agent):
             self._source = "voice"
 
     @subscribe(VOICE_OUTPUT_TOPIC)
-    async def output(self, output: VoiceOutput, ctx: RuntimeContext) -> None:
+    async def output(self, output: ResponseOutput, ctx: RuntimeContext) -> None:
         """Send one voice message using participant and producer metadata."""
 
         metadata = ctx.metadata
@@ -523,7 +461,7 @@ class VoiceAgent(Agent):
         if query.interrupted_output and self.interrupted_topic is not None:
             await runtime.publish(
                 self.interrupted_topic,
-                VoiceInterrupted(),
+                Interrupted(),
                 participant_id=query.participant_id,
                 source=self._source,
             )
@@ -634,7 +572,7 @@ class VoiceAgent(Agent):
             participant_id,
             lambda: runtime.publish(
                 topic,
-                VoiceParticipantJoined(),
+                ParticipantJoined(),
                 participant_id=participant_id,
                 source=self._source,
             ),
@@ -650,7 +588,7 @@ class VoiceAgent(Agent):
             participant_id,
             lambda: runtime.publish(
                 topic,
-                VoiceParticipantLeft(),
+                ParticipantLeft(),
                 participant_id=participant_id,
                 source=self._source,
             ),
@@ -664,7 +602,7 @@ class VoiceAgent(Agent):
         self._start_lifecycle_task(
             runtime.publish(
                 topic,
-                VoiceInterrupted(),
+                Interrupted(),
                 participant_id=participant_id,
                 source=self._source,
             ),
@@ -822,12 +760,7 @@ class VoiceAgent(Agent):
 __all__ = [
     "VOICE_OUTPUT_TOPIC",
     "VOICE_TRANSCRIPT_TOPIC",
-    "UserQuery",
     "VoiceAgent",
-    "VoiceInterrupted",
-    "VoiceOutput",
-    "VoiceParticipantJoined",
-    "VoiceParticipantLeft",
     "VoiceStreamClosedError",
     "VoiceTranscript",
 ]

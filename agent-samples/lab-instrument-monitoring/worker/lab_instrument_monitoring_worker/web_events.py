@@ -5,13 +5,9 @@
 
 from __future__ import annotations
 
+from xr_ai_interaction import ParticipantJoined, ParticipantLeft
 from xr_ai_runtime import Agent, RuntimeContext, subscribe
-from xr_ai_voice import (
-    VOICE_TRANSCRIPT_TOPIC,
-    VoiceParticipantJoined,
-    VoiceParticipantLeft,
-    VoiceTranscript,
-)
+from xr_ai_voice import VOICE_TRANSCRIPT_TOPIC, VoiceTranscript
 from xr_ai_web_events import WEB_EVENT_TOPIC, WebEvent
 
 from .events import (
@@ -63,7 +59,7 @@ class WebEventsAdapterAgent(Agent):
     @subscribe(PARTICIPANT_JOINED_TOPIC)
     async def participant_joined(
         self,
-        _event: VoiceParticipantJoined,
+        _event: ParticipantJoined,
         ctx: RuntimeContext,
     ) -> None:
         await ctx.publish(
@@ -78,7 +74,7 @@ class WebEventsAdapterAgent(Agent):
     @subscribe(PARTICIPANT_LEFT_TOPIC)
     async def participant_left(
         self,
-        _event: VoiceParticipantLeft,
+        _event: ParticipantLeft,
         ctx: RuntimeContext,
     ) -> None:
         await ctx.publish(

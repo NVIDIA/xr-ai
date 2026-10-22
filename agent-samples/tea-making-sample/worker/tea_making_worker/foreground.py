@@ -15,6 +15,7 @@ from pathlib import Path
 import nemo_relay
 from loguru import logger
 from xr_ai_hub import FrameUnavailable
+from xr_ai_interaction import Interrupted, ParticipantLeft, ResponseOutput, UserQuery
 from xr_ai_models import ChatMessage, ChatResponse, LLMService, ToolDef, VLMService
 from xr_ai_runtime import Agent, RuntimeClosedError, RuntimeContext, subscribe
 from xr_ai_tools import Tool, ToolSet
@@ -26,13 +27,7 @@ from xr_ai_tools.vision import (
     ImageQueryResult,
     StreamingImageQueryTool,
 )
-from xr_ai_voice import (
-    VOICE_CONTRIBUTION_TOPIC,
-    UserQuery,
-    VoiceInterrupted,
-    VoiceOutput,
-    VoiceParticipantLeft,
-)
+from xr_ai_voice import VOICE_CONTRIBUTION_TOPIC
 
 from .background_context import BackgroundContextAgent
 from .change_watch import ChangeWatchAgent
@@ -179,7 +174,7 @@ class ForegroundAgent(Agent):
     @subscribe(PARTICIPANT_LEFT_TOPIC)
     async def participant_left(
         self,
-        _event: VoiceParticipantLeft,
+        _event: ParticipantLeft,
         ctx: RuntimeContext,
     ) -> None:
         await self._cancel(self._participant(ctx))
@@ -194,7 +189,7 @@ class ForegroundAgent(Agent):
     @subscribe(INTERRUPTED_TOPIC)
     async def interrupted(
         self,
-        _event: VoiceInterrupted,
+        _event: Interrupted,
         ctx: RuntimeContext,
     ) -> None:
         participant_id = ctx.metadata.participant_id
@@ -236,7 +231,7 @@ class ForegroundAgent(Agent):
                 if not spoken:
                     await ctx.publish(
                         VOICE_CONTRIBUTION_TOPIC,
-                        VoiceOutput(
+                        ResponseOutput(
                             text=response,
                             interrupt=True,
                             timestamp_us=query.timestamp_us,
@@ -469,7 +464,7 @@ class ForegroundAgent(Agent):
                         raise
                     await ctx.publish(
                         VOICE_CONTRIBUTION_TOPIC,
-                        VoiceOutput(
+                        ResponseOutput(
                             text=unavailable,
                             response_id=response_id,
                             final=False,
@@ -489,7 +484,7 @@ class ForegroundAgent(Agent):
                         chunks.append(chunk.text)
                         await ctx.publish(
                             VOICE_CONTRIBUTION_TOPIC,
-                            VoiceOutput(
+                            ResponseOutput(
                                 text=chunk.text,
                                 response_id=response_id,
                                 final=False,
@@ -510,7 +505,7 @@ class ForegroundAgent(Agent):
                     )
                     await ctx.publish(
                         VOICE_CONTRIBUTION_TOPIC,
-                        VoiceOutput(
+                        ResponseOutput(
                             text=unavailable,
                             response_id=response_id,
                             final=False,
@@ -527,7 +522,7 @@ class ForegroundAgent(Agent):
             )
             await ctx.publish(
                 VOICE_CONTRIBUTION_TOPIC,
-                VoiceOutput(
+                ResponseOutput(
                     text=unavailable,
                     response_id=response_id,
                     final=False,
@@ -545,7 +540,7 @@ class ForegroundAgent(Agent):
                 with suppress(RuntimeClosedError):
                     await ctx.publish(
                         VOICE_CONTRIBUTION_TOPIC,
-                        VoiceOutput(
+                        ResponseOutput(
                             response_id=response_id,
                             timestamp_us=timestamp_us,
                         ),

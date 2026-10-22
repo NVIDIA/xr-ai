@@ -15,6 +15,7 @@ from typing import Any
 import nemo_relay
 from loguru import logger
 from pydantic import BaseModel
+from xr_ai_interaction import ParticipantJoined, ParticipantLeft
 from xr_ai_models import ChatMessage, LLMService, ToolDef
 from xr_ai_runtime import (
     Agent,
@@ -28,7 +29,6 @@ from xr_ai_tools.current_frame import CurrentFrameTool
 from xr_ai_tools.rag import RAGTools
 from xr_ai_tools.tool_calling import ToolLoopError, run_tool_loop
 from xr_ai_tools.vision import ImageQueryTool
-from xr_ai_voice import VoiceParticipantJoined, VoiceParticipantLeft
 
 from .events import (
     GUIDANCE_NOTICE_TOPIC,
@@ -190,7 +190,7 @@ class GuidanceAgent(Agent):
     @subscribe(PARTICIPANT_JOINED_TOPIC)
     async def participant_joined(
         self,
-        _event: VoiceParticipantJoined,
+        _event: ParticipantJoined,
         ctx: RuntimeContext,
     ) -> None:
         participant_id = self._participant(ctx)
@@ -206,7 +206,7 @@ class GuidanceAgent(Agent):
     @subscribe(PARTICIPANT_LEFT_TOPIC)
     async def participant_left(
         self,
-        _event: VoiceParticipantLeft,
+        _event: ParticipantLeft,
         ctx: RuntimeContext,
     ) -> None:
         participant_id = self._participant(ctx)

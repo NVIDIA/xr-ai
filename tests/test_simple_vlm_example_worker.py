@@ -20,9 +20,10 @@ import pytest
 import yaml
 from PIL import Image
 from xr_ai_hub import FrameData, FrameSignal, FrameUnavailable, PixelFormat, ProcessorEndpoint
+from xr_ai_interaction import Interrupted, ResponseOutput, UserQuery
 from xr_ai_models import ChatResponse, VLMService
 from xr_ai_runtime import AgentRuntime
-from xr_ai_voice import UserQuery, VoiceAgent, VoiceInterrupted, VoiceOutput
+from xr_ai_voice import VoiceAgent
 from xr_ai_voice import _runtime as voice_runtime_module
 from xr_ai_voice._readiness import wait_for_services
 from xr_ai_voice._session import _VoiceSession as VoiceSession
@@ -421,7 +422,7 @@ async def test_simple_vlm_agent_closes_tool_stream_when_publication_fails() -> N
 
 
 async def test_simple_vlm_agent_reports_relay_wrapped_missing_camera_frame() -> None:
-    published: list[VoiceOutput] = []
+    published: list[ResponseOutput] = []
 
     async def missing_frame(_request: CurrentFrameRequest) -> ImageFrame:
         raise FrameUnavailable("No camera frame available — please try again.")
@@ -469,7 +470,7 @@ async def test_simple_vlm_agent_reports_relay_wrapped_missing_camera_frame() -> 
 async def test_cancelled_vlm_turn_does_not_publish_stream_terminator() -> None:
     waiting = asyncio.Event()
     closed = asyncio.Event()
-    published: list[VoiceOutput] = []
+    published: list[ResponseOutput] = []
 
     class Stream:
         def __init__(self) -> None:
@@ -1070,7 +1071,7 @@ async def test_simple_vlm_agent_handles_global_interruption_event() -> None:
         await asyncio.wait_for(started.wait(), 1.0)
         await runtime.publish(
             INTERRUPTED_TOPIC,
-            VoiceInterrupted(),
+            Interrupted(),
             source="voice.interruption",
         )
         await asyncio.wait_for(cancelled.wait(), 1.0)

@@ -36,12 +36,13 @@ from procedure_capture_guide_worker.guide.agent import GuideAgent
 from procedure_capture_guide_worker.guide.events import PARTICIPANT_JOINED_TOPIC, USER_QUERY_TOPIC
 from procedure_capture_guide_worker.guide.guides import SelectedGuide, select_guide
 from xr_ai_hub import FrameData, FrameSignal, PixelFormat
+from xr_ai_interaction import ParticipantJoined, ResponseOutput, UserQuery
 from xr_ai_models import load_models_config, make_llm, make_vlm
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, subscribe
 from xr_ai_tools.current_frame import CurrentFrameTool
 from xr_ai_tools.image import ImageRegistry
 from xr_ai_tools.vision import ImageQueryTool
-from xr_ai_voice import VOICE_OUTPUT_TOPIC, UserQuery, VoiceAggregationAgent, VoiceOutput, VoiceParticipantJoined
+from xr_ai_voice import VOICE_OUTPUT_TOPIC, VoiceAggregationAgent
 
 _SAMPLE = Path(__file__).resolve().parents[1]
 _PID = "guide-eval"
@@ -117,7 +118,7 @@ class Speech(Agent):
         self.log = log
 
     @subscribe(VOICE_OUTPUT_TOPIC)
-    async def receive(self, output: VoiceOutput, _ctx: RuntimeContext):
+    async def receive(self, output: ResponseOutput, _ctx: RuntimeContext):
         self.outputs.append(output)
         self.log("speech", text=output.text, timestamp_us=output.timestamp_us)
 
@@ -265,7 +266,7 @@ async def evaluate(manifest_path: Path | None, output: Path, *, packet: Path | N
     nemo_relay.subscribers.register(subscription, relay_event)
     try:
         async with runtime:
-            await runtime.publish(PARTICIPANT_JOINED_TOPIC, VoiceParticipantJoined(), participant_id=_PID)
+            await runtime.publish(PARTICIPANT_JOINED_TOPIC, ParticipantJoined(), participant_id=_PID)
             await wait_until(lambda: bool(speech.outputs))
             if packet:
                 deadline = time.monotonic() + (rows[-1]["timestamp_us"] - rows[0]["timestamp_us"]) / 1e6 + tail_s

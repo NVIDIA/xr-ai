@@ -29,10 +29,10 @@ from _common import (
     validate_suite,
 )
 from xr_ai_conversation import Conversation, ConversationContextUpdate
+from xr_ai_interaction import ResponseOutput
 from xr_ai_models import LLMService
 from xr_ai_routing import AgentTurn
 from xr_ai_runtime import AgentRuntime, Topic
-from xr_ai_voice import VoiceOutput
 
 SESSIONS = ("session_lab.yaml", "session_renovation.yaml")
 
@@ -47,7 +47,7 @@ async def run_session(llm: LLMService, name: str, sample_override: int | None) -
     conversation = Conversation(
         llm,
         runtime=runtime,
-        output_topic=Topic("conversation-eval.output", VoiceOutput),
+        output_topic=Topic("conversation-eval.output", ResponseOutput),
         incremental_context_topics=(topic_name,),
         dialogue_budget_bytes=budgets["dialogue_bytes"],
         topic_budget_bytes=budgets["topic_bytes"],

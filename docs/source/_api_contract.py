@@ -13,6 +13,7 @@ _REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 API_PACKAGE_DIRS = (
     _REPOSITORY_ROOT / "utils" / "xr-ai-gpu" / "xr_ai_gpu",
     _REPOSITORY_ROOT / "agent-sdk" / "xr-ai-hub" / "xr_ai_hub",
+    _REPOSITORY_ROOT / "agent-sdk" / "xr-ai-interaction" / "xr_ai_interaction",
     _REPOSITORY_ROOT / "agent-sdk" / "xr-ai-routing" / "xr_ai_routing",
     _REPOSITORY_ROOT / "agent-sdk" / "xr-ai-conversation" / "xr_ai_conversation",
     _REPOSITORY_ROOT / "agent-sdk" / "xr-ai-models" / "xr_ai_models",

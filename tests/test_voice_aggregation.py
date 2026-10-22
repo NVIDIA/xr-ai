@@ -9,14 +9,10 @@ import asyncio
 
 import pytest
 from loguru import logger
+from xr_ai_interaction import ResponseOutput
 from xr_ai_models import ChatMessage, ChatResponse
 from xr_ai_runtime import Agent, AgentRuntime, MessageMetadata, RuntimeContext, subscribe
-from xr_ai_voice import (
-    VOICE_CONTRIBUTION_TOPIC,
-    VOICE_OUTPUT_TOPIC,
-    VoiceAggregationAgent,
-    VoiceOutput,
-)
+from xr_ai_voice import VOICE_CONTRIBUTION_TOPIC, VOICE_OUTPUT_TOPIC, VoiceAggregationAgent
 
 
 class _LLM:
@@ -51,12 +47,12 @@ class _LLM:
 class _Recorder(Agent):
     def __init__(self, gate: asyncio.Event | None = None) -> None:
         super().__init__()
-        self.outputs: list[tuple[VoiceOutput, MessageMetadata]] = []
+        self.outputs: list[tuple[ResponseOutput, MessageMetadata]] = []
         self.changed = asyncio.Condition()
         self.gate = gate
 
     @subscribe(VOICE_OUTPUT_TOPIC)
-    async def record(self, output: VoiceOutput, ctx: RuntimeContext) -> None:
+    async def record(self, output: ResponseOutput, ctx: RuntimeContext) -> None:
         async with self.changed:
             self.outputs.append((output, ctx.metadata))
             self.changed.notify_all()
@@ -105,7 +101,7 @@ async def test_single_contribution_bypasses_llm() -> None:
     try:
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(text="The timer is done.", timestamp_us=11),
+            ResponseOutput(text="The timer is done.", timestamp_us=11),
             participant_id="alice",
             source="timer",
         )
@@ -129,13 +125,13 @@ async def test_simultaneous_contributions_are_rewritten_once() -> None:
     try:
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(text="Temperature rose to 24 degrees.", timestamp_us=20),
+            ResponseOutput(text="Temperature rose to 24 degrees.", timestamp_us=20),
             participant_id="alice",
             source="instrument-monitor",
         )
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(text="The timer is done.", timestamp_us=10),
+            ResponseOutput(text="The timer is done.", timestamp_us=10),
             participant_id="alice",
             source="timer",
         )
@@ -170,13 +166,13 @@ async def test_participants_aggregate_independently() -> None:
         await asyncio.gather(
             runtime.publish(
                 VOICE_CONTRIBUTION_TOPIC,
-                VoiceOutput(text="Alice update."),
+                ResponseOutput(text="Alice update."),
                 participant_id="alice",
                 source="monitor",
             ),
             runtime.publish(
                 VOICE_CONTRIBUTION_TOPIC,
-                VoiceOutput(text="Bob update."),
+                ResponseOutput(text="Bob update."),
                 participant_id="bob",
                 source="monitor",
             ),
@@ -198,27 +194,27 @@ async def test_lone_stream_passes_through_while_pending_updates_coalesce() -> No
     try:
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(text="I can see ", response_id="view", final=False),
+            ResponseOutput(text="I can see ", response_id="view", final=False),
             participant_id="alice",
             source="foreground",
         )
         await recorder.wait_for(1)
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(text="Temperature changed."),
+            ResponseOutput(text="Temperature changed."),
             participant_id="alice",
             source="instrument-monitor",
         )
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(text="The timer completed."),
+            ResponseOutput(text="The timer completed."),
             participant_id="alice",
             source="timer",
         )
         assert len(recorder.outputs) == 1
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(text="a beaker.", response_id="view"),
+            ResponseOutput(text="a beaker.", response_id="view"),
             participant_id="alice",
             source="foreground",
         )
@@ -231,7 +227,7 @@ async def test_lone_stream_passes_through_while_pending_updates_coalesce() -> No
     assert first.final is False
     assert first.response_id
     assert first.response_id != "view"
-    assert second == VoiceOutput(
+    assert second == ResponseOutput(
         text="a beaker.",
         response_id=first.response_id,
         final=True,
@@ -251,20 +247,20 @@ async def test_stream_buffered_during_playback_keeps_all_chunks() -> None:
     try:
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(text="Initial announcement."),
+            ResponseOutput(text="Initial announcement."),
             participant_id="alice",
             source="foreground",
         )
         await recorder.wait_for(1)
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(text="Buffered ", response_id="view", final=False),
+            ResponseOutput(text="Buffered ", response_id="view", final=False),
             participant_id="alice",
             source="foreground",
         )
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(text="stream.", response_id="view"),
+            ResponseOutput(text="stream.", response_id="view"),
             participant_id="alice",
             source="foreground",
         )
@@ -275,7 +271,7 @@ async def test_stream_buffered_during_playback_keeps_all_chunks() -> None:
     outputs = [output for output, _metadata in recorder.outputs]
     assert outputs[0].final is True
     assert outputs[1].text == "Buffered "
-    assert outputs[2] == VoiceOutput(
+    assert outputs[2] == ResponseOutput(
         text="stream.",
         response_id=outputs[1].response_id,
         final=True,
@@ -294,7 +290,7 @@ async def test_interleaved_streams_keep_each_stream_ordered() -> None:
         ):
             await runtime.publish(
                 VOICE_CONTRIBUTION_TOPIC,
-                VoiceOutput(text=text, response_id=response_id, final=final),
+                ResponseOutput(text=text, response_id=response_id, final=final),
                 participant_id="alice",
                 source=source,
             )
@@ -330,20 +326,20 @@ async def test_updates_during_estimated_playback_coalesce_after_current_output()
     try:
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(text="This response remains active while it is spoken."),
+            ResponseOutput(text="This response remains active while it is spoken."),
             participant_id="alice",
             source="foreground",
         )
         await recorder.wait_for(1)
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(text="Temperature changed."),
+            ResponseOutput(text="Temperature changed."),
             participant_id="alice",
             source="instrument-monitor",
         )
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(text="The timer completed."),
+            ResponseOutput(text="The timer completed."),
             participant_id="alice",
             source="timer",
         )
@@ -369,7 +365,7 @@ async def test_pending_capacity_drops_oldest_across_all_buffered_work() -> None:
     try:
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(text="Current response."),
+            ResponseOutput(text="Current response."),
             participant_id="alice",
             source="foreground",
         )
@@ -377,7 +373,7 @@ async def test_pending_capacity_drops_oldest_across_all_buffered_work() -> None:
         for index in range(5):
             await runtime.publish(
                 VOICE_CONTRIBUTION_TOPIC,
-                VoiceOutput(text=f"Update {index}."),
+                ResponseOutput(text=f"Update {index}."),
                 participant_id="alice",
                 source="monitor",
             )
@@ -402,7 +398,7 @@ async def test_pending_capacity_preserves_urgent_work() -> None:
     try:
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(text="Blocked output."),
+            ResponseOutput(text="Blocked output."),
             participant_id="alice",
             source="foreground",
         )
@@ -410,13 +406,13 @@ async def test_pending_capacity_preserves_urgent_work() -> None:
         for text in ("Urgent one.", "Urgent two."):
             await runtime.publish(
                 VOICE_CONTRIBUTION_TOPIC,
-                VoiceOutput(text=text, interrupt=True),
+                ResponseOutput(text=text, interrupt=True),
                 participant_id="alice",
                 source="safety",
             )
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(text="Routine stream.", response_id="routine", final=False),
+            ResponseOutput(text="Routine stream.", response_id="routine", final=False),
             participant_id="alice",
             source="monitor",
         )
@@ -430,7 +426,7 @@ async def test_pending_capacity_preserves_urgent_work() -> None:
 
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(text="Urgent three.", interrupt=True),
+            ResponseOutput(text="Urgent three.", interrupt=True),
             participant_id="alice",
             source="safety",
         )
@@ -453,14 +449,14 @@ async def test_discarded_stream_does_not_resume_after_other_interrupts() -> None
     try:
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(text="A-start", response_id="A", final=False),
+            ResponseOutput(text="A-start", response_id="A", final=False),
             participant_id="alice",
             source="stream",
         )
         await recorder.wait_for(1)
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(
+            ResponseOutput(
                 text="B-start",
                 response_id="B",
                 final=False,
@@ -472,7 +468,7 @@ async def test_discarded_stream_does_not_resume_after_other_interrupts() -> None
         await recorder.wait_for(2)
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(
+            ResponseOutput(
                 text="C-start",
                 response_id="C",
                 final=False,
@@ -484,7 +480,7 @@ async def test_discarded_stream_does_not_resume_after_other_interrupts() -> None
         await recorder.wait_for(3)
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(text="C-end", response_id="C"),
+            ResponseOutput(text="C-end", response_id="C"),
             participant_id="alice",
             source="stream",
         )
@@ -495,7 +491,7 @@ async def test_discarded_stream_does_not_resume_after_other_interrupts() -> None
         old_expiry = state.discarded_streams[a_key]
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(text="A-stale-tail", response_id="A", final=False),
+            ResponseOutput(text="A-stale-tail", response_id="A", final=False),
             participant_id="alice",
             source="stream",
         )
@@ -505,7 +501,7 @@ async def test_discarded_stream_does_not_resume_after_other_interrupts() -> None
 
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(response_id="A"),
+            ResponseOutput(response_id="A"),
             participant_id="alice",
             source="stream",
         )
@@ -536,14 +532,14 @@ async def test_discarded_stream_can_restart_after_idle_expiry() -> None:
     try:
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(text="A-old", response_id="A", final=False),
+            ResponseOutput(text="A-old", response_id="A", final=False),
             participant_id="alice",
             source="stream",
         )
         await recorder.wait_for(1)
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(
+            ResponseOutput(
                 text="B-start",
                 response_id="B",
                 final=False,
@@ -555,7 +551,7 @@ async def test_discarded_stream_can_restart_after_idle_expiry() -> None:
         await recorder.wait_for(2)
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(text="B-end", response_id="B"),
+            ResponseOutput(text="B-end", response_id="B"),
             participant_id="alice",
             source="stream",
         )
@@ -564,14 +560,14 @@ async def test_discarded_stream_can_restart_after_idle_expiry() -> None:
 
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(text="A-new", response_id="A", final=False),
+            ResponseOutput(text="A-new", response_id="A", final=False),
             participant_id="alice",
             source="stream",
         )
         await recorder.wait_for(4)
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(text="A-end", response_id="A"),
+            ResponseOutput(text="A-end", response_id="A"),
             participant_id="alice",
             source="stream",
         )
@@ -599,7 +595,7 @@ async def test_expired_discarded_streams_are_pruned_by_finite_work() -> None:
     try:
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(text="Current status."),
+            ResponseOutput(text="Current status."),
             participant_id="alice",
             source="monitor",
         )
@@ -610,7 +606,7 @@ async def test_expired_discarded_streams_are_pruned_by_finite_work() -> None:
 
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(text="Updated status."),
+            ResponseOutput(text="Updated status."),
             participant_id="alice",
             source="monitor",
         )
@@ -631,13 +627,13 @@ async def test_release_cancels_only_departed_participant_state() -> None:
     try:
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(text="Long response for Alice."),
+            ResponseOutput(text="Long response for Alice."),
             participant_id="alice",
             source="foreground",
         )
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(text="Long response for Bob."),
+            ResponseOutput(text="Long response for Bob."),
             participant_id="bob",
             source="foreground",
         )
@@ -657,21 +653,21 @@ async def test_urgent_contribution_interrupts_active_stream() -> None:
     try:
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(text="A long description", response_id="view", final=False),
+            ResponseOutput(text="A long description", response_id="view", final=False),
             participant_id="alice",
             source="foreground",
         )
         await recorder.wait_for(1)
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(text="Move away from the heater.", interrupt=True),
+            ResponseOutput(text="Move away from the heater.", interrupt=True),
             participant_id="alice",
             source="safety-monitor",
         )
         await recorder.wait_for(2)
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(response_id="view"),
+            ResponseOutput(response_id="view"),
             participant_id="alice",
             source="foreground",
         )
@@ -693,19 +689,19 @@ async def test_urgent_batch_speaks_alert_first_and_retains_routine_order() -> No
     try:
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(text="Routine one."),
+            ResponseOutput(text="Routine one."),
             participant_id="alice",
             source="monitor",
         )
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(text="Routine two."),
+            ResponseOutput(text="Routine two."),
             participant_id="alice",
             source="timer",
         )
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(text="Move away.", interrupt=True),
+            ResponseOutput(text="Move away.", interrupt=True),
             participant_id="alice",
             source="safety",
         )
@@ -736,25 +732,25 @@ async def test_stream_boundary_does_not_hide_queued_urgent_output() -> None:
     try:
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(text="Routine."),
+            ResponseOutput(text="Routine."),
             participant_id="alice",
             source="monitor",
         )
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(text="Stream start", response_id="foreground", final=False),
+            ResponseOutput(text="Stream start", response_id="foreground", final=False),
             participant_id="alice",
             source="foreground",
         )
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(text="Move now.", interrupt=True),
+            ResponseOutput(text="Move now.", interrupt=True),
             participant_id="alice",
             source="safety",
         )
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(text="Stream end", response_id="foreground"),
+            ResponseOutput(text="Stream end", response_id="foreground"),
             participant_id="alice",
             source="foreground",
         )
@@ -782,7 +778,7 @@ async def test_urgent_first_contribution_skips_coalescing_delay() -> None:
     try:
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(text="Move away.", interrupt=True),
+            ResponseOutput(text="Move away.", interrupt=True),
             participant_id="alice",
             source="safety",
         )
@@ -801,20 +797,20 @@ async def test_urgent_contribution_cancels_in_flight_rewrite() -> None:
     try:
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(text="First routine update."),
+            ResponseOutput(text="First routine update."),
             participant_id="alice",
             source="one",
         )
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(text="Second routine update."),
+            ResponseOutput(text="Second routine update."),
             participant_id="alice",
             source="two",
         )
         await asyncio.wait_for(llm.started.wait(), 1.0)
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(text="Move away now.", interrupt=True),
+            ResponseOutput(text="Move away now.", interrupt=True),
             participant_id="alice",
             source="safety",
         )
@@ -839,13 +835,13 @@ async def test_rewrite_failure_preserves_all_updates() -> None:
     try:
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(text="First update."),
+            ResponseOutput(text="First update."),
             participant_id="alice",
             source="one",
         )
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(text="Second update."),
+            ResponseOutput(text="Second update."),
             participant_id="alice",
             source="two",
         )
@@ -866,13 +862,13 @@ async def test_rewrite_timeout_is_enforced_around_service_call() -> None:
     try:
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(text="First update."),
+            ResponseOutput(text="First update."),
             participant_id="alice",
             source="one",
         )
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(text="Second update."),
+            ResponseOutput(text="Second update."),
             participant_id="alice",
             source="two",
         )
@@ -895,13 +891,13 @@ async def test_shutdown_logs_prepublication_in_flight_work(release: bool) -> Non
     try:
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(text="First update."),
+            ResponseOutput(text="First update."),
             participant_id="alice",
             source="one",
         )
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(text="Second update."),
+            ResponseOutput(text="Second update."),
             participant_id="alice",
             source="two",
         )
@@ -931,7 +927,7 @@ async def test_contribution_after_stop_is_dropped_without_publisher_error() -> N
     try:
         await runtime.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(text="Late update."),
+            ResponseOutput(text="Late update."),
             participant_id="alice",
             source="monitor",
         )

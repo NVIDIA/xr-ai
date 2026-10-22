@@ -19,11 +19,12 @@ import pytest
 from PIL import Image
 from xr_ai_hub import FrameUnavailable, ParticipantEvent
 from xr_ai_hub._capture import CAPTURE_STT_TOPIC
+from xr_ai_interaction import UserQuery
 from xr_ai_models import load_models_config
 from xr_ai_runtime import AgentRuntime
 from xr_ai_tools.current_frame import ImageFrame
 from xr_ai_tools.image import ImageRegistry
-from xr_ai_voice import VOICE_OUTPUT_TOPIC, UserQuery
+from xr_ai_voice import VOICE_OUTPUT_TOPIC
 
 _SAMPLE = Path(__file__).resolve().parents[1] / "agent-samples/procedure-capture-guide"
 sys.path.insert(0, str(_SAMPLE / "worker"))
@@ -384,14 +385,14 @@ async def test_finalization_exception_does_not_add_announcements(demo, monkeypat
 
 
 async def test_runtime_shutdown_during_stop_announcement_preserves_stop_record(demo):
+    from xr_ai_interaction import ResponseOutput
     from xr_ai_runtime import Agent, RuntimeContext, subscribe
-    from xr_ai_voice import VoiceOutput
 
     entered = asyncio.Event()
 
     class BlockedOutput(Agent):
         @subscribe(VOICE_OUTPUT_TOPIC)
-        async def output(self, message: VoiceOutput, ctx: RuntimeContext):
+        async def output(self, message: ResponseOutput, ctx: RuntimeContext):
             assert message.text == "Capture stopped."
             entered.set()
             await asyncio.Future()
