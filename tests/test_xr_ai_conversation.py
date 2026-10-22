@@ -12,6 +12,7 @@ from unittest.mock import patch
 
 import pytest
 import xr_ai_conversation as conversation_package
+import xr_ai_conversation._conversation as conversation_module
 from xr_ai_conversation import Conversation, ConversationContextUpdate
 from xr_ai_conversation._context import (
     _BackgroundSection,
@@ -28,6 +29,7 @@ from xr_ai_routing import (
     DestinationResult,
     RoutableAgent,
     RoutingAid,
+    notify_response_started,
 )
 from xr_ai_runtime import AgentRuntime, Topic
 
@@ -142,6 +144,39 @@ async def test_conversation_is_a_normal_front_end_destination_with_completed_his
     assert "max_tokens" not in llm.calls[0]
     assert "temperature" not in llm.calls[0]
     assert "enable_thinking" not in llm.calls[0]
+
+
+@pytest.mark.asyncio
+async def test_conversation_notifies_before_delivery_and_preserves_answer_context(monkeypatch):
+    events = []
+
+    class LLM(_LLM):
+        def stream_events(self, _messages, **_kwargs):
+            async def chunks():
+                for text in (" ", "Hello", " there."):
+                    yield ChatStreamEvent(kind="text", text=text)
+            return chunks()
+
+    def notify():
+        events.append(("started", notify_response_started()))
+
+    async def emit(source, text):
+        events.append((source, text))
+
+    monkeypatch.setattr(conversation_module, "notify_response_started", notify)
+    conversation = Conversation(LLM())
+    router = AgentRouter({"conversation": conversation}, _Decisions())
+    result = await router.handle(AgentTurn("alice", "turn-1", "Hello."), emit=emit)
+
+    assert events == [
+        ("conversation", " "),
+        ("started", True),
+        ("conversation", "Hello"),
+        ("conversation", " there."),
+    ]
+    assert result == DestinationResult("answer", "Hello there.")
+    assert router._history["alice"] == [AgentExchange("Hello.", "Hello there.")]
+    assert len(router._first_answer_samples["alice"]["conversation"]) == 1
 
 
 @pytest.mark.asyncio

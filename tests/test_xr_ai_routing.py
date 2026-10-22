@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import json
 from collections import deque
 from contextlib import contextmanager
@@ -23,6 +24,7 @@ from xr_ai_routing import (
     RoutingAid,
     RoutingTurnContext,
     current_turn_context,
+    notify_response_started,
 )
 from xr_ai_routing._history import (
     _active_exchange_id,
@@ -47,7 +49,172 @@ def test_routable_agent_is_the_only_destination_protocol_export() -> None:
         "RoutingAid",
         "RoutingTurnContext",
         "current_turn_context",
+        "notify_response_started",
     ]
+
+
+def test_response_started_outside_a_routed_answer_is_ignored():
+    assert notify_response_started() is False
+
+
+@pytest.mark.asyncio
+async def test_direct_response_signal_cancels_blocked_ack_without_emitting_text(monkeypatch):
+    now = 0.0
+    monkeypatch.setattr(router_module, "_monotonic", lambda: now)
+    responded = asyncio.Event()
+    respond = asyncio.Event()
+    finish = asyncio.Event()
+    notifications = []
+    llm = _AcknowledgmentLLM(blocked=True)
+
+    class Destination(_AckDestination):
+        async def answer(self, _turn, *, emit):
+            del emit
+            await llm.started.wait()
+            await respond.wait()
+            notifications.extend((notify_response_started(), notify_response_started()))
+            responded.set()
+            await finish.wait()
+            return DestinationResult("focus", "The application updated the scene.")
+
+    destination = Destination()
+    router = AgentRouter(
+        {"destination": destination},
+        _Prediction("slow", {"slow": 0.9, "within_delay": 0.05, "uncertain": 0.05}),
+        default_destination="destination",
+        acknowledgment_llm=llm,
+        acknowledgment_delay_secs=10.0,
+    )
+    output = []
+    task = asyncio.create_task(_ack_output(router, "Update the scene.", output))
+    await asyncio.wait_for(llm.started.wait(), timeout=1)
+    now = 2.0
+    respond.set()
+    await asyncio.wait_for(responded.wait(), timeout=1)
+    await asyncio.wait_for(llm.cancelled.wait(), timeout=1)
+    assert not task.done()
+    assert output == []
+    assert notifications == [True, False]
+    now = 50.0
+    finish.set()
+    result = await asyncio.wait_for(task, timeout=1)
+    assert result.disposition == "focus"
+    assert router._focus == {"alice": "destination"}
+    assert router._history["alice"] == [AgentExchange("Update the scene.", result.text)]
+    assert router._first_answer_samples["alice"]["destination"] == [("Update the scene.", 2.0)]
+
+
+@pytest.mark.parametrize("ending", ["completion", "failure", "interrupt", "replacement", "departure", "stop"])
+@pytest.mark.asyncio
+async def test_response_signal_from_old_answer_cannot_affect_later_turn(ending):
+    contexts = {}
+    entered = {name: asyncio.Event() for name in ("old", "new")}
+    finish = {name: asyncio.Event() for name in ("old", "new")}
+    notifications = []
+
+    class Destination(_AckDestination):
+        async def admit(self, turn, *, focused):
+            notifications.append(notify_response_started())
+            return await super().admit(turn, focused=focused)
+
+        async def answer(self, turn, *, emit):
+            del emit
+            contexts[turn.query] = contextvars.copy_context()
+            entered[turn.query].set()
+            try:
+                await finish[turn.query].wait()
+            except asyncio.CancelledError:
+                notifications.append(notify_response_started())
+                raise
+            if ending == "failure" and turn.query == "old":
+                raise ValueError("destination failed")
+            return DestinationResult()
+
+    router = AgentRouter({"destination": Destination()}, None, default_destination="destination")
+    output = []
+    old = asyncio.create_task(_ack_output(router, "old", output))
+    await asyncio.wait_for(entered["old"].wait(), timeout=1)
+    if ending in {"completion", "failure"}:
+        finish["old"].set()
+        old_result = (await asyncio.gather(old, return_exceptions=True))[0]
+        if ending == "failure":
+            assert isinstance(old_result, ValueError)
+        else:
+            assert old_result == DestinationResult()
+    elif ending != "replacement":
+        operation = {
+            "interrupt": lambda: router.interrupt("alice"),
+            "departure": lambda: router.participant_left("alice"),
+            "stop": router.stop,
+        }[ending]
+        await operation()
+    new = asyncio.create_task(_ack_output(router, "new", output))
+    await asyncio.wait_for(entered["new"].wait(), timeout=1)
+    if ending not in {"completion", "failure"}:
+        assert isinstance((await asyncio.gather(old, return_exceptions=True))[0], asyncio.CancelledError)
+    assert contexts["old"].run(notify_response_started) is False
+    assert notify_response_started() is False
+    assert contexts["new"].run(notify_response_started) is True
+    assert contexts["new"].run(notify_response_started) is False
+    finish["new"].set()
+    await asyncio.wait_for(new, timeout=1)
+    assert contexts["new"].run(notify_response_started) is False
+    assert not any(notifications)
+    assert output == []
+    assert router._history["alice"] == []
+    assert router._focus == {}
+    assert [query for query, _duration in router._first_answer_samples["alice"]["destination"]] == ["new"]
+
+
+@pytest.mark.asyncio
+async def test_blank_emit_does_not_signal_and_explicit_signal_survives_first_text():
+    notifications = []
+
+    class Destination(_AckDestination):
+        async def answer(self, _turn, *, emit):
+            await emit("wrong-source", " ")
+            notifications.append(notify_response_started())
+            await emit("wrong-source", "answer")
+            notifications.append(notify_response_started())
+            return DestinationResult("answer", "routing context")
+
+    router = AgentRouter({"destination": Destination()}, None, default_destination="destination")
+    output = []
+    await _ack_output(router, "request", output)
+    assert notifications == [True, False]
+    assert output == [("destination", " "), ("destination", "answer")]
+    assert router._history["alice"] == [AgentExchange("request", "routing context")]
+    assert len(router._first_answer_samples["alice"]["destination"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_response_notification_is_scoped_to_answer_and_inherited_by_child_tasks():
+    notifications = []
+
+    async def child_notification():
+        return notify_response_started()
+
+    class Inner(_AckDestination):
+        async def admit(self, turn, *, focused):
+            notifications.append(("inner admission", notify_response_started()))
+            return await super().admit(turn, focused=focused)
+
+        async def answer(self, _turn, *, emit):
+            del emit
+            notifications.append(("inner answer", await asyncio.create_task(child_notification())))
+            return DestinationResult()
+
+    inner = AgentRouter({"destination": Inner()}, None, default_destination="destination")
+
+    class Outer(_AckDestination):
+        async def answer(self, _turn, *, emit):
+            await inner.handle(AgentTurn("alice", "inner", "inner request"), emit=emit)
+            notifications.append(("outer answer", await asyncio.create_task(child_notification())))
+            return DestinationResult()
+
+    outer = AgentRouter({"destination": Outer()}, None, default_destination="destination")
+    await _ack_output(outer, "outer request", [])
+    assert notifications == [("inner admission", False), ("inner answer", True), ("outer answer", True)]
 
 
 class _Prediction:

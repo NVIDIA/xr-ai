@@ -54,8 +54,8 @@ turn = AgentTurn(
 result = await router.handle(turn, emit=publish_chunk)
 ```
 
-`AgentExchange` records a completed user request and its user-visible
-answer. The first turn for a participant uses the supplied `turn.history` as its
+`AgentExchange` records a completed user request and its destination-provided
+response context. The first turn for a participant uses the supplied `turn.history` as its
 initial history once. Later turns use history retained by the router. Only whole
 recent exchanges that fit `context_budget_bytes` are retained and passed to route decisions;
 the budget counts the serialized exchange and time label in UTF-8 bytes. An
@@ -85,6 +85,38 @@ while each destination's `admit()` method remains responsible for deciding
 whether it can accept the specific turn. Destinations decline or clarify before
 answer work begins. A clarification returned after answer work starts is an
 error.
+
+## Response progress and routing context
+
+Destinations can call `notify_response_started()` immediately before their
+first meaningful output or application action. The notification contains no
+response text and works when a destination publishes its output directly
+instead of using `emit`. It suppresses a pending optional acknowledgment and
+supplies the first-response timing sample if the answer completes successfully.
+It does not deliver output, complete the turn, change focus, or add history.
+Return a `DestinationResult` for completion and focus; exceptions still report
+failure to the caller.
+
+The notification applies only during the current destination's `answer()` call,
+including its child-task contexts. The first notification returns `True`;
+duplicates and calls outside an active answer return `False`. A retained
+context from a completed or interrupted answer cannot notify a later turn,
+including after departure and rejoin. Destinations own and drain their child
+tasks before returning. Call the function from the answer's event loop.
+
+`DestinationResult.text` remains optional response context for routing history.
+The router retains supplied text without delivering it as output. A destination
+can return a concise description of an application action, a completed text
+answer, or no context. Existing history budgets and route-selection behavior
+apply to any supplied context.
+
+Existing callback-based destinations remain supported: the first nonblank
+`emit` chunk supplies the notification automatically. The router still
+intercepts that callback path to attribute chunks, suppress interrupted output,
+and serialize it with acknowledgment output. `Conversation.answer()` explicitly
+notifies before its first nonblank chunk and continues to deliver chunks through
+this existing callback path. Direct destination output bypasses that path;
+its application output port owns delivery and serialization.
 
 ## Focus, cancellation, and departure
 
@@ -126,14 +158,19 @@ should default to non-reasoning generation because per-call settings cannot
 override model-level behavior for every provider. A positive delay controls the
 fallback threshold. Measured first-answer examples can predict a slower response
 and start acknowledgment generation earlier, while destination work starts
-immediately. The first nonblank answer chunk cancels acknowledgment that has
-not yet been emitted. This cannot retract text already handed to the output
-callback or audio already queued by the application.
+immediately. An explicit response-start notification or the first nonblank
+answer chunk cancels acknowledgment that has not yet been emitted. This cannot
+retract text already handed to the output callback or audio already queued by
+the application.
 
 The timing sample begins after destination admission and ends when the
-destination produces its first nonblank text. It excludes route selection,
+destination signals its first meaningful response, either explicitly or through
+its first nonblank text chunk. It excludes route selection,
 admission, acknowledgment-output serialization, and downstream playback.
 Admission preambles suppress the optional acknowledgment for that turn.
+The `conversation.response-started` trace records that notification separately
+from the existing text-ready and text-emitted timestamps. A notification does
+not establish that output has been accepted or played by a downstream transport.
 If prediction or acknowledgment generation fails, the optional task logs the
 failure once and ends; the destination answer continues. The decision service
 does not define a separate expected-prediction-failure category, so errors are

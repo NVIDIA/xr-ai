@@ -23,6 +23,7 @@ from xr_ai_routing import (
     RoutableAgent,
     RoutingAid,
     current_turn_context,
+    notify_response_started,
 )
 from xr_ai_runtime import Agent, Topic
 
@@ -134,14 +135,19 @@ class Conversation(RoutableAgent):
         """Forward answer chunks with the general conversation source name.
 
         Cancellation and stream errors propagate after the inner iterator is
-        closed.
+        closed. The first nonblank chunk notifies the active router before
+        delivery; the completed text remains available as routing context.
         """
 
         fragments: list[str] = []
+        response_started = False
         stream = self.stream(turn.query, turn.participant_id, history=turn.history)
         try:
             async for text in stream:
                 fragments.append(text)
+                if not response_started and text.strip():
+                    notify_response_started()
+                    response_started = True
                 await emit(self._routing.name, text)
         finally:
             await stream.aclose()

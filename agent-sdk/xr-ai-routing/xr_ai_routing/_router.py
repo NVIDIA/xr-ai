@@ -30,6 +30,7 @@ from ._history import (
     _active_history_timestamps,
     _format_minute,
 )
+from ._progress import _response_started
 
 _DEFAULT_CONTEXT_BUDGET_BYTES = 12_000
 _ACKNOWLEDGMENT_MAX_TOKENS = 64
@@ -72,11 +73,12 @@ class AgentRouter:
     Acknowledgments use a bounded output-token budget. A positive delay sets
     the fallback silence threshold; a confident prediction
     of a slower first answer can start the acknowledgment earlier. The
-    destination still starts immediately, and its first nonblank answer chunk
-    cancels any acknowledgment that has not yet been emitted. This suppresses
+    destination still starts immediately. Its ``notify_response_started()``
+    notification or first nonblank answer chunk cancels any acknowledgment
+    that has not yet been emitted. This suppresses
     pending output, not audio already queued or played by downstream transports.
     The delay and timing examples start after admission and measure when the
-    destination produces its first nonblank text, excluding routing, admission,
+    destination signals its first meaningful response, excluding routing, admission,
     acknowledgment-output serialization, and audio playback.
 
     :param destinations: Registered destinations keyed by their stable route names.
@@ -207,6 +209,7 @@ class AgentRouter:
                     await emit(source, text)
 
             async def run_handle() -> DestinationResult:
+                progress_token = _response_started.set(None)
                 timestamp_token = _active_history_timestamps.set(timestamps)
                 history_id_token = _active_history_exchange_ids.set(exchange_ids)
                 current_id_token = _active_exchange_id.set(current_exchange_id)
@@ -216,6 +219,7 @@ class AgentRouter:
                     _active_exchange_id.reset(current_id_token)
                     _active_history_exchange_ids.reset(history_id_token)
                     _active_history_timestamps.reset(timestamp_token)
+                    _response_started.reset(progress_token)
 
             task = asyncio.create_task(
                 run_handle(),
@@ -489,30 +493,55 @@ class AgentRouter:
             output_lock = asyncio.Lock()
             first_answer_duration: float | None = None
             first_answer_claimed = False
+            response_open = True
             answer_started_at = _monotonic()
             answer_execution_started_at_unix_ns = time.time_ns()
             prediction_trace: dict[str, object] = {"choice": "not_started", "probabilities": {}}
 
+            def response_started() -> bool:
+                nonlocal first_answer_duration
+                if (
+                    not response_open
+                    or self._generation.get(turn.participant_id) is not generation
+                    or answer_started.is_set()
+                ):
+                    return False
+                answer_started.set()
+                first_answer_duration = _monotonic() - answer_started_at
+                if (
+                    acknowledgment_task is not None
+                    and not acknowledgment_task.done()
+                    and not acknowledgment_committed.is_set()
+                ):
+                    acknowledgment_task.cancel()
+                with nemo_relay.scope.scope(
+                    "conversation.response-started",
+                    nemo_relay.ScopeType.Agent,
+                    input={"query": turn.query},
+                    metadata={
+                        "participant_id": turn.participant_id,
+                        "destination": destination_name,
+                        "execution_started_at_unix_ns": answer_execution_started_at_unix_ns,
+                        "response_started_at_unix_ns": time.time_ns(),
+                        "time_to_response_started_secs": first_answer_duration,
+                    },
+                ):
+                    pass
+                return True
+
             async def emit_answer(source: str, text: str) -> None:
-                nonlocal first_answer_duration, first_answer_claimed
+                nonlocal first_answer_claimed
                 is_first_answer_chunk = bool(text.strip()) and not first_answer_claimed
                 ready_duration = None
                 first_text_ready_at_unix_ns = None
                 if is_first_answer_chunk:
                     first_answer_claimed = True
-                    answer_started.set()
                     ready_duration = _monotonic() - answer_started_at
                     first_text_ready_at_unix_ns = time.time_ns()
-                    if (
-                        acknowledgment_task is not None
-                        and not acknowledgment_task.done()
-                        and not acknowledgment_committed.is_set()
-                    ):
-                        acknowledgment_task.cancel()
+                    response_started()
                 async with output_lock:
                     await emit(source, text)
                     if is_first_answer_chunk:
-                        first_answer_duration = ready_duration
                         with nemo_relay.scope.scope(
                             "conversation.first-meaningful-answer-text",
                             nemo_relay.ScopeType.Agent,
@@ -523,7 +552,7 @@ class AgentRouter:
                                 "execution_started_at_unix_ns": answer_execution_started_at_unix_ns,
                                 "first_text_ready_at_unix_ns": first_text_ready_at_unix_ns,
                                 "first_text_emitted_at_unix_ns": time.time_ns(),
-                                "time_to_first_answer_ready_secs": first_answer_duration,
+                                "time_to_first_answer_ready_secs": ready_duration,
                                 "acknowledgment_delay_secs": self._acknowledgment_delay_secs,
                                 "prediction_choice": prediction_trace["choice"],
                                 "prediction_probabilities": prediction_trace["probabilities"],
@@ -577,12 +606,15 @@ class AgentRouter:
                         cleanup_errors=acknowledgment_cleanup_errors,
                     )
                 )
+            progress_token = _response_started.set(response_started)
             try:
                 result = await destination.answer(
                     turn,
                     emit=partial(_emit_from, emit_answer, destination_name),
                 )
             finally:
+                response_open = False
+                _response_started.reset(progress_token)
                 if acknowledgment_task is not None:
                     if not acknowledgment_committed.is_set():
                         if not acknowledgment_task.cancelling():
@@ -820,14 +852,14 @@ class AgentRouter:
         }
         question = DecisionQuestion(
             instructions=(
-                "Predict whether this destination's first meaningful answer text will arrive before the configured "
+                "Predict whether this destination's first meaningful response will start before the configured "
                 "silence delay, using only the destination description and the participant's measured examples. "
                 "Choose uncertain when examples are absent, mixed, or not relevant. Do not use total completion time."
             ),
             criteria={
-                "slow": "Relevant measured examples support first meaningful answer text arriving after the delay.",
+                "slow": "Relevant measured examples support a first meaningful response starting after the delay.",
                 "within_delay": (
-                    "Relevant measured examples support first meaningful answer text arriving by the delay."
+                    "Relevant measured examples support a first meaningful response starting by the delay."
                 ),
                 "uncertain": "There is not enough relevant measured evidence to predict first-answer timing.",
             },

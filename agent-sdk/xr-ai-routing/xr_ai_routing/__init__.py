@@ -13,6 +13,7 @@ from ._contracts import (
     RoutingTurnContext,
 )
 from ._history import current_turn_context
+from ._progress import notify_response_started
 from ._router import AgentRouter
 
 __all__ = [
@@ -25,4 +26,5 @@ __all__ = [
     "RoutingAid",
     "RoutingTurnContext",
     "current_turn_context",
+    "notify_response_started",
 ]

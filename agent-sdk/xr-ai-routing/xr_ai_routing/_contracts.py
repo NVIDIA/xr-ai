@@ -32,13 +32,13 @@ class RoutingTurnContext:
 
 @dataclass(frozen=True, slots=True)
 class AgentExchange:
-    """One completed user and assistant exchange."""
+    """One completed user request and destination-provided response context."""
 
     user: str
     """User request in the completed exchange."""
 
     assistant: str
-    """Completed user-visible reply, excluding progress acknowledgments."""
+    """Completed response context, excluding progress acknowledgments."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,7 +103,7 @@ class Admission:
 
 @dataclass(frozen=True, slots=True)
 class DestinationResult:
-    """Completed answer plus the router's post-answer focus transition."""
+    """Optional completed response context and the router's focus transition."""
 
     disposition: Literal["answer", "focus", "release", "clarify"] = "answer"
     """Destinations return answer, focus, or release; the router returns clarify before answer work.
@@ -113,7 +113,11 @@ class DestinationResult:
     """
 
     text: str = ""
-    """Completed answer to retain in history; progress acknowledgements are excluded."""
+    """Optional completed response context to retain in history.
+
+    This text is not delivered as output by the router. Destinations can omit
+    it when no routing context is needed; progress acknowledgements are excluded.
+    """
 
 
 class RoutableAgent(Protocol):
@@ -151,6 +155,11 @@ class RoutableAgent(Protocol):
         Returning ``DestinationResult("release")`` consumes the current request
         after the answer and clears focus; it does not reroute that request.
         Destination exceptions and task cancellation propagate to the caller.
+        Destinations delivering output directly can ignore ``emit`` and call
+        ``notify_response_started()`` before their first meaningful output or
+        application action to suppress a pending acknowledgment. Completion
+        and focus still use the return value, with optional response context
+        in ``DestinationResult.text`` for the router's history.
         The router suppresses later chunks after interruption but cannot
         retract output already delivered to ``emit``.
         A routing ``clarify`` choice with usable scores selects the
