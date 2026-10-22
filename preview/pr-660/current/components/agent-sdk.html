@@ -317,6 +317,7 @@
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../reference/index.html">Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-conversation.html">xr-ai-conversation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-hub.html">xr-ai-hub</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-models.html">xr-ai-models</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-routing.html">xr-ai-routing</a></li>
@@ -376,6 +377,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_conversation/index.html">xr_ai_conversation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_model_server_stack/index.html">xr_ai_model_server_stack</a></li>
 </ul>
 </details></li>
@@ -462,19 +464,23 @@ installation.</p>
 <td><p><code class="docutils literal notranslate"><span class="pre">xr_ai_routing</span></code></p></td>
 <td><p>Participant-scoped routing and the <code class="docutils literal notranslate"><span class="pre">RoutableAgent</span></code> contract</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">xr-ai-runtime</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">xr-ai-conversation</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">xr_ai_conversation</span></code></p></td>
+<td><p>Streamed text conversation with named context and rolling-summary compaction</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">xr-ai-runtime</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">xr_ai_runtime</span></code></p></td>
 <td><p>Agent registration and typed participant-scoped fan-out</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">xr-ai-tools</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">xr-ai-tools</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">xr_ai_tools</span></code></p></td>
 <td><p>Relay-managed tools and model tool-call helpers</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">xr-ai-voice</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">xr-ai-voice</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">xr_ai_voice</span></code></p></td>
 <td><p>Voice agent, transport, and private media pipeline</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">xr-ai-web-events</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">xr-ai-web-events</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">xr_ai_web_events</span></code></p></td>
 <td><p>Bounded live browser views over selected application events</p></td>
 </tr>
@@ -483,7 +489,8 @@ installation.</p>
 </div>
 <p>Refer to these versioned package guides:
 <a class="reference internal" href="../reference/agent-sdk-hub.html"><span class="doc">xr-ai-hub</span></a>, <a class="reference internal" href="../reference/agent-sdk-models.html"><span class="doc">xr-ai-models</span></a>,
-<a class="reference internal" href="../reference/agent-sdk-runtime.html"><span class="doc">xr-ai-runtime</span></a>, <a class="reference internal" href="../reference/agent-sdk-routing.html"><span class="doc">xr-ai-routing</span></a>, <a class="reference internal" href="../reference/agent-sdk-tools.html"><span class="doc">xr-ai-tools</span></a>,
+<a class="reference internal" href="../reference/agent-sdk-routing.html"><span class="doc">xr-ai-routing</span></a>, <a class="reference internal" href="../reference/agent-sdk-conversation.html"><span class="doc">xr-ai-conversation</span></a>,
+<a class="reference internal" href="../reference/agent-sdk-runtime.html"><span class="doc">xr-ai-runtime</span></a>, <a class="reference internal" href="../reference/agent-sdk-tools.html"><span class="doc">xr-ai-tools</span></a>,
 <a class="reference internal" href="../reference/agent-sdk-voice.html"><span class="doc">xr-ai-voice</span></a>, and <a class="reference internal" href="../reference/agent-sdk-web-events.html"><span class="doc">xr-ai-web-events</span></a>.
 Refer to the generated <a class="reference internal" href="../reference/python/index.html"><span class="doc">API Reference</span></a> for public names,
 signatures, types, defaults, fields, and method-level behavior.</p>
