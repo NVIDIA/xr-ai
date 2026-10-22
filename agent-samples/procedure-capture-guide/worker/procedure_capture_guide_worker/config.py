@@ -71,7 +71,7 @@ def load_config(path: Path | None) -> WorkerConfig:
             settings[name] = value
     return WorkerConfig(
         models_config=base / "models.json",
-        voice_gate_yaml=base / ("voice_gate.guide.yaml" if mode == "guide" else "voice_gate.yaml"),
+        voice_gate_yaml=base / "voice_gate.yaml",
         mode=mode,
         capture=load_capture_config(
             base / data.get("capture_config", "capture-agent-config.yaml"), output_root=output_root,

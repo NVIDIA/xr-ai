@@ -1544,7 +1544,7 @@ def test_cli_selects_guide_with_independent_session_recording(
         assert config.mode == "guide" and config.capture is None
         assert config.guide.guide_path == configured_path
         assert load_guide(config.guide.guide_path).path == expected_path
-        assert config.voice_gate_yaml == _SAMPLE / "yaml/voice_gate.guide.yaml"
+        assert config.voice_gate_yaml == _SAMPLE / "yaml/voice_gate.yaml"
         if session_recording:
             recorder = processes[1]
             assert recorder.command == "device_io_capture"
@@ -1605,7 +1605,7 @@ async def test_unapproved_selection_fails_before_model_construction(tmp_path, do
     with pytest.raises(ValueError, match="draft"):
         await app.run_app(WorkerConfig(
             mode="guide", models_config=_SAMPLE / "yaml/models.json",
-            voice_gate_yaml=_SAMPLE / "yaml/voice_gate.guide.yaml",
+            voice_gate_yaml=_SAMPLE / "yaml/voice_gate.yaml",
             guide=GuideConfig(tmp_path / "test.guide.yaml"),
         ))
     models.assert_not_called()
@@ -1623,7 +1623,7 @@ def test_mode_configuration_is_isolated_and_models_are_shared(tmp_path):
     assert guide.mode == "guide" and guide.capture is None
     assert guide.models_config == capture.models_config
     assert guide.guide.guide_path == _SAMPLE / "examples/tea-making/guide.yaml"
-    assert guide.voice_gate_yaml == _SAMPLE / "yaml/voice_gate.guide.yaml"
+    assert guide.voice_gate_yaml == _SAMPLE / "yaml/voice_gate.yaml"
 
 
 @pytest.mark.parametrize("mode", ["capture", "guide"])
@@ -1714,7 +1714,7 @@ async def test_guide_app_composition_starts_and_cleans_up(tmp_path, document, mo
     write_guide(tmp_path, document)
     config = WorkerConfig(
         mode="guide", models_config=_SAMPLE / "yaml/models.json",
-        voice_gate_yaml=_SAMPLE / "yaml/voice_gate.guide.yaml", guide=GuideConfig(tmp_path / "test.guide.yaml"),
+        voice_gate_yaml=_SAMPLE / "yaml/voice_gate.yaml", guide=GuideConfig(tmp_path / "test.guide.yaml"),
     )
     llm = Mock(health=AsyncMock(return_value=True), close=AsyncMock())
     for name in ("make_llm", "make_vlm", "make_stt", "make_tts"):
