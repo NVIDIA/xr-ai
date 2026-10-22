@@ -368,9 +368,8 @@ def test_manifest_excludes_only_explicit_incompatible_project(tmp_path: Path) ->
     _write_repo(tmp_path)
     _write_project(tmp_path, "services/speaker-stt", name="xr-ai-speaker-stt", requires_python=">=3.12,<3.14")
     _write_project(tmp_path, "services/clef-server", name="clef-server")
-    _write_project(tmp_path, "model-server-samples/clef-flash", name="clef-flash-model-server")
 
     manifest = tomllib.loads(_render(tmp_path))
     assert "xr-ai-speaker-stt" not in manifest["tool"]["uv"]["sources"]
-    assert {"clef-server", "clef-flash-model-server"} <= manifest["tool"]["uv"]["sources"].keys()
+    assert "clef-server" in manifest["tool"]["uv"]["sources"].keys()
     assert manifest["project"]["requires-python"] == ">=3.11,<3.13"

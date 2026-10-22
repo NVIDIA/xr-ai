@@ -23,7 +23,7 @@ from xr_ai_logging import setup_logging
 from ._config import identity, load_config
 from ._service import create_app
 
-_MARKER = "XR_AI_CLEF"
+_MARKER = "XR_AI_VLLM"
 
 
 def run() -> None:

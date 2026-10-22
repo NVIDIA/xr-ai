@@ -72,7 +72,6 @@
 "tests/_helpers.py" = ["BLE001"]  # BLE001=2
 "tests/_helpers_subprocess.py" = ["BLE001"]  # BLE001=1
 "tests/conftest.py" = ["BLE001", "S110"]  # BLE001=3 S110=3
-"tests/test_clef_server.py" = ["BLE001"]  # BLE001=1
 "tests/test_gpu_llm_servers.py" = ["BLE001"]  # BLE001=1
 "tests/test_gpu_stt_server.py" = ["BLE001"]  # BLE001=1
 "tests/test_gpu_video_recorder.py" = ["BLE001", "S110"]  # BLE001=2 S110=1

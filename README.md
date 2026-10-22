@@ -63,7 +63,6 @@ evaluation, and adaptation guidance.
 | `client-samples/` | Platform clients and shared StreamKit implementations |
 | `agent-sdk/` | Hub IPC, model clients, runtime, tools, voice, and web events |
 | `agent-samples/` | Runnable agent stacks |
-| `model-server-samples/` | Standalone model demonstrations (CLEF); agent sample model stacks live under `agent-samples/` |
 | `apps/` | Application workspaces outside repository sample tooling |
 | `services/` | Hub, model servers, and typed capability services |
 | `utils/` | Launcher, logging, VAD, vLLM, and voice-gate utilities |

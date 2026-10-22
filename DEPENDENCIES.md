@@ -898,20 +898,6 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Commands:
   - `xr_render_demo_worker` → `xr_render_demo_worker.__main__:run`
 
-### Model server samples
-
-#### `clef-flash-model-server` — [`model-server-samples/clef-flash/`](model-server-samples/clef-flash/)
-
-- Python: `>=3.11,<3.15`
-- Build dependencies:
-  - `hatchling`
-- Runtime dependencies:
-  - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
-  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
-- Optional dependency groups: none
-- Commands:
-  - `clef_flash_model` → `main:run`
-
 ### Tests
 
 #### `xr-ai-tests` — [`tests/`](tests/)
@@ -987,7 +973,6 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
     - `xr-ai-tools[capture,frames,image-editing,marker-tracking,relay,services,vision]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
     - `xr-ai-voice` → [`xr-ai-voice`](agent-sdk/xr-ai-voice/) (local, editable)
     - `xr-ai-web-events` → [`xr-ai-web-events`](agent-sdk/xr-ai-web-events/) (local, editable)
-    - `clef-flash-model-server` → [`clef-flash-model-server`](model-server-samples/clef-flash/) (local, editable)
     - `clef-server` → [`clef-server`](services/clef-server/) (local, editable)
     - `cloudxr-runtime` → [`cloudxr-runtime`](services/cloudxr-runtime/) (local, editable)
     - `device-io-hub` → [`device-io-hub`](services/device-io-hub/) (local, editable)
