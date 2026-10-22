@@ -261,6 +261,54 @@ def test_image_limits(monkeypatch):
     assert exc.value.status_code == 413
 
 
+@pytest.mark.parametrize(("excess_bytes", "status"), [(1, 413), (100, 422)])
+async def test_oversized_file_schema_and_decode_limits(excess_bytes, status, monkeypatch):
+    data = b"\0" * (server.MAX_IMAGE_BYTES + excess_bytes)
+    url = "data:image/png;base64," + base64.b64encode(data).decode()
+    decoded = []
+    decode = server.base64.b64decode
+
+    def record_decode(*args, **kwargs):
+        decoded.append(True)
+        return decode(*args, **kwargs)
+
+    def unexpected_call(*args, **kwargs):
+        pytest.fail("oversized image reached pixel decoding or model inference")
+
+    monkeypatch.setattr(server.base64, "b64decode", record_decode)
+    monkeypatch.setattr(Image, "open", unexpected_call)
+    monkeypatch.setitem(sys.modules, "torch", SimpleNamespace(inference_mode=unexpected_call))
+    app = server.build_app(loader=lambda: unexpected_call)
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url="http://test") as client:
+            result = await client.post("/v1/ocr", json={"input": [{"type": "image_url", "url": url}]})
+    assert result.status_code == status
+    if status == 422:
+        assert not decoded
+        assert result.json()["detail"][0]["type"] == "string_too_long"
+    else:
+        assert decoded == [True]
+        assert result.json()["detail"] == "Image exceeds 10 MiB"
+
+
+def test_caller_compositing_preserves_transparent_png_text():
+    source = Image.new("RGBA", (128, 64), (0, 0, 0, 0))
+    ImageDraw.Draw(source).text((8, 8), "OCR 123", fill=(0, 0, 0, 255))
+    # Reproduce the plain RGB conversion limitation independently of the server.
+    assert source.convert("RGB").getextrema() == ((0, 0),) * 3
+    rgba = source.convert("RGBA")
+    opaque = Image.new("RGBA", rgba.size, "white")
+    opaque.alpha_composite(rgba)
+    prepared = opaque.convert("RGB")
+    assert all(low < high == 255 for low, high in prepared.getextrema())
+    buffer = io.BytesIO()
+    prepared.save(buffer, "PNG")
+    url = "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode()
+    with server.decode_image(url) as decoded:
+        assert decoded.size == prepared.size
+        assert decoded.tobytes() == prepared.tobytes()
+
+
 @pytest.mark.parametrize("size", [(100_000, 1), (1, 100_000), (4473, 1), (1, 4473)])
 async def test_thin_image_rejected_before_conversion_or_model(size, monkeypatch):
     url = image_url(size)

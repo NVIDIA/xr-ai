@@ -101,19 +101,42 @@ normalized polygons. Remote image URLs are intentionally unsupported.
 Word, sentence, and paragraph grouping are available; recognition results
 need not be identical across backends.
 
+Send an opaque image. The local Hugging Face server converts inputs to RGB
+without compositing transparency: opaque black text on a transparent black
+background becomes uniformly black, losing the visible text. Composite
+transparent PNGs onto an appropriate background before calling either backend.
+For dark text intended for a white background:
+
+```python
+from PIL import Image
+
+with Image.open("input.png") as source:
+    rgba = source.convert("RGBA")
+    opaque = Image.new("RGBA", rgba.size, "white")
+    opaque.alpha_composite(rgba)
+    opaque.convert("RGB").save("ocr-input.png")
+```
+
+Choose a contrasting background for light text. This preparation remains
+caller-owned; the service does not infer the intended background color.
+
 The Hugging Face server clips finite bounding-box coordinates to the image's
 normalized `[0, 1]` bounds while preserving recognized text and confidence.
 Non-finite model coordinates are an inference failure (HTTP 500), not valid
 detections. The SDK continues to reject malformed responses from any endpoint.
 
-The Hugging Face server accepts one image per request, at most 10 MiB encoded
-image bytes and 20 million pixels after full-resolution square padding:
+The Hugging Face server accepts one image per request, at most 10 MiB of PNG
+or JPEG file bytes after base64 decoding, and 20 million pixels after
+full-resolution square padding:
 `max(width, height)² <= 20,000,000` (longest side at most 4,472 pixels).
 This check runs before RGB conversion or inference because upstream pads the
 image on CUDA before resizing; lowering `infer_length` does not reduce that
 allocation. The padded FP16 RGB tensor alone is bounded to about 114 MiB;
-this is not a bound on total inference memory. Oversized inputs receive HTTP
-413; callers must downsample or tile them first.
+this is not a bound on total inference memory. Requests that exceed the schema's
+data-URL string-length limit receive HTTP 422 before image decoding. Requests
+that pass that limit but exceed the decoded image-file byte limit or padded
+pixel limit receive HTTP 413. Both limits apply before model inference;
+callers must reduce the encoded file size, downsample, or tile oversized inputs.
 The server serializes inference and rejects overlapping requests with HTTP 503.
 Its detector length is configured server-wide in `ocr_server.yaml` (640 or
 1024). NIM request limits and engine settings belong to the deployed version,
@@ -145,6 +168,9 @@ XR_AI_OCR_TEST_URL=http://localhost:8112 uv --config-file uv.toml run --project 
 This opt-in HTTP test does not require a local GPU or Docker and never owns
 containers. It skips when `XR_AI_OCR_TEST_URL` is unset; do not mark it `gpu`
 or run it through container-management fixtures.
+The smoke test checks transcription on a square image, not polygon placement.
+CPU tests cover the response coordinate contract with mocked predictions;
+they do not establish real-model normalization on non-square images.
 
 ## Speaker-conditioned STT
 
