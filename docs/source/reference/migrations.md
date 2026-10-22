@@ -24,7 +24,7 @@ callable instead of `emit`. Move destination answer
 publication out of the router's `emit` callback and into each agent. Return
 `DestinationResult.text` when completed response context is needed for later
 routing; `routing_aid(participant_id)` remains the explicit source of each
-agent's routing context. Call `started()` when the first meaningful response
+agent's routing context. Await `started()` when the first meaningful response
 is ready to suppress a pending acknowledgment.
 
 Move the router's own finite control callback from `handle(..., emit=callback)`

@@ -18,16 +18,20 @@ async def emit_control(_turn: AgentTurn, source: str, text: str) -> None:
     await _sink.get()(source, text)
 
 
-def destination_output(started: Callable[[], bool]) -> Callable[[str, str], Awaitable[None]]:
+def destination_output(started: Callable[[], Awaitable[bool]]) -> Callable[[str, str], Awaitable[None]]:
     async def emit(source: str, text: str) -> None:
         task = asyncio.current_task()
         if task is not None and task.cancelling():
             raise asyncio.CancelledError
         if text.strip():
-            started()
+            await started()
         await _sink.get()(source, text)
 
     return emit
+
+
+async def standalone_started() -> bool:
+    return True
 
 
 async def publish_output(source: str, text: str) -> None:

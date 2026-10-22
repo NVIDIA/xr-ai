@@ -89,7 +89,7 @@ error.
 
 ## Response progress and routing context
 
-The router calls `answer(turn, started=...)`. Destinations call `started()`
+The router calls `answer(turn, started=...)`. Destinations await `started()`
 immediately before their first meaningful output or application action. The
 signal contains no response text; destinations publish their output directly.
 It suppresses a pending optional acknowledgment and supplies the first-response
@@ -100,7 +100,9 @@ that fails before its destination calls `started()` sends one brief failure
 message through the router's output; after that call, the destination owns any
 failure output. Callers should not publish another.
 
-`started()` returns whether the response leads the turn's output. It returns
+If an acknowledgment is already committed, `started()` waits until it is
+delivered, so direct answer output never precedes it. It returns whether the
+response leads the turn's output. It returns
 `False` when the router already delivered or committed control text for the
 turn, such as an admission preamble or acknowledgment; the destination should
 then follow that output instead of interrupting it. Only the first call changes

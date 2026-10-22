@@ -14,7 +14,18 @@ import time
 from typing import Any
 from unittest.mock import patch
 
-from _common import ScriptedLLM, ask, load_cases, make_eval_llm, matches, normalize, parser, settle, validate_suite
+from _common import (
+    ScriptedLLM,
+    ask,
+    load_cases,
+    make_eval_llm,
+    matches,
+    normalize,
+    parser,
+    settle,
+    standalone_started,
+    validate_suite,
+)
 from xr_ai_conversation import Conversation, ConversationContextUpdate
 from xr_ai_routing import AgentTurn
 from xr_ai_runtime import AgentRuntime, Topic
@@ -60,7 +71,9 @@ async def _seed(
         clock.advance(step_minutes)
         if "say" in step:
             llm.answer = step["say"]["assistant"]
-            await conversation.answer(AgentTurn(_PARTICIPANT, str(index), step["say"]["user"]), started=lambda: True)
+            await conversation.answer(
+                AgentTurn(_PARTICIPANT, str(index), step["say"]["user"]), started=standalone_started,
+            )
         else:
             publication = step["publish"]
             await runtime.publish(

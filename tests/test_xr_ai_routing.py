@@ -67,7 +67,7 @@ async def test_direct_response_signal_cancels_blocked_ack_without_emitting_text(
         async def answer(self, _turn, *, started):
             await llm.started.wait()
             await respond.wait()
-            notifications.extend((started(), started()))
+            notifications.extend((await started(), await started()))
             responded.set()
             await finish.wait()
             return DestinationResult("focus", "The application updated the scene.")
@@ -113,7 +113,7 @@ async def test_response_signal_from_old_answer_cannot_affect_later_turn(ending):
             try:
                 await finish[turn.query].wait()
             except asyncio.CancelledError:
-                started()
+                await started()
                 raise
             if ending == "failure" and turn.query == "old":
                 raise ValueError("destination failed")
@@ -141,11 +141,11 @@ async def test_response_signal_from_old_answer_cannot_affect_later_turn(ending):
     await asyncio.wait_for(entered["new"].wait(), timeout=1)
     if ending not in {"completion", "failure"}:
         assert isinstance((await asyncio.gather(old, return_exceptions=True))[0], asyncio.CancelledError)
-    assert signals["old"]() is False
-    assert signals["new"]() is True
+    assert await signals["old"]() is False
+    assert await signals["new"]() is True
     finish["new"].set()
     await asyncio.wait_for(new, timeout=1)
-    assert signals["new"]() is False
+    assert await signals["new"]() is False
     assert output == ([("destination", router_module._FAILURE_TEXT)] if ending == "failure" else [])
     assert router._history["alice"] == []
     assert router._focus == {}
@@ -160,9 +160,9 @@ async def test_direct_destination_output_keeps_its_source_and_explicit_progress(
         async def answer(self, _turn, *, started):
             emit = _destination_output(started)
             await emit("wrong-source", " ")
-            notifications.append(started())
+            notifications.append(await started())
             await emit("wrong-source", "answer")
-            notifications.append(started())
+            notifications.append(await started())
             return DestinationResult("answer", "routing context")
 
     router = AgentRouter({"destination": Destination()}, None, output=_emit_control, default_destination="destination")
@@ -1400,6 +1400,39 @@ async def test_confident_slow_prediction_acknowledges_then_records_only_real_ans
     assert front_end._history["alice"][-1].assistant == "Here is the answer."
     assert front_end._history["alice"][-1].assistant != output[0][1]
     assert front_end._first_answer_samples["alice"]["destination"][0][0] == "Explain the request."
+
+
+@pytest.mark.asyncio
+async def test_committed_acknowledgment_is_delivered_before_direct_answer_output():
+    destination = _AckDestination(blocked=True)
+    front_end = AgentRouter(
+        {"destination": destination},
+        _Prediction(), output=_emit_control,  # type: ignore[arg-type]
+        default_destination="destination",
+        acknowledgment_llm=_AcknowledgmentLLM(),  # type: ignore[arg-type]
+        acknowledgment_delay_secs=0.001,
+    )
+    output = []
+    ack_entered, ack_release = asyncio.Event(), asyncio.Event()
+
+    async def emit(source, text):
+        if text.startswith("Let me think"):
+            ack_entered.set()
+            await ack_release.wait()
+        output.append((source, text))
+
+    task = asyncio.create_task(
+        _route(front_end, AgentTurn("alice", "turn-1", "An unfamiliar request."), emit=emit)
+    )
+    await asyncio.wait_for(ack_entered.wait(), timeout=1)
+    destination.release_answer.set()
+    await asyncio.wait_for(destination.answer_emit_started.wait(), timeout=1)
+    for _ in range(5):
+        await asyncio.sleep(0)
+    assert output == []
+    ack_release.set()
+    await asyncio.wait_for(task, timeout=1)
+    assert output == [("destination", "Let me think through that. "), ("destination", "Here is the answer.")]
 
 
 @pytest.mark.asyncio

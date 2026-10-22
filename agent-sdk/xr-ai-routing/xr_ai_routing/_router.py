@@ -523,17 +523,20 @@ class AgentRouter:
             acknowledgment_task: asyncio.Task[None] | None = None
             answer_started = asyncio.Event()
             acknowledgment_committed = asyncio.Event()
+            acknowledgment_delivered = asyncio.Event()
             first_answer_duration: float | None = None
             response_open = True
             answer_started_at = _monotonic()
             answer_execution_started_at_unix_ns = time.time_ns()
             prediction_trace: dict[str, object] = {"choice": "not_started", "probabilities": {}}
 
-            def response_started() -> bool:
+            async def response_started() -> bool:
                 nonlocal first_answer_duration
                 if not response_open or self._generation.get(turn.participant_id) is not generation:
                     return False
                 if answer_started.is_set():
+                    if acknowledgment_committed.is_set():
+                        await acknowledgment_delivered.wait()
                     return not turn_output.control
                 answer_started.set()
                 turn_output.response = True
@@ -557,6 +560,9 @@ class AgentRouter:
                     },
                 ):
                     pass
+                # A committed acknowledgment is delivered before any direct answer output.
+                if acknowledgment_committed.is_set():
+                    await acknowledgment_delivered.wait()
                 return not turn_output.control
 
             async def emit_acknowledgment(source: str, text: str) -> None:
@@ -572,7 +578,10 @@ class AgentRouter:
                             "acknowledgment_delay_secs": self._acknowledgment_delay_secs,
                         },
                     ):
-                        await emit(turn, source, text)
+                        try:
+                            await emit(turn, source, text)
+                        finally:
+                            acknowledgment_delivered.set()
 
             if (
                 self._acknowledgment_llm is not None

@@ -25,6 +25,7 @@ from _common import (
     normalize,
     parser,
     settle,
+    standalone_started,
     validate_suite,
 )
 from xr_ai_conversation import Conversation, ConversationContextUpdate
@@ -66,7 +67,7 @@ async def run_session(llm: LLMService, name: str, sample_override: int | None) -
                         )
                     started = time.perf_counter()
                     await conversation.answer(
-                        AgentTurn(participant, str(index), expand(turn["user"])), started=lambda: True,
+                        AgentTurn(participant, str(index), expand(turn["user"])), started=standalone_started,
                     )
                     answered = time.perf_counter() - started
                     await settle(conversation, participant)

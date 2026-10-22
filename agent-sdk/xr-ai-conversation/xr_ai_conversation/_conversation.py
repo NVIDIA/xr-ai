@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from collections.abc import AsyncIterator, Callable, Mapping, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
@@ -152,34 +152,36 @@ class Conversation(RoutableAgent):
         self,
         turn: AgentTurn,
         *,
-        started: Callable[[], bool],
+        started: Callable[[], Awaitable[bool]],
     ) -> DestinationResult:
         """Publish a routed answer directly to the configured voice output topic.
 
         Requires ``runtime`` and ``output_topic``. The first nonblank ready chunk
-        calls ``started()`` before publication. That body frame
+        awaits ``started()`` before publication. That body frame
         interrupts older output unless router control text already started
         this turn, and a final frame closes a completed or failed partial
         response. Cancellation and publication failures do not publish further
         frames. Failures propagate after closing the model iterator; the router
         reports failures that occur before the first frame. A successful answer
-        returns the complete text as routing context.
+        returns the complete text as routing context. The exchange joins this
+        conversation's transcript only after its final frame is delivered.
         """
 
         from xr_ai_voice import VoiceOutput
 
         fragments: list[str] = []
-        stream = self._stream_response(turn.query, turn.participant_id, history=turn.history)
+        stream = self._stream_response(turn.query, turn.participant_id, history=turn.history, commit=False)
         opened = False
         publication_failed = False
         interrupt = False
+        finalized = False
         try:
             async for text in stream:
                 fragments.append(text)
                 if not opened and not text.strip():
                     continue
                 if not opened:
-                    interrupt = started()
+                    interrupt = await started()
                 task = asyncio.current_task()
                 # A model stream can swallow cancellation; never publish for a canceled answer.
                 if task is not None and task.cancelling():
@@ -215,7 +217,12 @@ class Conversation(RoutableAgent):
                         participant_id=turn.participant_id,
                         source=self._routing.name,
                     )
-        return DestinationResult("answer", "".join(fragments).strip())
+                    finalized = True
+        answer = "".join(fragments)
+        task = asyncio.current_task()
+        if finalized and not (task is not None and task.cancelling()):
+            self._commit_exchange(turn.participant_id, turn.query, answer)
+        return DestinationResult("answer", answer.strip())
 
     async def release(self, _participant_id: str) -> None:
         """Keep completed participant context; this destination holds no active resources.
@@ -259,6 +266,7 @@ class Conversation(RoutableAgent):
         participant_id: str,
         *,
         history: tuple[AgentExchange, ...] = (),
+        commit: bool = True,
     ) -> AsyncIterator[str]:
         """Yield answer text for a participant's request.
 
@@ -270,6 +278,7 @@ class Conversation(RoutableAgent):
         :param request: Current user request.
         :param participant_id: Participant whose transcript and named context apply.
         :param history: Completed exchanges to reconcile with this participant's transcript.
+        :param commit: Whether to add the completed exchange to the transcript when the stream ends.
         :yields: Non-empty answer text chunks.
         :raises RuntimeError: If the conversation is closing or the model returns no answer.
 
@@ -315,6 +324,10 @@ class Conversation(RoutableAgent):
         answer = "".join(fragments)
         if not answer.strip():
             raise RuntimeError("conversation model returned no answer")
+        if commit:
+            self._commit_exchange(participant_id, request, answer)
+
+    def _commit_exchange(self, participant_id: str, request: str, answer: str) -> None:
         self._context.append(
             participant_id,
             request,

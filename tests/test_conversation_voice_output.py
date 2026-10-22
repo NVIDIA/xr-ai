@@ -63,6 +63,10 @@ async def _control(_turn, _source, _text):
     return None
 
 
+async def _standalone_started():
+    return True
+
+
 
 async def test_configured_control_output_preserves_concurrent_participant_turn_identity():
     alice_entered, release_alice = asyncio.Event(), asyncio.Event()
@@ -185,7 +189,7 @@ async def test_conversations_publish_directly_to_shared_typed_topic_with_own_sou
         try:
             for index, conversation in enumerate(conversations):
                 result = await conversation.answer(
-                    AgentTurn("alice", f"turn-{index}", "request", timestamp_us=17), started=lambda: True,
+                    AgentTurn("alice", f"turn-{index}", "request", timestamp_us=17), started=_standalone_started,
                 )
                 assert result.text == "spoken answer"
             assert [value.text for value, _ in output.items] == ["spoken ", "answer", ""] * 2
@@ -230,7 +234,7 @@ async def test_conversation_does_not_retry_or_finalize_failed_typed_publication(
     async with runtime:
         try:
             with pytest.raises(ExceptionGroup):
-                await conversation.answer(AgentTurn("alice", "turn", "request"), started=lambda: True)
+                await conversation.answer(AgentTurn("alice", "turn", "request"), started=_standalone_started)
             assert len(output.items) == failed_frame
             assert not any(value.final for value, _ in output.items)
             assert closed.is_set()
@@ -238,6 +242,33 @@ async def test_conversation_does_not_retry_or_finalize_failed_typed_publication(
         finally:
             await conversation.close()
 
+
+
+async def test_failed_final_frame_does_not_commit_the_exchange():
+    class LLM:
+        def stream_events(self, _messages):
+            async def response():
+                yield ChatStreamEvent(kind="text", text="answer")
+
+            return response()
+
+    class FailingFinal(_Output):
+        @subscribe(OUTPUT)
+        async def receive(self, value: VoiceOutput, ctx: RuntimeContext):
+            await super().receive(value, ctx)
+            if value.final:
+                raise RuntimeError("final delivery failed")
+
+    runtime = AgentRuntime()
+    runtime.register("output", FailingFinal())
+    conversation = Conversation(LLM(), runtime=runtime, output_topic=OUTPUT)
+    async with runtime:
+        try:
+            with pytest.raises(ExceptionGroup):
+                await conversation.answer(AgentTurn("alice", "turn", "request"), started=_standalone_started)
+            assert conversation._context.transcript("alice") == ()
+        finally:
+            await conversation.close()
 
 
 async def test_answer_after_router_preamble_does_not_interrupt_it():
@@ -282,8 +313,8 @@ async def test_model_failure_is_reported_once_and_partial_stream_is_finalized(pa
 
     class Recording(Conversation):
         async def answer(self, turn, *, started):
-            def recorded():
-                leads = started()
+            async def recorded():
+                leads = await started()
                 notifications.append(leads)
                 return leads
 

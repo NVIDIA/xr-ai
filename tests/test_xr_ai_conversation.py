@@ -16,6 +16,7 @@ from _routing_test_output import destination_output as _destination_output
 from _routing_test_output import emit_control as _emit_control
 from _routing_test_output import publish_output as _publish_output
 from _routing_test_output import route as _route
+from _routing_test_output import standalone_started as _standalone_started
 from xr_ai_conversation import Conversation, ConversationContextUpdate
 from xr_ai_conversation._context import (
     _BackgroundSection,
@@ -170,8 +171,8 @@ async def test_conversation_notifies_before_delivery_and_preserves_answer_contex
 
     class Recording(Conversation):
         async def answer(self, turn, *, started):
-            def recorded():
-                leads = started()
+            async def recorded():
+                leads = await started()
                 events.append(("started", leads))
                 return leads
 
@@ -1299,7 +1300,7 @@ async def test_cancelled_answer_closes_the_model_stream_and_records_nothing():
     conversation = Conversation(_BlockingStreamLLM(), runtime=Runtime(), output_topic=_OUTPUT_TOPIC)  # type: ignore[arg-type]
 
     answering = asyncio.create_task(
-        conversation.answer(AgentTurn("alice", "turn-1", "Tell me a story."), started=lambda: True)
+        conversation.answer(AgentTurn("alice", "turn-1", "Tell me a story."), started=_standalone_started)
     )
     await asyncio.wait_for(first_chunk.wait(), 1)
     answering.cancel()
@@ -1398,7 +1399,7 @@ async def test_output_failure_closes_model_without_recording_partial_context():
     runtime = Runtime()
     conversation = Conversation(LLM(), runtime=runtime, output_topic=_OUTPUT_TOPIC)
     with pytest.raises(RuntimeError, match="output publication failed"):
-        await conversation.answer(AgentTurn("alice", "turn", "request"), started=lambda: True)
+        await conversation.answer(AgentTurn("alice", "turn", "request"), started=_standalone_started)
     assert closed.is_set()
     assert runtime.attempts == 1
     assert conversation._context.transcript("alice") == ()

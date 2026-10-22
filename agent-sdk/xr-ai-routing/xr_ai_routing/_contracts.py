@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
@@ -144,7 +144,7 @@ class RoutableAgent(Protocol):
         self,
         turn: AgentTurn,
         *,
-        started: Callable[[], bool],
+        started: Callable[[], Awaitable[bool]],
     ) -> DestinationResult:
         """Answer a turn after admission or as the configured default fallback.
 
@@ -158,9 +158,10 @@ class RoutableAgent(Protocol):
         Returning ``DestinationResult("release")`` consumes the current request
         after the answer and clears focus; it does not reroute that request.
         Destination exceptions and task cancellation propagate to the caller.
-        Call ``started()`` immediately before the first meaningful output or
-        application action. It suppresses a pending acknowledgment, supplies
-        the first-response timing sample, and returns whether the response
+        Await ``started()`` immediately before the first meaningful output or
+        application action. It suppresses an acknowledgment that is not yet
+        committed, waits until a committed one is delivered, supplies the
+        first-response timing sample, and returns whether the response
         leads the turn's output: ``False`` means router control text such as a
         preamble or acknowledgment already started this turn, so the response
         should follow it instead of interrupting it. Repeated calls return the
