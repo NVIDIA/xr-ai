@@ -1,0 +1,65 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+name: sbom
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    paths:
+      - 'dependency-manifest/**'
+      - 'uv.toml'
+      - '.github/scripts/generate_sbom.py'
+      - '.github/workflows/sbom.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sbom-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Syft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TOOLS: ${{ runner.temp }}/sbom-tools
+        run: |
+          mkdir -p "$TOOLS"
+          gh release download v1.55.0 --repo anchore/syft \
+            --pattern syft_1.55.0_linux_amd64.tar.gz --dir "$TOOLS"
+          cd "$TOOLS"
+          echo 'bb65249542db5fedeeb4d3f9b018b75e7264dbfbbb10486f044581a92f90490d  syft_1.55.0_linux_amd64.tar.gz' | sha256sum --check
+          tar -xzf syft_1.55.0_linux_amd64.tar.gz syft
+          echo "$TOOLS" >> "$GITHUB_PATH"
+
+      - name: Generate and check dependency SBOMs
+        run: python3 .github/scripts/generate_sbom.py
+
+      - name: Validate SPDX document
+        run: |
+          python3 -m pip install 'spdx-tools==0.8.3'
+          pyspdxtools --infile dist/sbom/xr-ai.spdx.json
+
+      - name: Upload SBOMs and provenance
+        uses: actions/upload-artifact@v4
+        with:
+          name: xr-ai-sbom-${{ github.sha }}
+          path: dist/sbom/
+          if-no-files-found: error
+          retention-days: 90
