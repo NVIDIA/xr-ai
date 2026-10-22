@@ -11,7 +11,6 @@ from __future__ import annotations
 import asyncio
 from collections import deque
 from collections.abc import Awaitable, Callable, Iterable
-from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
@@ -28,9 +27,8 @@ from xr_ai_routing import (
     DestinationResult,
     RoutableAgent,
     RoutingAid,
-    notify_response_started,
 )
-from xr_ai_runtime import AgentRuntime, RuntimeClosedError, Topic
+from xr_ai_runtime import AgentRuntime, Topic
 from xr_ai_tools.current_frame import CurrentFrameRequest, CurrentFrameTool
 from xr_ai_tools.vision import ImageQueryRequest, ImageQueryTool
 from xr_ai_voice import VoiceOutput
@@ -190,46 +188,25 @@ class VisualMonitorAgent(RoutableAgent):
         self._pending[turn.participant_id] = (turn.turn_id, action)
         return Admission("accept")
 
-    async def answer(self, turn: AgentTurn) -> DestinationResult:
-        output_attempted = False
-
+    async def answer(self, turn: AgentTurn, *, started: Callable[[], Awaitable[bool]]) -> DestinationResult:
         async def emit(text: str) -> None:
-            nonlocal output_attempted
+            interrupt = await started()
             task = asyncio.current_task()
             if task is not None and task.cancelling():
                 raise asyncio.CancelledError
-            notify_response_started()
-            output_attempted = True
             await self._runtime.publish(
                 self._output_topic,
                 VoiceOutput(
                     text=text,
                     response_id=turn.turn_id,
-                    interrupt=True,
+                    interrupt=interrupt,
                     timestamp_us=turn.timestamp_us,
                 ),
                 participant_id=turn.participant_id,
                 source="monitor",
             )
 
-        try:
-            return await self._answer(turn, emit)
-        except Exception:
-            task = asyncio.current_task()
-            if task is not None and task.cancelling():
-                raise asyncio.CancelledError from None
-            if not output_attempted:
-                with suppress(RuntimeClosedError):
-                    await self._runtime.publish(
-                        self._output_topic,
-                        VoiceOutput(
-                            text="I couldn't complete that request. Please try again.",
-                            timestamp_us=turn.timestamp_us,
-                        ),
-                        participant_id=turn.participant_id,
-                        source="monitor",
-                    )
-            raise
+        return await self._answer(turn, emit)
 
     async def _answer(self, turn: AgentTurn, emit: Callable[[str], Awaitable[None]]) -> DestinationResult:
         pending = self._pending.pop(turn.participant_id, None)

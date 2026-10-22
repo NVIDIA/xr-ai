@@ -445,7 +445,7 @@ async def test_conversation_keeps_early_context_after_interleaved_router_history
         async def admit(self, _turn, *, focused):
             return Admission("accept")
 
-        async def answer(self, _turn):
+        async def answer(self, _turn, *, started):
             return DestinationResult("answer", "Handled the detour.")
 
         async def release(self, _participant_id):
@@ -860,10 +860,11 @@ async def test_sample_departure_callback_clears_notes_after_router_release() -> 
         _RouteDecisions("conversation"),
         query_topic=USER_QUERY_TOPIC,
         output_topic=VOICE_OUTPUT_TOPIC,
+        participant_joined_topic=PARTICIPANT_JOINED_TOPIC,
         participant_left_topic=PARTICIPANT_LEFT_TOPIC,
         cleanup_participant=notes.participant_left,
     )
-    runtime.register("router", router)
+    runtime.register("router", router.runtime_subscriber())
     async with runtime:
         await runtime.publish(PARTICIPANT_LEFT_TOPIC, VoiceParticipantLeft(), participant_id="alice")
         assert "The demo showed an AR overlay." not in notes.routing_aid("alice").description
@@ -882,7 +883,7 @@ async def test_router_departure_error_does_not_skip_sample_cleanup() -> None:
         async def admit(self, _turn, *, focused):
             return Admission("accept")
 
-        async def answer(self, _turn):
+        async def answer(self, _turn, *, started):
             return DestinationResult("answer", "done")
 
         async def release(self, _participant):
@@ -1051,8 +1052,9 @@ async def test_conversation_publishes_answer_before_model_stream_finishes() -> N
     assert answer.text == "Hello there."
 
 
-async def test_conversation_example_agent_publishes_one_safe_fallback_on_llm_failure() -> None:
+async def test_conversation_example_agent_reports_one_safe_fallback_on_llm_failure() -> None:
     published = []
+    control = []
 
     class Context:
         agent_name = "conversation-example"
@@ -1074,12 +1076,15 @@ async def test_conversation_example_agent_publishes_one_safe_fallback_on_llm_fai
         destination="conversation",
     )
 
-    with pytest.raises(RuntimeError, match="offline"):
-        await agent.handle(AgentTurn("alice", "turn-failed", "Hello", timestamp_us=456))
+    async def capture(source, text):
+        control.append((source, text))
 
-    assert len(published) == 1
-    assert published[0][1].text == "I couldn't complete that request. Please try again."
-    assert published[0][1].timestamp_us == 456
+    with pytest.raises(RuntimeError, match="offline"):
+        await _handle(agent, AgentTurn("alice", "turn-failed", "Hello", timestamp_us=456), emit=capture)
+
+    # The router reports a failure before any output; the destination publishes nothing.
+    assert published == []
+    assert control == [("conversation", "I couldn't complete that request. Please try again.")]
     assert "You are a fast voice conversational assistant" in llm.requests[0][0][0].content
 
 
@@ -1426,7 +1431,7 @@ async def test_conversation_example_agent_reports_relay_wrapped_missing_camera_f
     assert [output.final for output in published] == [False, True]
 
 
-async def test_cancelled_vlm_turn_does_not_publish_stream_terminator() -> None:
+async def test_cancelled_vlm_turn_closes_its_stream_without_late_text() -> None:
     waiting = asyncio.Event()
     closed = asyncio.Event()
     published: list[VoiceOutput] = []
@@ -1472,8 +1477,7 @@ async def test_cancelled_vlm_turn_does_not_publish_stream_terminator() -> None:
     await asyncio.gather(task, return_exceptions=True)
 
     assert closed.is_set()
-    assert len(published) == 1
-    assert published[0].final is False
+    assert [(output.text, output.final) for output in published] == [("first", False), ("", True)]
 
 
 @pytest.mark.asyncio
@@ -1508,7 +1512,7 @@ async def test_context_updates_apply_after_participant_rejoin() -> None:
     context_topic = Topic("tea.status", ConversationContextUpdate)
     runtime = AgentRuntime()
     runtime.register("conversation-context", conversation.context_subscriber())
-    runtime.register("conversation-example", agent)
+    runtime.register("conversation-example", agent.runtime_subscriber())
 
     async with runtime:
         await runtime.publish(
@@ -1568,7 +1572,7 @@ class _LifecycleDestination:
     async def admit(self, _turn, *, focused):
         return Admission("accept")
 
-    async def answer(self, _turn):
+    async def answer(self, _turn, *, started):
         self.events.append("answer.started")
         self.started.set()
         try:
@@ -1617,7 +1621,8 @@ async def test_query_initialization_and_response_admission_are_atomic_with_depar
         events.append("application.left")
 
     runtime = AgentRuntime()
-    router = runtime.register("router", _lifecycle_router(destination, initialize, cleanup))
+    router = _lifecycle_router(destination, initialize, cleanup)
+    runtime.register("router", router.runtime_subscriber())
     async with runtime:
         request = UserQuery(text="Hello", timestamp_us=1)
         query = asyncio.create_task(runtime.publish(USER_QUERY_TOPIC, request, participant_id="alice"))
@@ -1648,7 +1653,8 @@ async def test_interruption_cancels_query_admitted_after_blocked_context_initial
         await release_initialization.wait()
 
     runtime = AgentRuntime()
-    router = runtime.register("router", _lifecycle_router(destination, initialize, None))
+    router = _lifecycle_router(destination, initialize, None)
+    runtime.register("router", router.runtime_subscriber())
     async with runtime:
         query = asyncio.create_task(
             runtime.publish(USER_QUERY_TOPIC, UserQuery(text="Hello", timestamp_us=1), participant_id="alice")
@@ -1679,7 +1685,8 @@ async def test_stop_closes_query_admission_while_context_initialization_is_in_fl
         events.append("application.left")
 
     runtime = AgentRuntime()
-    router = runtime.register("router", _lifecycle_router(destination, initialize, cleanup))
+    router = _lifecycle_router(destination, initialize, cleanup)
+    runtime.register("router", router.runtime_subscriber())
     async with runtime:
         query = asyncio.create_task(
             runtime.publish(USER_QUERY_TOPIC, UserQuery(text="Hello", timestamp_us=1), participant_id="alice")
@@ -1728,7 +1735,7 @@ async def test_acknowledgment_publish_preserves_interrupt_slot(fail_acknowledgme
         async def admit(self, _turn, *, focused):
             return Admission("accept")
 
-        async def answer(self, turn):
+        async def answer(self, turn, *, started):
             await release_answer.wait()
             await runtime.publish(
                 VOICE_OUTPUT_TOPIC,
@@ -1767,7 +1774,7 @@ async def test_acknowledgment_publish_preserves_interrupt_slot(fail_acknowledgme
         output_topic=VOICE_OUTPUT_TOPIC,
         set_status=status,
     )
-    runtime.register("router", router)
+    runtime.register("router", router.runtime_subscriber())
     runtime.register("output", Output())
     async with runtime:
         await runtime.publish(
@@ -2282,10 +2289,8 @@ async def test_sample_runtime_streams_vision_through_voice_agent(monkeypatch) ->
         lambda **_kwargs: session,
     )
     runtime = AgentRuntime()
-    runtime.register(
-        "conversation-example",
-        _make_agent(runtime, _ConversationService(), frames, vision, set_status=endpoint.set_status),
-    )
+    router = _make_agent(runtime, _ConversationService(), frames, vision, set_status=endpoint.set_status)
+    runtime.register("conversation-example", router.runtime_subscriber())
     runtime.register(
         "voice",
         VoiceAgent(
@@ -2386,7 +2391,7 @@ async def test_conversation_example_agent_handles_global_interruption_event() ->
     runtime = AgentRuntime()
     runtime.register(
         "conversation-example",
-        _make_agent(runtime, _ConversationService(), _SelectedFrameTool(), BlockingVision()),
+        _make_agent(runtime, _ConversationService(), _SelectedFrameTool(), BlockingVision()).runtime_subscriber(),
     )
 
     async with runtime:

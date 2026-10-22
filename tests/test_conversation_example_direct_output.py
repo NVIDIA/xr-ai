@@ -133,7 +133,7 @@ def _stack(runtime, route, mode):
             idle.set()
 
     router = AgentRouter(destinations, decisions, query_topic=USER_QUERY_TOPIC, output_topic=_OUTPUT, set_status=status)
-    runtime.register("router", router)
+    runtime.register("router", router.runtime_subscriber())
     output = runtime.register("output", _Output())
     return router, model, output, idle, (general, notes)
 
@@ -167,7 +167,9 @@ async def test_destination_failure_preserves_source_and_never_duplicates_partial
             await asyncio.wait_for(idle.wait(), 1)
             await router.stop()
         assert model.closed.is_set()
-        assert all(metadata.source == route and metadata.participant_id == "alice" for metadata, _ in output.messages)
+        # A failure before any output is reported by the router; after output starts, the destination owns it.
+        source = "router" if mode == "before" else route
+        assert all(metadata.source == source and metadata.participant_id == "alice" for metadata, _ in output.messages)
         assert all(message.timestamp_us == 123 for _, message in output.messages)
         messages = [message for _, message in output.messages]
         if mode == "before":
@@ -195,17 +197,21 @@ async def test_replacement_suppresses_model_chunk_after_swallowed_cancellation(r
             await _query(runtime, idle, "First request.", 123)
             await asyncio.wait_for(model.waiting.wait(), 1)
             await _query(runtime, idle, "Replacement request.", 456)
-            await asyncio.wait_for(output.completed.wait(), 1)
+
+            async def replacement_finished():
+                while len(output.messages) < 4:
+                    await asyncio.sleep(0)
+
+            await asyncio.wait_for(replacement_finished(), 1)
             await asyncio.wait_for(router.stop(), 1)
         assert model.closed.is_set()
         messages = [message for _, message in output.messages]
-        assert [message.text for message in messages] == ["first", "replacement", ""]
-        assert messages[0].timestamp_us == 123
-        assert [message.timestamp_us for message in messages[1:]] == [456, 456]
-        assert messages[0].response_id != messages[1].response_id
-        assert messages[1].response_id == messages[2].response_id
-        assert messages[0].final is False
-        assert messages[2].final is True
+        # The canceled stream is closed without stale text before the replacement streams.
+        assert [message.text for message in messages] == ["first", "", "replacement", ""]
+        assert [message.timestamp_us for message in messages] == [123, 123, 456, 456]
+        assert messages[0].response_id == messages[1].response_id != messages[2].response_id
+        assert messages[2].response_id == messages[3].response_id
+        assert [message.final for message in messages] == [False, True, False, True]
         assert {metadata.source for metadata, _ in output.messages} == {route}
     finally:
         for conversation in conversations:
@@ -236,16 +242,14 @@ async def test_monitor_control_publishes_one_finite_attributed_response():
         if value == "idle":
             idle.set()
 
-    router = runtime.register(
-        "router",
-        AgentRouter(
-            {"conversation": general, "monitor": monitor},
-            decisions,
-            query_topic=USER_QUERY_TOPIC,
-            output_topic=_OUTPUT,
-            set_status=status,
-        ),
+    router = AgentRouter(
+        {"conversation": general, "monitor": monitor},
+        decisions,
+        query_topic=USER_QUERY_TOPIC,
+        output_topic=_OUTPUT,
+        set_status=status,
     )
+    runtime.register("router", router.runtime_subscriber())
     output = runtime.register("output", _Output())
     try:
         async with runtime:

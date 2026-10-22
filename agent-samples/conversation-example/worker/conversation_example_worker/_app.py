@@ -303,7 +303,7 @@ async def run_app(
     # Only general conversation consumes the configured shared context sources.
     if config.summary_context_topics or config.incremental_context_topics:
         runtime.register("conversation-context", conversation.context_subscriber())
-    runtime.register("conversation-example", router)
+    runtime.register("conversation-example", router.runtime_subscriber())
     runtime.register("voice", voice)
 
     logger.info("Relay events → {}", log_file.parent / "relay-events.jsonl")

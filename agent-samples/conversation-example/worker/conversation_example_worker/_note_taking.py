@@ -7,14 +7,13 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
-from contextlib import suppress
 from datetime import UTC, datetime
 
 import nemo_relay
 from loguru import logger
 from xr_ai_conversation import Conversation, ConversationContextUpdate
 from xr_ai_models import DecisionQuestion, DecisionService
-from xr_ai_routing import Admission, AgentTurn, DestinationResult, RoutableAgent, RoutingAid, notify_response_started
+from xr_ai_routing import Admission, AgentTurn, DestinationResult, RoutableAgent, RoutingAid
 from xr_ai_runtime import AgentRuntime, RuntimeClosedError, Topic
 from xr_ai_voice import VoiceOutput
 
@@ -129,53 +128,32 @@ class NoteTakingAgent(RoutableAgent):
             self._pending.pop(turn.participant_id, None)
             raise
 
-    async def answer(self, turn: AgentTurn) -> DestinationResult:
+    async def answer(self, turn: AgentTurn, *, started: Callable[[], Awaitable[bool]]) -> DestinationResult:
         pending = self._pending.pop(turn.participant_id, None)
         action = pending[1] if pending is not None and pending[0] == turn.turn_id else "other"
         was_focused = pending[2] if pending is not None and pending[0] == turn.turn_id else False
         if action == "other":
-            result = await self._conversation.answer(turn)
+            result = await self._conversation.answer(turn, started=started)
             return DestinationResult("focus" if was_focused else "answer", result.text)
 
-        output_attempted = False
-
         async def emit(text: str) -> None:
-            nonlocal output_attempted
+            interrupt = await started()
             task = asyncio.current_task()
             if task is not None and task.cancelling():
                 raise asyncio.CancelledError
-            notify_response_started()
-            output_attempted = True
             await self._runtime.publish(
                 self._output_topic,
                 VoiceOutput(
                     text=text,
                     response_id=turn.turn_id,
-                    interrupt=True,
+                    interrupt=interrupt,
                     timestamp_us=turn.timestamp_us,
                 ),
                 participant_id=turn.participant_id,
                 source="notes",
             )
 
-        try:
-            return await self._answer_control(turn, action, was_focused, emit)
-        except Exception:
-            task = asyncio.current_task()
-            if task is not None and task.cancelling():
-                raise asyncio.CancelledError from None
-            if not output_attempted:
-                with suppress(RuntimeClosedError):
-                    await self._runtime.publish(
-                        self._output_topic,
-                        VoiceOutput(
-                            text="I couldn't complete that request. Please try again.",
-                            timestamp_us=turn.timestamp_us,
-                        ),
-                        participant_id=turn.participant_id,
-                        source="notes",
-                    )
-            raise
+        return await self._answer_control(turn, action, was_focused, emit)
 
     async def _answer_control(
         self,
