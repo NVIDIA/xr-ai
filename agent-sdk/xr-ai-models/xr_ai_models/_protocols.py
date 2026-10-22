@@ -522,9 +522,28 @@ class _StreamingTTSService(TTSService, Protocol):
         pass
 
 
+class ModelServiceError(RuntimeError):
+    """Failure to determine or maintain an embedding model's reported identity."""
+
+
 @runtime_checkable
 class EmbeddingService(Protocol):
     """Structural interface for text-embedding services."""
+
+    async def model_identity(self) -> str | None:
+        """Return a stable backing-model identity, or ``None`` when absent.
+
+        ``None`` means a successful lookup found no identity; it must not hide
+        a failed operation. This is not a weight checksum: deployments that
+        replace weights under the same identity need an explicit cache revision.
+        Consumers choose whether absence permits operation without caching.
+
+        Raises:
+            ModelServiceError: Identity lookup failed or returned invalid
+                metadata. Consumers own any fallback or retry policy.
+        """
+
+        pass
 
     async def embed(
         self,

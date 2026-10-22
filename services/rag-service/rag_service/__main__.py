@@ -6,6 +6,8 @@
 import argparse
 import asyncio
 import hashlib
+import json
+from dataclasses import asdict
 from pathlib import Path
 
 import yaml
@@ -26,7 +28,11 @@ def _resolve(path: str, config_path: Path) -> Path:
 async def _serve(config: dict, config_path: Path, ready_file: Path | None) -> None:
     models_path = _resolve(str(config["models_config"]), config_path)
     models = load_models_config(models_path)
-    embedder = make_embedding(models, str(config.get("embedding_role", "embedding")))
+    role = str(config.get("embedding_role", "embedding"))
+    profile_key = hashlib.sha256(
+        json.dumps(asdict(models.embedding(role)), sort_keys=True).encode()
+    ).hexdigest()
+    embedder = make_embedding(models, role)
     try:
         if not await embedder.health():
             raise RuntimeError("embedding service is not healthy")
@@ -40,10 +46,8 @@ async def _serve(config: dict, config_path: Path, ready_file: Path | None) -> No
             batch_size=int(config.get("batch_size", 32)),
             passage_prefix=str(config.get("passage_prefix", "passage: ")),
             query_prefix=str(config.get("query_prefix", "query: ")),
-            cache_key=str(
-                config.get("cache_key")
-                or hashlib.sha256(models_path.read_bytes()).hexdigest()
-            ),
+            cache_key=str(config.get("cache_key") or ""),
+            profile_key=profile_key,
             min_score=float(config.get("min_score", 0.3)),
         )
         address = str(config.get("endpoint", "tcp://0.0.0.0:8340"))

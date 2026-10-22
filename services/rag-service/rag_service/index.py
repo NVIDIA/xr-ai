@@ -6,13 +6,15 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
-from xr_ai_models import EmbeddingService
+from loguru import logger
+from xr_ai_models import EmbeddingService, ModelServiceError
 
 
 @dataclass(frozen=True)
@@ -108,8 +110,28 @@ class DenseIndex:
         passage_prefix: str = "passage: ",
         query_prefix: str = "query: ",
         cache_key: str = "",
+        profile_key: str = "",
         min_score: float = 0.3,
     ) -> "DenseIndex":
+        """Build or reuse document vectors for the current backing model.
+
+        ``profile_key`` fingerprints the caller's embedding configuration;
+        ``cache_key`` is an additional operator-controlled revision. Neither
+        replaces the server-reported identity. Successful metadata absence
+        disables persistent cache reads and writes while allowing retrieval.
+        Lookup failures propagate: RAG does not degrade a failed lookup into
+        permission to reuse or serve unverified embeddings.
+        A different identity after embedding rejects the build. These separate
+        metadata reads cannot detect swap-and-restore or inconsistent replicas;
+        every replica must stay on the same weights throughout indexing and
+        serving. Health probes check availability, not model consistency.
+
+        Raises:
+            xr_ai_models.ModelServiceError: An identity lookup failed, or the
+                reported identity changed during document embedding (including
+                appearing or disappearing).
+        """
+
         if chunk_size <= 0 or not 0 <= overlap < chunk_size:
             raise ValueError("overlap must be non-negative and smaller than chunk_size")
         if embedding_dim <= 0 or batch_size <= 0:
@@ -127,17 +149,22 @@ class DenseIndex:
         if not chunks:
             raise ValueError(f"no non-empty .md or .txt documents found in {documents_dir}")
 
-        digest = hashlib.sha256()
-        digest.update(
-            f"{chunk_size}:{overlap}:{embedding_dim}:{passage_prefix}:{cache_key}".encode()
-        )
-        for chunk in chunks:
-            digest.update(chunk.source.encode())
-            digest.update(chunk.text.encode())
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        cache_path = cache_dir / f"{digest.hexdigest()}.npz"
+        identity = await embedder.model_identity()
+        cache_path = None
+        if identity:
+            # Structured fields prevent ambiguous concatenation and keep manual
+            # revisions additive to the embedding profile and reported identity.
+            key = json.dumps([
+                "rag-index-v2", identity, profile_key, cache_key,
+                chunk_size, overlap, embedding_dim, passage_prefix,
+                [(chunk.source, chunk.text) for chunk in chunks],
+            ]).encode()
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            cache_path = cache_dir / f"{hashlib.sha256(key).hexdigest()}.npz"
+        else:
+            logger.warning("Embedding model identity metadata absent; persistent RAG cache disabled")
         vectors: np.ndarray | None = None
-        if cache_path.exists():
+        if cache_path is not None and cache_path.exists():
             try:
                 with np.load(cache_path) as cached:
                     vectors = cached["vectors"]
@@ -153,6 +180,11 @@ class DenseIndex:
             texts = [passage_prefix + chunk.text for chunk in chunks]
             for offset in range(0, len(texts), batch_size):
                 rows.extend(await embedder.embed(texts[offset:offset + batch_size]))
+            if await embedder.model_identity() != identity:
+                raise ModelServiceError(
+                    "embedding model identity changed during indexing; "
+                    "stabilize the embedding server and restart RAG"
+                )
             vectors = np.asarray(rows, dtype=np.float32)
             if vectors.ndim != 2 or vectors.shape[1] < embedding_dim:
                 raise ValueError(
@@ -166,9 +198,10 @@ class DenseIndex:
                 embedding_dim=embedding_dim,
             )
             vectors = _normalize(vectors)
-            temporary = cache_path.with_name(f".{cache_path.name}.{os.getpid()}.tmp.npz")
-            np.savez_compressed(temporary, vectors=vectors)
-            temporary.replace(cache_path)
+            if cache_path is not None:
+                temporary = cache_path.with_name(f".{cache_path.name}.{os.getpid()}.tmp.npz")
+                np.savez_compressed(temporary, vectors=vectors)
+                temporary.replace(cache_path)
         return cls(
             chunks=chunks,
             vectors=vectors,

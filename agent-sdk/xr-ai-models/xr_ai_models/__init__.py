@@ -18,6 +18,7 @@ from ._protocols import (
     ChatStreamEvent,
     ContentPart,
     EmbeddingService,
+    ModelServiceError,
     ImageInput,
     ImagePart,
     LLMService,
@@ -61,6 +62,7 @@ from ._factory import make_decision, make_embedding, make_llm, make_stt, make_tt
 from ._riva_grpc import RivaSTT, RivaTTS
 
 __all__ = [
+    "ModelServiceError",
     "Capabilities",
     "ChatMessage",
     "ChatResponse",
