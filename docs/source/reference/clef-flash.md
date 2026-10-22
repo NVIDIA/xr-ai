@@ -71,7 +71,9 @@ limit receive HTTP 422; increase `max_length` only when GPU memory allows it.
 ## Updating a running service
 
 Before updating the checkout or changing server configuration, stop the service
-from the old checkout in `model-server-samples/clef-flash/`:
+from the old checkout in `model-server-samples/clef-flash/`. The service
+configuration now lives in `services/clef-server/clef_server.yaml`; copy any edits
+you made to the sample's former `yaml/clef_server.yaml` there:
 
 ```bash
 export UV_CONFIG_FILE=../../uv.toml

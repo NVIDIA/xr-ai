@@ -20,9 +20,9 @@ after checking available GPU memory:
 max_length: 8192
 ```
 
-Refer to the generated
-[configuration reference](https://nvidia.github.io/xr-ai/latest/reference/configuration.html)
-for the remaining checked-in fields and comments.
+Refer to the
+[Clef-Flash guide](https://nvidia.github.io/xr-ai/latest/reference/clef-flash.html)
+for the remaining fields.
 
 ## Run
 

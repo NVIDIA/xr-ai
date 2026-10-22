@@ -346,11 +346,13 @@ def test_sample_readmes_use_sample_directory_commands() -> None:
         assert f"--project {relative_dir}" not in bash
         assert re.search(rf"^uv run {re.escape(command)}(?:\s|$)", bash, re.MULTILINE)
         assert re.search(r"^uv run main\.py\s*$", bash, re.MULTILINE)
-        assert "yaml/" in configure_section
-        assert (
-            "https://nvidia.github.io/xr-ai/latest/reference/configuration.html"
-            in configure_section
-        )
+        owns_yaml = (sample_dir / "yaml").is_dir()
+        assert ("yaml/" if owns_yaml else "services/") in configure_section
+        if owns_yaml:
+            assert (
+                "https://nvidia.github.io/xr-ai/latest/reference/configuration.html"
+                in configure_section
+            )
         if sample_dir.parent.name == "agent-samples":
             assert f"uv run --project model-servers {sample_dir.name.replace('-', '_')}_model_servers" in bash
             assert "same terminal" in run_section
