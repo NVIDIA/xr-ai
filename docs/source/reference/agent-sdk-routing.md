@@ -127,7 +127,7 @@ selection on each turn.
 Install `xr-ai-routing[voice]` to use the existing typed voice event models.
 The direct `handle()` path uses its configured control callback and does not
 import voice media. Runtime queries need no callback. Configure the query and
-output topics explicitly, then register the router itself:
+output topics explicitly, then register the router's runtime subscriber:
 
 ```python
 from xr_ai_runtime import AgentRuntime, Topic
@@ -136,12 +136,13 @@ from xr_ai_voice import UserQuery, VoiceOutput
 queries = Topic("my-app.query", UserQuery)
 outputs = Topic("my-app.output", VoiceOutput)
 runtime = AgentRuntime()
-router = runtime.register("router", AgentRouter(
+router = AgentRouter(
     {"conversation": conversation, "scene": scene_destination},
     decision_service,
     query_topic=queries,
     output_topic=outputs,
-))
+)
+runtime.register("router", router.runtime_subscriber())
 ```
 
 Use the same query topic on the input producer and register a consumer for the
@@ -157,16 +158,17 @@ Optional join, leave, and interruption topics must also be supplied explicitly.
 Each uses the corresponding `VoiceParticipantJoined`, `VoiceParticipantLeft`,
 or `VoiceInterrupted` model. No query or lifecycle topics are subscribed by
 default. Incorrect payload classes and incomplete topic pairs fail during
-construction.
+construction. A leave topic requires a join topic, because only a join readmits
+a participant who left.
 
 The runtime delivers queries concurrently; the router owns its detached query
-and destination tasks. Initialization runs once before the participant's first
-query, including when no join event preceded it. Application initialization and
-idempotent cleanup callbacks can preserve context snapshots and resources that
-exist before a route is used. Keep conversation context subscribers registered
-separately. A participant's initialization or cleanup does not block another
+and destination tasks. Runtime turns carry no caller-supplied history; the
+router supplies its own retained history. Keep conversation context subscribers
+registered separately. One participant's cleanup does not block another
 participant. Leave closes admission before cleanup; late queries cannot recreate
-state, and a new join reopens admission after cleanup. Interruption retains
+state, and a join reopens admission after cleanup, first retrying a departure
+whose cleanup failed. A runtime query refused because its participant left or
+the router is stopping is logged and dropped. Interruption retains
 completed history and focus. Await `router.stop()` before runtime shutdown and
 resource closure. Successful stop permits a fresh later lifecycle.
 
@@ -200,7 +202,9 @@ the caller's wait. Concurrent callers join the same operation. Canceling a calle
 does not cancel cleanup; the caller's cancellation propagates after cleanup
 finishes. If cleanup also fails, that failure remains the cancellation's cause.
 Failed departure keeps only that participant closed until a successful
-`participant_left()` retry. Other participants can continue.
+`participant_left()` retry. With runtime topics, a participant who left also
+needs a join event, which retries any failed cleanup itself. Other participants
+can continue.
 
 `stop()` closes global admission, interrupts responses and joins departure
 cleanup for every tracked participant, including history-only participants.
@@ -237,9 +241,9 @@ work before replacement or resource cleanup; an operation that does not finish
 its cancellation cleanup can delay the next turn, rather than being detached
 behind an arbitrary timeout.
 
-The routing engine does not depend on a voice transport or a particular
-application. Configure its control output once, then call `handle()` with
-`AgentTurn` values without runtime configuration.
+Without runtime topics, the routing engine imports neither the agent runtime nor
+voice packages. Configure its control output once, then call `handle()` with
+`AgentTurn` values.
 
 ## Python API reference
 
