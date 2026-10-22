@@ -4,7 +4,10 @@
 """CPU-only coverage for dense document indexing and retrieval."""
 
 import asyncio
+import hashlib
+import json
 import uuid
+from dataclasses import asdict
 from pathlib import Path
 
 import numpy as np
@@ -12,7 +15,9 @@ import pytest
 import yaml
 from pydantic import ValidationError
 from rag_service import DenseIndex, RAGService
+from rag_service import __main__ as main
 from rag_service.index import _chunk_text
+from xr_ai_models import ModelServiceError, presets
 from xr_ai_tools.rag import RAGTools, RetrieveRequest
 from xr_ai_tools.rpc import RPCServer
 from xr_ai_tools.types import EmptyRequest
@@ -22,6 +27,10 @@ class _Embedding:
     def __init__(self, *, healthy: bool = True) -> None:
         self.healthy = healthy
         self.calls: list[list[str]] = []
+        self.identity: str | None = "test-model-v1"
+
+    async def model_identity(self):
+        return self.identity
 
     async def embed(self, texts, *, timeout=None):
         self.calls.append(list(texts))
@@ -115,6 +124,196 @@ async def test_cache_reuse_and_invalidation(tmp_path) -> None:
         cache_key="model-revision-2",
     )
     assert changed_key.calls
+
+
+async def test_cache_tracks_backing_model_and_skips_unknown_identity(tmp_path) -> None:
+    documents = tmp_path / "documents"
+    documents.mkdir()
+    (documents / "guide.md").write_text("Reset the task.")
+    cache = tmp_path / "cache"
+    embedder = _Embedding()
+    await DenseIndex.build(documents, embedder, cache_dir=cache, embedding_dim=3)
+    original = next(cache.glob("*.npz")).read_bytes()
+
+    embedder.identity = "different-weights-same-alias"
+    embedder.calls.clear()
+    await DenseIndex.build(documents, embedder, cache_dir=cache, embedding_dim=3)
+    assert embedder.calls
+    assert len(list(cache.glob("*.npz"))) == 2
+
+    embedder.identity = None
+    for _ in range(2):
+        embedder.calls.clear()
+        await DenseIndex.build(documents, embedder, cache_dir=cache, embedding_dim=3)
+        assert embedder.calls
+        assert len(list(cache.glob("*.npz"))) == 2
+    assert original in [path.read_bytes() for path in cache.glob("*.npz")]
+
+
+async def test_legacy_cache_without_model_identity_is_not_reused(tmp_path) -> None:
+    documents = tmp_path / "documents"
+    documents.mkdir()
+    (documents / "guide.md").write_text("Reset the task.")
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    # The previous format can contain valid-shaped vectors from different weights.
+    digest = hashlib.sha256(b"900:120:3:passage: :guide.mdReset the task.")
+    legacy = cache / f"{digest.hexdigest()}.npz"
+    np.savez_compressed(legacy, vectors=np.ones((1, 3), dtype=np.float32))
+    embedder = _Embedding()
+    await DenseIndex.build(documents, embedder, cache_dir=cache, embedding_dim=3)
+    assert embedder.calls
+    assert len(list(cache.glob("*.npz"))) == 2
+
+
+@pytest.mark.parametrize("initial_identity, final_identity", [
+    ("test-model-v1", "different-weights"),
+    ("test-model-v1", None),
+    (None, "weights"),
+])
+async def test_model_change_during_indexing_never_persists_or_serves_vectors(
+    tmp_path, initial_identity, final_identity,
+):
+    class ChangingEmbedding(_Embedding):
+        async def embed(self, texts, *, timeout=None):
+            rows = await super().embed(texts, timeout=timeout)
+            self.identity = final_identity
+            return rows
+
+    documents = tmp_path / "documents"
+    documents.mkdir()
+    (documents / "guide.md").write_text("Reset the task.")
+    (documents / "count.md").write_text("Count the tasks.")
+    cache = tmp_path / "cache"
+    embedder = ChangingEmbedding()
+    embedder.identity = initial_identity
+    with pytest.raises(ModelServiceError, match="identity changed.*restart RAG"):
+        await DenseIndex.build(documents, embedder, cache_dir=cache, embedding_dim=3, batch_size=1)
+    assert len(embedder.calls) == 2
+    assert not list(cache.glob("*.npz"))
+
+    # Retrying against the original model must embed again, never reuse the failed build.
+    stable = _Embedding()
+    await DenseIndex.build(documents, stable, cache_dir=cache, embedding_dim=3)
+    assert stable.calls
+    assert len(list(cache.glob("*.npz"))) == 1
+
+
+@pytest.mark.parametrize("fail_on, existing_cache", [(1, False), (1, True), (2, False)])
+async def test_identity_lookup_failure_aborts_before_cache_reuse_or_publication(tmp_path, fail_on, existing_cache):
+    class FailingLookup(_Embedding):
+        def __init__(self):
+            super().__init__()
+            self.lookups = 0
+
+        async def model_identity(self):
+            self.lookups += 1
+            if self.lookups == fail_on:
+                raise ModelServiceError("metadata lookup failed")
+            return self.identity
+
+    documents = tmp_path / "documents"
+    documents.mkdir()
+    (documents / "guide.md").write_text("Reset the task.")
+    cache = tmp_path / "cache"
+    if existing_cache:
+        await DenseIndex.build(documents, _Embedding(), cache_dir=cache, embedding_dim=3)
+    before = {path.name: path.read_bytes() for path in cache.glob("*.npz")}
+    embedder = FailingLookup()
+    with pytest.raises(ModelServiceError, match="metadata lookup failed"):
+        await DenseIndex.build(documents, embedder, cache_dir=cache, embedding_dim=3)
+    assert bool(embedder.calls) is (fail_on == 2)
+    assert {path.name: path.read_bytes() for path in cache.glob("*.npz")} == before
+
+
+@pytest.mark.parametrize("change, rebuild", [
+    ("tts", False), ("llm", False), ("vlm", False),
+    ("format", False), ("explicit_defaults", False),
+    ("model", True), ("endpoint", True), ("extras", True),
+    ("preset", True), ("manual_key", True),
+])
+async def test_cache_depends_only_on_resolved_embedding_role_and_manual_key(
+    tmp_path, monkeypatch, change, rebuild,
+) -> None:
+    profile = tmp_path / "models.yaml"
+    roles = {
+        "retrieval": {
+            "adapter": {"preset": "nemotron_embedding"},
+            "endpoint": {"base_url": "http://embedding-v1"},
+        },
+        "tts": {"adapter": {"preset": "pocket_tts"}, "endpoint": {"base_url": "http://tts"}},
+        "llm": {"adapter": {"preset": "nemotron3_nano"}, "endpoint": {"base_url": "http://llm"}},
+        "vlm": {"adapter": {"preset": "cosmos_vlm"}, "endpoint": {"base_url": "http://vlm"}},
+    }
+    profile.write_text(yaml.safe_dump({"models": roles}, sort_keys=False))
+    documents = tmp_path / "documents"
+    documents.mkdir()
+    (documents / "guide.md").write_text("Reset the task.")
+    cache = tmp_path / "cache"
+    config = {
+        "models_config": "models.yaml", "embedding_role": "retrieval",
+        "documents_dir": "documents", "cache_dir": "cache",
+        "embedding_dim": 3, "cache_key": "manual-v1",
+    }
+    embedder = _Embedding()
+    monkeypatch.setattr(main, "make_embedding", lambda *_args: embedder)
+
+    async def serve(_self, *, ready):
+        pass
+
+    monkeypatch.setattr(main.RPCServer, "serve", serve)
+    await main._serve(config, tmp_path / "rag.yaml", None)
+    assert embedder.calls
+    original = {p.name: p.read_bytes() for p in cache.glob("*.npz")}
+    embedder.calls.clear()
+
+    if change in ("tts", "llm", "vlm"):
+        roles[change]["endpoint"] = {"base_url": "http://unrelated-v2"}
+    elif change == "explicit_defaults":
+        spec = main.load_models_config(profile).embedding("retrieval")
+        roles["retrieval"] = {"category": "embedding", **asdict(spec)}
+    elif change == "model":
+        roles["retrieval"]["adapter"]["model_name"] = "embed-v2"
+    elif change == "endpoint":
+        roles["retrieval"]["endpoint"]["base_url"] = "http://embedding-v2"
+    elif change == "extras":
+        roles["retrieval"]["adapter"]["default_extras"] = {"input_type": "passage"}
+    elif change == "preset":
+        get_preset = presets.get_preset
+
+        def updated_preset(name):
+            preset = get_preset(name)
+            if name == "nemotron_embedding":
+                preset["model_name"] = "embed-v2"
+            return preset
+
+        monkeypatch.setattr(presets, "get_preset", updated_preset)
+    elif change == "manual_key":
+        config["cache_key"] = "manual-v2"
+    profile.write_text(
+        json.dumps({"models": roles}, sort_keys=True, indent=4)
+        if change == "format" else yaml.safe_dump({"models": roles}, sort_keys=False)
+    )
+    await main._serve(config, tmp_path / "rag.yaml", None)
+    assert bool(embedder.calls) is rebuild
+    assert len(list(cache.glob("*.npz"))) == (2 if rebuild else 1)
+    assert all((cache / name).read_bytes() == content for name, content in original.items())
+
+
+async def test_profile_change_invalidates_cache_with_same_manual_key(tmp_path) -> None:
+    documents = tmp_path / "documents"
+    documents.mkdir()
+    (documents / "guide.md").write_text("Reset the task.")
+    cache = tmp_path / "cache"
+    embedder = _Embedding()
+    for profile in ("profile-v1", "profile-v2"):
+        embedder.calls.clear()
+        await DenseIndex.build(
+            documents, embedder, cache_dir=cache, embedding_dim=3,
+            cache_key="manual-v1", profile_key=profile,
+        )
+        assert embedder.calls
+    assert len(list(cache.glob("*.npz"))) == 2
 
 
 async def test_invalid_cached_shape_is_rebuilt(tmp_path) -> None:

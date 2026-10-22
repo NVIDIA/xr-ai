@@ -670,9 +670,21 @@ cleanup.
   with an `embedding` role. It chunks and embeds supported documents at
   startup, caches its index, and returns matches above `min_score`. Start the
   embedding service first, RAG second, and the consuming worker last. The cache
-  includes document content, indexing settings, and the model profile; change
-  `cache_key` when a remote endpoint changes its backing model without changing
-  that profile.
+  includes document content, indexing settings, the resolved embedding-role
+  hash, the server-reported `root` from the matching `/v1/models` entry, and
+  optional `cache_key`. Unrelated model-role edits do not invalidate the cache.
+  The reported identity is best-effort: this repository's Docker launcher serves
+  a resolved snapshot path, while pip serves the Hugging Face repository ID.
+  Switching backends can rebuild the cache, and changing a Hub revision under
+  the same pip model ID requires a new `cache_key`. A served alias such as
+  `embed` does not identify weights. Providers omitting `root` cause documents
+  to be re-embedded on every startup without persistent caching; `cache_key`
+  cannot opt back in. Failed metadata requests or invalid responses abort
+  startup. The manual key supplements the role hash and reported identity.
+  Every replica must remain on the same weights throughout indexing and serving;
+  health probes check availability, not model consistency. Restart RAG whenever
+  the embedding model changes. Refer to
+  {doc}`/reference/migrations` for upgrading existing indexes and servers.
 - **video-memory-service** owns recorded chunk queries, NVDEC, and PNG output
   behind typed msgpack over ZMQ on port 8310. Set `recordings_dir` in its YAML to
   enable recorded-video operations; the path must match the hub's
