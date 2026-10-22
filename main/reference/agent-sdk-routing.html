@@ -575,6 +575,71 @@ routing history; it never substitutes for direct output or explicit per-agent
 <code class="docutils literal notranslate"><span class="pre">routing_aid(participant_id)</span></code> metadata. Dynamic routing aids are refreshed for
 selection on each turn.</p>
 </section>
+<section id="register-the-router-with-a-runtime">
+<h2>Register the router with a runtime<a class="headerlink" href="#register-the-router-with-a-runtime" title="Link to this heading">#</a></h2>
+<p>Install <code class="docutils literal notranslate"><span class="pre">xr-ai-routing[voice]</span></code> to use the existing typed voice event models.
+The direct <code class="docutils literal notranslate"><span class="pre">handle()</span></code> path uses its configured control callback and does not
+import voice media. Runtime queries need no callback. Configure the query and
+output topics explicitly, then register the router’s runtime subscriber:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_runtime</span><span class="w"> </span><span class="kn">import</span> <span class="n">AgentRuntime</span><span class="p">,</span> <span class="n">Topic</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_voice</span><span class="w"> </span><span class="kn">import</span> <span class="n">UserQuery</span><span class="p">,</span> <span class="n">VoiceOutput</span>
+
+<span class="n">queries</span> <span class="o">=</span> <span class="n">Topic</span><span class="p">(</span><span class="s2">"my-app.query"</span><span class="p">,</span> <span class="n">UserQuery</span><span class="p">)</span>
+<span class="n">outputs</span> <span class="o">=</span> <span class="n">Topic</span><span class="p">(</span><span class="s2">"my-app.output"</span><span class="p">,</span> <span class="n">VoiceOutput</span><span class="p">)</span>
+<span class="n">runtime</span> <span class="o">=</span> <span class="n">AgentRuntime</span><span class="p">()</span>
+<span class="n">router</span> <span class="o">=</span> <span class="n">AgentRouter</span><span class="p">(</span>
+    <span class="p">{</span><span class="s2">"conversation"</span><span class="p">:</span> <span class="n">conversation</span><span class="p">,</span> <span class="s2">"scene"</span><span class="p">:</span> <span class="n">scene_destination</span><span class="p">},</span>
+    <span class="n">decision_service</span><span class="p">,</span>
+    <span class="n">query_topic</span><span class="o">=</span><span class="n">queries</span><span class="p">,</span>
+    <span class="n">output_topic</span><span class="o">=</span><span class="n">outputs</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">runtime</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">"router"</span><span class="p">,</span> <span class="n">router</span><span class="o">.</span><span class="n">runtime_subscriber</span><span class="p">())</span>
+</pre></div>
+</div>
+<p>Use the same query topic on the input producer and register a consumer for the
+chosen output topic. With <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code>, use its <code class="docutils literal notranslate"><span class="pre">VOICE_OUTPUT_TOPIC</span></code> or an
+existing aggregation input topic for output. Destinations publish their answer
+streams independently under their own producer identity and close their own
+streams. <code class="docutils literal notranslate"><span class="pre">AgentTurn.turn_id</span></code> carries the input publication identity;
+<code class="docutils literal notranslate"><span class="pre">timestamp_us</span></code> carries its originating input time. The router publishes finite
+control messages under its own producer identity, so an acknowledgment never
+holds an open stream ahead of a direct answer.</p>
+<p>Optional join, leave, and interruption topics must also be supplied explicitly.
+Each uses the corresponding <code class="docutils literal notranslate"><span class="pre">VoiceParticipantJoined</span></code>, <code class="docutils literal notranslate"><span class="pre">VoiceParticipantLeft</span></code>,
+or <code class="docutils literal notranslate"><span class="pre">VoiceInterrupted</span></code> model. No query or lifecycle topics are subscribed by
+default. Incorrect payload classes and incomplete topic pairs fail during
+construction. A leave topic requires a join topic, because only a join readmits
+a participant who left.</p>
+<p>Install <code class="docutils literal notranslate"><span class="pre">xr-ai-routing[voice]</span></code> and supply explicit query and output topics to
+use runtime delivery; optional participant and interruption topics also require
+explicit configuration. Runtime queries use the configured output topic for
+router-owned control text; direct <code class="docutils literal notranslate"><span class="pre">handle(turn)</span></code> calls use the constructor
+<code class="docutils literal notranslate"><span class="pre">output</span></code> callback.</p>
+<p>The runtime delivers queries concurrently; the router owns its detached query
+and destination tasks. Initialization runs once before the participant’s first
+query, including when no join event preceded it; an interrupted initialization
+runs again on the next turn. Application initialization and idempotent cleanup
+callbacks own application resources that exist before a route is used. Runtime
+turns carry no caller-supplied history, and these callbacks cannot seed routing
+history. Keep conversation context subscribers registered separately. A
+participant’s initialization or cleanup does not block another participant.
+Leave closes admission before cleanup; late queries cannot recreate state, and a
+new join reopens admission after cleanup, first retrying a departure whose
+cleanup failed. A runtime query refused because its participant left or the
+router is stopping is logged and dropped. <code class="docutils literal notranslate"><span class="pre">set_status</span></code> reports <code class="docutils literal notranslate"><span class="pre">processing</span></code> and
+<code class="docutils literal notranslate"><span class="pre">idle</span></code> around each runtime turn; its failures are logged and never fail the turn.
+Interruption retains
+completed history and focus. Await <code class="docutils literal notranslate"><span class="pre">router.stop()</span></code> before runtime shutdown and
+resource closure. Successful stop permits a fresh later lifecycle.</p>
+<p>Runtime turns use the same failure rule as <code class="docutils literal notranslate"><span class="pre">handle()</span></code>: a turn that fails before
+its destination calls <code class="docutils literal notranslate"><span class="pre">started()</span></code> gets one brief failure message through the
+router’s output, unless that output itself failed. After <code class="docutils literal notranslate"><span class="pre">started()</span></code>, the
+destination owns failure output: preserve a partial answer without adding a
+duplicate fallback, and finalize any open stream on failure. Cancellation drains owned work and
+closes an open stream without adding text. Optional progress notifications
+can describe nonvoice actions and are never treated as evidence of voice
+publication.</p>
+</section>
 <section id="focus-cancellation-and-departure">
 <h2>Focus, cancellation, and departure<a class="headerlink" href="#focus-cancellation-and-departure" title="Link to this heading">#</a></h2>
 <p>Returning <code class="docutils literal notranslate"><span class="pre">DestinationResult(&quot;focus&quot;)</span></code> makes that destination the participant’s
@@ -595,7 +660,9 @@ the caller’s wait. Concurrent callers join the same operation. Canceling a cal
 does not cancel cleanup; the caller’s cancellation propagates after cleanup
 finishes. If cleanup also fails, that failure remains the cancellation’s cause.
 Failed departure keeps only that participant closed until a successful
-<code class="docutils literal notranslate"><span class="pre">participant_left()</span></code> retry. Other participants can continue.</p>
+<code class="docutils literal notranslate"><span class="pre">participant_left()</span></code> retry. With runtime topics, a participant who left also
+needs a join event, which retries any failed cleanup itself. Other participants
+can continue.</p>
 <p><code class="docutils literal notranslate"><span class="pre">stop()</span></code> closes global admission, interrupts responses and joins departure
 cleanup for every tracked participant, including history-only participants.
 Failed shutdown keeps admission closed until a successful <code class="docutils literal notranslate"><span class="pre">stop()</span></code> retry. A
@@ -629,9 +696,9 @@ not silently converted into a delay fallback. Cancellation drains actual owned
 work before replacement or resource cleanup; an operation that does not finish
 its cancellation cleanup can delay the next turn, rather than being detached
 behind an arbitrary timeout.</p>
-<p>The routing engine does not depend on a voice transport or a particular
-application. Configure its control output once, then call <code class="docutils literal notranslate"><span class="pre">handle()</span></code> with
-<code class="docutils literal notranslate"><span class="pre">AgentTurn</span></code> values.</p>
+<p>Without runtime topics, routing imports neither the agent runtime nor voice
+packages and requires no particular application. Configure its control output once, then call <code class="docutils literal notranslate"><span class="pre">handle()</span></code>
+with <code class="docutils literal notranslate"><span class="pre">AgentTurn</span></code> values.</p>
 </section>
 <section id="python-api-reference">
 <h2>Python API reference<a class="headerlink" href="#python-api-reference" title="Link to this heading">#</a></h2>
@@ -691,6 +758,7 @@ documents the exported names and their signatures, fields, and behavior.</p>
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#route-a-turn">Route a turn</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#response-progress-and-routing-context">Response progress and routing context</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#register-the-router-with-a-runtime">Register the router with a runtime</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#focus-cancellation-and-departure">Focus, cancellation, and departure</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#optional-progress-acknowledgment">Optional progress acknowledgment</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#python-api-reference">Python API reference</a></li>

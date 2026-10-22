@@ -332,7 +332,7 @@ Package Contents
    an active routed turn, it contains ``None`` and empty history tuples.
 
 
-.. py:class:: AgentRouter(destinations: collections.abc.Mapping[str, xr_ai_routing.RoutableAgent], decisions: xr_ai_models.DecisionService, *, output: collections.abc.Callable[[xr_ai_routing.AgentTurn, str, str], collections.abc.Awaitable[None]], default_destination: str = 'conversation', context_budget_bytes: int = _DEFAULT_CONTEXT_BUDGET_BYTES, acknowledgment_llm: xr_ai_models.LLMService | None = None, acknowledgment_delay_secs: float | None = None)
+.. py:class:: AgentRouter(destinations: collections.abc.Mapping[str, xr_ai_routing.RoutableAgent], decisions: xr_ai_models.DecisionService, *, output: collections.abc.Callable[[xr_ai_routing.AgentTurn, str, str], collections.abc.Awaitable[None]] | None = None, default_destination: str = 'conversation', context_budget_bytes: int = _DEFAULT_CONTEXT_BUDGET_BYTES, acknowledgment_llm: xr_ai_models.LLMService | None = None, acknowledgment_delay_secs: float | None = None, query_topic: xr_ai_runtime.Topic[xr_ai_voice.UserQuery] | None = None, output_topic: xr_ai_runtime.Topic[xr_ai_voice.VoiceOutput] | None = None, participant_joined_topic: xr_ai_runtime.Topic[xr_ai_voice.VoiceParticipantJoined] | None = None, participant_left_topic: xr_ai_runtime.Topic[xr_ai_voice.VoiceParticipantLeft] | None = None, interrupted_topic: xr_ai_runtime.Topic[xr_ai_voice.VoiceInterrupted] | None = None, initialize_participant: collections.abc.Callable[[str], collections.abc.Awaitable[None]] | None = None, cleanup_participant: collections.abc.Callable[[str], collections.abc.Awaitable[None]] | None = None, set_status: collections.abc.Callable[[Literal['processing', 'idle'], str], collections.abc.Awaitable[None]] | None = None)
 
    Route a turn, check admission before speech, and retain explicit focus.
 
@@ -363,16 +363,57 @@ Package Contents
    destination signals its first meaningful response, excluding routing, admission,
    waiting for committed acknowledgment delivery, and audio playback.
 
+   Supply ``query_topic`` and ``output_topic`` together, then register
+   ``runtime_subscriber()`` with :class:`xr_ai_runtime.AgentRuntime`. This
+   requires the ``xr-ai-routing[voice]`` extra; ordinary ``handle()`` use never
+   imports the runtime or voice media. No input or lifecycle topic is
+   subscribed unless explicitly supplied.
+   Runtime queries use their publication identity and originating timestamp.
+   Destinations publish their own output; the router publishes only finite
+   admission, clarification, acknowledgment, and failure messages for turns that
+   fail before the destination calls ``started()``. After that call, the
+   destination owns failure output and stream finalization. Runtime background
+   failures are logged once.
+
    :param destinations: Registered destinations keyed by their stable route names.
    :param decisions: Typed Clef decision service used to select routes.
    :param output: Async callback receiving the current ``AgentTurn``, route name, and finite control text,
        including acknowledgments, admission preambles, and clarification or release messages.
+       Required for direct ``handle()`` calls; runtime queries publish control text through ``output_topic``.
        Destinations publish their own answer output directly.
    :param default_destination: Registered route used for exhausted-decline fallback.
    :param context_budget_bytes: UTF-8 byte budget for retained completed history and routing history input.
    :param acknowledgment_llm: Optional non-reasoning client for intention acknowledgments and duration prediction.
    :param acknowledgment_delay_secs: Finite positive delay before fallback
        acknowledgment; requires ``acknowledgment_llm``.
+   :param query_topic: Explicit runtime input topic carrying ``xr_ai_voice.UserQuery``.
+   :param output_topic: Explicit topic carrying ``xr_ai_voice.VoiceOutput`` for router control output.
+   :param participant_joined_topic: Optional explicit ``VoiceParticipantJoined`` topic reopening admission.
+   :param participant_left_topic: Optional explicit ``VoiceParticipantLeft`` topic for departure cleanup;
+       requires ``participant_joined_topic`` so a departed participant can be readmitted.
+   :param interrupted_topic: Optional explicit ``VoiceInterrupted`` topic for participant or global interruption.
+   :param initialize_participant: Optional initialization, awaited once before the participant's first turn,
+       whether called directly or published. An interrupted initialization runs again on the next turn.
+   :param cleanup_participant: Optional idempotent application cleanup after destination work is drained.
+       Used also for initialized participants who never selected a route; failed cleanup can be retried.
+   :param set_status: Optional asynchronous callback receiving ``processing`` or ``idle``, then the participant ID,
+       around each runtime turn. Its failures are logged and do not fail the turn.
+       All callbacks run on the delivery event loop and must not reenter this router's operations.
+
+   Topic payload classes must match exactly and configured topic names must be
+   distinct. Incomplete runtime configuration raises ``ValueError``; a wrong
+   payload class raises ``TypeError``. Missing optional voice support raises
+   ``ImportError`` when runtime configuration is supplied. The application must
+   await ``stop()`` before stopping its runtime or closing destination resources.
+
+
+   .. py:method:: runtime_subscriber() -> xr_ai_runtime.Agent
+
+      Return the runtime agent that delivers configured topics to this router.
+
+      Register it once with the application's ``AgentRuntime``. Requires
+      ``query_topic`` and ``output_topic`` on the constructor.
+
 
 
    .. py:method:: handle(turn: xr_ai_routing.AgentTurn) -> xr_ai_routing.DestinationResult
@@ -404,6 +445,8 @@ Package Contents
       Canceling a cleanup waiter does not abandon the owned operation;
       cancellation propagates after that operation completes.
 
+      Configure ``output`` on the constructor before calling this direct entry point.
+
       :param turn: Current request and optional initial completed history.
       :return: The final answer, focus, release, or clarification disposition.
 
@@ -434,7 +477,9 @@ Package Contents
       successfully, ``handle()`` raises ``RuntimeError`` for that participant.
       Concurrent callers join the same owned departure. Canceling a waiter
       waits for that operation to finish before propagating cancellation.
-      Retry after a cleanup failure; success reopens participant admission.
+      Retry after a cleanup failure. With runtime topics configured, departure
+      also closes direct ``handle()`` admission until a participant-joined event.
+      Without runtime topics, successful cleanup permits a fresh later turn.
 
 
 
