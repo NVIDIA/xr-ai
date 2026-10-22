@@ -22,9 +22,10 @@ models:
     adapter:
       preset: cosmos3_nano_reasoner
       model_name: nvidia/cosmos3-nano-reasoner
-      default_extras:
-        chat_template_kwargs:
-          enable_thinking: false
+      # The hosted NIM accepts the template switch; keep reasoning off.
+      thinking:
+        control: chat_template
+        default: false
     endpoint:
       base_url: https://vlm.example.com
       api_key_env: NIM_ENDPOINT_API_KEY
