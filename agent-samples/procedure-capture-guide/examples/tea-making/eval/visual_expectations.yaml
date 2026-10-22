@@ -5,8 +5,7 @@
 # This is evaluation input, not a procedure guide. Oracles describe the drawing,
 # not a model's prior responses. Only pixels and
 # the shipped guide's question reach the configured VLM; these expectations never do.
-guides_dir: ../../guides
-guide: Tea Making
+guide_path: ../guide.yaml
 scenes_file: image_scenes.yaml
 cases:
   - {scene: breakfast, step: identify, answer: 'NO', accept: false}

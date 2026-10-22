@@ -31,11 +31,11 @@ def evaluator(monkeypatch):
 
 
 def test_scenes_are_reproducible_and_distinct(evaluator, tmp_path):
-    cases, guide = evaluator.prepare(_SAMPLE / "eval/tea-guide/visual_expectations.yaml", tmp_path / "images")
+    cases, guide = evaluator.prepare(_SAMPLE / "examples/tea-making/eval/visual_expectations.yaml", tmp_path / "images")
     assert len(cases) == 25
-    assert guide.path == _SAMPLE / "guides/tea-making.guide.yaml"
+    assert guide.path == _SAMPLE / "examples/tea-making/guide.yaml"
     assert guide.workflow.steps["steep_timer"].trigger.arguments["duration_s"] == 300
-    scenes = yaml.safe_load((_SAMPLE / "eval/tea-guide/image_scenes.yaml").read_text())
+    scenes = yaml.safe_load((_SAMPLE / "examples/tea-making/eval/image_scenes.yaml").read_text())
     for scene in scenes.values():
         if scene["kind"] == "packet":
             assert set(scene) <= {"kind", "blend", "color", "covered"}
@@ -53,21 +53,21 @@ def test_scenes_are_reproducible_and_distinct(evaluator, tmp_path):
     assert len(provenance["images"]) == len(cases)
     assert provenance["guide_sha256"] == guide.sha256
     with pytest.raises(FileExistsError):
-        evaluator.prepare(_SAMPLE / "eval/tea-guide/visual_expectations.yaml", tmp_path / "images")
+        evaluator.prepare(_SAMPLE / "examples/tea-making/eval/visual_expectations.yaml", tmp_path / "images")
 
 
 def test_visual_entry_point_renders_tea_manifest_without_models(tmp_path, monkeypatch):
     monkeypatch.setenv("PYTHONPATH", str(_SAMPLE / "worker"))
     output = tmp_path / "preview"
     result = subprocess.run(
-        [sys.executable, "eval/visual.py", "--manifest", "eval/tea-guide/visual_expectations.yaml",
+        [sys.executable, "eval/visual.py", "--manifest", "examples/tea-making/eval/visual_expectations.yaml",
          "--render-only", "--output", str(output)],
         cwd=_SAMPLE, capture_output=True, text=True, timeout=30,
     )
     assert result.returncode == 0, result.stdout + result.stderr
     provenance = json.loads((output / "provenance.json").read_text())
     assert len(provenance["images"]) == 25
-    assert str(_SAMPLE / "guides/tea-making.guide.yaml") in provenance["source_sha256"]
+    assert str(_SAMPLE / "examples/tea-making/guide.yaml") in provenance["source_sha256"]
     assert str(_SAMPLE / "eval/_scene_rendering.py") in provenance["source_sha256"]
     assert str(_SAMPLE / "eval/_visual_expectations.py") in provenance["source_sha256"]
 
@@ -107,8 +107,8 @@ async def test_visual_evaluator_uses_guide_question_not_answer(evaluator, tmp_pa
     requests = []
     fake_vlm = SimpleNamespace(close=AsyncMock())
     monkeypatch.setattr(evaluator, "make_vlm", lambda *_args: fake_vlm)
-    manifest = yaml.safe_load((_SAMPLE / "eval/tea-guide/visual_expectations.yaml").read_text())
-    scenes = evaluator.load_scenes(_SAMPLE / "eval/tea-guide/visual_expectations.yaml", manifest)
+    manifest = yaml.safe_load((_SAMPLE / "examples/tea-making/eval/visual_expectations.yaml").read_text())
+    scenes = evaluator.load_scenes(_SAMPLE / "examples/tea-making/eval/visual_expectations.yaml", manifest)
     canonical = []
     for case in manifest["cases"]:
         if case["step"] == "heat_water" and case["answer"] != "UNKNOWN":
@@ -132,7 +132,7 @@ async def test_visual_evaluator_uses_guide_question_not_answer(evaluator, tmp_pa
 
     monkeypatch.setattr(evaluator, "ImageQueryTool", FakeTool)
     output = tmp_path / "visual"
-    summary = await evaluator.evaluate(_SAMPLE / "eval/tea-guide/visual_expectations.yaml", output,
+    summary = await evaluator.evaluate(_SAMPLE / "examples/tea-making/eval/visual_expectations.yaml", output,
                                       _SAMPLE / "yaml/models.json", 2, 1)
     assert summary["attempts"] == 50
     assert summary["false_rejects"] == (0 if correct else 10)
@@ -142,7 +142,7 @@ async def test_visual_evaluator_uses_guide_question_not_answer(evaluator, tmp_pa
         assert summary["recognition_correct"] == 50
         assert all(step["passed"] for step in summary["by_step"].values())
     rows = [json.loads(line) for line in (output / "results.jsonl").read_text().splitlines()]
-    guide = evaluator.select_guide(_SAMPLE / "guides", "Tea Making")
+    guide = evaluator.load_guide(_SAMPLE / "examples/tea-making/guide.yaml")
     for row, request in zip(rows, requests, strict=True):
         assert request.query == guide.workflow.steps[row["step"]].trigger.arguments["question"]
     fake_vlm.close.assert_awaited_once()
@@ -161,8 +161,10 @@ async def test_timeout_is_not_a_correct_negative(evaluator, tmp_path, monkeypatc
             raise TimeoutError("simulated")
 
     monkeypatch.setattr(evaluator, "ImageQueryTool", TimeoutTool)
-    summary = await evaluator.evaluate(_SAMPLE / "eval/tea-guide/visual_expectations.yaml", tmp_path / "timeouts",
-                                      _SAMPLE / "yaml/models.json", 1, 1)
+    summary = await evaluator.evaluate(
+        _SAMPLE / "examples/tea-making/eval/visual_expectations.yaml", tmp_path / "timeouts",
+        _SAMPLE / "yaml/models.json", 1, 1,
+    )
     assert summary["unavailable"] == 25
     assert summary["scored"] == summary["gate_correct"] == 0
     assert not summary["passed"]
@@ -171,10 +173,10 @@ async def test_timeout_is_not_a_correct_negative(evaluator, tmp_path, monkeypatc
 
 @pytest.mark.parametrize("filename", ["step_verification_scenario.yaml", "full_run_scenario.yaml"])
 def test_flow_uses_shipped_guide_and_control_contract(evaluator, filename):
-    path = _SAMPLE / "eval/tea-guide" / filename
+    path = _SAMPLE / "examples/tea-making/eval" / filename
     manifest = yaml.safe_load(path.read_text())
-    guide = evaluator.select_guide(path.parent / manifest["guides_dir"], manifest["guide"])
-    assert guide.path == _SAMPLE / "guides/tea-making.guide.yaml"
+    guide = evaluator.load_guide(path.parent / manifest["guide_path"])
+    assert guide.path == _SAMPLE / "examples/tea-making/guide.yaml"
     scenes = evaluator.load_scenes(path, manifest)
     assert all(action["scene"] in scenes for action in manifest["actions"] if action["action"] == "image")
     utterances = [action for action in manifest["actions"] if action["action"] == "say"]
@@ -211,13 +213,13 @@ def test_flow_uses_shipped_guide_and_control_contract(evaluator, filename):
 
 
 @pytest.mark.parametrize("filename,fail_fast", [
-    ("tea-guide/step_verification_scenario.yaml", True),
-    ("tea-guide/full_run_scenario.yaml", True),
-    ("guide_cases.yaml", True),
-    ("guide_routing.yaml", False),
+    ("examples/tea-making/eval/step_verification_scenario.yaml", True),
+    ("examples/tea-making/eval/full_run_scenario.yaml", True),
+    ("eval/guide_cases.yaml", True),
+    ("eval/guide_routing.yaml", False),
 ])
 def test_manifest_declares_dependent_or_independent_checks(filename, fail_fast):
-    manifest = yaml.safe_load((_SAMPLE / "eval" / filename).read_text())
+    manifest = yaml.safe_load((_SAMPLE / filename).read_text())
     assert manifest["fail_fast"] is fail_fast
 
 
@@ -234,10 +236,10 @@ async def test_manifest_rejects_non_boolean_fail_fast(evaluator, tmp_path, value
 
 
 def test_inline_scene_manifest_preserves_provenance(evaluator, tmp_path):
-    manifest = yaml.safe_load((_SAMPLE / "eval/tea-guide/visual_expectations.yaml").read_text())
-    manifest["scenes"] = evaluator.load_scenes(_SAMPLE / "eval/tea-guide/visual_expectations.yaml", manifest)
+    manifest = yaml.safe_load((_SAMPLE / "examples/tea-making/eval/visual_expectations.yaml").read_text())
+    manifest["scenes"] = evaluator.load_scenes(_SAMPLE / "examples/tea-making/eval/visual_expectations.yaml", manifest)
     del manifest["scenes_file"]
-    manifest["guides_dir"] = str(_SAMPLE / "guides")
+    manifest["guide_path"] = str(_SAMPLE / "examples/tea-making/guide.yaml")
     path = tmp_path / "inline.yaml"
     path.write_text(yaml.safe_dump(manifest))
     cases, _guide = evaluator.prepare(path, tmp_path / "output")
@@ -259,9 +261,9 @@ def test_inline_scene_manifest_preserves_provenance(evaluator, tmp_path):
     ("chamomile", "YES\n", True, True),
 ])
 def test_recognition_and_runtime_gate_have_distinct_contracts(evaluator, scene, text, recognition, accepted):
-    manifest = yaml.safe_load((_SAMPLE / "eval/tea-guide/visual_expectations.yaml").read_text())
+    manifest = yaml.safe_load((_SAMPLE / "examples/tea-making/eval/visual_expectations.yaml").read_text())
     case = evaluator.visual_cases(manifest)[scene]
-    guide = evaluator.select_guide(_SAMPLE / "eval/tea-guide" / manifest["guides_dir"], manifest["guide"])
+    guide = evaluator.load_guide(_SAMPLE / "examples/tea-making/eval" / manifest["guide_path"])
     pattern = guide.workflow.steps[case["step"]].evidence.pattern
     row = evaluator.score(case, pattern, text, True)
     assert row["recognition"] is recognition
@@ -298,14 +300,14 @@ def runtime_evaluator(evaluator, monkeypatch):
 
 
 def timer_scenario(tmp_path, actions):
-    guide = yaml.safe_load((_SAMPLE / "eval/fixtures/indicator.guide.yaml").read_text())
+    guide = yaml.safe_load((_SAMPLE / "eval/fixtures/indicator.yaml").read_text())
     guide["task"]["start_step"] = "wait"
     guide["steps"] = [guide["steps"][1]]
     guide["steps"][0]["trigger"]["arguments"]["duration_s"] = 1
     guide["steps"][0]["trigger"]["interval_s"] = 0.05
     (tmp_path / "test.guide.yaml").write_text(yaml.safe_dump(guide))
     manifest = tmp_path / "scenario.yaml"
-    manifest.write_text(yaml.safe_dump({"guides_dir": ".", "guide": "Indicator Check",
+    manifest.write_text(yaml.safe_dump({"guide_path": "test.guide.yaml",
                                       "fail_fast": True, "actions": actions}))
     return manifest
 
@@ -453,7 +455,7 @@ async def test_invalid_actions_fail_before_model_work(runtime_evaluator, tmp_pat
 async def test_runtime_observe_uses_shared_visual_case(runtime_evaluator, tmp_path, answer, expected):
     module = runtime_evaluator
     module.make_vlm.return_value.ask_images.return_value = SimpleNamespace(content=answer)
-    guide = yaml.safe_load((_SAMPLE / "eval/fixtures/indicator.guide.yaml").read_text())
+    guide = yaml.safe_load((_SAMPLE / "eval/fixtures/indicator.yaml").read_text())
     guide["steps"] = guide["steps"][:1]
     guide["steps"][0]["next"] = None
     (tmp_path / "test.guide.yaml").write_text(yaml.safe_dump(guide))
@@ -461,7 +463,7 @@ async def test_runtime_observe_uses_shared_visual_case(runtime_evaluator, tmp_pa
     (tmp_path / "cases.yaml").write_text(yaml.safe_dump(cases))
     manifest = tmp_path / "scenario.yaml"
     manifest.write_text(yaml.safe_dump({
-        "guides_dir": ".", "guide": "Indicator Check", "scenes": {"red": {"rectangle": "red"}},
+        "guide_path": "test.guide.yaml", "scenes": {"red": {"rectangle": "red"}},
         "visual_cases_file": "cases.yaml", "actions": [
             {"action": "image", "scene": "red"}, {"action": "say", "text": "Start guide"},
             {"action": "observe", "case": "red", "count": 1},

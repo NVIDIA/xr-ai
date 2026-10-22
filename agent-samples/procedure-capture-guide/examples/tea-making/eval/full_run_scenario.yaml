@@ -5,8 +5,7 @@
 # Follow the successful path through the five-minute timer, restart, and stop.
 # This runs independently so a failure in the step-verification scenario
 # cannot hide timer and lifecycle coverage.
-guides_dir: ../../guides
-guide: Tea Making
+guide_path: ../guide.yaml
 fail_fast: true
 scenes_file: image_scenes.yaml
 actions:

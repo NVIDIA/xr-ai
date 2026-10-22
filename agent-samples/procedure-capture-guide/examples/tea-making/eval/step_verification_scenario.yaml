@@ -5,8 +5,7 @@
 # Present incorrect scenes before correct ones for each visual step, checking
 # that advancement is blocked until verification succeeds. Stop before the timer;
 # full_run_scenario.yaml covers timed completion, restart, and post-stop silence.
-guides_dir: ../../guides
-guide: Tea Making
+guide_path: ../guide.yaml
 fail_fast: true
 scenes_file: image_scenes.yaml
 visual_cases_file: visual_expectations.yaml

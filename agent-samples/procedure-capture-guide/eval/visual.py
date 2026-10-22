@@ -22,7 +22,7 @@ from pathlib import Path
 import yaml
 from _scene_rendering import load_scenes, render_scene
 from _visual_expectations import matches_answer, visual_cases
-from procedure_capture_guide_worker.guide.guides import select_guide
+from procedure_capture_guide_worker.guide.guides import load_guide
 from xr_ai_models import load_models_config, make_vlm
 from xr_ai_tools.image import ImageRegistry
 from xr_ai_tools.vision import ImageQueryRequest, ImageQueryTool
@@ -62,7 +62,7 @@ def summarize(rows: list[dict]) -> dict:
 def prepare(manifest_path: Path, output: Path) -> tuple:
     manifest = yaml.safe_load(manifest_path.read_text())
     scenes = load_scenes(manifest_path, manifest)
-    guide = select_guide(manifest_path.parent / manifest["guides_dir"], manifest["guide"])
+    guide = load_guide(manifest_path.parent / manifest["guide_path"])
     cases = list(visual_cases(manifest).values())
     for case in cases:
         step = guide.workflow.steps[case["step"]]

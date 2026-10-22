@@ -4,7 +4,7 @@
 # Evaluation scenario for eval/guide.py covering the tea-identification step.
 # Generated label cards exercise the real VLM and guide, not photographic accuracy.
 # Expected responses are assertions; they are never supplied to the VLM.
-guide_path: ../../examples/tea-making/guide.yaml
+guide_path: ../guide.yaml
 scenes:
   green: {text: "TEA PACKET\nGREEN"}
   breakfast: {text: "TEA PACKET\nBREAKFAST BLACK"}
