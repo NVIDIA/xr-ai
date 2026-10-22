@@ -18,7 +18,7 @@ An application sample has at least these two sub-projects:
 
 Samples may add capability or eval sub-projects. Each sample's `model-servers/`
 project is a separate inference convenience launcher with no worker. It combines
-shared defaults under `utils/xr-ai-model-server-stack/yaml/` with sample-owned GPU
+each service's own YAML under `services/` with sample-owned GPU
 profiles. Refer to {doc}`/guides/customizing-model-servers` for configuration and
 startup, shutdown, and sample-switching workflows.
 
