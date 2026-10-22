@@ -13,9 +13,10 @@ model calls, application state, and resources.
 
 ## Route a turn
 
-Pass an `AgentTurn` to `AgentRouter.handle()` with an async
-callback for router-owned admission, clarification, and acknowledgment text. The router applies
-these steps:
+Configure `AgentRouter(output=...)` with an async callback for router-owned
+admission, clarification, and acknowledgment text. The callback receives the
+current `AgentTurn`, route name, and text, so it can preserve participant and
+response identity when publishing. Pass each request's `AgentTurn` to `handle()`. The router applies these steps:
 
 1. It serializes turns for one participant, cancels and drains that
    participant's previous response, and bounds the completed history supplied
@@ -44,13 +45,14 @@ from xr_ai_routing import AgentRouter, AgentTurn
 router = AgentRouter(
     {"conversation": general_destination, "scene": scene_destination},
     decision_service,
+    output=publish_router_control,
 )
 turn = AgentTurn(
     participant_id="participant-1",
     turn_id="turn-42",
     query="Add a blue cube.",
 )
-result = await router.handle(turn, emit=publish_router_control)
+result = await router.handle(turn)
 ```
 
 `AgentExchange` records a completed user request and its destination-provided
@@ -174,8 +176,8 @@ its cancellation cleanup can delay the next turn, rather than being detached
 behind an arbitrary timeout.
 
 The routing engine does not depend on a voice transport or a particular
-application. Call `handle()` with `AgentTurn` values and a callback for
-router-owned control output.
+application. Configure its control output once, then call `handle()` with
+`AgentTurn` values.
 
 ## Python API reference
 

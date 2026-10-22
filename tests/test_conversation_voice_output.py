@@ -14,7 +14,7 @@ import pytest
 import xr_ai_conversation._conversation as conversation_module
 from xr_ai_conversation import Conversation, ConversationContextUpdate
 from xr_ai_models import ChatStreamEvent, DecisionAnswer, DecisionResponse
-from xr_ai_routing import AgentExchange, AgentRouter, AgentTurn, RoutingAid, notify_response_started
+from xr_ai_routing import Admission, AgentExchange, AgentRouter, AgentTurn, RoutingAid, notify_response_started
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, Topic, subscribe
 from xr_ai_voice import UserQuery, VoiceOutput
 
@@ -59,9 +59,60 @@ class _Decisions:
 
 
 
-async def _control(_source, _text):
+async def _control(_turn, _source, _text):
     return None
 
+
+
+async def test_configured_control_output_preserves_concurrent_participant_turn_identity():
+    alice_entered, release_alice = asyncio.Event(), asyncio.Event()
+    delivered_turns = []
+
+    class Clarifier:
+        def routing_aid(self, _participant):
+            return RoutingAid("conversation", "Ask for a specific request")
+
+        async def admit(self, turn, *, focused):
+            return Admission("clarify", text=f"Clarify {turn.query}")
+
+        async def answer(self, _turn):
+            raise AssertionError("clarification does not start destination work")
+
+        async def release(self, _participant):
+            pass
+
+    runtime = AgentRuntime()
+    output = runtime.register("output", _Output())
+
+    async def publish(turn, source, text):
+        if turn.participant_id == "alice":
+            alice_entered.set()
+            await release_alice.wait()
+        delivered_turns.append((turn, source))
+        await runtime.publish(
+            OUTPUT, VoiceOutput(text=text, timestamp_us=turn.timestamp_us),
+            participant_id=turn.participant_id, source="router",
+        )
+
+    router = AgentRouter({"conversation": Clarifier()}, None, output=publish)
+    alice = AgentTurn("alice", "alice-turn", "Alice request", (AgentExchange("earlier", "Alice context"),), 11)
+    bob = AgentTurn("bob", "bob-turn", "Bob request", timestamp_us=22)
+    async with runtime:
+        first = asyncio.create_task(router.handle(alice))
+        try:
+            await alice_entered.wait()
+            await asyncio.wait_for(router.handle(bob), 1)
+            assert [(value.timestamp_us, metadata.participant_id) for value, metadata in output.items] == [(22, "bob")]
+            release_alice.set()
+            await first
+            assert delivered_turns == [(bob, "conversation"), (alice, "conversation")]
+            assert [metadata.participant_id for _, metadata in output.items] == ["bob", "alice"]
+            assert [value.text for value, _ in output.items] == ["Clarify Bob request", "Clarify Alice request"]
+            assert [value.timestamp_us for value, _ in output.items] == [22, 11]
+        finally:
+            release_alice.set()
+            await asyncio.gather(first, return_exceptions=True)
+            await router.stop()
 
 
 async def test_conversation_context_topic_and_direct_output_retain_complete_history():
@@ -85,14 +136,14 @@ async def test_conversation_context_topic_and_direct_output_retain_complete_hist
         llm, summary_context_topics=(CONTEXT.name,), runtime=runtime, output_topic=OUTPUT,
     )
     runtime.register("context", conversation.context_subscriber())
-    router = AgentRouter({"conversation": conversation}, None)
+    router = AgentRouter({"conversation": conversation}, None, output=_control)
     async with runtime:
         try:
             await runtime.publish(
                 CONTEXT, ConversationContextUpdate(text="explicit application context"), participant_id="alice"
             )
-            await router.handle(AgentTurn("alice", "first", "first request", timestamp_us=1234), emit=_control)
-            await router.handle(AgentTurn("alice", "followup", "followup", timestamp_us=1234), emit=_control)
+            await router.handle(AgentTurn("alice", "first", "first request", timestamp_us=1234))
+            await router.handle(AgentTurn("alice", "followup", "followup", timestamp_us=1234))
             assert "first request" in str(llm.messages[1])
             assert "answer one answer two" in str(llm.messages[1])
             assert router._history["alice"] == [
@@ -213,11 +264,11 @@ async def test_conversation_owns_failure_fallback_and_stream_finalization(partia
     output = runtime.register("output", _Output())
 
     conversation = Conversation(LLM(), runtime=runtime, output_topic=OUTPUT)
-    router = AgentRouter({"conversation": conversation}, None)
+    router = AgentRouter({"conversation": conversation}, None, output=_control)
     async with runtime:
         try:
             with pytest.raises(RuntimeError, match="model failed"):
-                await router.handle(AgentTurn("alice", "request", "request"), emit=_control)
+                await router.handle(AgentTurn("alice", "request", "request"))
             assert closed.is_set()
             assert notifications == [True]
             assert router._history["alice"] == []
@@ -288,18 +339,24 @@ async def test_finite_ack_does_not_block_direct_answer_in_bounded_voice_consumer
             return ChatResponse("Let me think through the requested details.", None, None, "stop", {})
 
     conversation = Conversation(LLM(), runtime=runtime, output_topic=VOICE_OUTPUT_TOPIC)
+
+    async def emit_control(turn, _source, text):
+        assert (turn.participant_id, turn.turn_id, turn.timestamp_us) == ("alice", "request", 928)
+        await runtime.publish(
+            VOICE_OUTPUT_TOPIC, VoiceOutput(text=text, timestamp_us=turn.timestamp_us),
+            participant_id=turn.participant_id, source="router",
+        )
+
     router = AgentRouter(
-        {"conversation": conversation}, _Decisions(),
+        {"conversation": conversation}, _Decisions(), output=emit_control,
         acknowledgment_llm=Ack(), acknowledgment_delay_secs=10,
     )
 
-    async def emit_control(_source, text):
-        await runtime.publish(VOICE_OUTPUT_TOPIC, VoiceOutput(text=text), participant_id="alice", source="router")
     consumer = asyncio.create_task(session.consume())
     async with runtime:
         try:
             await asyncio.wait_for(
-                router.handle(AgentTurn("alice", "request", "provide the details"), emit=emit_control), 1,
+                router.handle(AgentTurn("alice", "request", "provide the details", timestamp_us=928)), 1,
             )
             await asyncio.wait_for(session.queue.join(), 1)
             assert session.spoken == ["Let me think through the requested details. ", "answer " * 8]
@@ -355,11 +412,11 @@ async def test_conversation_drops_late_model_output_after_interruption(after_can
     output = runtime.register("output", _Output())
 
     conversation = Conversation(LLM(), runtime=runtime, output_topic=OUTPUT)
-    router = AgentRouter({"conversation": conversation}, None)
+    router = AgentRouter({"conversation": conversation}, None, output=_control)
     async with runtime:
         try:
             answering = asyncio.create_task(
-                router.handle(AgentTurn("alice", "request", "request"), emit=_control)
+                router.handle(AgentTurn("alice", "request", "request"))
             )
             await started.wait()
             await router.interrupt("alice")

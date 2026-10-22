@@ -13,6 +13,7 @@ from dataclasses import FrozenInstanceError
 import pytest
 import xr_ai_routing as routing_module
 import xr_ai_routing._router as router_module
+from _routing_test_output import emit_control as _emit_control
 from _routing_test_output import emit_destination as _emit_destination
 from _routing_test_output import route as _route
 from xr_ai_models import ChatResponse, DecisionAnswer, DecisionResponse
@@ -81,7 +82,7 @@ async def test_direct_response_signal_cancels_blocked_ack_without_emitting_text(
     destination = Destination()
     router = AgentRouter(
         {"destination": destination},
-        _Prediction("slow", {"slow": 0.9, "within_delay": 0.05, "uncertain": 0.05}),
+        _Prediction("slow", {"slow": 0.9, "within_delay": 0.05, "uncertain": 0.05}), output=_emit_control,
         default_destination="destination",
         acknowledgment_llm=llm,
         acknowledgment_delay_secs=10.0,
@@ -130,7 +131,7 @@ async def test_response_signal_from_old_answer_cannot_affect_later_turn(ending):
                 raise ValueError("destination failed")
             return DestinationResult()
 
-    router = AgentRouter({"destination": Destination()}, None, default_destination="destination")
+    router = AgentRouter({"destination": Destination()}, None, output=_emit_control, default_destination="destination")
     output = []
     old = asyncio.create_task(_ack_output(router, "old", output))
     await asyncio.wait_for(entered["old"].wait(), timeout=1)
@@ -179,7 +180,7 @@ async def test_direct_destination_output_keeps_its_source_and_explicit_progress(
             notifications.append(notify_response_started())
             return DestinationResult("answer", "routing context")
 
-    router = AgentRouter({"destination": Destination()}, None, default_destination="destination")
+    router = AgentRouter({"destination": Destination()}, None, output=_emit_control, default_destination="destination")
     output = []
     await _ack_output(router, "request", output)
     assert notifications == [True, False]
@@ -204,7 +205,7 @@ async def test_response_notification_is_scoped_to_answer_and_inherited_by_child_
             notifications.append(("inner answer", await asyncio.create_task(child_notification())))
             return DestinationResult()
 
-    inner = AgentRouter({"destination": Inner()}, None, default_destination="destination")
+    inner = AgentRouter({"destination": Inner()}, None, output=_emit_control, default_destination="destination")
 
     class Outer(_AckDestination):
         async def answer(self, _turn):
@@ -213,7 +214,7 @@ async def test_response_notification_is_scoped_to_answer_and_inherited_by_child_
             notifications.append(("outer answer", await asyncio.create_task(child_notification())))
             return DestinationResult()
 
-    outer = AgentRouter({"destination": Outer()}, None, default_destination="destination")
+    outer = AgentRouter({"destination": Outer()}, None, output=_emit_control, default_destination="destination")
     await _ack_output(outer, "outer request", [])
     assert notifications == [("inner admission", False), ("inner answer", True), ("outer answer", True)]
 
@@ -445,7 +446,7 @@ async def test_general_conversation_is_a_normal_route_between_stateless_app_turn
     decisions = _Decisions("xr", "conversation", "xr")
     conversation = _Destination("conversation")
     xr = _Destination("xr")
-    front_end = AgentRouter({"conversation": conversation, "xr": xr}, decisions)
+    front_end = AgentRouter({"conversation": conversation, "xr": xr}, decisions, output=_emit_control)
 
     await _run(front_end, query="Add a cube.")
     await _run(front_end, query="What is a cube?")
@@ -469,7 +470,7 @@ async def test_explicit_focus_routes_cross_domain_turns_until_release_per_partic
         ),
     )
     xr = _Destination("xr")
-    front_end = AgentRouter({"conversation": conversation, "tea": tea, "xr": xr}, decisions)
+    front_end = AgentRouter({"conversation": conversation, "tea": tea, "xr": xr}, decisions, output=_emit_control)
 
     await _run(front_end, query="Start the guide.")
     await _run(front_end, query="Add a cube.")
@@ -503,7 +504,7 @@ async def test_focused_destination_answer_retains_focus_until_explicit_release()
             DestinationResult("release", "Guide closed."),
         ),
     )
-    front_end = AgentRouter({"conversation": conversation, "tea": tea}, decisions)
+    front_end = AgentRouter({"conversation": conversation, "tea": tea}, decisions, output=_emit_control)
 
     await _run(front_end, query="Start the guide.")
     await _run(front_end, query="What does this step mean?")
@@ -527,7 +528,7 @@ async def test_declined_route_reroutes_once_and_preamble_precedes_attributed_res
         admissions=(Admission("accept", preamble="I will add it."),),
         results=(DestinationResult("answer", "Added."),),
     )
-    front_end = AgentRouter({"conversation": conversation, "tea": tea, "xr": xr}, decisions)
+    front_end = AgentRouter({"conversation": conversation, "tea": tea, "xr": xr}, decisions, output=_emit_control)
 
     result, output = await _run(front_end, query="Add a blue cube.")
 
@@ -540,7 +541,7 @@ async def test_declined_route_reroutes_once_and_preamble_precedes_attributed_res
 @pytest.mark.asyncio
 async def test_destination_cannot_decline_or_clarify_after_answer_work_starts():
     destination = _Destination("conversation", results=(DestinationResult("clarify", "too late"),))
-    front_end = AgentRouter({"conversation": destination}, _Decisions())
+    front_end = AgentRouter({"conversation": destination}, _Decisions(), output=_emit_control)
 
     with pytest.raises(ValueError, match="before answer"):
         await _run(front_end, query="Tell me about this.")
@@ -553,7 +554,7 @@ async def test_participant_departure_releases_only_that_participants_focus():
         "tea",
         results=(DestinationResult("focus"), DestinationResult("focus")),
     )
-    front_end = AgentRouter({"conversation": _Destination("conversation"), "tea": tea}, decisions)
+    front_end = AgentRouter({"conversation": _Destination("conversation"), "tea": tea}, decisions, output=_emit_control)
 
     await _run(front_end, participant="alice", query="Start guide.")
     await _run(front_end, participant="bob", query="Start guide.")
@@ -571,7 +572,7 @@ async def test_participant_departure_releases_only_that_participants_focus():
 async def test_departure_and_stop_release_destinations_used_without_focus():
     decisions = _Decisions("conversation", "conversation")
     conversation = _Destination("conversation")
-    front_end = AgentRouter({"conversation": conversation}, decisions)
+    front_end = AgentRouter({"conversation": conversation}, decisions, output=_emit_control)
 
     await _run(front_end, participant="alice", query="What is a cube?")
     await front_end.participant_left("alice")
@@ -596,7 +597,9 @@ async def test_departure_attempts_all_releases_and_retains_failures_for_retry():
     decisions = _Decisions("tea", "xr")
     tea = _FailOnce("tea")
     xr = _FailOnce("xr")
-    front_end = AgentRouter({"conversation": _Destination("conversation"), "tea": tea, "xr": xr}, decisions)
+    front_end = AgentRouter(
+        {"conversation": _Destination("conversation"), "tea": tea, "xr": xr}, decisions, output=_emit_control,
+    )
     await _run(front_end, query="Start the guide.")
     await _run(front_end, query="Add a cube.")
 
@@ -627,7 +630,7 @@ async def test_departure_blocks_new_turns_until_destination_cleanup_completes():
             await self.finish_departure.wait()
 
     destination = _SlowDeparture("conversation")
-    front_end = AgentRouter({"conversation": destination}, _Decisions())
+    front_end = AgentRouter({"conversation": destination}, _Decisions(), output=_emit_control)
     await _run(front_end, query="before cleanup")
     departure = asyncio.create_task(front_end.participant_left("alice"))
     await destination.departure_started.wait()
@@ -656,7 +659,7 @@ async def test_release_result_keeps_destination_for_optional_departure_hook():
     destination = _DurableDestination()
     front_end = AgentRouter(
         {"conversation": _Destination("conversation"), "app": destination},
-        _Decisions("app"),
+        _Decisions("app"), output=_emit_control,
     )
 
     await _run(front_end)
@@ -670,7 +673,7 @@ async def test_release_result_keeps_destination_for_optional_departure_hook():
 async def test_seeded_history_is_retained_with_unknown_timestamps():
     seed = (AgentExchange("Earlier question", "Earlier answer"),)
     destination = _Destination("conversation")
-    front_end = AgentRouter({"conversation": destination}, _Decisions())
+    front_end = AgentRouter({"conversation": destination}, _Decisions(), output=_emit_control)
 
     await _run(front_end, query="First turn", history=seed)
     await _run(front_end, query="Second turn")
@@ -687,7 +690,7 @@ async def test_focused_decline_returns_to_ordinary_route_selection():
     visual = _Destination("visual", results=(DestinationResult("answer", "A blue cup."),))
     front_end = AgentRouter(
         {"conversation": _Destination("conversation"), "tea": tea, "visual": visual},
-        _Decisions("tea", "visual"),
+        _Decisions("tea", "visual"), output=_emit_control,
     )
 
     await _run(front_end, query="Start the guide")
@@ -708,7 +711,7 @@ async def test_repeated_admission_release_returns_existing_no_route_clarificatio
     }
     front_end = AgentRouter(
         destinations,
-        _Decisions("first", "second"),
+        _Decisions("first", "second"), output=_emit_control,
     )
 
     result, output = await _run(front_end)
@@ -726,7 +729,7 @@ async def test_stop_attempts_release_for_every_participant_after_failure():
 
     decisions = _Decisions("conversation", "conversation")
     conversation = _AlwaysFail("conversation")
-    front_end = AgentRouter({"conversation": conversation}, decisions)
+    front_end = AgentRouter({"conversation": conversation}, decisions, output=_emit_control)
     await _run(front_end, participant="alice", query="A")
     await _run(front_end, participant="bob", query="B")
 
@@ -755,7 +758,7 @@ async def test_destination_error_after_preamble_propagates_to_turn_caller():
             return DestinationResult("answer", "Recovered.")
 
     destination = _BrokenAnswer("xr", admissions=(Admission("accept", preamble="I will try."),))
-    front_end = AgentRouter({"xr": destination}, _Decisions(), default_destination="xr")
+    front_end = AgentRouter({"xr": destination}, _Decisions(), output=_emit_control, default_destination="xr")
     output = []
 
     async def emit(source, text):
@@ -777,7 +780,7 @@ async def test_unresolved_or_invalid_route_clarifies_without_answering_default()
         decisions = _Decisions(choice)
         conversation = _Destination("conversation", results=(DestinationResult("answer", "I can help."),))
         xr = _Destination("xr")
-        front_end = AgentRouter({"conversation": conversation, "xr": xr}, decisions)
+        front_end = AgentRouter({"conversation": conversation, "xr": xr}, decisions, output=_emit_control)
 
         result, output = await _run(
             front_end,
@@ -819,7 +822,7 @@ async def test_route_scope_records_choice_probabilities_and_eligible_candidates(
     decisions = _RouteDecisions()
     conversation = _Destination("conversation", results=(DestinationResult("answer", "General answer."),))
     observation = _Destination("observation", description="Questions about the current camera view")
-    front_end = AgentRouter({"conversation": conversation, "observation": observation}, decisions)
+    front_end = AgentRouter({"conversation": conversation, "observation": observation}, decisions, output=_emit_control)
 
     result, output = await _run(front_end, query="How can I move the objects behind me?")
 
@@ -860,7 +863,7 @@ async def test_router_uses_explicit_eligible_visual_destination():
     environment = _Destination("environment", results=(DestinationResult("answer", "A grounded answer."),))
     front_end = AgentRouter(
         {"conversation": conversation, "observation": observation, "environment": environment},
-        decisions,
+        decisions, output=_emit_control,
     )
 
     result, output = await _run(
@@ -892,7 +895,7 @@ async def test_router_uses_explicit_observation_for_current_camera_question():
     environment = _Destination("environment", results=(DestinationResult("answer", "A grounded answer."),))
     front_end = AgentRouter(
         {"conversation": conversation, "observation": observation, "environment": environment},
-        decisions,
+        decisions, output=_emit_control,
     )
 
     query = "What color is the cup in the current camera view?"
@@ -916,7 +919,7 @@ async def test_uncertain_router_tie_uses_destination_registration_order():
     )
     conversation = _Destination("conversation", results=(DestinationResult("answer", "General."),))
     observation = _Destination("observation", results=(DestinationResult("answer", "Observed."),))
-    front_end = AgentRouter({"conversation": conversation, "observation": observation}, decisions)
+    front_end = AgentRouter({"conversation": conversation, "observation": observation}, decisions, output=_emit_control)
 
     result, output = await _run(front_end, query="What is in front of me?")
 
@@ -937,7 +940,8 @@ async def test_uncertain_fallback_uses_only_eligible_routes_without_overriding_e
     observation = _Destination("observation", results=(DestinationResult("answer", "Observed."),))
     unavailable = _Destination("unavailable", eligible=False)
     router = AgentRouter(
-        {"conversation": conversation, "observation": observation, "unavailable": unavailable}, decisions,
+        {"conversation": conversation, "observation": observation, "unavailable": unavailable},
+        decisions, output=_emit_control,
     )
 
     result, output = await _run(router, query="What is in the current view?")
@@ -953,7 +957,7 @@ async def test_uncertain_router_with_no_eligible_scores_still_clarifies():
     decisions = _Decisions(DecisionAnswer("clarify", 0.2, {"clarify": 0.2, "conversation": 0.4, "specialist": 0.4}))
     conversation = _Destination("conversation", eligible=False)
     specialist = _Destination("specialist", eligible=False)
-    front_end = AgentRouter({"conversation": conversation, "specialist": specialist}, decisions)
+    front_end = AgentRouter({"conversation": conversation, "specialist": specialist}, decisions, output=_emit_control)
 
     result, output = await _run(front_end, query="Help me.")
 
@@ -968,7 +972,7 @@ async def test_uncertain_router_with_zero_probability_mass_still_clarifies():
     decisions = _Decisions(DecisionAnswer("clarify", 1.0, {"clarify": 1.0, "conversation": 0.0, "observation": 0.0}))
     conversation = _Destination("conversation")
     observation = _Destination("observation")
-    front_end = AgentRouter({"conversation": conversation, "observation": observation}, decisions)
+    front_end = AgentRouter({"conversation": conversation, "observation": observation}, decisions, output=_emit_control)
 
     result, output = await _run(front_end, query="What is in the current view?")
 
@@ -983,7 +987,7 @@ async def test_route_prompt_exposes_unavailable_destination_eligibility():
     decisions = _Decisions("xr")
     conversation = _Destination("conversation", results=(DestinationResult("answer", "I can help generally."),))
     xr = _Destination("xr", eligibility="unavailable", eligible=False)
-    front_end = AgentRouter({"conversation": conversation, "xr": xr}, decisions)
+    front_end = AgentRouter({"conversation": conversation, "xr": xr}, decisions, output=_emit_control)
 
     result, output = await _run(front_end, query="Change the virtual scene.")
 
@@ -999,7 +1003,7 @@ async def test_route_prompt_exposes_unavailable_destination_eligibility():
 @pytest.mark.asyncio
 async def test_single_ineligible_destination_is_not_admitted():
     destination = _Destination("conversation", eligibility="not configured", eligible=False)
-    front_end = AgentRouter({"conversation": destination}, _Decisions())
+    front_end = AgentRouter({"conversation": destination}, _Decisions(), output=_emit_control)
 
     result, output = await _run(front_end, query="What is visible?")
 
@@ -1032,7 +1036,7 @@ async def test_exhausted_declines_answer_once_with_default_and_shared_history():
     visual = _Destination("visual", admissions=(Admission("decline"),))
     front_end = AgentRouter(
         {"conversation": default, "specialist": specialist, "visual": visual},
-        decisions,
+        decisions, output=_emit_control,
         default_destination="conversation",
     )
 
@@ -1063,7 +1067,7 @@ async def test_ineligible_route_clarifies_instead_of_answering_default():
     specialist = _Destination("specialist", eligible=False)
     front_end = AgentRouter(
         {"conversation": default, "specialist": specialist},
-        decisions,
+        decisions, output=_emit_control,
         default_destination="conversation",
     )
 
@@ -1085,7 +1089,7 @@ async def test_already_declined_default_is_not_forced_to_answer(monkeypatch):
     specialist = _Destination("specialist", admissions=(Admission("decline"),))
     front_end = AgentRouter(
         {"conversation": default, "specialist": specialist},
-        _Decisions("specialist", "conversation"),
+        _Decisions("specialist", "conversation"), output=_emit_control,
         default_destination="conversation",
     )
     reasons = []
@@ -1108,7 +1112,7 @@ async def test_exhausted_declines_clarify_when_default_is_unavailable():
     default = _Destination("conversation", eligible=False)
     front_end = AgentRouter(
         {"conversation": default, "specialist": specialist},
-        _Decisions("specialist"),
+        _Decisions("specialist"), output=_emit_control,
         default_destination="conversation",
     )
 
@@ -1126,7 +1130,7 @@ async def test_destination_admission_clarification_does_not_trigger_default_answ
     specialist = _Destination("specialist", admissions=(Admission("clarify", text="Which one?"),))
     front_end = AgentRouter(
         {"conversation": default, "specialist": specialist},
-        _Decisions("specialist"),
+        _Decisions("specialist"), output=_emit_control,
         default_destination="conversation",
     )
 
@@ -1148,7 +1152,7 @@ async def test_domain_specific_visual_question_routes_by_declared_scope():
     )
     front_end = AgentRouter(
         {"conversation": conversation, "museum_guide": museum},
-        decisions,
+        decisions, output=_emit_control,
     )
 
     result, _output = await _run(front_end, query="What is written on this exhibit label?")
@@ -1168,7 +1172,7 @@ async def test_route_decision_receives_bounded_completed_context():
     decisions = _Decisions("xr")
     conversation = _Destination("conversation")
     xr = _Destination("xr")
-    front_end = AgentRouter({"conversation": conversation, "xr": xr}, decisions)
+    front_end = AgentRouter({"conversation": conversation, "xr": xr}, decisions, output=_emit_control)
     history = tuple(AgentExchange(f"request {index}", f"reply {index}") for index in range(5))
 
     await _run(front_end, query="Add the next object.", history=history)
@@ -1205,7 +1209,7 @@ async def test_replacement_turn_cancels_old_answer_before_it_can_emit():
 
     decisions = _Decisions("xr", "xr")
     xr = _WaitingDestination()
-    front_end = AgentRouter({"conversation": _Destination("conversation"), "xr": xr}, decisions)
+    front_end = AgentRouter({"conversation": _Destination("conversation"), "xr": xr}, decisions, output=_emit_control)
     output = []
 
     async def emit(source, text):
@@ -1238,7 +1242,7 @@ async def test_front_end_attaches_completion_recency_to_its_owned_history():
         results=(DestinationResult("answer", "first answer"), DestinationResult("answer", "second answer")),
     )
     front_end = AgentRouter(
-        {"conversation": conversation, "observation": _Destination("observation")}, decisions
+        {"conversation": conversation, "observation": _Destination("observation")}, decisions, output=_emit_control
     )
 
     await _run(front_end, query="first request")
@@ -1255,7 +1259,7 @@ async def test_completed_exchange_ids_remain_aligned_when_history_is_trimmed():
         "conversation",
         results=(DestinationResult("answer", "first answer"), DestinationResult("answer", "second answer")),
     )
-    front_end = AgentRouter({"conversation": destination}, _Decisions())
+    front_end = AgentRouter({"conversation": destination}, _Decisions(), output=_emit_control)
 
     await _run(front_end, query="first request")
     await _run(front_end, query="second request")
@@ -1286,6 +1290,11 @@ async def test_completed_exchange_ids_remain_aligned_when_history_is_trimmed():
 @pytest.mark.asyncio
 async def test_admission_release_reroute_receives_history_with_separate_exchange_ids():
     observed = {}
+    controls = []
+
+    async def output_control(turn, source, text):
+        controls.append((turn, source, text))
+        await _emit_control(turn, source, text)
 
     class _ReroutedDestination(_Destination):
         async def answer(self, turn):
@@ -1301,11 +1310,12 @@ async def test_admission_release_reroute_receives_history_with_separate_exchange
     )
     conversation = _ReroutedDestination(
         "conversation",
+        admissions=(Admission("accept", preamble="I will answer."),),
         results=(DestinationResult("answer", "The answer."),),
     )
     front_end = AgentRouter(
         {"scene": releasing, "conversation": conversation},
-        _Decisions("scene"),
+        _Decisions("scene"), output=output_control,
         default_destination="conversation",
     )
     output = []
@@ -1314,14 +1324,20 @@ async def test_admission_release_reroute_receives_history_with_separate_exchange
         output.append((source, text))
 
     result = await _route(front_end,
-        AgentTurn("alice", "turn-1", "Continue with the request."),
+        AgentTurn("alice", "turn-1", "Continue with the request.", timestamp_us=13),
         emit=emit,
     )
 
     assert result.text == "The answer."
     assert output == [
         ("scene", "Leaving scene mode."),
+        ("conversation", "I will answer."),
         ("conversation", "The answer."),
+    ]
+    assert controls[0][0].history == ()
+    assert controls[1][0].history == (AgentExchange("Continue with the request.", "Leaving scene mode."),)
+    assert [(turn.participant_id, turn.turn_id, turn.timestamp_us) for turn, _, _ in controls] == [
+        ("alice", "turn-1", 13), ("alice", "turn-1", 13),
     ]
     assert observed["history"] == (AgentExchange("Continue with the request.", "Leaving scene mode."),)
     assert len(observed["timestamps"]) == len(observed["history_ids"]) == 1
@@ -1358,7 +1374,9 @@ async def test_acknowledgment_is_disabled_by_default_and_fast_answer_cancels_pre
     destination = _AckDestination()
     decisions = _Prediction()
     llm = _AcknowledgmentLLM()
-    front_end = AgentRouter({"destination": destination}, decisions, default_destination="destination")  # type: ignore[arg-type]
+    front_end = AgentRouter(
+        {"destination": destination}, decisions, output=_emit_control, default_destination="destination",
+    )  # type: ignore[arg-type]
     output = []
 
     await _ack_output(front_end, "Quick request.", output)
@@ -1369,7 +1387,7 @@ async def test_acknowledgment_is_disabled_by_default_and_fast_answer_cancels_pre
 
     enabled = AgentRouter(
         {"destination": destination},
-        decisions,  # type: ignore[arg-type]
+        decisions, output=_emit_control,  # type: ignore[arg-type]
         default_destination="destination",
         acknowledgment_llm=llm,  # type: ignore[arg-type]
         acknowledgment_delay_secs=20.0,
@@ -1390,7 +1408,7 @@ async def test_confident_slow_prediction_acknowledges_then_records_only_real_ans
     llm = _AcknowledgmentLLM()
     front_end = AgentRouter(
         {"destination": destination},
-        decisions,  # type: ignore[arg-type]
+        decisions, output=_emit_control,  # type: ignore[arg-type]
         default_destination="destination",
         acknowledgment_llm=llm,  # type: ignore[arg-type]
         acknowledgment_delay_secs=10.0,
@@ -1435,7 +1453,7 @@ async def test_uncertain_prediction_uses_delay_fallback_and_admission_preamble_s
     llm = _AcknowledgmentLLM()
     front_end = AgentRouter(
         {"destination": destination},
-        decisions,  # type: ignore[arg-type]
+        decisions, output=_emit_control,  # type: ignore[arg-type]
         default_destination="destination",
         acknowledgment_llm=llm,  # type: ignore[arg-type]
         acknowledgment_delay_secs=0.001,
@@ -1459,7 +1477,7 @@ async def test_uncertain_prediction_uses_delay_fallback_and_admission_preamble_s
     preamble_destination = _AckDestination(preamble="I will check.")
     preamble_front_end = AgentRouter(
         {"destination": preamble_destination},
-        decisions,  # type: ignore[arg-type]
+        decisions, output=_emit_control,  # type: ignore[arg-type]
         default_destination="destination",
         acknowledgment_llm=llm,  # type: ignore[arg-type]
         acknowledgment_delay_secs=0.001,
@@ -1482,7 +1500,7 @@ async def test_real_answer_cancels_pending_ack_generation_without_waiting():
     llm = _AcknowledgmentLLM(blocked=True)
     front_end = AgentRouter(
         {"destination": destination},
-        decisions,  # type: ignore[arg-type]
+        decisions, output=_emit_control,  # type: ignore[arg-type]
         default_destination="destination",
         acknowledgment_llm=llm,  # type: ignore[arg-type]
         acknowledgment_delay_secs=10.0,
@@ -1504,7 +1522,7 @@ async def test_answer_does_not_reuse_interrupt_slot_after_ack_was_delivered():
     llm = _AcknowledgmentLLM()
     front_end = AgentRouter(
         {"destination": destination},
-        decisions,  # type: ignore[arg-type]
+        decisions, output=_emit_control,  # type: ignore[arg-type]
         default_destination="destination",
         acknowledgment_llm=llm,  # type: ignore[arg-type]
         acknowledgment_delay_secs=10.0,
@@ -1546,7 +1564,7 @@ async def test_answer_timing_excludes_committed_acknowledgment_output(monkeypatc
     llm = _AcknowledgmentLLM()
     front_end = AgentRouter(
         {"destination": destination},
-        decisions,  # type: ignore[arg-type]
+        decisions, output=_emit_control,  # type: ignore[arg-type]
         default_destination="destination",
         acknowledgment_llm=llm,  # type: ignore[arg-type]
         acknowledgment_delay_secs=10.0,
@@ -1605,7 +1623,7 @@ async def test_invalid_acknowledgment_uses_neutral_fallback_without_recording_it
     llm = _AcknowledgmentLLM(content=generated)
     front_end = AgentRouter(
         {"destination": destination},
-        decisions,  # type: ignore[arg-type]
+        decisions, output=_emit_control,  # type: ignore[arg-type]
         default_destination="destination",
         acknowledgment_llm=llm,  # type: ignore[arg-type]
         acknowledgment_delay_secs=0.001,
@@ -1646,7 +1664,7 @@ async def test_completed_focus_and_release_answers_train_first_answer_timing(dis
     destination = Destination()
     front_end = AgentRouter(
         {"destination": destination},
-        _Decisions(),
+        _Decisions(), output=_emit_control,
         default_destination="destination",
     )
 
@@ -1669,7 +1687,7 @@ async def test_unexpected_prediction_failure_is_logged_without_failing_answer(ca
     llm = _AcknowledgmentLLM()
     front_end = AgentRouter(
         {"destination": destination},
-        decisions,  # type: ignore[arg-type]
+        decisions, output=_emit_control,  # type: ignore[arg-type]
         default_destination="destination",
         acknowledgment_llm=llm,  # type: ignore[arg-type]
         acknowledgment_delay_secs=0.001,
@@ -1696,7 +1714,7 @@ async def test_prediction_hang_does_not_delay_answer_and_starts_ack_after_delay(
     llm = _AcknowledgmentLLM(error=RuntimeError("acknowledgment bug"))
     front_end = AgentRouter(
         {"destination": destination},
-        decisions,  # type: ignore[arg-type]
+        decisions, output=_emit_control,  # type: ignore[arg-type]
         default_destination="destination",
         acknowledgment_llm=llm,  # type: ignore[arg-type]
         acknowledgment_delay_secs=0.001,
@@ -1726,7 +1744,7 @@ async def test_cancelled_acknowledgment_reports_prediction_cleanup_failure_once(
     llm = _AcknowledgmentLLM(blocked=True)
     front_end = AgentRouter(
         {"destination": destination},
-        decisions,  # type: ignore[arg-type]
+        decisions, output=_emit_control,  # type: ignore[arg-type]
         default_destination="destination",
         acknowledgment_llm=llm,  # type: ignore[arg-type]
         acknowledgment_delay_secs=0.001,
@@ -1764,7 +1782,7 @@ async def test_repeated_acknowledgment_cancellation_drains_and_reports_child_fai
     llm = _AcknowledgmentLLM(blocked=True)
     front_end = AgentRouter(
         {"destination": destination},
-        decisions,  # type: ignore[arg-type]
+        decisions, output=_emit_control,  # type: ignore[arg-type]
         default_destination="destination",
         acknowledgment_llm=llm,  # type: ignore[arg-type]
         acknowledgment_delay_secs=0.001,
@@ -1824,7 +1842,7 @@ async def test_turn_cancellation_cancels_ack_and_departure_drops_timing_examples
     llm = _AcknowledgmentLLM(blocked=True)
     front_end = AgentRouter(
         {"destination": destination},
-        decisions,  # type: ignore[arg-type]
+        decisions, output=_emit_control,  # type: ignore[arg-type]
         default_destination="destination",
         acknowledgment_llm=llm,  # type: ignore[arg-type]
         acknowledgment_delay_secs=10.0,

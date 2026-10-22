@@ -13,6 +13,7 @@ from unittest.mock import patch
 import pytest
 import xr_ai_conversation as conversation_package
 import xr_ai_conversation._conversation as conversation_module
+from _routing_test_output import emit_control as _emit_control
 from _routing_test_output import emit_destination as _emit_destination
 from _routing_test_output import route as _route
 from xr_ai_conversation import Conversation, ConversationContextUpdate
@@ -137,7 +138,7 @@ async def _drain(context, participant="alice"):
 async def test_conversation_is_a_normal_front_end_destination_with_completed_history():
     llm = _LLM()
     conversation = Conversation(llm, runtime=_ConversationRuntime(), output_topic=_OUTPUT_TOPIC)  # type: ignore[arg-type]
-    front_end = AgentRouter({"conversation": conversation}, _Decisions())  # type: ignore[arg-type]
+    front_end = AgentRouter({"conversation": conversation}, _Decisions(), output=_emit_control)  # type: ignore[arg-type]
     output = []
 
     async def emit(source, text):
@@ -176,7 +177,7 @@ async def test_conversation_notifies_before_delivery_and_preserves_answer_contex
 
     monkeypatch.setattr(conversation_module, "notify_response_started", notify)
     conversation = Conversation(LLM(), runtime=_ConversationRuntime(), output_topic=_OUTPUT_TOPIC)
-    router = AgentRouter({"conversation": conversation}, _Decisions())
+    router = AgentRouter({"conversation": conversation}, _Decisions(), output=_emit_control)
     result = await _route(router, AgentTurn("alice", "turn-1", "Hello."), emit=emit)
 
     assert events == [
@@ -231,7 +232,7 @@ async def test_conversation_reconciles_recent_front_end_window_after_another_des
     )  # type: ignore[arg-type]
     front_end = AgentRouter(
         {"conversation": conversation, "scene": Scene()},
-        Decisions(),  # type: ignore[arg-type]
+        Decisions(), output=_emit_control,  # type: ignore[arg-type]
         context_budget_bytes=160,
     )
 
@@ -301,7 +302,7 @@ async def test_unknown_seed_does_not_mask_a_later_identical_routed_exchange():
     )  # type: ignore[arg-type]
     front_end = AgentRouter(
         {"conversation": conversation, "scene": Scene()},
-        Decisions(),  # type: ignore[arg-type]
+        Decisions(), output=_emit_control,  # type: ignore[arg-type]
         context_budget_bytes=1_000,
     )
 
@@ -356,7 +357,7 @@ async def test_admission_release_text_and_rerouted_answer_keep_separate_history_
     )  # type: ignore[arg-type]
     front_end = AgentRouter(
         {"conversation": conversation, "scene": Scene()},
-        Decisions(),  # type: ignore[arg-type]
+        Decisions(), output=_emit_control,  # type: ignore[arg-type]
         context_budget_bytes=1_000,
     )
 
@@ -656,7 +657,7 @@ async def test_router_history_windows_larger_than_256_exchanges_are_not_replayed
     conversation = Conversation(llm, runtime=_ConversationRuntime(), output_topic=_OUTPUT_TOPIC)  # type: ignore[arg-type]
     front_end = AgentRouter(
         {"conversation": conversation},
-        _Decisions(),  # type: ignore[arg-type]
+        _Decisions(), output=_emit_control,  # type: ignore[arg-type]
         context_budget_bytes=64_000,
     )
 

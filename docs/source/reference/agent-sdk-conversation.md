@@ -31,12 +31,11 @@ conversation = Conversation(
     runtime=runtime,
     output_topic=VOICE_OUTPUT_TOPIC,
 )
-front_end = AgentRouter({"conversation": conversation}, decisions)
+front_end = AgentRouter({"conversation": conversation}, decisions, output=publish_router_control)
 async with runtime:
     try:
         result = await front_end.handle(
             AgentTurn("participant-1", "turn-1", "When is the calibration meeting?"),
-            emit=publish_router_control,
         )
     finally:
         await front_end.stop()

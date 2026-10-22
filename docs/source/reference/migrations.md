@@ -26,6 +26,13 @@ routing; `routing_aid(participant_id)` remains the explicit source of each
 agent's routing context. Call `notify_response_started()` when the first
 meaningful response is ready to suppress a pending acknowledgment.
 
+Move the router's own finite control callback from `handle(..., emit=callback)`
+to constructor configuration with `AgentRouter(..., output=callback)`, then call
+`handle(turn)`. The callback now receives `(turn, source, text)` so one configured
+publisher can preserve each participant's identity and originating timestamp.
+It receives only acknowledgments, admission preambles, and clarification or
+release messages.
+
 Configure `Conversation(runtime=runtime, output_topic=voice_output_topic)` when
 using it as a routed destination, and install `xr-ai-conversation[voice]`.
 Remove any previous `output` callable; Conversation now publishes directly and

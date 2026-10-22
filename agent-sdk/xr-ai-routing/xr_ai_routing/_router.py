@@ -45,7 +45,7 @@ _ACKNOWLEDGMENT_PROMPT = (
 _ACKNOWLEDGMENT_PREFIX = "Let me think through "
 _ACKNOWLEDGMENT_FALLBACK = "Let me think that through."
 _logger = logging.getLogger(__name__)
-_Emit = Callable[[str, str], Awaitable[None]]
+_Emit = Callable[[AgentTurn, str, str], Awaitable[None]]
 _active_routers: contextvars.ContextVar[frozenset[object]] = contextvars.ContextVar(
     "xr_ai_routing_active_routers", default=frozenset(),
 )
@@ -83,6 +83,9 @@ class AgentRouter:
 
     :param destinations: Registered destinations keyed by their stable route names.
     :param decisions: Typed Clef decision service used to select routes.
+    :param output: Async callback receiving the current ``AgentTurn``, route name, and finite control text,
+        including acknowledgments, admission preambles, and clarification or release messages.
+        Destinations publish their own answer output directly.
     :param default_destination: Registered route used for exhausted-decline fallback.
     :param context_budget_bytes: UTF-8 byte budget for retained completed history and routing history input.
     :param acknowledgment_llm: Optional non-reasoning client for intention acknowledgments and duration prediction.
@@ -95,6 +98,7 @@ class AgentRouter:
         destinations: Mapping[str, RoutableAgent],
         decisions: DecisionService,
         *,
+        output: Callable[[AgentTurn, str, str], Awaitable[None]],
         default_destination: str = "conversation",
         context_budget_bytes: int = _DEFAULT_CONTEXT_BUDGET_BYTES,
         acknowledgment_llm: LLMService | None = None,
@@ -102,6 +106,7 @@ class AgentRouter:
     ) -> None:
         if not destinations or default_destination not in destinations:
             raise ValueError("default destination must be registered")
+        self._output = output
         self._destinations = dict(destinations)
         if context_budget_bytes <= 0:
             raise ValueError("context_budget_bytes must be positive")
@@ -132,8 +137,6 @@ class AgentRouter:
     async def handle(
         self,
         turn: AgentTurn,
-        *,
-        emit: Callable[[str, str], Awaitable[None]],
     ) -> DestinationResult:
         """Route one turn while emitting only router-owned control text.
 
@@ -158,7 +161,6 @@ class AgentRouter:
         cancellation propagates after that operation completes.
 
         :param turn: Current request and optional initial completed history.
-        :param emit: Callback receiving the route name and router-owned control text; never destination answer chunks.
         :return: The final answer, focus, release, or clarification disposition.
         """
 
@@ -205,9 +207,9 @@ class AgentRouter:
             generation = object()
             self._generation[participant_id] = generation
 
-            async def emit_if_current(source: str, text: str) -> None:
+            async def emit_if_current(output_turn: AgentTurn, source: str, text: str) -> None:
                 if self._generation.get(participant_id) is generation:
-                    await emit(source, text)
+                    await self._output(output_turn, source, text)
 
             async def run_handle() -> DestinationResult:
                 progress_token = _response_started.set(None)
@@ -410,7 +412,7 @@ class AgentRouter:
                 raise asyncio.CancelledError()
             if destination_name is None:
                 text = "Which part would you like help with?"
-                await emit(self._default_destination, text)
+                await emit(turn, self._default_destination, text)
                 self._remember(turn, text)
                 return DestinationResult("clarify", text)
             destination = self._destinations[destination_name]
@@ -424,7 +426,7 @@ class AgentRouter:
                     raise asyncio.CancelledError()
                 self._focus.pop(turn.participant_id, None)
                 if admission.text:
-                    await emit(destination_name, admission.text)
+                    await emit(turn, destination_name, admission.text)
                     self._remember(turn, admission.text)
                     turn = self._turn_with_latest_history(turn)
                 focused = None
@@ -432,13 +434,13 @@ class AgentRouter:
                 if not candidates or attempt == 1:
                     text = admission.text or "Which part would you like help with?"
                     if not admission.text:
-                        await emit(self._default_destination, text)
+                        await emit(turn, self._default_destination, text)
                         self._remember(turn, text)
                     return DestinationResult("clarify", text)
                 continue
             if admission.disposition == "clarify":
                 if admission.text:
-                    await emit(destination_name, admission.text)
+                    await emit(turn, destination_name, admission.text)
                     self._remember(turn, admission.text)
                 return DestinationResult("clarify", admission.text)
             if admission.disposition == "decline":
@@ -465,7 +467,7 @@ class AgentRouter:
                         if self._generation.get(turn.participant_id) is not generation:
                             raise asyncio.CancelledError()
                         text = admission.text or "Which part would you like help with?"
-                        await emit(destination_name, text)
+                        await emit(turn, destination_name, text)
                         self._remember(turn, text)
                         return DestinationResult("clarify", text)
                     # The default is about to answer; releasing it here could
@@ -485,7 +487,7 @@ class AgentRouter:
                     continue
 
             if admission.preamble:
-                await emit(destination_name, admission.preamble)
+                await emit(turn, destination_name, admission.preamble)
             if self._generation.get(turn.participant_id) is not generation:
                 raise asyncio.CancelledError()
             acknowledgment_task: asyncio.Task[None] | None = None
@@ -541,7 +543,7 @@ class AgentRouter:
                             "acknowledgment_delay_secs": self._acknowledgment_delay_secs,
                         },
                     ):
-                        await emit(source, text)
+                        await emit(turn, source, text)
 
             if (
                 self._acknowledgment_llm is not None

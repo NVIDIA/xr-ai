@@ -14,6 +14,10 @@ from xr_ai_routing import AgentRouter, AgentTurn, DestinationResult, notify_resp
 _sink: ContextVar[Callable[[str, str], Awaitable[None]]] = ContextVar("test_destination_output")
 
 
+async def emit_control(_turn: AgentTurn, source: str, text: str) -> None:
+    await _sink.get()(source, text)
+
+
 async def emit_destination(source: str, text: str) -> None:
     task = asyncio.current_task()
     if task is not None and task.cancelling():
@@ -28,6 +32,6 @@ async def route(
 ) -> DestinationResult:
     token = _sink.set(emit)
     try:
-        return await router.handle(turn, emit=emit)
+        return await router.handle(turn)
     finally:
         _sink.reset(token)

@@ -6,6 +6,7 @@
 import asyncio
 
 import pytest
+from _routing_test_output import emit_control as _emit_control
 from _routing_test_output import emit_destination as _emit_destination
 from _routing_test_output import route as _route
 from xr_ai_models import ChatResponse, DecisionAnswer, DecisionResponse
@@ -75,7 +76,7 @@ async def test_interruption_keeps_cleanup_owned_across_concurrent_operations(ope
             await super().release(participant)
 
     destination = Destination()
-    router = AgentRouter({"conversation": destination}, None)
+    router = AgentRouter({"conversation": destination}, None, output=_emit_control)
     old = asyncio.create_task(_route(router, AgentTurn("alice", "old", "old"), emit=_emit))
     await entered.wait()
     interrupt = asyncio.create_task(router.interrupt("alice"))
@@ -125,7 +126,7 @@ async def test_repeated_interrupt_cancellation_does_not_cancel_child_cleanup_aga
                 await finish_cleanup.wait()
                 cleanup_done.set()
 
-    router = AgentRouter({"conversation": Destination()}, None)
+    router = AgentRouter({"conversation": Destination()}, None, output=_emit_control)
     old = asyncio.create_task(_route(router, AgentTurn("alice", "old", "old"), emit=_emit))
     await entered.wait()
     interrupt = asyncio.create_task(router.interrupt("alice"))
@@ -161,7 +162,7 @@ async def test_cancelled_handle_keeps_its_response_owned_until_cleanup_finishes(
                 await finish_cleanup.wait()
                 cleanup_done.set()
 
-    router = AgentRouter({"conversation": Destination()}, None)
+    router = AgentRouter({"conversation": Destination()}, None, output=_emit_control)
     handle = asyncio.create_task(_route(router, AgentTurn("alice", "old", "old"), emit=_emit))
     await entered.wait()
     handle.cancel()
@@ -195,7 +196,7 @@ async def test_interrupted_preamble_cannot_start_destination_answer():
             await finish_preamble.wait()
 
     destination = Destination()
-    router = AgentRouter({"conversation": destination}, None)
+    router = AgentRouter({"conversation": destination}, None, output=_emit_control)
     handle = asyncio.create_task(_route(router, AgentTurn("alice", "turn", "query"), emit=emit))
     await entered.wait()
     interrupt = asyncio.create_task(router.interrupt("alice"))
@@ -222,7 +223,7 @@ async def test_eligibility_is_rechecked_after_model_inference():
 
     specialist = _Destination("specialist")
     default = _Destination()
-    router = AgentRouter({"conversation": default, "specialist": specialist}, Decisions())
+    router = AgentRouter({"conversation": default, "specialist": specialist}, Decisions(), output=_emit_control)
     handle = asyncio.create_task(_route(router, AgentTurn("alice", "turn", "query"), emit=_emit))
     await entered.wait()
     specialist.eligible = False
@@ -251,7 +252,7 @@ async def test_failed_ineligible_focus_release_does_not_wedge_later_turns():
 
     specialist = Specialist("specialist")
     default = _Destination()
-    router = AgentRouter({"conversation": default, "specialist": specialist}, Decisions())
+    router = AgentRouter({"conversation": default, "specialist": specialist}, Decisions(), output=_emit_control)
     # Establish focus through actual admission and answer, without private state mutation.
     default.eligible = False
     await _route(router, AgentTurn("alice", "one", "focus"), emit=_emit)
@@ -266,7 +267,7 @@ async def test_failed_ineligible_focus_release_does_not_wedge_later_turns():
 async def test_stop_clears_history_only_participants_and_allows_fresh_reuse():
     destination = _Destination()
     destination.eligible = False
-    router = AgentRouter({"conversation": destination}, None)
+    router = AgentRouter({"conversation": destination}, None, output=_emit_control)
     await _route(router, AgentTurn("alice", "old", "unavailable"), emit=_emit)
     await router.stop()
     assert not router._history
@@ -280,7 +281,7 @@ async def test_stop_clears_history_only_participants_and_allows_fresh_reuse():
 
 async def test_retained_history_is_bounded_and_an_empty_history_is_not_reseeded():
     destination = _Destination()
-    router = AgentRouter({"conversation": destination}, None, context_budget_bytes=1)
+    router = AgentRouter({"conversation": destination}, None, output=_emit_control, context_budget_bytes=1)
     for index in range(3):
         await _route(router,
             AgentTurn("alice", str(index), "query", (AgentExchange("seed", "seed"),)), emit=_emit,
@@ -314,7 +315,7 @@ async def test_closed_admission_is_rechecked_after_replacement_drains_old_respon
             return await super().answer(turn)
 
     destination = Destination()
-    router = AgentRouter({"conversation": destination}, None)
+    router = AgentRouter({"conversation": destination}, None, output=_emit_control)
     old = asyncio.create_task(_route(router, AgentTurn("alice", "old", "old"), emit=_emit))
     await entered.wait()
     replacement = asyncio.create_task(_route(router, AgentTurn("alice", "new", "new"), emit=_emit))
@@ -354,7 +355,7 @@ async def test_canceled_cleanup_waiter_owns_the_complete_transition(operation):
             await super().release(participant)
 
     destination = Destination()
-    router = AgentRouter({"conversation": destination}, None)
+    router = AgentRouter({"conversation": destination}, None, output=_emit_control)
     response = asyncio.create_task(_route(router, AgentTurn("alice", "old", "old"), emit=_emit))
     await entered.wait()
     cleanup = asyncio.create_task(router.stop() if operation == "stop" else router.participant_left("alice"))
@@ -392,7 +393,7 @@ async def test_concurrent_cleanup_waiters_join_one_destination_release(operation
             await finish.wait()
 
     destination = Destination()
-    router = AgentRouter({"conversation": destination}, None)
+    router = AgentRouter({"conversation": destination}, None, output=_emit_control)
     await _route(router, AgentTurn("alice", "old", "old"), emit=_emit)
     first = asyncio.create_task(router.stop() if operation == "stop" else router.participant_left("alice"))
     await cleaning.wait()
@@ -421,7 +422,7 @@ async def test_failed_cleanup_retains_admission_and_retries_only_owned_failures(
                 raise RuntimeError("cleanup failed")
 
     destination = Destination()
-    router = AgentRouter({"conversation": destination}, None)
+    router = AgentRouter({"conversation": destination}, None, output=_emit_control)
     await _route(router, AgentTurn("alice", "old", "old"), emit=_emit)
     await _route(router, AgentTurn("bob", "old", "old"), emit=_emit)
     with pytest.raises(ExceptionGroup, match="failed to release"):
@@ -451,7 +452,7 @@ async def test_canceled_shutdown_preserves_a_cleanup_failure_as_its_cause():
             await finish.wait()
             raise RuntimeError("cleanup failed")
 
-    router = AgentRouter({"conversation": Destination()}, None)
+    router = AgentRouter({"conversation": Destination()}, None, output=_emit_control)
     await _route(router, AgentTurn("alice", "old", "old"), emit=_emit)
     shutdown = asyncio.create_task(router.stop())
     await cleaning.wait()
@@ -480,7 +481,7 @@ async def test_destination_cannot_deadlock_by_awaiting_router_operations(operati
             else:
                 await _route(router, AgentTurn(target, "nested", "nested"), emit=emit)
 
-    router = AgentRouter({"conversation": Destination()}, None)
+    router = AgentRouter({"conversation": Destination()}, None, output=_emit_control)
     with pytest.raises(RuntimeError, match="cannot await"):
         await asyncio.wait_for(_route(router, AgentTurn("alice", "turn", "query"), emit=_emit), timeout=1)
 
@@ -520,7 +521,7 @@ async def test_acknowledgment_callback_inherits_router_ownership(child_callback,
 
     destination = Destination()
     router = AgentRouter(
-        {"conversation": destination}, Decisions(),
+        {"conversation": destination}, Decisions(), output=_emit_control,
         acknowledgment_llm=Acknowledgment(), acknowledgment_delay_secs=10,
     )
     response = asyncio.create_task(_route(router, AgentTurn("alice", "turn", "query"), emit=emit))
