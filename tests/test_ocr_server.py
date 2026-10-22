@@ -64,6 +64,14 @@ def config():
     }})
 
 
+def test_ocr_errors_reuse_shared_model_service_error():
+    from xr_ai_models._protocols import ModelServiceError as SharedModelServiceError
+
+    assert ModelServiceError is SharedModelServiceError
+    assert issubclass(OCRRequestError, SharedModelServiceError)
+    assert issubclass(OCRResponseError, SharedModelServiceError)
+
+
 def test_inline_ocr_defaults_to_its_native_readiness_route():
     models = load_models_config_from_dict({"ocr": {
         "category": "ocr", "adapter": {"kind": "nemotron_ocr"},

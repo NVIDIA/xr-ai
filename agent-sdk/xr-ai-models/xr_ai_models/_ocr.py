@@ -11,11 +11,7 @@ import httpx
 
 from ._config import OCRSpec
 from ._openai_compat import _auth_headers, _http_health, _normalize_image, _warn_if_cleartext_key
-from ._protocols import ImageInput, OCRRegion
-
-
-class ModelServiceError(Exception):
-    """Base for typed model-service failures; currently adopted by OCR only."""
+from ._protocols import ImageInput, ModelServiceError, OCRRegion
 
 
 class OCRRequestError(ModelServiceError):

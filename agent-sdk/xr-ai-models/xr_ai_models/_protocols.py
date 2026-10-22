@@ -565,7 +565,7 @@ class _StreamingTTSService(TTSService, Protocol):
 
 
 class ModelServiceError(RuntimeError):
-    """Failure to determine or maintain an embedding model's reported identity."""
+    """Base for model-service failures, including embedding identity and OCR errors."""
 
 
 @runtime_checkable
