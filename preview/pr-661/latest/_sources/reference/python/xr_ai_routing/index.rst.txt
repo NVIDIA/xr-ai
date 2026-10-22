@@ -1,0 +1,422 @@
+xr_ai_routing
+=============
+
+.. py:module:: xr_ai_routing
+
+.. autoapi-nested-parse::
+
+   Public contracts and router for participant-scoped agent routing.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   xr_ai_routing.Admission
+   xr_ai_routing.AgentExchange
+   xr_ai_routing.AgentTurn
+   xr_ai_routing.DestinationResult
+   xr_ai_routing.RoutableAgent
+   xr_ai_routing.RoutingAid
+   xr_ai_routing.RoutingTurnContext
+   xr_ai_routing.AgentRouter
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   xr_ai_routing.current_turn_context
+
+
+Package Contents
+----------------
+
+.. py:class:: Admission
+
+   Destination decision made before it speaks or starts work.
+
+   ``accept`` permits work, ``decline`` returns control for another route,
+   ``clarify`` ends routing with a question, and ``release`` clears focus and
+   returns the same query to ordinary routing.
+
+
+   .. py:attribute:: disposition
+      :type:  Literal['accept', 'decline', 'clarify', 'release']
+
+      Whether the destination may begin work or should return control.
+
+
+
+   .. py:attribute:: preamble
+      :type:  str
+      :value: ''
+
+
+      Optional short acknowledgment emitted only after acceptance.
+
+
+
+   .. py:attribute:: text
+      :type:  str
+      :value: ''
+
+
+      Optional text for clarification or release; release text precedes rerouting.
+
+
+
+.. py:class:: AgentExchange
+
+   One completed user and assistant exchange.
+
+
+   .. py:attribute:: user
+      :type:  str
+
+      User request in the completed exchange.
+
+
+
+   .. py:attribute:: assistant
+      :type:  str
+
+      Completed user-visible reply, excluding progress acknowledgments.
+
+
+
+.. py:class:: AgentTurn
+
+   The current user turn and complete exchanges selected for this destination.
+
+
+   .. py:attribute:: participant_id
+      :type:  str
+
+      Participant whose state and focus apply to this turn.
+
+
+
+   .. py:attribute:: turn_id
+      :type:  str
+
+      Stable identity used to correlate streamed output and cancellation.
+
+
+
+   .. py:attribute:: query
+      :type:  str
+
+      Unmodified current user request.
+
+
+
+   .. py:attribute:: history
+      :type:  tuple[AgentExchange, Ellipsis]
+      :value: ()
+
+
+      Newest whole completed exchanges that fit the router's byte budget.
+
+
+
+.. py:class:: DestinationResult
+
+   Completed answer plus the router's post-answer focus transition.
+
+
+   .. py:attribute:: disposition
+      :type:  Literal['answer', 'focus', 'release', 'clarify']
+      :value: 'answer'
+
+
+      Destinations return answer, focus, or release; the router returns clarify before answer work.
+
+      A post-answer ``release`` consumes this turn and clears focus. It does not
+      reroute the request; use ``Admission("release")`` for that behavior.
+
+
+
+   .. py:attribute:: text
+      :type:  str
+      :value: ''
+
+
+      Completed answer to retain in history; progress acknowledgements are excluded.
+
+
+
+.. py:class:: RoutableAgent
+
+
+
+   An agent that owns its state and handles admitted or fallback turns.
+
+   The router calls ``release()`` when it releases a destination during
+   rerouting or clears its focus. On participant departure it calls an optional
+   ``participant_left(participant_id)`` method when present, otherwise it calls
+   ``release()``. Implement that optional hook when departure should clear
+   durable participant state that route release retains; it is not required by
+   this protocol.
+
+
+   .. py:method:: routing_aid(participant_id: str) -> RoutingAid
+
+      Describe this participant's current eligibility and route scope.
+
+
+
+   .. py:method:: admit(turn: AgentTurn, *, focused: bool) -> Admission
+      :async:
+
+
+      Accept, decline, clarify, or release before producing spoken output.
+
+
+
+   .. py:method:: answer(turn: AgentTurn, *, emit: collections.abc.Callable[[str, str], collections.abc.Awaitable[None]]) -> DestinationResult
+      :async:
+
+
+      Answer a turn after admission or as the configured default fallback.
+
+      Stream chunks and return answer, focus, or release. After selected
+      destinations decline through the bounded routing attempts, the front
+      end may call an eligible configured default once without ``admit()``,
+      unless that default already declined the current turn;
+      destinations must support that standalone answer path.
+
+      Destinations decline or clarify in ``admit()``, before output or work begins.
+      Returning ``DestinationResult("release")`` consumes the current request
+      after the answer and clears focus; it does not reroute that request.
+      Destination exceptions and task cancellation propagate to the caller.
+      The router suppresses later chunks after interruption but cannot
+      retract output already delivered to ``emit``.
+      A routing ``clarify`` choice with usable scores selects the
+      highest-scoring eligible destination through normal admission. Without
+      eligible scores the router asks for clarification. After exhausted
+      declines, the default is not retried if
+      it already declined this turn, and
+      clarification is also used when the configured default is unavailable.
+
+
+
+   .. py:method:: release(participant_id: str) -> None
+      :async:
+
+
+      Handle route release; the router also uses it for departure fallback.
+
+      This method runs when the router releases a destination during
+      rerouting or clears its focus. It is also the departure fallback when
+      no ``participant_left()`` hook is present. A destination can clear
+      active resources here while retaining completed participant data; use
+      the optional departure hook for stronger cleanup.
+
+
+
+.. py:class:: RoutingAid
+
+   Brief routing metadata, separate from the destination's full instructions.
+
+
+   .. py:attribute:: name
+      :type:  str
+
+      Stable route name used for attribution and decision labels.
+
+
+
+   .. py:attribute:: description
+      :type:  str
+
+      Concise description used as a route-selection hint, not an authorization rule.
+
+
+
+   .. py:attribute:: priority
+      :type:  int
+      :value: 0
+
+
+      Tie-breaking preference after request relevance.
+
+
+
+   .. py:attribute:: eligible
+      :type:  bool
+      :value: True
+
+
+      Whether this destination may be selected for this participant now.
+
+
+
+   .. py:attribute:: eligibility
+      :type:  str
+      :value: 'available'
+
+
+      Current participant-specific eligibility state.
+
+
+
+.. py:class:: RoutingTurnContext
+
+   Read-only routing metadata captured from the current asynchronous context.
+
+   The snapshot is stable after it is returned, including when the router
+   later updates its private context for another completed exchange.
+   Outside an active routed turn, the identifiers are ``None`` and the
+   history metadata tuples are empty.
+
+
+   .. py:attribute:: exchange_id
+      :type:  object | None
+
+      Identity of the current completed exchange, when one is active.
+
+
+
+   .. py:attribute:: history_exchange_ids
+      :type:  tuple[object | None, Ellipsis]
+
+      Exchange identities aligned with the active bounded history.
+
+
+
+   .. py:attribute:: history_timestamps
+      :type:  tuple[int | None, Ellipsis]
+
+      History timestamps aligned with the active history, in Unix microseconds.
+
+
+
+.. py:function:: current_turn_context() -> xr_ai_routing.RoutingTurnContext
+
+   Return a stable snapshot of metadata for the active routed turn.
+
+   Agent code called within a routed turn can use this accessor to associate
+   work with the current exchange and its bounded history. The returned
+   snapshot does not change when routing advances to another exchange. Outside
+   an active routed turn, it contains ``None`` and empty history tuples.
+
+
+.. py:class:: AgentRouter(destinations: collections.abc.Mapping[str, xr_ai_routing.RoutableAgent], decisions: xr_ai_models.DecisionService, *, default_destination: str = 'conversation', context_budget_bytes: int = _DEFAULT_CONTEXT_BUDGET_BYTES, acknowledgment_llm: xr_ai_models.LLMService | None = None, acknowledgment_delay_secs: float | None = None)
+
+   Route a turn, check admission before speech, and retain explicit focus.
+
+   A focused destination receives the participant's next turn first. It can
+   answer, release focus, or decline and return control to ordinary routing.
+   Route choices use the typed decision service; a declined route is excluded
+   from one bounded reroute. If selected destinations decline through those
+   attempts, the configured eligible default gets one final answer attempt
+   without another admission check unless it already declined this turn.
+   An uncertain routing choice uses the highest-scoring eligible destination
+   when usable scores are available.
+   If routing cannot select an eligible
+   destination, the router asks for clarification. Destinations own their
+   model and application state.
+
+   ``acknowledgment_llm`` and ``acknowledgment_delay_secs`` opt into a brief,
+   route-aware intention acknowledgment. Both must be supplied together. A
+   configured acknowledgment client must default to non-reasoning generation;
+   the per-call setting cannot override every provider's model-level extras.
+   Acknowledgments use a bounded output-token budget. A positive delay sets
+   the fallback silence threshold; a confident prediction
+   of a slower first answer can start the acknowledgment earlier. The
+   destination still starts immediately, and its first nonblank answer chunk
+   cancels any acknowledgment that has not yet been emitted. This suppresses
+   pending output, not audio already queued or played by downstream transports.
+   The delay and timing examples start after admission and measure when the
+   destination produces its first nonblank text, excluding routing, admission,
+   acknowledgment-output serialization, and audio playback.
+
+   :param destinations: Registered destinations keyed by their stable route names.
+   :param decisions: Typed Clef decision service used to select routes.
+   :param default_destination: Registered route used for exhausted-decline fallback.
+   :param context_budget_bytes: UTF-8 byte budget for retained completed history and routing history input.
+   :param acknowledgment_llm: Optional non-reasoning client for intention acknowledgments and duration prediction.
+   :param acknowledgment_delay_secs: Finite positive delay before fallback
+       acknowledgment; requires ``acknowledgment_llm``.
+
+
+   .. py:method:: handle(turn: xr_ai_routing.AgentTurn, *, emit: collections.abc.Callable[[str, str], collections.abc.Awaitable[None]]) -> xr_ai_routing.DestinationResult
+      :async:
+
+
+      Route and answer one turn, emitting source-tagged text chunks.
+
+      The supplied ``turn.history`` seeds this participant when the router
+      has no completed history of its own. Later turns use the router's
+      completed history rather than merging a new caller-supplied history.
+      The participant's current turn is kept separate from that history.
+
+      Destination failures propagate to the caller, which owns any turn-level
+      recovery after already-emitted progress text. Cancellation suppresses
+      future chunks from the interrupted turn but cannot retract chunks
+      already delivered to ``emit``.
+
+      The application drives turns and lifecycle operations. Destination and
+      output callbacks, including their child tasks, must not recursively
+      await this router's operations, which would wait for their own response
+      or cleanup to finish.
+
+      Raises ``RuntimeError`` while departure or shutdown is pending, or
+      after cleanup fails until the caller retries it successfully.
+      Canceling a cleanup waiter does not abandon the owned operation;
+      cancellation propagates after that operation completes.
+
+      :param turn: Current request and optional initial completed history.
+      :param emit: Callback that receives destination-attributed text chunks.
+      :return: The final answer, focus, release, or clarification disposition.
+
+
+
+   .. py:method:: interrupt(participant_id: str | None = None) -> None
+      :async:
+
+
+      Cancel active response work while retaining completed history and focus.
+
+      If ``participant_id`` is ``None``, cancel work for all participants.
+      Awaiting this method drains the canceled response tasks. Output already
+      delivered to a callback cannot be retracted.
+
+
+
+   .. py:method:: participant_left(participant_id: str) -> None
+      :async:
+
+
+      Release one participant's state and history.
+
+      Attempts every destination used by the participant, calling its
+      ``participant_left()`` hook when present and otherwise ``release()``.
+      Failed releases remain tracked for a caller-triggered retry and are
+      raised together in an ``ExceptionGroup``. Until this method completes
+      successfully, ``handle()`` raises ``RuntimeError`` for that participant.
+      Concurrent callers join the same owned departure. Canceling a waiter
+      waits for that operation to finish before propagating cancellation.
+      Retry after a cleanup failure; success reopens participant admission.
+
+
+
+   .. py:method:: stop() -> None
+      :async:
+
+
+      Drain responses and release all participant state in one owned operation.
+
+      Concurrent callers join the same shutdown. Canceling a waiter does not
+      cancel shutdown: cancellation propagates only after cleanup completes.
+      Release failures are raised together in an ``ExceptionGroup`` after
+      every participant is attempted; admission stays closed until a later
+      ``stop()`` retries successfully. Successful shutdown clears history-only
+      participants too, and permits later turns to begin a fresh lifecycle.
+
+
+

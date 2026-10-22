@@ -1,0 +1,845 @@
+
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Release migration &#8212; XR AI</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=a95f357e85573c9b56d5" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=a95f357e85573c9b56d5" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/nvidia-sphinx-theme.css?v=933278ad" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=da1a55c7" />
+  
+  <!-- So that users can add custom icons -->
+  <script defer src="../_static/scripts/fontawesome.js?digest=a95f357e85573c9b56d5"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=a95f357e85573c9b56d5" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=a95f357e85573c9b56d5" />
+
+
+
+    <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+    <script src="../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../_static/copybutton.js?v=f281be69"></script>
+    <script src="../_static/design-tabs.js?v=f930bc37"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'reference/migrations';</script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+
+    <link rel="icon" href="../_static/favicon.png"/>
+
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="NIM model endpoints" href="model-servers-nim.html" />
+    <link rel="prev" title="Migration notes through v0.3.0-beta" href="migration-history/through-v0.3.0-beta.html" />
+
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+  
+    
+    <script src="../_static/searchtools.js"></script>
+    <script src="../_static/language_data.js"></script>
+    <script src="../searchindex.js"></script>
+  
+
+
+  </head>
+
+  <body data-default-mode="">
+
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+  
+  
+  
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/nvidia-logo-horiz-rgb-blk-for-screen.svg" class="logo__image only-light" alt="XR AI - Home"/>
+    <img src="../_static/nvidia-logo-horiz-rgb-wht-for-screen.svg" class="logo__image only-dark pst-js-only" alt="XR AI - Home"/>
+  
+  
+    <p class="title logo__title">XR AI</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/nvidia-logo-horiz-rgb-blk-for-screen.svg" class="logo__image only-light" alt="XR AI - Home"/>
+    <img src="../_static/nvidia-logo-horiz-rgb-wht-for-screen.svg" class="logo__image only-dark pst-js-only" alt="XR AI - Home"/>
+  
+  
+    <p class="title logo__title">XR AI</p>
+  
+</a>
+
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item"><!--
+  SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-License-Identifier: Apache-2.0
+-->
+
+</div>
+        <div class="sidebar-primary-item">
+
+
+
+<nav class="bd-docs-nav bd-links"
+     aria-label="Table of Contents">
+  <p class="bd-links__title" role="heading" aria-level="1">Table of Contents</p>
+  <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../overview/architecture.html">Architecture</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../getting_started/index.html">Getting Started</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/quickstart.html">Quickstart</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/skills.html">Skills</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/requirements.html">Requirements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/clients.html">Connecting clients</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/networking.html">Networking and firewall</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/credentials.html">Credentials</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../components/index.html">Components</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../components/agent-sdk.html">Agent SDK</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../components/ai-services.html">AI inference servers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../components/launcher-and-process-model.html">Launcher and process model</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../components/server-runtime.html">Server runtime</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../guides/index.html">Guides</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../guides/adding-a-sample.html">Adding a new sample</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/building-your-app.html">Build your application</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/deploying-with-nim.html">Deploying samples with NIM endpoints</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/python-code-style.html">Python code style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/testing.html">Testing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Reference</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="agent-sdk-hub.html">xr-ai-hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="agent-sdk-models.html">xr-ai-models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="agent-sdk-routing.html">xr-ai-routing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="agent-sdk-runtime.html">xr-ai-runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="agent-sdk-tools.html">xr-ai-tools</a></li>
+<li class="toctree-l2"><a class="reference internal" href="agent-sdk-voice.html">xr-ai-voice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="agent-sdk-web-events.html">xr-ai-web-events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="clef-flash.html">Clef-Flash local decision server</a></li>
+<li class="toctree-l2"><a class="reference internal" href="command-line.html">Command-line reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="configuration.html">Sample configuration reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
+<li class="toctree-l2"><a class="reference internal" href="magpie-nim-tts.html">Magpie NIM speech</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="migration-history.html">Migration history</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="migration-history/through-v0.3.0-beta.html">Migration notes through v0.3.0-beta</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">Release migration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="model-servers-nim.html">NIM model endpoints</a></li>
+<li class="toctree-l2"><a class="reference internal" href="procedure-capture-guide.html">Procedure capture and guidance</a></li>
+<li class="toctree-l2"><a class="reference internal" href="simple-vlm-example.html">Simple VLM example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
+<li class="toctree-l2"><a class="reference internal" href="xr-render-demo.html">xr-render-demo — architecture</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_gpu/index.html">xr_ai_gpu</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_hub/index.html">xr_ai_hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_vad/index.html">xr_ai_vad</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="python/xr_ai_tools/index.html">xr_ai_tools</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/async_tools/index.html">xr_ai_tools.async_tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/capture/index.html">xr_ai_tools.capture</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/current_frame/index.html">xr_ai_tools.current_frame</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/image/index.html">xr_ai_tools.image</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/image_polygon/index.html">xr_ai_tools.image_polygon</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/marker_tracking/index.html">xr_ai_tools.marker_tracking</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/rag/index.html">xr_ai_tools.rag</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/rpc/index.html">xr_ai_tools.rpc</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/spatial/index.html">xr_ai_tools.spatial</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/text_memory/index.html">xr_ai_tools.text_memory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/tool_calling/index.html">xr_ai_tools.tool_calling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/tools/index.html">xr_ai_tools.tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/tracking/index.html">xr_ai_tools.tracking</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/types/index.html">xr_ai_tools.types</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/video_memory/index.html">xr_ai_tools.video_memory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/vision/index.html">xr_ai_tools.vision</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_voice/index.html">xr_ai_voice</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="python/xr_ai_models/index.html">xr_ai_models</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_models/presets/index.html">xr_ai_models.presets</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_routing/index.html">xr_ai_routing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_runtime/index.html">xr_ai_runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_logging/index.html">xr_ai_logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_model_server_stack/index.html">xr_ai_model_server_stack</a></li>
+</ul>
+</details></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="index.html" class="nav-link">Reference</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Release migration</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <!--
+  SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-License-Identifier: Apache-2.0
+-->
+<section id="release-migration">
+<h1>Release migration<a class="headerlink" href="#release-migration" title="Link to this heading">#</a></h1>
+<section id="changes-since-v0-3-0-beta">
+<h2>Changes since v0.3.0-beta<a class="headerlink" href="#changes-since-v0-3-0-beta" title="Link to this heading">#</a></h2>
+<p>The development version on <code class="docutils literal notranslate"><span class="pre">main</span></code> is unreleased. These instructions cover
+changes from <code class="docutils literal notranslate"><span class="pre">v0.3.0-beta</span></code> to that version. If upgrading from an older release,
+first apply <a class="reference internal" href="migration-history/through-v0.3.0-beta.html"><span class="doc">Migration notes through v0.3.0-beta</span></a>, then apply the changes
+below. Refer to <a class="reference internal" href="migration-history.html"><span class="doc">Migration history</span></a> for completed migration guides.</p>
+<p>Stop running model services with the old checkout’s commands and configuration
+before updating the checkout. Start the updated services before restarting
+workers; launchers can reuse a running service whose identity matches even when
+its application code predates the update.</p>
+<section id="nemotron-3-embedding-model">
+<h3>Nemotron 3 embedding model<a class="headerlink" href="#nemotron-3-embedding-model" title="Link to this heading">#</a></h3>
+<p>The embedding server now defaults to <code class="docutils literal notranslate"><span class="pre">nvidia/Nemotron-3-Embed-1B-BF16</span></code>; the NIM
+consumer profile selects <code class="docutils literal notranslate"><span class="pre">nvidia/nemotron-3-embed-1b</span></code>. Both the tea sample and
+standalone RAG now default to 2048 dimensions. The local endpoint remains on
+port 8109 with the served name <code class="docutils literal notranslate"><span class="pre">embed</span></code>.</p>
+<ol class="arabic">
+<li><p>Stop the agent and its persistent embedding server <strong>before updating</strong>.
+For the tea sample, run from the repository root:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/tea-making-sample/model-servers<span class="w"> </span>tea_making_sample_model_servers<span class="w"> </span>--stop
+</pre></div>
+</div>
+<p>For a standalone deployment, stop the embedding process or container through
+the supervisor that started it. Check that its listener on port 8109 has
+stopped. Stopping only RAG or the embedding launcher does not stop persistent
+weights; the pip launcher reuses a healthy listener without comparing models.</p>
+</li>
+<li><p>Update the checkout and change <code class="docutils literal notranslate"><span class="pre">embedding_dim:</span> <span class="pre">768</span></code> to <code class="docutils literal notranslate"><span class="pre">embedding_dim:</span> <span class="pre">2048</span></code>
+in copied tea <strong>and standalone</strong> <code class="docutils literal notranslate"><span class="pre">rag_service.yaml</span></code> files. Restart the
+embedding server before RAG. Verify the <code class="docutils literal notranslate"><span class="pre">embed</span></code> entry’s <code class="docutils literal notranslate"><span class="pre">root</span></code> in
+<code class="docutils literal notranslate"><span class="pre">/v1/models</span></code> identifies Nemotron 3 Embed, not the previous model.</p></li>
+<li><p>Restart the agent. Changing the default dimension from 768 to 2048 changes
+the existing cache digest, so RAG rebuilds the index automatically. If a
+copied configuration already used 2048 dimensions, set a new <code class="docutils literal notranslate"><span class="pre">cache_key</span></code> or
+delete its generated cache before
+restarting RAG; a local served alias such as <code class="docutils literal notranslate"><span class="pre">embed</span></code> does not identify weights.
+If RAG started while the previous pip server was still listening, stop RAG,
+verify the new model is serving, and delete the generated cache
+(<code class="docutils literal notranslate"><span class="pre">models/tea-making-rag-cache</span></code> for tea, or the configured <code class="docutils literal notranslate"><span class="pre">.rag-cache</span></code> for
+standalone RAG) or set a new <code class="docutils literal notranslate"><span class="pre">cache_key</span></code> before restarting RAG. Otherwise,
+old-model vectors saved at 2048 dimensions remain reusable after the server
+switches models. The Docker launcher recreates its container on model changes.</p></li>
+</ol>
+<p>Old 768-dimensional <code class="docutils literal notranslate"><span class="pre">.npz</span></code> caches are no longer used by the default
+configuration and can be deleted to reclaim space without losing documents.</p>
+<p>Independently deployed NIM endpoints must serve the new model before using the
+updated NIM profile. For later model changes behind an unchanged profile, set
+an explicit model revision in <code class="docutils literal notranslate"><span class="pre">cache_key</span></code> and restart RAG. Do not change models
+while RAG is running; its document vectors must match query embeddings.</p>
+</section>
+<section id="shared-accepted-query-display">
+<h3>Shared accepted-query display<a class="headerlink" href="#shared-accepted-query-display" title="Link to this heading">#</a></h3>
+<p>Every <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> now returns accepted query text to its originating participant
+on the new <code class="docutils literal notranslate"><span class="pre">voice.user-query</span></code> client data topic. This generic display supports
+checking what the voice layer understood without a sample-specific echo agent.
+Payloads are UTF-8 <code class="docutils literal notranslate"><span class="pre">Speaker</span> <span class="pre">N:</span> <span class="pre">&lt;text&gt;</span></code> for speaker ASR or <code class="docutils literal notranslate"><span class="pre">User:</span> <span class="pre">&lt;text&gt;</span></code> for batch
+STT and typed input. Text is gate-normalized accepted input, not all raw STT;
+control phrases do not become queries. The separate internal <code class="docutils literal notranslate"><span class="pre">voice.transcript</span></code>
+event retains its existing mode/backend publication policy. Optional ignored-speaker display remains
+on <code class="docutils literal notranslate"><span class="pre">voice.speaker-diagnostic</span></code>, controlled by <code class="docutils literal notranslate"><span class="pre">speaker.diagnostics</span></code>.</p>
+<p>Internal application query topics, including <code class="docutils literal notranslate"><span class="pre">tea-making.user-query</span></code>,
+<code class="docutils literal notranslate"><span class="pre">lab-instrument-monitoring.user-query</span></code>, <code class="docutils literal notranslate"><span class="pre">xr-render.user-query</span></code>, <code class="docutils literal notranslate"><span class="pre">task.capture.input</span></code>
+and <code class="docutils literal notranslate"><span class="pre">simple-vlm.user-query</span></code>, are unchanged and are not used for client display.
+Clients with topic-specific handlers can handle or ignore <code class="docutils literal notranslate"><span class="pre">voice.user-query</span></code>;
+catch-all message lists will show the additional messages, including typed echoes.
+There is no new constructor switch. Routing remains participant-targeted;
+topic filtering is not an authorization boundary.</p>
+</section>
+<section id="session-recording-flag">
+<h3>Session recording flag<a class="headerlink" href="#session-recording-flag" title="Link to this heading">#</a></h3>
+<p>Replace <code class="docutils literal notranslate"><span class="pre">--capture</span></code> with <code class="docutils literal notranslate"><span class="pre">--session-recording</span></code> in saved launch commands for
+<code class="docutils literal notranslate"><span class="pre">simple_vlm_example</span></code>, <code class="docutils literal notranslate"><span class="pre">xr_render_demo</span></code>, <code class="docutils literal notranslate"><span class="pre">tea_making_sample</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">lab_instrument_monitoring</span></code>. The old flag is no longer accepted. For example,
+<code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">simple_vlm_example</span> <span class="pre">--capture</span></code> becomes
+<code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">simple_vlm_example</span> <span class="pre">--session-recording</span></code>.</p>
+</section>
+<section id="explicit-voice-interaction-modes">
+<h3>Explicit voice interaction modes<a class="headerlink" href="#explicit-voice-interaction-modes" title="Link to this heading">#</a></h3>
+<p>Set an explicit <code class="docutils literal notranslate"><span class="pre">mode:</span> <span class="pre">conversation</span></code>, <code class="docutils literal notranslate"><span class="pre">hybrid</span></code>, <code class="docutils literal notranslate"><span class="pre">wake_only</span></code>, or <code class="docutils literal notranslate"><span class="pre">always_on</span></code> at
+the top of the selected voice-gate YAML. For the default speaker ASR stack,
+add this mapping to private voice-gate files retained from <code class="docutils literal notranslate"><span class="pre">v0.3.0-beta</span></code>:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">speaker</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="nt">backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">required</span>
+<span class="w">  </span><span class="nt">base_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://127.0.0.1:8102</span>
+</pre></div>
+</div>
+<p>A retained YAML without a <code class="docutils literal notranslate"><span class="pre">speaker</span></code> mapping selects batch STT. The new sample
+profiles omit the <code class="docutils literal notranslate"><span class="pre">stt</span></code> role, so this configuration raises <code class="docutils literal notranslate"><span class="pre">KeyError</span></code> during
+worker construction. With the mapping above, workers wait for <code class="docutils literal notranslate"><span class="pre">speaker-stt</span></code>
+before reporting ready. Refer to
+<a class="reference internal" href="#batch-stt-migration"><span class="std std-ref">the batch alternative</span></a> if retaining batch speech.</p>
+<p>In tea’s worker YAML, replace <code class="docutils literal notranslate"><span class="pre">voice_gate_yaml:</span> <span class="pre">voice_gate.always-on.yaml</span></code> with
+<code class="docutils literal notranslate"><span class="pre">voice_gate_yaml:</span> <span class="pre">voice_gate.yaml</span></code>, then set <code class="docutils literal notranslate"><span class="pre">mode:</span> <span class="pre">always_on</span></code> in that file to
+retain ungated speech. The alternate file is removed; keeping its path loads
+the package’s batch-STT defaults.</p>
+<p id="voice-sample-conversation-defaults">The four voice samples select <code class="docutils literal notranslate"><span class="pre">conversation</span></code>. Say
+<code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">start</span> <span class="pre">talking</span></code> after connecting and
+<code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">stop</span> <span class="pre">talking</span></code> to close the conversation.
+Select <code class="docutils literal notranslate"><span class="pre">wake_only</span></code> for addressed turns, <code class="docutils literal notranslate"><span class="pre">hybrid</span></code> for addressed turns alongside
+conversations, or <code class="docutils literal notranslate"><span class="pre">always_on</span></code> for ungated dispatch. <code class="docutils literal notranslate"><span class="pre">wake_only</span></code> and <code class="docutils literal notranslate"><span class="pre">hybrid</span></code>
+require non-empty <code class="docutils literal notranslate"><span class="pre">magic_phrases</span></code>. Set <code class="docutils literal notranslate"><span class="pre">conversation.require_wake_phrase:</span> <span class="pre">true</span></code>
+to require wake phrases during an active conversation.</p>
+<p>In conversation mode, only accepted final transcripts during an active
+conversation reach <code class="docutils literal notranslate"><span class="pre">VOICE_TRANSCRIPT_TOPIC</span></code>; hybrid mode also delivers accepted
+closed-state one-off questions. Applications needing ungated final transcripts
+must select <code class="docutils literal notranslate"><span class="pre">always_on</span></code>. Restart workers after configuration edits. Refer to
+<a class="reference internal" href="agent-sdk-voice.html#voice-conversation-controls"><span class="std std-ref">Conversation controls</span></a> for interaction behavior.</p>
+</section>
+<section id="single-llm-entry-in-model-profiles">
+<h3>Single LLM entry in model profiles<a class="headerlink" href="#single-llm-entry-in-model-profiles" title="Link to this heading">#</a></h3>
+<p>XR Render and its eval commands now use <code class="docutils literal notranslate"><span class="pre">llm</span></code> instead of <code class="docutils literal notranslate"><span class="pre">agent_llm</span></code>.
+For custom XR Render, NIM consumer, or shared model profiles, move any settings
+from <code class="docutils literal notranslate"><span class="pre">agent_llm</span></code> you need into <code class="docutils literal notranslate"><span class="pre">llm</span></code>, then remove the old entry. The NIM smoke
+check rejects the old entry.</p>
+</section>
+<section id="sample-local-model-server-launchers">
+<span id="local-model-server-cli"></span><span id="selected-model-server-cleanup"></span><h3>Sample-local model-server launchers<a class="headerlink" href="#sample-local-model-server-launchers" title="Link to this heading">#</a></h3>
+<p>Replace commands targeting <code class="docutils literal notranslate"><span class="pre">model-server-samples/model-servers</span></code> with each agent
+sample’s <code class="docutils literal notranslate"><span class="pre">model-servers/</span></code> project. Before updating, run the applicable stop
+command from the old checkout’s repository root:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-server-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span>--stop
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-server-samples/model-servers-nim<span class="w"> </span>model_servers_nim<span class="w"> </span>--stop
+</pre></div>
+</div>
+<p>The old commands discover their cleanup ports without <code class="docutils literal notranslate"><span class="pre">--models</span></code>. The shared
+launcher rejects combining <code class="docutils literal notranslate"><span class="pre">--models</span></code> with <code class="docutils literal notranslate"><span class="pre">--stop</span></code>; the NIM launcher ignores
+<code class="docutils literal notranslate"><span class="pre">--models</span></code> during shutdown. Stop former batch STT and NIM services before
+updating; the new launcher’s stop plan omits those services.</p>
+<p>After updating, run from <code class="docutils literal notranslate"><span class="pre">agent-samples/simple-vlm-example/</span></code>:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-servers<span class="w"> </span>simple_vlm_example_model_servers
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-servers<span class="w"> </span>simple_vlm_example_model_servers<span class="w"> </span>--stop
+</pre></div>
+</div>
+<p>Other samples have corresponding <code class="docutils literal notranslate"><span class="pre">&lt;sample&gt;_model_servers</span></code> commands. Keep
+<code class="docutils literal notranslate"><span class="pre">--gpu-profile</span> <span class="pre">NAME</span></code> for hardware selection. Pass the same profile to <code class="docutils literal notranslate"><span class="pre">--stop</span></code>
+when it overrides service ports. Remove <code class="docutils literal notranslate"><span class="pre">--models</span></code> and <code class="docutils literal notranslate"><span class="pre">--allow-anonymous</span></code>;
+local stacks require <code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code>. Move custom server settings into shared
+defaults under <code class="docutils literal notranslate"><span class="pre">utils/xr-ai-model-server-stack/yaml/</span></code> or sample GPU overrides
+under <code class="docutils literal notranslate"><span class="pre">agent-samples/&lt;sample&gt;/model-servers/yaml/</span></code>.</p>
+<p>The new stop plan covers only its selected services. Stop that plan before
+changing its configuration or switching samples. Refer to
+<a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a> for the current workflow.</p>
+</section>
+<section id="shared-model-stack-speaker-filtering">
+<h3>Shared model-stack speaker filtering<a class="headerlink" href="#shared-model-stack-speaker-filtering" title="Link to this heading">#</a></h3>
+<p id="batch-stt-migration">The four voice samples use speaker ASR and omit batch STT on port 8103.
+Replace unconditional worker <code class="docutils literal notranslate"><span class="pre">make_stt</span></code> calls with <code class="docutils literal notranslate"><span class="pre">VoiceAgent.from_models</span></code>,
+passing the loaded models and voice-gate settings. To retain batch STT, select
+<code class="docutils literal notranslate"><span class="pre">stt</span></code> in the sample’s launcher and hardware overrides and configure the worker’s
+batch adapter as <code class="docutils literal notranslate"><span class="pre">models.stt</span></code> in the worker profile. For batch-only speech,
+omit <code class="docutils literal notranslate"><span class="pre">speaker-stt</span></code> from the selection and set <code class="docutils literal notranslate"><span class="pre">speaker.enabled:</span> <span class="pre">false</span></code>. Refer to
+<a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a> for serving both paths.</p>
+</section>
+<section id="native-nim-endpoint-profiles">
+<h3>Native NIM endpoint profiles<a class="headerlink" href="#native-nim-endpoint-profiles" title="Link to this heading">#</a></h3>
+<p>Replace the managed <code class="docutils literal notranslate"><span class="pre">model_servers_nim</span></code> stack and
+<code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--models</span> <span class="pre">vlm_llm_nim</span></code> with independently deployed native NIM
+endpoints. Configure native model IDs with <code class="docutils literal notranslate"><span class="pre">openai_compat</span></code>, <code class="docutils literal notranslate"><span class="pre">riva_grpc</span></code> for
+speech, and embedding <code class="docutils literal notranslate"><span class="pre">default_extras.input_type:</span> <span class="pre">passage</span></code> for prefix-aware
+asymmetric inputs. Refer to <a class="reference internal" href="../guides/deploying-with-nim.html"><span class="doc">Deploying samples with NIM endpoints</span></a> for the removed
+compatibility surfaces, endpoint configuration, and validation.</p>
+<p>Native Magpie speech omits the compatibility wrapper’s 300 ms pause. Validate
+inference separately from Riva readiness, which checks channel connectivity.</p>
+</section>
+<section id="livekit-sample-credentials">
+<h3>LiveKit sample credentials<a class="headerlink" href="#livekit-sample-credentials" title="Link to this heading">#</a></h3>
+<p>Shipped DeviceIOHub YAML files now leave <code class="docutils literal notranslate"><span class="pre">api_key</span></code> and <code class="docutils literal notranslate"><span class="pre">api_secret</span></code> blank.
+The YAML loader generates a fresh random pair when both values are missing or
+blank, so samples require no credential setup. Existing private configurations
+and environment overrides remain supported; partial pairs still fail startup.
+Refer to <a class="reference internal" href="../getting_started/credentials.html"><span class="doc">Credentials</span></a> for fixed-pair configuration.</p>
+</section>
+<section id="launcher-failure-exit-statuses">
+<h3>Launcher failure exit statuses<a class="headerlink" href="#launcher-failure-exit-statuses" title="Link to this heading">#</a></h3>
+<p>Update shell scripts and supervisors that interpret sample launcher exit
+statuses. An unexpected monitored process exit now fails the stack; it
+previously returned success. A process that exits during startup now reports
+its failure status; startup failures previously returned 130.</p>
+<p>The launcher preserves positive child exit codes, maps signal termination to
+<code class="docutils literal notranslate"><span class="pre">128</span> <span class="pre">+</span> <span class="pre">signal</span> <span class="pre">number</span></code>, and maps an unexpected zero exit to 1. User cancellation
+during startup returns 130. Refer to
+<a class="reference internal" href="../components/launcher-and-process-model.html"><span class="doc">Launcher and process model</span></a> for failure diagnostics and
+shutdown behavior.</p>
+</section>
+<section id="model-reasoning-control">
+<h3>Model reasoning control<a class="headerlink" href="#model-reasoning-control" title="Link to this heading">#</a></h3>
+<p>Model profiles now declare reasoning with a typed <code class="docutils literal notranslate"><span class="pre">adapter.thinking</span></code> setting.
+A per-call <code class="docutils literal notranslate"><span class="pre">enable_thinking=True</span></code> or <code class="docutils literal notranslate"><span class="pre">False</span></code> always applies to that call. A
+legacy <code class="docutils literal notranslate"><span class="pre">default_extras.chat_template_kwargs.enable_thinking:</span> <span class="pre">true</span></code> default could
+previously not be turned off per call. Refer to <a class="reference internal" href="agent-sdk-models.html#agent-sdk-models-thinking"><span class="std std-ref">Reasoning control</span></a>.</p>
+<ul>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">llama_nemotron</span></code> profiles:</strong> requests now start the system message with
+<code class="docutils literal notranslate"><span class="pre">detailed</span> <span class="pre">thinking</span> <span class="pre">off</span></code> unless a call passes <code class="docutils literal notranslate"><span class="pre">enable_thinking=True</span></code>; the model
+previously reasoned by default and its preamble appeared in the response. To
+keep reasoning on by default, set it in the profile:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">adapter</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">preset</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">llama_nemotron</span>
+<span class="w">  </span><span class="nt">thinking</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">default</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</pre></div>
+</div>
+</li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">thinking_budget</span></code>:</strong> now sent as vLLM’s <code class="docutils literal notranslate"><span class="pre">thinking_token_budget</span></code>, which
+the server enforces, instead of <code class="docutils literal notranslate"><span class="pre">chat_template_kwargs.thinking_budget</span></code>, which
+the Nemotron chat templates ignored. Budgets now cap reasoning, and are
+omitted when reasoning is off. A vLLM server started without
+<code class="docutils literal notranslate"><span class="pre">--reasoning-parser</span></code> rejects a request that sets one.</p></li>
+<li><p><strong>Custom <code class="docutils literal notranslate"><span class="pre">LLMService</span></code> implementations:</strong> <code class="docutils literal notranslate"><span class="pre">enable_thinking</span></code> now defaults to
+<code class="docutils literal notranslate"><span class="pre">None</span></code> instead of <code class="docutils literal notranslate"><span class="pre">False</span></code>. Treat <code class="docutils literal notranslate"><span class="pre">None</span></code> as the endpoint’s configured default.</p></li>
+<li><p><strong>Profiles with the legacy key:</strong> no change is required. With a template-driven
+or presetless adapter, the value becomes <code class="docutils literal notranslate"><span class="pre">thinking.default</span></code>, so a call can
+override it. It must now be a boolean, and a profile that also sets a
+different <code class="docutils literal notranslate"><span class="pre">thinking.default</span></code> is rejected. Prefer <code class="docutils literal notranslate"><span class="pre">thinking.default</span></code> in new
+profiles.</p></li>
+</ul>
+</section>
+<section id="operator-visible-runtime-changes">
+<h3>Operator-visible runtime changes<a class="headerlink" href="#operator-visible-runtime-changes" title="Link to this heading">#</a></h3>
+<p>Recorded-video perception is enabled when <code class="docutils literal notranslate"><span class="pre">video_history_enabled</span></code> is omitted
+from the XR Render worker YAML. Set it to <code class="docutils literal notranslate"><span class="pre">false</span></code> to opt out, or configure
+<a class="reference internal" href="xr-render-demo.html#xr-render-recording-prerequisites"><span class="std std-ref">Recorded-video prerequisites</span></a> before using recorded-video tools.</p>
+</section>
+</section>
+<section id="earlier-releases">
+<h2>Earlier releases<a class="headerlink" href="#earlier-releases" title="Link to this heading">#</a></h2>
+<p>Refer to <a class="reference internal" href="migration-history.html"><span class="doc">Migration history</span></a> for completed guides.</p>
+<p id="swift-microphone-cleanup-errors">Refer to <a class="reference internal" href="migration-history/through-v0.3.0-beta.html#swift-microphone-cleanup-errors"><span class="std std-ref">Swift microphone cleanup errors</span></a>.</p>
+<p id="streamkit-image-capture-dependencies">Refer to <a class="reference internal" href="migration-history/through-v0.3.0-beta.html#streamkit-image-capture-dependencies"><span class="std std-ref">StreamKit image-capture dependencies</span></a>.</p>
+<p id="deviceiohub-rename">Refer to <a class="reference internal" href="migration-history/through-v0.3.0-beta.html#deviceiohub-rename"><span class="std std-ref">DeviceIOHub rename</span></a>.</p>
+<p id="shared-model-server-sample-location">Refer to <a class="reference internal" href="migration-history/through-v0.3.0-beta.html#shared-model-server-sample-location"><span class="std std-ref">Shared model-server sample location</span></a>.</p>
+<p id="local-speech-service">Refer to <a class="reference internal" href="migration-history/through-v0.3.0-beta.html#local-speech-service"><span class="std std-ref">Local speech service</span></a>.</p>
+<p id="removed-sdk-compatibility-surfaces">Refer to <a class="reference internal" href="migration-history/through-v0.3.0-beta.html#removed-sdk-compatibility-surfaces"><span class="std std-ref">Removed SDK compatibility surfaces</span></a>.</p>
+<p><a id="consumer-model-readiness"></a>
+For current worker startup and model availability requirements, refer to
+<a class="reference internal" href="../components/launcher-and-process-model.html#consumer-model-readiness"><span class="std std-ref">Consumer model readiness</span></a>.</p>
+<p id="clef-model-cache-configuration"><span id="clef-image-decision-inputs"></span><span id="clef-image-input-migration"></span>For Clef updates between development checkouts, refer to
+<a class="reference internal" href="clef-flash.html#clef-service-updates"><span class="std std-ref">Updating a running service</span></a>. For image inputs and model cache configuration,
+refer to <a class="reference internal" href="clef-flash.html"><span class="doc">Clef-Flash local decision server</span></a>.</p>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="migration-history/through-v0.3.0-beta.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Migration notes through v0.3.0-beta</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="model-servers-nim.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">NIM model endpoints</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+
+
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#changes-since-v0-3-0-beta">Changes since v0.3.0-beta</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nemotron-3-embedding-model">Nemotron 3 embedding model</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#shared-accepted-query-display">Shared accepted-query display</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#session-recording-flag">Session recording flag</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#explicit-voice-interaction-modes">Explicit voice interaction modes</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#single-llm-entry-in-model-profiles">Single LLM entry in model profiles</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#sample-local-model-server-launchers">Sample-local model-server launchers</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#shared-model-stack-speaker-filtering">Shared model-stack speaker filtering</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#native-nim-endpoint-profiles">Native NIM endpoint profiles</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#livekit-sample-credentials">LiveKit sample credentials</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#launcher-failure-exit-statuses">Launcher failure exit statuses</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#model-reasoning-control">Model reasoning control</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#operator-visible-runtime-changes">Operator-visible runtime changes</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#earlier-releases">Earlier releases</a></li>
+</ul>
+  </nav></div>
+
+</div></div>
+              
+            
+
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../_static/scripts/bootstrap.js?digest=a95f357e85573c9b56d5"></script>
+<script defer src="../_static/scripts/pydata-sphinx-theme.js?digest=a95f357e85573c9b56d5"></script>
+
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+<a class="footer-brand logo" href="https://www.nvidia.com">
+  <img src="../_static/nvidia-logo-horiz-rgb-1c-blk-for-screen.svg" class="logo__image only-light" alt="NVIDIA"/>
+  <img src="../_static/nvidia-logo-horiz-rgb-1c-wht-for-screen.svg" class="logo__image only-dark" alt="NVIDIA"/>
+</a></div>
+      
+        <div class="footer-item">
+
+<div class="footer-links">
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/about-nvidia/privacy-policy/">Privacy Policy</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/about-nvidia/privacy-center/">Your Privacy Choices</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/about-nvidia/terms-of-service/">Terms of Service</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/about-nvidia/accessibility/">Accessibility</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/about-nvidia/company-policies/">Corporate Policies</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/product-security/">Product Security</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/contact/">Contact</a>
+  
+  
+  
+</div>
+</div>
+      
+        <div class="footer-item">
+
+
+
+
+  <p class="copyright">
+    
+      Copyright © 2026, NVIDIA CORPORATION &amp; AFFILIATES.
+      <br/>
+    
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+  </body>
+</html>
