@@ -3,9 +3,8 @@
 
 """Load guide selection and verification settings for guided procedures.
 
-Read guide-agent-config.yaml into GuideConfig: the guide directory and visual
-verification timeout, together with the guide name supplied on the command line.
-Resolve the guide directory relative to that YAML file. Shared voice, frame,
+Read the visual verification timeout from guide-agent-config.yaml and resolve
+the command-line guide path against the sample directory. Shared voice, frame,
 and model settings remain in the worker's config.py.
 """
 
@@ -17,16 +16,19 @@ import yaml
 
 @dataclass(frozen=True, slots=True)
 class GuideConfig:
-    guides_dir: Path
-    guide_name: str
+    guide_path: Path
     vision_timeout_s: float = 15.0
 
 
-def load_guide_config(path: Path, *, guide_name: str | None) -> GuideConfig:
+def load_guide_config(path: Path, *, guide_path: str | None) -> GuideConfig:
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    if not isinstance(guide_name, str) or not guide_name.strip():
-        raise ValueError("--mode guide requires a non-empty GUIDE_NAME")
+    if not isinstance(guide_path, str) or not guide_path.strip():
+        raise ValueError("--mode guide requires a non-empty GUIDE_PATH")
     timeout = float(data.get("vision_timeout_s", 15.0))
     if not 0 < timeout < float("inf"):
         raise ValueError("vision_timeout_s must be finite and positive")
-    return GuideConfig(path.resolve().parent / data.get("guides_dir", "../guides"), guide_name.strip(), timeout)
+    selected = Path(guide_path).expanduser()
+    if not selected.is_absolute():
+        # Worker processes and temporary launch requests need the same path base as the sample CLI.
+        selected = Path(__file__).resolve().parents[3] / selected
+    return GuideConfig(selected, timeout)

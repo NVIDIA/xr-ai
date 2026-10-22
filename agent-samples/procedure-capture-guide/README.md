@@ -49,12 +49,15 @@ To choose where packets are saved, launch with `uv run main.py --mode capture --
 To test guide mode with the included chamomile tea example:
 
 ```bash
-uv run main.py --mode guide "Tea Making"
+uv run main.py --mode guide examples/tea-making/guide.yaml
 ```
 
 Use tea labeled chamomile, boiling water, a five-minute steep, and a kettle
 or thermometer that shows the current water temperature. For another locally
-reviewed guide under `guides/`, replace `Tea Making` with its exact name or ID.
+reviewed guide, pass its YAML file path, such as `guides/my-procedure.guide.yaml`.
+Relative paths resolve from this sample directory; absolute paths are also
+supported. Quote paths containing spaces. The `guides/` folder remains available
+for local guides; checked-in examples live under `examples/`.
 The guide must have `task.status: approved`. Guide mode uses the same model servers;
 say **start guide** to begin and **stop guide** to cancel. Say **start guide**
 again to begin a fresh run of the same command-line-selected guide.
@@ -66,7 +69,7 @@ spoken capture or guide commands, use:
 
 ```bash
 uv run main.py --mode capture --session-recording
-uv run main.py --mode guide "Tea Making" --session-recording
+uv run main.py --mode guide examples/tea-making/guide.yaml --session-recording
 ```
 
 In capture mode, this flag can also be combined with `--output-root PATH`. Refer to the
@@ -85,7 +88,7 @@ uv run --project model-servers procedure_capture_guide_model_servers --stop
 |---|---|
 | `yaml/worker.yaml` | Shared frame and speech detection settings; capture configuration path |
 | `yaml/capture-agent-config.yaml` | Task output directory, sampling rate, and caption interval |
-| `yaml/guide-agent-config.yaml` | Local guide directory and verification timeout |
+| `yaml/guide-agent-config.yaml` | Visual verification timeout |
 | `yaml/media_capture.yaml` | Opt-in session recording output and rendering profile |
 | `yaml/models.json` | Client adapters and endpoints for batch STT, LLM, VLM, and acknowledgement TTS |
 | `model-servers/yaml/<gpu-profile>.yaml` | Local model-server GPU placement and workload budgets |

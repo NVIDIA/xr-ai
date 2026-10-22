@@ -1,8 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-guides_dir: fixtures
-guide: Indicator Check
+guide_path: fixtures/indicator.yaml
 scenes:
   red: {rectangle: red}
 actions:
