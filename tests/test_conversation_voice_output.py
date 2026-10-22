@@ -11,11 +11,10 @@ import sys
 from collections import deque
 
 import pytest
-import xr_ai_conversation._conversation as conversation_module
 import xr_ai_routing._router as router_module
 from xr_ai_conversation import Conversation, ConversationContextUpdate
 from xr_ai_models import ChatStreamEvent, DecisionAnswer, DecisionResponse
-from xr_ai_routing import Admission, AgentExchange, AgentRouter, AgentTurn, RoutingAid, notify_response_started
+from xr_ai_routing import Admission, AgentExchange, AgentRouter, AgentTurn, RoutingAid
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, Topic, subscribe
 from xr_ai_voice import UserQuery, VoiceOutput
 
@@ -76,7 +75,7 @@ async def test_configured_control_output_preserves_concurrent_participant_turn_i
         async def admit(self, turn, *, focused):
             return Admission("clarify", text=f"Clarify {turn.query}")
 
-        async def answer(self, _turn):
+        async def answer(self, _turn, *, started):
             raise AssertionError("clarification does not start destination work")
 
         async def release(self, _participant):
@@ -185,7 +184,9 @@ async def test_conversations_publish_directly_to_shared_typed_topic_with_own_sou
     async with runtime:
         try:
             for index, conversation in enumerate(conversations):
-                result = await conversation.answer(AgentTurn("alice", f"turn-{index}", "request", timestamp_us=17))
+                result = await conversation.answer(
+                    AgentTurn("alice", f"turn-{index}", "request", timestamp_us=17), started=lambda: True,
+                )
                 assert result.text == "spoken answer"
             assert [value.text for value, _ in output.items] == ["spoken ", "answer", ""] * 2
             assert [value.interrupt for value, _ in output.items] == [True, False, False] * 2
@@ -229,7 +230,7 @@ async def test_conversation_does_not_retry_or_finalize_failed_typed_publication(
     async with runtime:
         try:
             with pytest.raises(ExceptionGroup):
-                await conversation.answer(AgentTurn("alice", "turn", "request"))
+                await conversation.answer(AgentTurn("alice", "turn", "request"), started=lambda: True)
             assert len(output.items) == failed_frame
             assert not any(value.final for value, _ in output.items)
             assert closed.is_set()
@@ -271,20 +272,22 @@ async def test_answer_after_router_preamble_does_not_interrupt_it():
 
 
 @pytest.mark.parametrize("partial", [False, True])
-async def test_model_failure_is_reported_once_and_partial_stream_is_finalized(partial, monkeypatch):
+async def test_model_failure_is_reported_once_and_partial_stream_is_finalized(partial):
     closed = asyncio.Event()
     notifications = []
     control = []
 
-    def notify():
-        leads = notify_response_started()
-        notifications.append(leads)
-        return leads
-
     async def record_control(_turn, source, text):
         control.append((source, text))
 
-    monkeypatch.setattr(conversation_module, "notify_response_started", notify)
+    class Recording(Conversation):
+        async def answer(self, turn, *, started):
+            def recorded():
+                leads = started()
+                notifications.append(leads)
+                return leads
+
+            return await super().answer(turn, started=recorded)
 
     class LLM:
         def stream_events(self, _messages):
@@ -301,7 +304,7 @@ async def test_model_failure_is_reported_once_and_partial_stream_is_finalized(pa
     runtime = AgentRuntime()
     output = runtime.register("output", _Output())
 
-    conversation = Conversation(LLM(), runtime=runtime, output_topic=OUTPUT)
+    conversation = Recording(LLM(), runtime=runtime, output_topic=OUTPUT)
     router = AgentRouter({"conversation": conversation}, None, output=record_control)
     async with runtime:
         try:

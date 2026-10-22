@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
@@ -142,6 +143,8 @@ class RoutableAgent(Protocol):
     async def answer(
         self,
         turn: AgentTurn,
+        *,
+        started: Callable[[], bool],
     ) -> DestinationResult:
         """Answer a turn after admission or as the configured default fallback.
 
@@ -155,15 +158,18 @@ class RoutableAgent(Protocol):
         Returning ``DestinationResult("release")`` consumes the current request
         after the answer and clears focus; it does not reroute that request.
         Destination exceptions and task cancellation propagate to the caller.
-        Destinations can call
-        ``notify_response_started()`` before their first meaningful output or
-        application action to suppress a pending acknowledgment; its result
-        says whether that output leads the turn or follows router control text.
+        Call ``started()`` immediately before the first meaningful output or
+        application action. It suppresses a pending acknowledgment, supplies
+        the first-response timing sample, and returns whether the response
+        leads the turn's output: ``False`` means router control text such as a
+        preamble or acknowledgment already started this turn, so the response
+        should follow it instead of interrupting it. Repeated calls return the
+        same result, and calls after ``answer()`` returns have no effect.
         Completion and focus still use the return value, with optional response
         context in ``DestinationResult.text`` for the router's history.
         Destinations own output publication and stream finalization. A failure
-        before the response-start notification is reported to the participant
-        by the router; after it, the destination owns any failure output.
+        before ``started()`` is reported to the participant by the router;
+        after it, the destination owns any failure output.
         Cancellation must drain their output and model work before returning.
         A routing ``clarify`` choice with usable scores selects the
         highest-scoring eligible destination through normal admission. Without
@@ -171,6 +177,9 @@ class RoutableAgent(Protocol):
         declines, the default is not retried if
         it already declined this turn, and
         clarification is also used when the configured default is unavailable.
+
+        :param turn: Current request and bounded completed history.
+        :param started: Response-start signal for this answer.
         """
 
     async def release(self, participant_id: str) -> None:

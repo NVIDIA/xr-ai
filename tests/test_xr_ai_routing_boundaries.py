@@ -6,8 +6,8 @@
 import asyncio
 
 import pytest
+from _routing_test_output import destination_output as _destination_output
 from _routing_test_output import emit_control as _emit_control
-from _routing_test_output import emit_destination as _emit_destination
 from _routing_test_output import route as _route
 from xr_ai_models import ChatResponse, DecisionAnswer, DecisionResponse
 from xr_ai_routing import Admission, AgentExchange, AgentRouter, AgentTurn, DestinationResult, RoutingAid
@@ -27,8 +27,8 @@ class _Destination:
     async def admit(self, _turn, *, focused):
         return Admission("accept")
 
-    async def answer(self, turn):
-        emit = _emit_destination
+    async def answer(self, turn, *, started):
+        emit = _destination_output(started)
         self.answers.append(turn.query)
         self.histories.append(turn.history)
         await emit(self.name, "answer")
@@ -57,7 +57,7 @@ async def test_interruption_keeps_cleanup_owned_across_concurrent_operations(ope
     overlap = []
 
     class Destination(_Destination):
-        async def answer(self, turn):
+        async def answer(self, turn, *, started):
             if turn.query == "old":
                 entered.set()
                 try:
@@ -68,7 +68,7 @@ async def test_interruption_keeps_cleanup_owned_across_concurrent_operations(ope
                     cleanup_done.set()
             if not cleanup_done.is_set():
                 overlap.append("answer")
-            return await super().answer(turn)
+            return await super().answer(turn, started=started)
 
         async def release(self, participant):
             if not cleanup_done.is_set():
@@ -117,7 +117,7 @@ async def test_repeated_interrupt_cancellation_does_not_cancel_child_cleanup_aga
     cleanup_done = asyncio.Event()
 
     class Destination(_Destination):
-        async def answer(self, turn):
+        async def answer(self, turn, *, started):
             entered.set()
             try:
                 await asyncio.Event().wait()
@@ -153,7 +153,7 @@ async def test_cancelled_handle_keeps_its_response_owned_until_cleanup_finishes(
     cleanup_done = asyncio.Event()
 
     class Destination(_Destination):
-        async def answer(self, turn):
+        async def answer(self, turn, *, started):
             entered.set()
             try:
                 await asyncio.Event().wait()
@@ -244,7 +244,7 @@ async def test_failed_ineligible_focus_release_does_not_wedge_later_turns():
             )
 
     class Specialist(_Destination):
-        async def answer(self, _turn):
+        async def answer(self, _turn, *, started):
             return DestinationResult("focus", "focused")
 
         async def release(self, participant):
@@ -304,7 +304,7 @@ async def test_closed_admission_is_rechecked_after_replacement_drains_old_respon
     finish = asyncio.Event()
 
     class Destination(_Destination):
-        async def answer(self, turn):
+        async def answer(self, turn, *, started):
             if turn.query == "old":
                 entered.set()
                 try:
@@ -312,7 +312,7 @@ async def test_closed_admission_is_rechecked_after_replacement_drains_old_respon
                 finally:
                     cleaning.set()
                     await finish.wait()
-            return await super().answer(turn)
+            return await super().answer(turn, started=started)
 
     destination = Destination()
     router = AgentRouter({"conversation": destination}, None, output=_emit_control)
@@ -341,7 +341,7 @@ async def test_canceled_cleanup_waiter_owns_the_complete_transition(operation):
     finish_destination = asyncio.Event()
 
     class Destination(_Destination):
-        async def answer(self, turn):
+        async def answer(self, turn, *, started):
             entered.set()
             try:
                 await asyncio.Event().wait()
@@ -470,8 +470,8 @@ async def test_canceled_shutdown_preserves_a_cleanup_failure_as_its_cause():
 @pytest.mark.parametrize("target", ["alice", "bob"])
 async def test_destination_cannot_deadlock_by_awaiting_router_operations(operation, target):
     class Destination(_Destination):
-        async def answer(self, turn):
-            emit = _emit_destination
+        async def answer(self, turn, *, started):
+            emit = _destination_output(started)
             if operation == "interrupt":
                 await router.interrupt(target)
             elif operation == "departure":
@@ -492,9 +492,9 @@ async def test_acknowledgment_callback_inherits_router_ownership(child_callback,
     callback_done = asyncio.Event()
 
     class Destination(_Destination):
-        async def answer(self, turn):
+        async def answer(self, turn, *, started):
             await finish_answer.wait()
-            return await super().answer(turn)
+            return await super().answer(turn, started=started)
 
     class Decisions:
         async def decide(self, _state, _questions):

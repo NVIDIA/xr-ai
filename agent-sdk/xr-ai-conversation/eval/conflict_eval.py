@@ -60,7 +60,7 @@ async def _seed(
         clock.advance(step_minutes)
         if "say" in step:
             llm.answer = step["say"]["assistant"]
-            await conversation.answer(AgentTurn(_PARTICIPANT, str(index), step["say"]["user"]))
+            await conversation.answer(AgentTurn(_PARTICIPANT, str(index), step["say"]["user"]), started=lambda: True)
         else:
             publication = step["publish"]
             await runtime.publish(

@@ -19,12 +19,13 @@ its application code predates the update.
 
 ### Routed agents publish their own output
 
-`RoutableAgent.answer()` now accepts only `turn`. Move destination answer
+`RoutableAgent.answer()` now accepts `turn` and a keyword-only `started`
+callable instead of `emit`. Move destination answer
 publication out of the router's `emit` callback and into each agent. Return
 `DestinationResult.text` when completed response context is needed for later
 routing; `routing_aid(participant_id)` remains the explicit source of each
-agent's routing context. Call `notify_response_started()` when the first
-meaningful response is ready to suppress a pending acknowledgment.
+agent's routing context. Call `started()` when the first meaningful response
+is ready to suppress a pending acknowledgment.
 
 Move the router's own finite control callback from `handle(..., emit=callback)`
 to constructor configuration with `AgentRouter(..., output=callback)`, then call

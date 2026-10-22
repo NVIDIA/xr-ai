@@ -9,7 +9,7 @@ import asyncio
 from collections.abc import Awaitable, Callable
 from contextvars import ContextVar
 
-from xr_ai_routing import AgentRouter, AgentTurn, DestinationResult, notify_response_started
+from xr_ai_routing import AgentRouter, AgentTurn, DestinationResult
 
 _sink: ContextVar[Callable[[str, str], Awaitable[None]]] = ContextVar("test_destination_output")
 
@@ -18,12 +18,19 @@ async def emit_control(_turn: AgentTurn, source: str, text: str) -> None:
     await _sink.get()(source, text)
 
 
-async def emit_destination(source: str, text: str) -> None:
-    task = asyncio.current_task()
-    if task is not None and task.cancelling():
-        raise asyncio.CancelledError
-    if text.strip():
-        notify_response_started()
+def destination_output(started: Callable[[], bool]) -> Callable[[str, str], Awaitable[None]]:
+    async def emit(source: str, text: str) -> None:
+        task = asyncio.current_task()
+        if task is not None and task.cancelling():
+            raise asyncio.CancelledError
+        if text.strip():
+            started()
+        await _sink.get()(source, text)
+
+    return emit
+
+
+async def publish_output(source: str, text: str) -> None:
     await _sink.get()(source, text)
 
 

@@ -31,7 +31,6 @@ from ._history import (
     _active_history_timestamps,
     _format_minute,
 )
-from ._progress import _response_started
 
 _DEFAULT_CONTEXT_BUDGET_BYTES = 12_000
 _ACKNOWLEDGMENT_MAX_TOKENS = 64
@@ -89,8 +88,8 @@ class AgentRouter:
     Acknowledgments use a bounded output-token budget. A positive delay sets
     the fallback silence threshold; a confident prediction
     of a slower first answer can start the acknowledgment earlier. The
-    destination still starts immediately. Its ``notify_response_started()``
-    notification cancels any acknowledgment
+    destination still starts immediately. Its ``started()`` response signal
+    cancels any acknowledgment
     that has not yet been emitted. This suppresses
     pending output, not audio already queued or played by downstream transports.
     The delay and timing examples start after admission and measure when the
@@ -237,7 +236,6 @@ class AgentRouter:
                         raise
 
             async def run_handle() -> DestinationResult:
-                progress_token = _response_started.set(None)
                 timestamp_token = _active_history_timestamps.set(timestamps)
                 history_id_token = _active_history_exchange_ids.set(exchange_ids)
                 current_id_token = _active_exchange_id.set(current_exchange_id)
@@ -253,7 +251,6 @@ class AgentRouter:
                     _active_exchange_id.reset(current_id_token)
                     _active_history_exchange_ids.reset(history_id_token)
                     _active_history_timestamps.reset(timestamp_token)
-                    _response_started.reset(progress_token)
 
             task = asyncio.create_task(
                 run_handle(),
@@ -607,12 +604,10 @@ class AgentRouter:
                         cleanup_errors=acknowledgment_cleanup_errors,
                     )
                 )
-            progress_token = _response_started.set(response_started)
             try:
-                result = await destination.answer(turn)
+                result = await destination.answer(turn, started=response_started)
             finally:
                 response_open = False
-                _response_started.reset(progress_token)
                 if acknowledgment_task is not None:
                     if not acknowledgment_committed.is_set():
                         if not acknowledgment_task.cancelling():

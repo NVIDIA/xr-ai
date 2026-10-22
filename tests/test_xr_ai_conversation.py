@@ -12,9 +12,9 @@ from unittest.mock import patch
 
 import pytest
 import xr_ai_conversation as conversation_package
-import xr_ai_conversation._conversation as conversation_module
+from _routing_test_output import destination_output as _destination_output
 from _routing_test_output import emit_control as _emit_control
-from _routing_test_output import emit_destination as _emit_destination
+from _routing_test_output import publish_output as _publish_output
 from _routing_test_output import route as _route
 from xr_ai_conversation import Conversation, ConversationContextUpdate
 from xr_ai_conversation._context import (
@@ -32,7 +32,6 @@ from xr_ai_routing import (
     DestinationResult,
     RoutableAgent,
     RoutingAid,
-    notify_response_started,
 )
 from xr_ai_runtime import AgentRuntime, Topic
 from xr_ai_voice import VoiceOutput
@@ -45,7 +44,7 @@ _OUTPUT_TOPIC = Topic("conversation-test.output", VoiceOutput)
 class _ConversationRuntime:
     async def publish(self, _topic, message, *, source, **_kwargs):
         if message.text:
-            await _emit_destination(source, message.text)
+            await _publish_output(source, message.text)
 
 
 
@@ -159,7 +158,7 @@ async def test_conversation_is_a_normal_front_end_destination_with_completed_his
 
 
 @pytest.mark.asyncio
-async def test_conversation_notifies_before_delivery_and_preserves_answer_context(monkeypatch):
+async def test_conversation_notifies_before_delivery_and_preserves_answer_context():
     events = []
 
     class LLM(_LLM):
@@ -169,16 +168,19 @@ async def test_conversation_notifies_before_delivery_and_preserves_answer_contex
                     yield ChatStreamEvent(kind="text", text=text)
             return chunks()
 
-    def notify():
-        leads = notify_response_started()
-        events.append(("started", leads))
-        return leads
+    class Recording(Conversation):
+        async def answer(self, turn, *, started):
+            def recorded():
+                leads = started()
+                events.append(("started", leads))
+                return leads
+
+            return await super().answer(turn, started=recorded)
 
     async def emit(source, text):
         events.append((source, text))
 
-    monkeypatch.setattr(conversation_module, "notify_response_started", notify)
-    conversation = Conversation(LLM(), runtime=_ConversationRuntime(), output_topic=_OUTPUT_TOPIC)
+    conversation = Recording(LLM(), runtime=_ConversationRuntime(), output_topic=_OUTPUT_TOPIC)
     router = AgentRouter({"conversation": conversation}, _Decisions(), output=_emit_control)
     result = await _route(router, AgentTurn("alice", "turn-1", "Hello."), emit=emit)
 
@@ -219,8 +221,8 @@ async def test_conversation_reconciles_recent_front_end_window_after_another_des
         async def admit(self, _turn, *, focused):
             return Admission("accept")
 
-        async def answer(self, _turn):
-            emit = _emit_destination
+        async def answer(self, _turn, *, started):
+            emit = _destination_output(started)
             answer = "Added the blue cube to the room."
             await emit("scene", answer)
             return DestinationResult("answer", answer)
@@ -289,8 +291,8 @@ async def test_unknown_seed_does_not_mask_a_later_identical_routed_exchange():
         async def admit(self, _turn, *, focused):
             return Admission("accept")
 
-        async def answer(self, _turn):
-            emit = _emit_destination
+        async def answer(self, _turn, *, started):
+            emit = _destination_output(started)
             answer = "Added the blue cube to the room."
             await emit("scene", answer)
             return DestinationResult("answer", answer)
@@ -347,7 +349,7 @@ async def test_admission_release_text_and_rerouted_answer_keep_separate_history_
         async def admit(self, _turn, *, focused):
             return Admission("release", text="Leaving the scene task.")
 
-        async def answer(self, _turn):  # pragma: no cover - release skips answer
+        async def answer(self, _turn, *, started):  # pragma: no cover - release skips answer
             raise AssertionError("released destination must not answer")
 
         async def release(self, _participant_id):
@@ -1296,7 +1298,9 @@ async def test_cancelled_answer_closes_the_model_stream_and_records_nothing():
 
     conversation = Conversation(_BlockingStreamLLM(), runtime=Runtime(), output_topic=_OUTPUT_TOPIC)  # type: ignore[arg-type]
 
-    answering = asyncio.create_task(conversation.answer(AgentTurn("alice", "turn-1", "Tell me a story.")))
+    answering = asyncio.create_task(
+        conversation.answer(AgentTurn("alice", "turn-1", "Tell me a story."), started=lambda: True)
+    )
     await asyncio.wait_for(first_chunk.wait(), 1)
     answering.cancel()
     with pytest.raises(asyncio.CancelledError):
@@ -1394,7 +1398,7 @@ async def test_output_failure_closes_model_without_recording_partial_context():
     runtime = Runtime()
     conversation = Conversation(LLM(), runtime=runtime, output_topic=_OUTPUT_TOPIC)
     with pytest.raises(RuntimeError, match="output publication failed"):
-        await conversation.answer(AgentTurn("alice", "turn", "request"))
+        await conversation.answer(AgentTurn("alice", "turn", "request"), started=lambda: True)
     assert closed.is_set()
     assert runtime.attempts == 1
     assert conversation._context.transcript("alice") == ()

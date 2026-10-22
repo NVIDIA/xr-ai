@@ -65,7 +65,9 @@ async def run_session(llm: LLMService, name: str, sample_override: int | None) -
                             participant_id=participant,
                         )
                     started = time.perf_counter()
-                    await conversation.answer(AgentTurn(participant, str(index), expand(turn["user"])))
+                    await conversation.answer(
+                        AgentTurn(participant, str(index), expand(turn["user"])), started=lambda: True,
+                    )
                     answered = time.perf_counter() - started
                     await settle(conversation, participant)
                     summary, recent = conversation._context.dialogue_snapshot(participant)

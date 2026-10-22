@@ -89,28 +89,23 @@ error.
 
 ## Response progress and routing context
 
-Destinations can call `notify_response_started()` immediately before their
-first meaningful output or application action. The notification contains no
-response text. Destinations publish their output directly. It suppresses a pending optional acknowledgment and
-supplies the first-response timing sample if the answer completes successfully.
-It does not deliver output, complete the turn, change focus, or add history.
-Return a `DestinationResult` for completion and focus; exceptions still report
-failure to the caller. A turn that fails before its destination notifies sends
-one brief failure message through the router's output; after the notification,
-the destination owns any failure output. Callers should not publish another.
+The router calls `answer(turn, started=...)`. Destinations call `started()`
+immediately before their first meaningful output or application action. The
+signal contains no response text; destinations publish their output directly.
+It suppresses a pending optional acknowledgment and supplies the first-response
+timing sample if the answer completes successfully. It does not deliver output,
+complete the turn, change focus, or add history. Return a `DestinationResult`
+for completion and focus; exceptions still report failure to the caller. A turn
+that fails before its destination calls `started()` sends one brief failure
+message through the router's output; after that call, the destination owns any
+failure output. Callers should not publish another.
 
-The notification returns whether the response leads the turn's output. It
-returns `False` when the router already delivered or committed control text for
-the turn, such as an admission preamble or acknowledgment; the destination
-should then follow that output instead of interrupting it.
-
-The notification applies only during the current destination's `answer()` call,
-including its child-task contexts. Only the first notification changes router
-state; repeated notifications return the same result, and calls outside a routed
-answer return `True`. A retained context from a completed or interrupted answer
-returns `False` and cannot notify a later turn,
-including after departure and rejoin. Destinations own and drain their child
-tasks before returning. Call the function from the answer's event loop.
+`started()` returns whether the response leads the turn's output. It returns
+`False` when the router already delivered or committed control text for the
+turn, such as an admission preamble or acknowledgment; the destination should
+then follow that output instead of interrupting it. Only the first call changes
+router state, and repeated calls return the same result. After `answer()`
+returns or is interrupted, the signal returns `False` and has no effect.
 
 `DestinationResult.text` remains optional response context for routing history.
 The router retains supplied text without delivering it as output. A destination

@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from collections.abc import AsyncIterator, Mapping, Sequence
+from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
@@ -26,7 +26,6 @@ from xr_ai_routing import (
     RoutableAgent,
     RoutingAid,
     current_turn_context,
-    notify_response_started,
 )
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeClosedError, Topic
 
@@ -152,11 +151,13 @@ class Conversation(RoutableAgent):
     async def answer(
         self,
         turn: AgentTurn,
+        *,
+        started: Callable[[], bool],
     ) -> DestinationResult:
         """Publish a routed answer directly to the configured voice output topic.
 
         Requires ``runtime`` and ``output_topic``. The first nonblank ready chunk
-        notifies the active router before publication. That body frame
+        calls ``started()`` before publication. That body frame
         interrupts older output unless router control text already started
         this turn, and a final frame closes a completed or failed partial
         response. Cancellation and publication failures do not publish further
@@ -178,7 +179,7 @@ class Conversation(RoutableAgent):
                 if not opened and not text.strip():
                     continue
                 if not opened:
-                    interrupt = notify_response_started()
+                    interrupt = started()
                 task = asyncio.current_task()
                 # A model stream can swallow cancellation; never publish for a canceled answer.
                 if task is not None and task.cancelling():

@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import asyncio
-import contextvars
 import json
 from collections import deque
 from contextlib import contextmanager
@@ -13,8 +12,8 @@ from dataclasses import FrozenInstanceError
 import pytest
 import xr_ai_routing as routing_module
 import xr_ai_routing._router as router_module
+from _routing_test_output import destination_output as _destination_output
 from _routing_test_output import emit_control as _emit_control
-from _routing_test_output import emit_destination as _emit_destination
 from _routing_test_output import route as _route
 from xr_ai_models import ChatResponse, DecisionAnswer, DecisionResponse
 from xr_ai_routing import (
@@ -27,7 +26,6 @@ from xr_ai_routing import (
     RoutingAid,
     RoutingTurnContext,
     current_turn_context,
-    notify_response_started,
 )
 from xr_ai_routing._history import (
     _active_exchange_id,
@@ -52,12 +50,7 @@ def test_routable_agent_is_the_only_destination_protocol_export() -> None:
         "RoutingAid",
         "RoutingTurnContext",
         "current_turn_context",
-        "notify_response_started",
     ]
-
-
-def test_response_started_outside_a_routed_answer_leads_output():
-    assert notify_response_started() is True
 
 
 @pytest.mark.asyncio
@@ -71,10 +64,10 @@ async def test_direct_response_signal_cancels_blocked_ack_without_emitting_text(
     llm = _AcknowledgmentLLM(blocked=True)
 
     class Destination(_AckDestination):
-        async def answer(self, _turn):
+        async def answer(self, _turn, *, started):
             await llm.started.wait()
             await respond.wait()
-            notifications.extend((notify_response_started(), notify_response_started()))
+            notifications.extend((started(), started()))
             responded.set()
             await finish.wait()
             return DestinationResult("focus", "The application updated the scene.")
@@ -109,22 +102,18 @@ async def test_direct_response_signal_cancels_blocked_ack_without_emitting_text(
 @pytest.mark.parametrize("ending", ["completion", "failure", "interrupt", "replacement", "departure", "stop"])
 @pytest.mark.asyncio
 async def test_response_signal_from_old_answer_cannot_affect_later_turn(ending):
-    contexts = {}
+    signals = {}
     entered = {name: asyncio.Event() for name in ("old", "new")}
     finish = {name: asyncio.Event() for name in ("old", "new")}
 
     class Destination(_AckDestination):
-        async def admit(self, turn, *, focused):
-            notify_response_started()
-            return await super().admit(turn, focused=focused)
-
-        async def answer(self, turn):
-            contexts[turn.query] = contextvars.copy_context()
+        async def answer(self, turn, *, started):
+            signals[turn.query] = started
             entered[turn.query].set()
             try:
                 await finish[turn.query].wait()
             except asyncio.CancelledError:
-                notify_response_started()
+                started()
                 raise
             if ending == "failure" and turn.query == "old":
                 raise ValueError("destination failed")
@@ -152,11 +141,11 @@ async def test_response_signal_from_old_answer_cannot_affect_later_turn(ending):
     await asyncio.wait_for(entered["new"].wait(), timeout=1)
     if ending not in {"completion", "failure"}:
         assert isinstance((await asyncio.gather(old, return_exceptions=True))[0], asyncio.CancelledError)
-    assert contexts["old"].run(notify_response_started) is False
-    assert contexts["new"].run(notify_response_started) is True
+    assert signals["old"]() is False
+    assert signals["new"]() is True
     finish["new"].set()
     await asyncio.wait_for(new, timeout=1)
-    assert contexts["new"].run(notify_response_started) is False
+    assert signals["new"]() is False
     assert output == ([("destination", router_module._FAILURE_TEXT)] if ending == "failure" else [])
     assert router._history["alice"] == []
     assert router._focus == {}
@@ -168,12 +157,12 @@ async def test_direct_destination_output_keeps_its_source_and_explicit_progress(
     notifications = []
 
     class Destination(_AckDestination):
-        async def answer(self, _turn):
-            emit = _emit_destination
+        async def answer(self, _turn, *, started):
+            emit = _destination_output(started)
             await emit("wrong-source", " ")
-            notifications.append(notify_response_started())
+            notifications.append(started())
             await emit("wrong-source", "answer")
-            notifications.append(notify_response_started())
+            notifications.append(started())
             return DestinationResult("answer", "routing context")
 
     router = AgentRouter({"destination": Destination()}, None, output=_emit_control, default_destination="destination")
@@ -183,36 +172,6 @@ async def test_direct_destination_output_keeps_its_source_and_explicit_progress(
     assert output == [("wrong-source", " "), ("wrong-source", "answer")]
     assert router._history["alice"] == [AgentExchange("request", "routing context")]
     assert len(router._first_answer_samples["alice"]["destination"]) == 1
-
-
-@pytest.mark.asyncio
-async def test_response_notification_is_scoped_to_answer_and_inherited_by_child_tasks():
-    notifications = []
-
-    async def child_notification():
-        return notify_response_started()
-
-    class Inner(_AckDestination):
-        async def admit(self, turn, *, focused):
-            notifications.append(("inner admission", notify_response_started()))
-            return await super().admit(turn, focused=focused)
-
-        async def answer(self, _turn):
-            notifications.append(("inner answer", await asyncio.create_task(child_notification())))
-            return DestinationResult()
-
-    inner = AgentRouter({"destination": Inner()}, None, output=_emit_control, default_destination="destination")
-
-    class Outer(_AckDestination):
-        async def answer(self, _turn):
-            emit = _emit_destination
-            await _route(inner, AgentTurn("alice", "inner", "inner request"), emit=emit)
-            notifications.append(("outer answer", await asyncio.create_task(child_notification())))
-            return DestinationResult()
-
-    outer = AgentRouter({"destination": Outer()}, None, output=_emit_control, default_destination="destination")
-    await _ack_output(outer, "outer request", [])
-    assert notifications == [("inner admission", True), ("inner answer", True), ("outer answer", True)]
 
 
 class _Prediction:
@@ -328,8 +287,8 @@ class _AckDestination:
     async def admit(self, _turn, *, focused):
         return Admission("accept", preamble=self.preamble)
 
-    async def answer(self, turn):
-        emit = _emit_destination
+    async def answer(self, turn, *, started):
+        emit = _destination_output(started)
         self.calls.append(turn.query)
         self.answer_started.set()
         if self.blocked:
@@ -411,8 +370,8 @@ class _Destination:
         self.calls.append(("admit", turn.query, focused))
         return self.admissions.popleft() if self.admissions else Admission("accept")
 
-    async def answer(self, turn):
-        emit = _emit_destination
+    async def answer(self, turn, *, started):
+        emit = _destination_output(started)
         self.calls.append(("answer", turn.query))
         self.answer_turns.append(turn)
         result = self.results.popleft() if self.results else DestinationResult()
@@ -744,8 +703,8 @@ async def test_destination_error_after_preamble_reports_failure_and_propagates()
             self.fail_once = True
             self.answer_histories = []
 
-        async def answer(self, turn):
-            emit = _emit_destination
+        async def answer(self, turn, *, started):
+            emit = _destination_output(started)
             self.answer_histories.append(turn.history)
             if self.fail_once:
                 self.fail_once = False
@@ -1189,8 +1148,8 @@ async def test_replacement_turn_cancels_old_answer_before_it_can_emit():
             super().__init__("xr")
             self.started = asyncio.Event()
 
-        async def answer(self, turn):
-            emit = _emit_destination
+        async def answer(self, turn, *, started):
+            emit = _destination_output(started)
             self.calls.append(("answer", turn.query))
             if turn.query == "Slow request":
                 self.started.set()
@@ -1294,12 +1253,12 @@ async def test_admission_release_reroute_receives_history_with_separate_exchange
         await _emit_control(turn, source, text)
 
     class _ReroutedDestination(_Destination):
-        async def answer(self, turn):
+        async def answer(self, turn, *, started):
             observed["history"] = turn.history
             observed["timestamps"] = _active_history_timestamps.get()
             observed["history_ids"] = _active_history_exchange_ids.get()
             observed["active_id"] = _active_exchange_id.get()
-            return await super().answer(turn)
+            return await super().answer(turn, started=started)
 
     releasing = _Destination(
         "scene",
@@ -1653,8 +1612,8 @@ async def test_invalid_acknowledgment_uses_neutral_fallback_without_recording_it
 @pytest.mark.asyncio
 async def test_completed_focus_and_release_answers_train_first_answer_timing(disposition):
     class Destination(_AckDestination):
-        async def answer(self, _turn):
-            emit = _emit_destination
+        async def answer(self, _turn, *, started):
+            emit = _destination_output(started)
             await emit("destination", self.answer_text)
             return DestinationResult(disposition, self.answer_text)
 
