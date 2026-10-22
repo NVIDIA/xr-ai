@@ -84,6 +84,49 @@ participant; `interrupt=True` flushes queued hub audio and replaces active
 speech. Without aggregation, producer identity is part of the stream key so
 independent agents cannot merge accidentally.
 
+Agents can use `VoiceOutputPublisher` for one response lifetime. The publisher
+owns framing and awaited delivery; the agent chooses content and fallback
+policy, owns its model iterator, and cancels its response task. Select the output
+topic explicitly: `VOICE_OUTPUT_TOPIC` for direct speech, or
+`VOICE_CONTRIBUTION_TOPIC` when using aggregation.
+
+A finite response uses one final body:
+
+```python
+from xr_ai_voice import VOICE_OUTPUT_TOPIC, VoiceOutputPublisher
+
+async with VoiceOutputPublisher(
+    runtime, VOICE_OUTPUT_TOPIC,
+    participant_id=participant_id, source="notes", response_id=turn_id,
+) as output:
+    await output.send("Saved the note.", final=True)
+```
+
+For incremental output, close the model iterator inside the response context:
+
+```python
+from contextlib import aclosing
+
+async with VoiceOutputPublisher(
+    runtime, VOICE_OUTPUT_TOPIC,
+    participant_id=participant_id, source="observation", response_id=turn_id,
+    timestamp_us=timestamp_us,
+) as output:
+    async with aclosing(model_text_stream) as stream:
+        async for text in stream:
+            await output.send(text)
+```
+
+The first nonblank body interrupts older speech by default. Empty responses
+publish nothing. Normal completion and producer failure close an opened stream;
+cancellation and publication failure emit no further frames. Publication errors
+propagate without retry because some subscribers may already have accepted the
+frame. Application fallback must handle producer failures separately and must
+never retry a failed publication through a new publisher. An optional synchronous
+first-body callback lets the agent report response start without involving the
+router in voice publication. Refer to
+{py:class}`~xr_ai_voice.VoiceOutputPublisher` for the exact contract.
+
 Each running `VoiceAgent` remembers its 1,024 most recently closed stream keys.
 Output that reuses one of those keys is ignored, and the runtime logs one
 warning for that participant, producer, and `response_id`. Streams close by

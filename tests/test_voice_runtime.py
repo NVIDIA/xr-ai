@@ -10,7 +10,7 @@ import inspect
 import sys
 from builtins import ExceptionGroup
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import aclosing, asynccontextmanager
 from unittest.mock import patch
 
 import nemo_relay
@@ -27,6 +27,7 @@ from xr_ai_voice import (
     VoiceAgent,
     VoiceInterrupted,
     VoiceOutput,
+    VoiceOutputPublisher,
     VoiceParticipantJoined,
     VoiceParticipantLeft,
     VoiceStreamClosedError,
@@ -1401,3 +1402,253 @@ async def test_query_delivery_child_cancellation_preserves_owned_task_cancellati
     finally:
         await output._shutdown()
         await output.cleanup()
+
+
+PUBLISHER_TOPIC = Topic("test.voice-producer", VoiceOutput, telemetry="none")
+
+
+class _OutputRecorder(Agent):
+    def __init__(self, *, fail_at: int = 0) -> None:
+        super().__init__()
+        self.frames: list[tuple[VoiceOutput, RuntimeContext]] = []
+        self.fail_at = fail_at
+        self.second_body = asyncio.Event()
+
+    @subscribe(VOICE_OUTPUT_TOPIC)
+    @subscribe(PUBLISHER_TOPIC)
+    async def record(self, output: VoiceOutput, ctx: RuntimeContext) -> None:
+        self.frames.append((output, ctx))
+        if len(self.frames) == 2:
+            self.second_body.set()
+        if len(self.frames) == self.fail_at:
+            raise RuntimeError("publication failed after another subscriber may have accepted it")
+
+
+@pytest.mark.parametrize("finite", [False, True])
+async def test_output_publisher_frames_one_response(finite: bool) -> None:
+    session = _Session()
+    runtime = AgentRuntime()
+    recorder = runtime.register("recorder", _OutputRecorder())
+    voice = runtime.register("voice", _voice_agent(session, response_capacity=1))
+    callbacks: list[int] = []
+    async with _running_voice(runtime, voice, session):
+        async with VoiceOutputPublisher(
+            runtime, VOICE_OUTPUT_TOPIC, participant_id="alice", source="observer",
+            response_id="turn", timestamp_us=123,
+            on_first_body=lambda: callbacks.append(len(recorder.frames)),
+        ) as output:
+            await output.send("  ")
+            assert not output.started
+            await output.send("first", final=finite)
+            assert output.started
+            if not finite:
+                await output.send("")
+                await output.send(" ")
+                await output.send("second")
+        await asyncio.wait_for(session.wait_for(1), 1.0)
+
+    frames = [frame for frame, _ctx in recorder.frames]
+    assert [frame.text for frame in frames] == (["first"] if finite else ["first", " ", "second", ""])
+    assert [frame.final for frame in frames] == ([True] if finite else [False, False, False, True])
+    assert [frame.interrupt for frame in frames] == [True] + [False] * (len(frames) - 1)
+    assert all(frame.response_id == "turn" and frame.timestamp_us == 123 for frame in frames)
+    assert all(
+        ctx.metadata.participant_id == "alice" and ctx.metadata.source == "observer"
+        for _frame, ctx in recorder.frames
+    )
+    assert callbacks == [0]
+    assert session.responses == [("alice", "first" if finite else "first second", True, 123)]
+
+
+async def test_output_publisher_empty_response_and_configured_topic() -> None:
+    runtime = AgentRuntime()
+    recorder = runtime.register("recorder", _OutputRecorder())
+    callbacks: list[bool] = []
+    async with runtime:
+        async with VoiceOutputPublisher(
+            runtime, PUBLISHER_TOPIC, participant_id="alice", source="notes", response_id="empty",
+            on_first_body=lambda: callbacks.append(True),
+        ) as output:
+            await output.send("")
+            await output.send("  ", final=True)
+        assert not recorder.frames
+        assert not callbacks
+        async with VoiceOutputPublisher(
+            runtime, PUBLISHER_TOPIC, participant_id="alice", source="notes", response_id="finite",
+            interrupt=False,
+        ) as output:
+            await output.send("Saved.", final=True)
+            with pytest.raises(ValueError, match="not accepting"):
+                await output.send("duplicate")
+        with pytest.raises(ValueError, match="single-use"):
+            async with output:
+                pytest.fail("publisher was reused")
+    assert [frame for frame, _ctx in recorder.frames] == [
+        VoiceOutput(text="Saved.", response_id="finite", interrupt=False),
+    ]
+
+
+async def test_output_publisher_finalizes_partial_model_failure_after_iterator_cleanup() -> None:
+    runtime = AgentRuntime()
+    recorder = runtime.register("recorder", _OutputRecorder())
+    closed: list[bool] = []
+
+    async def model() -> AsyncIterator[str]:
+        try:
+            yield "partial"
+            raise RuntimeError("model failed")
+        finally:
+            closed.append(True)
+
+    async with runtime:
+        with pytest.raises(RuntimeError, match="model failed"):
+            async with VoiceOutputPublisher(
+                runtime, PUBLISHER_TOPIC, participant_id="alice", source="observer", response_id="partial",
+            ) as output:
+                async with aclosing(model()) as stream:
+                    async for text in stream:
+                        await output.send(text)
+        assert output.started
+    assert closed == [True]
+    assert [(frame.text, frame.final) for frame, _ctx in recorder.frames] == [("partial", False), ("", True)]
+
+
+@pytest.mark.parametrize("fail_at", [1, 2])
+async def test_output_publisher_never_retries_ambiguous_publication(fail_at: int) -> None:
+    runtime = AgentRuntime()
+    recorder = runtime.register("recorder", _OutputRecorder(fail_at=fail_at))
+    async with runtime:
+        with pytest.raises(ExceptionGroup, match="errors during event publication"):
+            async with VoiceOutputPublisher(
+                runtime, PUBLISHER_TOPIC, participant_id="alice", source="observer", response_id="failed",
+            ) as output:
+                try:
+                    await output.send("first")
+                    await output.send("second")
+                except ExceptionGroup:
+                    with pytest.raises(ValueError, match="not accepting"):
+                        await output.send("fallback", final=True)
+                    raise
+    assert len(recorder.frames) == fail_at
+    assert all(not frame.final for frame, _ctx in recorder.frames)
+    assert output.started == (fail_at == 2)
+
+
+async def test_output_publisher_callback_failure_prevents_publication() -> None:
+    runtime = AgentRuntime()
+    recorder = runtime.register("recorder", _OutputRecorder())
+
+    def failed_callback() -> bool:
+        raise RuntimeError("response-start callback failed")
+
+    async with runtime:
+        with pytest.raises(RuntimeError, match="response-start callback failed"):
+            async with VoiceOutputPublisher(
+                runtime, PUBLISHER_TOPIC, participant_id="alice", source="observer", response_id="callback",
+                on_first_body=failed_callback,
+            ) as output:
+                await output.send("body")
+    assert not recorder.frames
+
+
+@pytest.mark.parametrize("opened", [False, True])
+@pytest.mark.parametrize("late_body", [False, True])
+async def test_output_publisher_rejects_suppressed_model_cancellation(opened: bool, late_body: bool) -> None:
+    runtime = AgentRuntime()
+    recorder = runtime.register("recorder", _OutputRecorder())
+    waiting = asyncio.Event()
+    closed: list[bool] = []
+    callbacks: list[bool] = []
+
+    async def model() -> AsyncIterator[str]:
+        try:
+            if opened:
+                yield "first"
+            waiting.set()
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                # Emulate an external producer that swallows cancellation.
+                if late_body:
+                    yield "stale"
+        finally:
+            closed.append(True)
+
+    async def produce() -> None:
+        async with VoiceOutputPublisher(
+            runtime, PUBLISHER_TOPIC, participant_id="alice", source="observer", response_id="cancelled",
+            on_first_body=lambda: callbacks.append(True),
+        ) as output:
+            async with aclosing(model()) as stream:
+                async for text in stream:
+                    await output.send(text)
+
+    async with runtime:
+        task = asyncio.create_task(produce())
+        await asyncio.wait_for(waiting.wait(), 1.0)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+    assert closed == [True]
+    assert [(frame.text, frame.final) for frame, _ctx in recorder.frames] == ([("first", False)] if opened else [])
+    assert callbacks == ([True] if opened else [])
+
+
+@pytest.mark.parametrize("cancelled", [False, True])
+async def test_output_publisher_awaits_bounded_voice_consumer(cancelled: bool) -> None:
+    class HeldSession(_Session):
+        def __init__(self) -> None:
+            super().__init__()
+            self.stream: AsyncIterator[str] | None = None
+
+        async def enqueue_response(self, _participant_id, response, **_options) -> None:
+            self.stream = response
+
+    session = HeldSession()
+    runtime = AgentRuntime()
+    recorder = runtime.register("recorder", _OutputRecorder())
+    voice = runtime.register("voice", _voice_agent(session, response_capacity=1))
+    resumed = asyncio.Event()
+
+    async def produce() -> None:
+        async with VoiceOutputPublisher(
+            runtime, VOICE_OUTPUT_TOPIC, participant_id="alice", source="observer", response_id="bounded",
+        ) as output:
+            await output.send("first")
+            await output.send("second")
+            resumed.set()
+
+    async with _running_voice(runtime, voice, session):
+        task = asyncio.create_task(produce())
+        try:
+            await asyncio.wait_for(recorder.second_body.wait(), 1.0)
+            assert not resumed.is_set()
+            assert session.stream is not None
+            if cancelled:
+                task.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await task
+                assert not resumed.is_set()
+                assert len(recorder.frames) == 2
+                assert all(not frame.final for frame, _ctx in recorder.frames)
+            else:
+                assert await anext(session.stream) == "first"
+                await asyncio.wait_for(task, 1.0)
+                assert resumed.is_set()
+                assert [text async for text in session.stream] == ["second"]
+        finally:
+            if not task.done():
+                task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
+
+async def test_output_publisher_propagates_finalization_failure() -> None:
+    runtime = AgentRuntime()
+    recorder = runtime.register("recorder", _OutputRecorder(fail_at=2))
+    async with runtime:
+        with pytest.raises(ExceptionGroup, match="errors during event publication"):
+            async with VoiceOutputPublisher(
+                runtime, PUBLISHER_TOPIC, participant_id="alice", source="observer", response_id="finalization",
+            ) as output:
+                await output.send("body")
+    assert [(frame.text, frame.final) for frame, _ctx in recorder.frames] == [("body", False), ("", True)]
