@@ -273,7 +273,13 @@ class DecisionService(Protocol):
 
 @runtime_checkable
 class LLMService(Protocol):
-    """Structural interface for text chat-completion services."""
+    """Structural interface for text chat-completion services.
+
+    ``enable_thinking`` requests or suppresses model reasoning for one call;
+    ``None`` uses the endpoint's configured default.  The endpoint renders it
+    in the model's own dialect, and models without a switch ignore it.
+    ``thinking_budget`` caps reasoning tokens where the model supports it.
+    """
 
     capabilities: Capabilities
     """Features supported by this service."""
@@ -285,7 +291,7 @@ class LLMService(Protocol):
         tools: Sequence[ToolDef] | None = None,
         max_tokens: int | None = None,
         temperature: float | None = None,
-        enable_thinking: bool = False,
+        enable_thinking: bool | None = None,
         thinking_budget: int | None = None,
         timeout: float | None = None,
         headers: Mapping[str, str] | None = None,
@@ -301,7 +307,7 @@ class LLMService(Protocol):
         tools: Sequence[ToolDef] | None = None,
         max_tokens: int | None = None,
         temperature: float | None = None,
-        enable_thinking: bool = False,
+        enable_thinking: bool | None = None,
         thinking_budget: int | None = None,
         timeout: float | None = None,
         headers: Mapping[str, str] | None = None,
@@ -317,7 +323,7 @@ class LLMService(Protocol):
         tools: Sequence[ToolDef] | None = None,
         max_tokens: int | None = None,
         temperature: float | None = None,
-        enable_thinking: bool = False,
+        enable_thinking: bool | None = None,
         thinking_budget: int | None = None,
         timeout: float | None = None,
         headers: Mapping[str, str] | None = None,

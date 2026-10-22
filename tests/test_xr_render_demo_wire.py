@@ -19,6 +19,7 @@ import pytest
 from xr_ai_models import (
     ChatMessage,
     OpenAICompatLLM,
+    ThinkingSpec,
     ToolDef,
     load_models_config,
 )
@@ -47,13 +48,15 @@ _MODELS_CONFIG = (
 
 def _make_llm(stub: StubOpenAI, *, model_name: str = "llm",
               reasoning_field: str | None = None,
-              default_extras: dict | None = None) -> OpenAICompatLLM:
+              default_extras: dict | None = None,
+              thinking: ThinkingSpec | None = None) -> OpenAICompatLLM:
     """Build an LLM client wired to a StubOpenAI transport."""
     return OpenAICompatLLM(
         "http://stub",
         model_name,
         reasoning_field=reasoning_field,
         default_extras=default_extras,
+        thinking=thinking,
         client=stub.client(),
     )
 
@@ -66,6 +69,7 @@ def _make_spec_llm(stub: StubOpenAI, name: str) -> OpenAICompatLLM:
         model_name=spec.model_name,
         reasoning_field=spec.reasoning_field,
         default_extras=spec.default_extras,
+        thinking=spec.adapter.thinking,
     )
 
 
@@ -157,7 +161,7 @@ def test_models_config_loads() -> None:
     # which burns short reply budgets on hidden reasoning and returns empty
     # content with finish_reason="length".
     assert llm_spec.model_name == "llm"
-    assert llm_spec.default_extras["chat_template_kwargs"] == {"enable_thinking": False}
+    assert llm_spec.adapter.thinking == ThinkingSpec(control="chat_template", default=False)
     assert vlm_spec.model_name == "vlm"
     assert vlm_spec.capabilities["vision"] is True
 

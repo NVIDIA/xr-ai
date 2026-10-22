@@ -3,10 +3,10 @@
 
 """OpenAI-compatible HTTP clients for model service protocols.
 
-Per-model quirks (reasoning field name, mandatory ``chat_template_kwargs``)
-are absorbed by ``reasoning_field`` and ``default_extras`` on the
-constructor; per-call quirks (``enable_thinking``, ``thinking_budget``)
-fold into ``chat_template_kwargs`` on the wire.
+Per-model quirks (reasoning field name, mandatory request fields) are
+absorbed by ``reasoning_field`` and ``default_extras`` on the constructor.
+The reasoning switch is rendered by the endpoint's ``ThinkingSpec``, so a
+per-call ``enable_thinking`` reaches each model in its own dialect.
 """
 from __future__ import annotations
 
@@ -22,7 +22,12 @@ from urllib.parse import urlparse
 import httpx
 from loguru import logger
 
-from ._utils import merge_dicts
+from ._thinking import (
+    ThinkingSpec,
+    apply_thinking,
+    check_legacy_conflict,
+    lift_legacy_default,
+)
 from ._protocols import (
     Capabilities,
     ChatMessage,
@@ -278,6 +283,7 @@ class OpenAICompatLLM:
         capabilities: Capabilities | None = None,
         reasoning_field: str | None = None,
         default_extras: dict[str, Any] | None = None,
+        thinking: ThinkingSpec | None = None,
         api_key_env: str | None = None,
         timeout: float = 60.0,
         health_check: bool = True,
@@ -294,7 +300,11 @@ class OpenAICompatLLM:
         """Features declared for this model endpoint."""
 
         self._reasoning_field = reasoning_field
-        self._default_extras  = default_extras or {}
+        thinking = thinking or ThinkingSpec()
+        check_legacy_conflict(thinking, default_extras or {})
+        self._thinking, self._default_extras = lift_legacy_default(
+            thinking, default_extras or {},
+        )
         self._api_key = os.environ.get(api_key_env) if api_key_env else None
         _warn_if_cleartext_key(base_url, self._api_key)
         self._health_check = health_check
@@ -308,7 +318,7 @@ class OpenAICompatLLM:
         tools: Sequence[ToolDef] | None,
         max_tokens: int | None,
         temperature: float | None,
-        enable_thinking: bool,
+        enable_thinking: bool | None,
         thinking_budget: int | None,
         stream: bool,
     ) -> dict[str, Any]:
@@ -325,16 +335,12 @@ class OpenAICompatLLM:
         if temperature is not None:
             payload["temperature"] = temperature
 
-        per_call: dict[str, Any] = {}
-        if enable_thinking or thinking_budget is not None:
-            tpl: dict[str, Any] = {}
-            if enable_thinking:
-                tpl["enable_thinking"] = True
-            if thinking_budget is not None:
-                tpl["thinking_budget"] = thinking_budget
-            per_call["chat_template_kwargs"] = tpl
-        for k, v in merge_dicts(self._default_extras, per_call).items():
+        for k, v in self._default_extras.items():
             payload[k] = v
+        apply_thinking(
+            self._thinking, payload,
+            enable_thinking=enable_thinking, thinking_budget=thinking_budget,
+        )
         return payload
 
     async def chat(
@@ -344,7 +350,7 @@ class OpenAICompatLLM:
         tools: Sequence[ToolDef] | None = None,
         max_tokens: int | None = None,
         temperature: float | None = None,
-        enable_thinking: bool = False,
+        enable_thinking: bool | None = None,
         thinking_budget: int | None = None,
         timeout: float | None = None,
         headers: Mapping[str, str] | None = None,
@@ -378,7 +384,7 @@ class OpenAICompatLLM:
         tools: Sequence[ToolDef] | None = None,
         max_tokens: int | None = None,
         temperature: float | None = None,
-        enable_thinking: bool = False,
+        enable_thinking: bool | None = None,
         thinking_budget: int | None = None,
         timeout: float | None = None,
         headers: Mapping[str, str] | None = None,
@@ -425,7 +431,7 @@ class OpenAICompatLLM:
         tools: Sequence[ToolDef] | None = None,
         max_tokens: int | None = None,
         temperature: float | None = None,
-        enable_thinking: bool = False,
+        enable_thinking: bool | None = None,
         thinking_budget: int | None = None,
         timeout: float | None = None,
         headers: Mapping[str, str] | None = None,
@@ -614,6 +620,7 @@ class OpenAICompatVLM:
         *,
         capabilities: Capabilities | None = None,
         default_extras: dict[str, Any] | None = None,
+        thinking: ThinkingSpec | None = None,
         api_key_env: str | None = None,
         timeout: float = 60.0,
         health_check: bool = True,
@@ -625,6 +632,7 @@ class OpenAICompatVLM:
             model_name,
             capabilities=capabilities or Capabilities(vision=True),
             default_extras=default_extras,
+            thinking=thinking,
             api_key_env=api_key_env,
             timeout=timeout,
             health_check=health_check,

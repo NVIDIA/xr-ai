@@ -22,6 +22,9 @@ dependencies = [
     # FlashInfer NVFP4 MoE kernels. 0.27.0 is the security floor that fixes
     # CVE-2026-73558 while retaining the model-card-required features.
     "vllm>=0.30.0",
+    # CVE-2026-59951: reclaim stateful Streamable HTTP sessions.
+    "mcp>=2.2.0",
+    "pillow>=13.0.0",
     "pyyaml>=6.0",
     # Xet speeds up weight download on first run.
     "huggingface-hub>=0.32.0",

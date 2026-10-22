@@ -1,0 +1,165 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Context where a summary disagrees with material from a different time. Each
+# case is seeded through the engine's public flow: ``say`` records a turn with
+# a scripted answer and ``publish`` sends a topic update. Compaction runs for
+# real with the scripted ``summaries`` (keyed by "dialogue" or a topic name),
+# and ``expect`` checks the seeded shape: which sections hold a summary and
+# which text is still verbatim. The question is then answered by the model
+# under evaluation; ``accept`` and ``reject`` are grader self-checks.
+samples: 5
+# Minutes between seeding steps, as in a real session.
+step_minutes: 3
+# Each case must be answered correctly in at least this share of samples.
+min_pass_rate: 0.8
+filler: &filler
+  user: "Unrelated: please list three general tips for keeping a workspace tidy and safe during long sessions."
+  assistant: "Keep walkways clear, label containers, and wipe spills immediately."
+
+cases:
+  - name: correction-after-stale-dialogue-summary
+    dialogue_budget_bytes: 600
+    summaries:
+      dialogue: The user's calibration meeting is on Monday at 3 pm in room B214.
+    steps:
+      - say: {user: "The calibration meeting is on Monday at 3pm in room B214.", assistant: "Noted."}
+      - say: *filler
+      - say: *filler
+      - say: {user: "Correction: the meeting moved to Tuesday, same time and room.", assistant: "Noted, Tuesday."}
+    expect: {summarized: [dialogue], verbatim: ["moved to Tuesday"]}
+    question: Which day is the calibration meeting? Answer with only the day.
+    any_of: [tuesday]
+    none_of: [monday]
+    accept: ["Tuesday", "**Tuesday**"]
+    reject: ["Monday", "Monday or Tuesday"]
+
+  - name: source-update-after-stale-source-summary
+    incremental_topics: {lab.notes: 600}
+    summaries:
+      lab.notes: Bench 3 has a cracked cuvette holder; do not use bench 3.
+    steps:
+      - publish: {topic: lab.notes, text: "Bench 3 has a cracked cuvette holder; do not use bench 3."}
+      - publish: {topic: lab.notes, text: "Routine check: all fume hoods passed their weekly airflow test this morning."}
+      - publish: {topic: lab.notes, text: "Routine check: eyewash stations were flushed and logged by the safety officer."}
+      - publish: {topic: lab.notes, text: "Bench 3 holder replaced; bench 3 is usable again."}
+    expect: {summarized: [lab.notes], verbatim: ["usable again"]}
+    question: Can I use bench 3 right now? Answer yes or no.
+    any_of: ["yes"]
+    none_of: ["no", "not"]
+    accept: ["Yes.", "Yes, bench 3 is usable again."]
+    reject: ["No.", "No, bench 3 isn't usable.", "Yesterday it was not."]
+
+  - name: dialogue-summary-newer-than-uncompacted-topic-update
+    dialogue_budget_bytes: 600
+    incremental_topics: {lab.notes: 4000}
+    summaries:
+      dialogue: The user swapped reference lamps and will use HL-2000-77 from now on.
+    steps:
+      - publish: {topic: lab.notes, text: "Reference lamp in use is HL-1000-12."}
+      - say: {user: "We swapped lamps: use HL-2000-77 from now on.", assistant: "Understood, HL-2000-77 from now on."}
+      - say: *filler
+      - say: *filler
+    expect: {summarized: [dialogue], verbatim: ["HL-1000-12"]}
+    question: Which reference lamp should I use? Answer with only the lamp identifier.
+    any_of: [hl-2000-77]
+    none_of: [hl-1000-12]
+    accept: ["HL-2000-77"]
+    reject: ["HL-1000-12", "HL-1000-12 or HL-2000-77"]
+
+  - name: topic-update-inside-a-later-dialogue-summary-span
+    dialogue_budget_bytes: 600
+    incremental_topics: {lab.notes: 4000}
+    summaries:
+      dialogue: The user said bench 3 is broken and must not be used.
+    steps:
+      - say: {user: "Bench 3 is broken, don't use it.", assistant: "Noted, bench 3 is out of use."}
+      - publish: {topic: lab.notes, text: "Bench 3 repaired; usable again."}
+      - say: *filler
+      - say: *filler
+    expect: {summarized: [dialogue], verbatim: ["usable again"]}
+    question: Can I use bench 3 right now? Answer yes or no.
+    any_of: ["yes"]
+    none_of: ["no", "not"]
+    accept: ["Yes."]
+    reject: ["No.", "No, it is broken."]
+
+  - name: newest-summary-topic-state
+    summary_topics: {tea.status: 400}
+    steps:
+      - say: {user: "Start a 4 minute timer for the tea.", assistant: "Started a 4 minute timer."}
+      - publish: {topic: tea.status, text: "Timer is at 6 minutes; steeping is complete."}
+    expect: {verbatim: ["steeping is complete"]}
+    question: Is the tea done steeping? Answer yes or no.
+    any_of: ["yes"]
+    none_of: ["no", "not"]
+    accept: ["Yes.", "Yes, it is done."]
+    reject: ["No.", "Not yet."]
+
+  - name: user-name-in-dialogue-summary-beside-another-person
+    dialogue_budget_bytes: 600
+    summaries:
+      dialogue: The user's name is Priya; she is setting up a spectrometer lab and is allergic to latex.
+    steps:
+      - publish: {topic: lab.notes, text: "Jonas owns the cooling loop."}
+      - say: {user: "Hi, I'm Priya and I'm setting up the spectrometer lab.", assistant: "Hi Priya."}
+      - say: *filler
+      - say: *filler
+    incremental_topics: {lab.notes: 4000}
+    expect: {summarized: [dialogue], verbatim: ["Jonas"]}
+    question: What is my name? Answer with only the name.
+    any_of: [priya]
+    none_of: [jonas]
+    accept: ["Priya"]
+    reject: ["Jonas", "I don't know your name."]
+
+  # Held-out entities: none of these facts appear in the compaction prompts.
+  - name: held-out-gate-change-after-stale-dialogue-summary
+    dialogue_budget_bytes: 600
+    incremental_topics: {airport.feed: 4000}
+    summaries:
+      dialogue: The user is flying on UA 882, which departs from gate B12.
+    steps:
+      - say: {user: "I'm on UA 882; the boarding pass says gate B12.", assistant: "Got it, gate B12."}
+      - say: *filler
+      - say: *filler
+      - publish: {topic: airport.feed, text: "UA 882 gate changed to C4."}
+    expect: {summarized: [dialogue], verbatim: ["gate changed to C4"]}
+    question: Which gate does my flight leave from? Answer with only the gate.
+    any_of: [c4]
+    none_of: [b12]
+    accept: ["C4", "Gate C4"]
+    reject: ["B12", "B12 or C4"]
+
+  - name: held-out-dose-correction-after-stale-dialogue-summary
+    dialogue_budget_bytes: 600
+    summaries:
+      dialogue: The user takes 200 mg of the anti-inflammatory twice a day.
+    steps:
+      - say: {user: "I take 200 mg of the anti-inflammatory twice a day.", assistant: "Noted."}
+      - say: *filler
+      - say: *filler
+      - say: {user: "My doctor changed it: it's 400 mg twice a day now.", assistant: "Noted, 400 mg."}
+    expect: {summarized: [dialogue], verbatim: ["400 mg"]}
+    question: What dose of the anti-inflammatory do I take now? Answer with only the dose.
+    any_of: [400 mg]
+    none_of: [200 mg]
+    accept: ["400 mg", "400 mg twice a day"]
+    reject: ["200 mg", "200 mg or 400 mg"]
+
+  - name: held-out-move-summarized-after-older-topic-update
+    dialogue_budget_bytes: 600
+    incremental_topics: {warehouse.feed: 4000}
+    summaries:
+      dialogue: The user moved pallet 7 to aisle 9.
+    steps:
+      - publish: {topic: warehouse.feed, text: "Pallet 7 is stored in aisle 3."}
+      - say: {user: "I just moved pallet 7 to aisle 9.", assistant: "Noted, pallet 7 is in aisle 9."}
+      - say: *filler
+      - say: *filler
+    expect: {summarized: [dialogue], verbatim: ["aisle 3"]}
+    question: Which aisle is pallet 7 in? Answer with only the aisle number.
+    any_of: ["9"]
+    none_of: ["3"]
+    accept: ["9", "Aisle 9"]
+    reject: ["3", "Aisle 3"]

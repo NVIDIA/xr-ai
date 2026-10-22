@@ -16,9 +16,7 @@ NEMOTRON_OMNI = {
     "kind":            "openai_compat",
     "model_name":      "llm",
     "reasoning_field": "reasoning_content",
-    "default_extras": {
-        "chat_template_kwargs": {"enable_thinking": False},
-    },
+    "thinking": {"control": "chat_template", "default": False},
     "capabilities": {
         "streaming":  True,
         "tool_calls": True,

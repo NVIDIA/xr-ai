@@ -30,6 +30,7 @@ from xr_ai_models import (
     OpenAICompatSTT,
     OpenAICompatTTS,
     OpenAICompatVLM,
+    ThinkingSpec,
     ToolDef,
 )
 from xr_ai_models._openai_compat import _PocketTTS
@@ -291,6 +292,151 @@ async def test_llm_chat_default_extras_merged_with_per_call() -> None:
         "enable_thinking": False,
         "thinking_budget": 256,
     }
+
+
+async def test_llm_chat_per_call_thinking_overrides_default_extras() -> None:
+    # A legacy YAML default of thinking-on must not win over an explicit off.
+    stub = StubOpenAI()
+    async with OpenAICompatLLM(
+        "http://stub", "llm",
+        default_extras={"chat_template_kwargs": {"enable_thinking": True}},
+        client=stub.client(),
+    ) as llm:
+        await llm.chat([ChatMessage(role="user", content="x")], enable_thinking=False)
+        assert stub.last_json()["chat_template_kwargs"] == {"enable_thinking": False}
+        await llm.chat([ChatMessage(role="user", content="x")])
+        assert stub.last_json()["chat_template_kwargs"] == {"enable_thinking": True}
+
+
+async def test_llm_unconfigured_thinking_keeps_previous_wire_output() -> None:
+    # SDK callers pass enable_thinking=False unconditionally; an endpoint with
+    # no thinking configuration must not start receiving template arguments.
+    stub = StubOpenAI()
+    async with OpenAICompatLLM("http://stub", "llm", client=stub.client()) as llm:
+        await llm.chat([ChatMessage(role="user", content="x")], enable_thinking=False)
+        assert "chat_template_kwargs" not in stub.last_json()
+        await llm.chat([ChatMessage(role="user", content="x")])
+        assert "chat_template_kwargs" not in stub.last_json()
+        await llm.chat([ChatMessage(role="user", content="x")], enable_thinking=True)
+        assert stub.last_json()["chat_template_kwargs"] == {"enable_thinking": True}
+
+
+@pytest.mark.parametrize("enable_thinking, expected", [
+    (None, True), (True, True), (False, False),
+])
+async def test_llm_typed_thinking_default_with_per_call_override(
+    enable_thinking, expected,
+) -> None:
+    stub = StubOpenAI()
+    stub.set_stream_tokens(["ok"])
+    async with OpenAICompatLLM(
+        "http://stub", "llm",
+        thinking=ThinkingSpec(control="chat_template", default=True),
+        client=stub.client(),
+    ) as llm:
+        await llm.chat([ChatMessage(role="user", content="x")], enable_thinking=enable_thinking)
+        assert stub.last_json()["chat_template_kwargs"] == {"enable_thinking": expected}
+        _ = [t async for t in llm.stream(
+            [ChatMessage(role="user", content="x")], enable_thinking=enable_thinking,
+        )]
+        assert stub.last_json()["chat_template_kwargs"] == {"enable_thinking": expected}
+
+
+async def test_llm_chat_thinking_control_none_sends_no_switch() -> None:
+    # Strict or switchless endpoints opt out of template arguments entirely.
+    stub = StubOpenAI()
+    async with OpenAICompatLLM(
+        "http://stub", "llm",
+        thinking=ThinkingSpec(control="none", default=False),
+        client=stub.client(),
+    ) as llm:
+        await llm.chat(
+            [ChatMessage(role="user", content="x")],
+            enable_thinking=True, thinking_budget=64,
+        )
+    assert "chat_template_kwargs" not in stub.last_json()
+
+
+@pytest.mark.parametrize("control", ["none", "system_prompt"])
+async def test_llm_legacy_thinking_extras_pass_through_other_controls(control) -> None:
+    # Only template-driven endpoints treat the legacy key as the switch;
+    # other controls keep sending the configured raw field unchanged.
+    stub = StubOpenAI()
+    async with OpenAICompatLLM(
+        "http://stub", "llm",
+        thinking=ThinkingSpec(control=control),
+        default_extras={"chat_template_kwargs": {"enable_thinking": False}},
+        client=stub.client(),
+    ) as llm:
+        await llm.chat([ChatMessage(role="user", content="x")])
+    body = stub.last_json()
+    assert body["chat_template_kwargs"] == {"enable_thinking": False}
+    assert body["messages"] == [{"role": "user", "content": "x"}]
+
+
+def test_llm_legacy_thinking_extras_validated() -> None:
+    with pytest.raises(ValueError, match="must be a boolean"):
+        OpenAICompatLLM(
+            "http://stub", "llm",
+            default_extras={"chat_template_kwargs": {"enable_thinking": "false"}},
+        )
+    with pytest.raises(ValueError, match="conflicts"):
+        OpenAICompatLLM(
+            "http://stub", "llm",
+            thinking=ThinkingSpec(default=True),
+            default_extras={"chat_template_kwargs": {"enable_thinking": False}},
+        )
+
+
+@pytest.mark.parametrize("enable_thinking, line", [
+    (None, "detailed thinking off"),
+    (True, "detailed thinking on"),
+])
+async def test_llm_chat_system_prompt_thinking_inserts_switch(enable_thinking, line) -> None:
+    stub = StubOpenAI()
+    async with OpenAICompatLLM(
+        "http://stub", "llm",
+        thinking=ThinkingSpec(control="system_prompt", default=False),
+        client=stub.client(),
+    ) as llm:
+        await llm.chat(
+            [ChatMessage(role="user", content="x")],
+            enable_thinking=enable_thinking,
+        )
+    body = stub.last_json()
+    assert body["messages"][0] == {"role": "system", "content": line}
+    assert "chat_template_kwargs" not in body
+
+
+@pytest.mark.parametrize("system, enable_thinking, expected", [
+    # Prose mentioning the phrase is not a mode selection.
+    (
+        "Never show detailed thinking; respond with only the answer.", None,
+        "detailed thinking off\n\nNever show detailed thinking; respond with only the answer.",
+    ),
+    ("Be brief.", None, "detailed thinking off\n\nBe brief."),
+    # A caller directive stands for the default...
+    ("detailed thinking on\nBe brief.", None, "detailed thinking on\nBe brief."),
+    # ...but an explicit per-call value replaces it.
+    ("detailed thinking on\nBe brief.", False, "detailed thinking off\nBe brief."),
+    ("Be brief.\n\nDetailed thinking off", True, "Be brief.\n\ndetailed thinking on"),
+])
+async def test_llm_chat_system_prompt_thinking_existing_system(
+    system, enable_thinking, expected,
+) -> None:
+    stub = StubOpenAI()
+    async with OpenAICompatLLM(
+        "http://stub", "llm",
+        thinking=ThinkingSpec(control="system_prompt", default=False),
+        client=stub.client(),
+    ) as llm:
+        await llm.chat(
+            [ChatMessage(role="system", content=system), ChatMessage(role="user", content="x")],
+            enable_thinking=enable_thinking,
+        )
+    messages = stub.last_json()["messages"]
+    assert len(messages) == 2
+    assert messages[0] == {"role": "system", "content": expected}
 
 
 async def test_llm_chat_reasoning_field_aliasing() -> None:
@@ -865,6 +1011,19 @@ async def test_vlm_ask_image_includes_system_prompt_when_set() -> None:
     body = stub.last_json()
     assert body["messages"][0] == {"role": "system", "content": "be terse"}
     assert body["messages"][1]["role"] == "user"
+
+
+@pytest.mark.parametrize("thinking, expected", [
+    (ThinkingSpec(control="chat_template", default=False), {"enable_thinking": False}),
+    (ThinkingSpec(control="none", default=False), None),
+])
+async def test_vlm_thinking_spec_applies_to_ask_image(thinking, expected) -> None:
+    stub = StubOpenAI()
+    async with OpenAICompatVLM(
+        "http://stub", "vlm", thinking=thinking, client=stub.client(),
+    ) as vlm:
+        await vlm.ask_image(_PNG_HEADER, "?")
+    assert stub.last_json().get("chat_template_kwargs") == expected
 
 
 async def test_vlm_default_extras_propagate() -> None:
