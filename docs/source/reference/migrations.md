@@ -390,4 +390,5 @@ refer to {doc}`clef-flash`.
 
 (routed-agents-publish-their-own-output)=
 For routing and conversation output contracts, refer to
-{ref}`routing-response-progress` and {doc}`agent-sdk-conversation`.
+[the routing contract](agent-sdk-routing.md#response-progress-and-routing-context)
+and {doc}`agent-sdk-conversation`.
