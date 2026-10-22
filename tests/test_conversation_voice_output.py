@@ -530,8 +530,10 @@ async def test_conversation_drops_late_model_output_after_interruption(after_can
             with pytest.raises(asyncio.CancelledError):
                 await answering
             assert closed.is_set()
-            assert [value.text for value, _ in output.items] == (["partial"] if partial else [])
-            assert not any(value.final for value, _ in output.items)
+            # An opened stream is closed by an empty final frame and receives no late text.
+            assert [(value.text, value.final) for value, _ in output.items] == (
+                [("partial", False), ("", True)] if partial else []
+            )
             assert router._history["alice"] == []
             assert conversation._context.transcript("alice") == ()
         finally:

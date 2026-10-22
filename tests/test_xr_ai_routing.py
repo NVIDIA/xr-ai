@@ -696,6 +696,20 @@ async def test_stop_attempts_release_for_every_participant_after_failure():
 
 
 @pytest.mark.asyncio
+async def test_failed_failure_message_keeps_the_destination_error():
+    class Failing(_Destination):
+        async def answer(self, turn, *, started):
+            raise ValueError("destination failed")
+
+    async def closed_output(_turn, _source, _text):
+        raise RuntimeError("output closed")
+
+    router = AgentRouter({"xr": Failing("xr")}, _Decisions(), output=closed_output, default_destination="xr")
+    with pytest.raises(ValueError, match="destination failed"):
+        await router.handle(AgentTurn("alice", "turn-1", "Do it."))
+
+
+@pytest.mark.asyncio
 async def test_destination_error_after_preamble_reports_failure_and_propagates():
     class _BrokenAnswer(_Destination):
         def __init__(self, *args, **kwargs):
@@ -1506,7 +1520,17 @@ async def test_real_answer_cancels_pending_ack_generation_without_waiting():
 
 @pytest.mark.asyncio
 async def test_answer_does_not_reuse_interrupt_slot_after_ack_was_delivered():
-    destination = _AckDestination(blocked=True)
+    leads = []
+
+    class Destination(_AckDestination):
+        async def answer(self, turn, *, started):
+            async def recorded():
+                leads.append(await started())
+                return leads[-1]
+
+            return await super().answer(turn, started=recorded)
+
+    destination = Destination(blocked=True)
     decisions = _Prediction("slow", {"slow": 0.9, "within_delay": 0.05, "uncertain": 0.05})
     llm = _AcknowledgmentLLM()
     front_end = AgentRouter(
@@ -1517,15 +1541,11 @@ async def test_answer_does_not_reuse_interrupt_slot_after_ack_was_delivered():
         acknowledgment_delay_secs=10.0,
     )
     output = []
-    first = True
     acknowledgment_emit_started = asyncio.Event()
     acknowledgment_emit_release = asyncio.Event()
 
     async def emit(source, text):
-        nonlocal first
-        interrupt = first
-        first = False
-        output.append((source, text, interrupt))
+        output.append((source, text))
         if text.startswith("Let me think through"):
             acknowledgment_emit_started.set()
             await acknowledgment_emit_release.wait()
@@ -1539,10 +1559,8 @@ async def test_answer_does_not_reuse_interrupt_slot_after_ack_was_delivered():
     acknowledgment_emit_release.set()
     await asyncio.wait_for(task, timeout=1)
 
-    assert output == [
-        ("destination", "Let me think through that. ", True),
-        ("destination", "Here is the answer.", False),
-    ]
+    assert output == [("destination", "Let me think through that. "), ("destination", "Here is the answer.")]
+    assert leads == [False]
     assert llm.calls
 
 

@@ -159,10 +159,11 @@ class Conversation(RoutableAgent):
         Requires ``runtime`` and ``output_topic``. The first nonblank ready chunk
         awaits ``started()`` before publication. That body frame
         interrupts older output unless router control text already started
-        this turn, and a final frame closes a completed or failed partial
-        response. Cancellation and publication failures do not publish further
-        frames. Failures propagate after closing the model iterator; the router
-        reports failures that occur before the first frame. A successful answer
+        this turn, and an empty final frame closes a completed, failed, or
+        canceled response once opened. Canceled answers publish no further text,
+        and a publication failure publishes no further frames. Failures
+        propagate after closing the model iterator; the router reports
+        failures that occur before the first frame. A successful answer
         returns the complete text as routing context. The exchange joins this
         conversation's transcript only after its final frame is delivered.
         """
@@ -207,9 +208,8 @@ class Conversation(RoutableAgent):
             raise
         finally:
             await stream.aclose()
-            task = asyncio.current_task()
-            cancelled = task is not None and task.cancelling() > 0
-            if opened and not cancelled and not publication_failed:
+            # Close an opened stream even when canceled so later output does not queue behind it.
+            if opened and not publication_failed:
                 with suppress(RuntimeClosedError):
                     await self._runtime.publish(
                         self._output_topic,

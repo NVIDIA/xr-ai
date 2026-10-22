@@ -168,7 +168,7 @@ the application.
 
 The timing sample begins after destination admission and ends when the
 destination signals its first meaningful response. It excludes route selection,
-admission, acknowledgment-output serialization, and downstream playback.
+admission, waiting for committed acknowledgment delivery, and downstream playback.
 Admission preambles suppress the optional acknowledgment for that turn.
 The `conversation.response-started` trace records that notification. A notification does
 not establish that output has been accepted or played by a downstream transport.

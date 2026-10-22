@@ -54,7 +54,7 @@ Cancellation drains the model without publishing further frames. Model and
 publication failures propagate to the caller.
 
 The application starts the runtime before answering and stops it after draining
-routed work. `answer(turn)` is the public request handler; streaming model
+routed work. `answer(turn, started=...)` is the public request handler; streaming model
 iteration is private to the conversation.
 
 ## Named context topics
@@ -159,7 +159,7 @@ speaks to this conversation, the application calls
 An answer still streaming when its participant leaves is not stopped. When it
 completes, it records its exchange as the start of new context for that
 participant. Close the conversation before closing the shared model client,
-and drain caller-owned answer streams separately.
+and drain in-flight answers separately.
 
 ## Evaluations
 

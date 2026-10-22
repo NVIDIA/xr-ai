@@ -94,7 +94,7 @@ class AgentRouter:
     pending output, not audio already queued or played by downstream transports.
     The delay and timing examples start after admission and measure when the
     destination signals its first meaningful response, excluding routing, admission,
-    acknowledgment-output serialization, and audio playback.
+    waiting for committed acknowledgment delivery, and audio playback.
 
     :param destinations: Registered destinations keyed by their stable route names.
     :param decisions: Typed Clef decision service used to select routes.
@@ -245,7 +245,11 @@ class AgentRouter:
                     )
                 except Exception:
                     if not turn_output.response and not turn_output.control_failed:
-                        await emit_if_current(current_turn, self._default_destination, _FAILURE_TEXT)
+                        try:
+                            await emit_if_current(current_turn, self._default_destination, _FAILURE_TEXT)
+                        except Exception:  # noqa: BLE001
+                            # isolation boundary: the turn's own failure, not this message's, propagates.
+                            _logger.exception("failed to publish turn failure message participant=%r", participant_id)
                     raise
                 finally:
                     _active_exchange_id.reset(current_id_token)

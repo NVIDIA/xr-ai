@@ -31,16 +31,18 @@ Move the router's own finite control callback from `handle(..., emit=callback)`
 to constructor configuration with `AgentRouter(..., output=callback)`, then call
 `handle(turn)`. The callback now receives `(turn, source, text)` so one configured
 publisher can preserve each participant's identity and originating timestamp.
-It receives only acknowledgments, admission preambles, and clarification or
-release messages.
+It receives acknowledgments, admission preambles, clarification or release
+messages, and the failure message for a turn that fails before its destination
+calls `started()`; it never receives destination answer text.
 
 Construct `Conversation(runtime=runtime, output_topic=voice_output_topic)` with
 both required arguments, and install `xr-ai-conversation[voice]`.
-Remove any previous `output` callable; Conversation now publishes directly and
-owns stream finalization. The router reports failures before the first chunk.
-`Conversation.stream()` has been removed. Submit requests with
-`await conversation.answer(AgentTurn(participant_id, turn_id, request))`; the
-conversation streams its answer to the configured output topic.
+Conversation now publishes directly and owns stream finalization. The router
+reports failures before the first chunk. `Conversation.stream()` has been
+removed. Route requests through `AgentRouter`, or call
+`await conversation.answer(AgentTurn(participant_id, turn_id, request), started=started)`
+with an async `started` callable; the conversation streams its answer to the
+configured output topic.
 
 
 ### Persistent services after startup failure
