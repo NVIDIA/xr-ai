@@ -11,6 +11,7 @@ This checks embedding startup and retrieval, not full-stack memory coexistence.
 """
 
 import asyncio
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -64,7 +65,7 @@ async def test_tea_embedding_startup_and_retrieval(tmp_path):
     config.update(
         host="127.0.0.1", port=port, vllm_backend="docker",
         # Docker-created cache files must stay outside checkout's cleanup path.
-        model_cache=str(Path("~/.cache/huggingface").expanduser()),
+        model_cache=str(Path(os.environ.get("HF_HOME", "~/.cache/huggingface")).expanduser()),
     )
     config_path = tmp_path / "embedding.yaml"
     config_path.write_text(yaml.safe_dump(config))

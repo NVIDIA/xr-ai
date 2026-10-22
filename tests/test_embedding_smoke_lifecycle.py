@@ -24,7 +24,16 @@ async def test_embedding_smoke_skips_unsupported_inventory(monkeypatch, tmp_path
 
 
 @pytest.mark.parametrize("failure", ["exit", "timeout"])
-async def test_embedding_smoke_cleans_up_docker_before_readiness(monkeypatch, tmp_path, failure):
+@pytest.mark.parametrize("hf_home", [None, "/data/huggingface", "~/model-cache"])
+async def test_embedding_smoke_cleans_up_docker_before_readiness(monkeypatch, tmp_path, failure, hf_home):
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    if hf_home is None:
+        monkeypatch.delenv("HF_HOME", raising=False)
+        expected_cache = home / ".cache" / "huggingface"
+    else:
+        monkeypatch.setenv("HF_HOME", hf_home)
+        expected_cache = home / "model-cache" if hf_home.startswith("~") else Path(hf_home)
     events = []
     launched = {}
 
@@ -59,5 +68,7 @@ async def test_embedding_smoke_cleans_up_docker_before_readiness(monkeypatch, tm
         await smoke.test_tea_embedding_startup_and_retrieval(tmp_path)
     assert launched["vllm_backend"] == "docker"
     assert launched["gpu_memory_utilization"] == 0.08
+    assert launched["model_cache"] == str(expected_cache)
+    assert not expected_cache.is_relative_to(smoke.ROOT)
     assert events[-1] == [("embedding", launched["port"])]
     assert ("terminate" in events) is (failure == "timeout")
