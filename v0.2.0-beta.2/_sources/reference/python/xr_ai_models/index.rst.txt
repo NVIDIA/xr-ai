@@ -514,7 +514,7 @@ Package Contents
    ``enable_thinking`` requests or suppresses model reasoning for one call;
    ``None`` uses the endpoint's configured default.  The endpoint renders it
    in the model's own dialect, and models without a switch ignore it.
-   ``thinking_budget`` caps reasoning tokens where the model supports it.
+   ``thinking_budget`` caps reasoning tokens on servers that enforce it.
 
 
    .. py:attribute:: capabilities
@@ -1678,8 +1678,9 @@ Package Contents
 
       The model's switch dialect.
 
-      ``chat_template`` sends ``chat_template_kwargs.enable_thinking`` (and
-      ``thinking_budget``), as vLLM and NIM Nemotron/Qwen-style templates expect.
+      ``chat_template`` sends ``chat_template_kwargs.enable_thinking``, as vLLM
+      and NIM Nemotron/Qwen-style templates expect, and a budget as vLLM's
+      ``thinking_token_budget``.
       ``system_prompt`` puts a ``detailed thinking on|off`` line at the start of
       the system message, as Llama-Nemotron expects.  ``none`` leaves requests
       unchanged for models without a switch or endpoints that reject template

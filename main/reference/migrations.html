@@ -734,6 +734,16 @@ A per-call <code class="docutils literal notranslate"><span class="pre">enable_t
 legacy <code class="docutils literal notranslate"><span class="pre">default_extras.chat_template_kwargs.enable_thinking:</span> <span class="pre">true</span></code> default could
 previously not be turned off per call. Refer to <a class="reference internal" href="agent-sdk-models.html#agent-sdk-models-thinking"><span class="std std-ref">Reasoning control</span></a>.</p>
 <ul class="simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">thinking_budget</span></code> call argument:</strong> now sent as vLLM’s
+<code class="docutils literal notranslate"><span class="pre">thinking_token_budget</span></code> instead of <code class="docutils literal notranslate"><span class="pre">chat_template_kwargs.thinking_budget</span></code>,
+which the Nemotron chat templates ignored. The argument is omitted when
+reasoning is off. Enforcement requires server support and has been verified
+on Nemotron Omni with vLLM’s <code class="docutils literal notranslate"><span class="pre">--reasoning-parser</span> <span class="pre">nemotron_v3</span></code>; NIM budget
+support has not been qualified. Other endpoints may reject or ignore it;
+the SDK does not detect support or retry without the budget. Refer to
+<a class="reference internal" href="agent-sdk-models.html#agent-sdk-models-thinking"><span class="std std-ref">Reasoning control</span></a>. Raw
+<code class="docutils literal notranslate"><span class="pre">default_extras.chat_template_kwargs.thinking_budget</span></code> profile values are
+forwarded unchanged, not migrated to the new field.</p></li>
 <li><p><strong>Custom <code class="docutils literal notranslate"><span class="pre">LLMService</span></code> implementations:</strong> <code class="docutils literal notranslate"><span class="pre">enable_thinking</span></code> now defaults to
 <code class="docutils literal notranslate"><span class="pre">None</span></code> instead of <code class="docutils literal notranslate"><span class="pre">False</span></code>. Treat <code class="docutils literal notranslate"><span class="pre">None</span></code> as the endpoint’s configured default.</p></li>
 <li><p><strong>Profiles with the legacy key:</strong> no change is required. With a template-driven

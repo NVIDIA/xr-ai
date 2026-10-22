@@ -1032,7 +1032,7 @@ Consumers choose whether absence permits operation without caching.</p>
 <p><code class="docutils literal notranslate"><span class="pre">enable_thinking</span></code> requests or suppresses model reasoning for one call;
 <code class="docutils literal notranslate"><span class="pre">None</span></code> uses the endpoint’s configured default.  The endpoint renders it
 in the model’s own dialect, and models without a switch ignore it.
-<code class="docutils literal notranslate"><span class="pre">thinking_budget</span></code> caps reasoning tokens where the model supports it.</p>
+<code class="docutils literal notranslate"><span class="pre">thinking_budget</span></code> caps reasoning tokens on servers that enforce it.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="xr_ai_models.LLMService.capabilities">
 <span class="sig-name descname"><span class="pre">capabilities</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#xr_ai_models.Capabilities" title="xr_ai_models.Capabilities"><span class="pre">Capabilities</span></a></em><a class="headerlink" href="#xr_ai_models.LLMService.capabilities" title="Link to this definition">#</a></dt>
@@ -2425,8 +2425,9 @@ originate from a file.</p>
 <dt class="sig sig-object py" id="xr_ai_models.ThinkingSpec.control">
 <span class="sig-name descname"><span class="pre">control</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ThinkingControl</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#xr_ai_models.ThinkingSpec.control" title="Link to this definition">#</a></dt>
 <dd><p>The model’s switch dialect.</p>
-<p><code class="docutils literal notranslate"><span class="pre">chat_template</span></code> sends <code class="docutils literal notranslate"><span class="pre">chat_template_kwargs.enable_thinking</span></code> (and
-<code class="docutils literal notranslate"><span class="pre">thinking_budget</span></code>), as vLLM and NIM Nemotron/Qwen-style templates expect.
+<p><code class="docutils literal notranslate"><span class="pre">chat_template</span></code> sends <code class="docutils literal notranslate"><span class="pre">chat_template_kwargs.enable_thinking</span></code>, as vLLM
+and NIM Nemotron/Qwen-style templates expect, and a budget as vLLM’s
+<code class="docutils literal notranslate"><span class="pre">thinking_token_budget</span></code>.
 <code class="docutils literal notranslate"><span class="pre">system_prompt</span></code> puts a <code class="docutils literal notranslate"><span class="pre">detailed</span> <span class="pre">thinking</span> <span class="pre">on|off</span></code> line at the start of
 the system message, as Llama-Nemotron expects.  <code class="docutils literal notranslate"><span class="pre">none</span></code> leaves requests
 unchanged for models without a switch or endpoints that reject template
