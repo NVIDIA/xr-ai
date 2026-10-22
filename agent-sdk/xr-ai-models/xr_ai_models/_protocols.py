@@ -21,8 +21,8 @@ ImageInput = bytes | Path | str
 
 
 @dataclass(frozen=True)
-class OCRSpan:
-    """One recognized region; polygon coordinates are normalized to [0, 1]."""
+class OCRRegion:
+    """One recognized text region; polygon coordinates are normalized to [0, 1]."""
 
     text: str
     """Transcribed text."""
@@ -39,7 +39,7 @@ class OCRService(Protocol):
     async def read_text(
         self, image: ImageInput, *, merge_level: Literal["word", "sentence", "paragraph"] = "word",
         timeout: float | None = None,
-    ) -> list[OCRSpan]:
+    ) -> list[OCRRegion]:
         """Transcribe inline PNG/JPEG bytes, a Path, or a base64 data URL.
 
         Remote URLs are not accepted. Regions follow backend reading order.

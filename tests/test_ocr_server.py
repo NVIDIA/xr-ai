@@ -24,6 +24,7 @@ from fastapi import HTTPException
 from PIL import Image, ImageDraw, ImageFont
 from xr_ai_models import (
     ModelServiceError,
+    OCRRegion,
     OCRRequestError,
     OCRResponseError,
     OCRService,
@@ -83,6 +84,7 @@ async def test_sdk_contract_and_lifecycle():
         assert isinstance(ocr, OCRService)
         assert await ocr.health()
         spans = await ocr.read_text(image_url(), merge_level="paragraph", timeout=10)
+        assert isinstance(spans[0], OCRRegion)
         assert spans[0].text == "温度 23.5"
         assert spans[0].polygon[0] == (0.1, 0.2)
         assert spans[0].confidence == 0.95

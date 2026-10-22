@@ -11,7 +11,7 @@ import httpx
 
 from ._config import OCRSpec
 from ._openai_compat import _auth_headers, _http_health, _normalize_image, _warn_if_cleartext_key
-from ._protocols import ImageInput, OCRSpan
+from ._protocols import ImageInput, OCRRegion
 
 
 class ModelServiceError(Exception):
@@ -51,7 +51,7 @@ def _normalized_number(value: object) -> float:
     return float(value)
 
 
-def _parse_spans(payload: object) -> list[OCRSpan]:
+def _parse_regions(payload: object) -> list[OCRRegion]:
     data = _object(payload).get("data")
     if not isinstance(data, list) or len(data) != 1:
         raise OCRResponseError("OCR response must contain exactly the requested image")
@@ -62,7 +62,7 @@ def _parse_spans(payload: object) -> list[OCRSpan]:
     detections = result.get("text_detections")
     if not isinstance(detections, list):
         raise OCRResponseError("OCR response text_detections must be a list")
-    spans = []
+    regions = []
     for item in detections:
         detection = _object(item)
         prediction = _object(detection.get("text_prediction"))
@@ -77,8 +77,8 @@ def _parse_spans(payload: object) -> list[OCRSpan]:
             (_normalized_number(_object(p).get("x")), _normalized_number(_object(p).get("y")))
             for p in points
         )
-        spans.append(OCRSpan(text=text, confidence=confidence, polygon=polygon))
-    return spans
+        regions.append(OCRRegion(text=text, confidence=confidence, polygon=polygon))
+    return regions
 
 
 class NemotronOCR:
@@ -95,7 +95,7 @@ class NemotronOCR:
     async def read_text(
         self, image: ImageInput, *, merge_level: Literal["word", "sentence", "paragraph"] = "word",
         timeout: float | None = None,
-    ) -> list[OCRSpan]:
+    ) -> list[OCRRegion]:
         """Return recognized text, confidence, and normalized polygons.
 
         Raises:
@@ -130,7 +130,7 @@ class NemotronOCR:
             payload = response.json()
         except ValueError as exc:
             raise OCRResponseError("OCR endpoint returned invalid JSON") from exc
-        return _parse_spans(payload)
+        return _parse_regions(payload)
 
     async def health(self) -> bool:
         """Probe configured readiness; disabled probes return True."""

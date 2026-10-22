@@ -90,9 +90,9 @@ config = load_models_config_from_dict({"ocr": {
     "deployment": {"ownership": "external"},
 }})
 async with make_ocr(config, "ocr") as ocr:
-    spans = await ocr.read_text(Path("image.png"))
-    for span in spans:
-        print(span.text, span.confidence, span.polygon)
+    regions = await ocr.read_text(Path("image.png"))
+    for region in regions:
+        print(region.text, region.confidence, region.polygon)
 ```
 
 Applications reuse the endpoint; an OCR tool does not load its own GPU model.
