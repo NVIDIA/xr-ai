@@ -89,8 +89,7 @@ uv run --project model-servers procedure_capture_guide_model_servers --stop
 | `yaml/media_capture.yaml` | Opt-in session recording output and rendering profile |
 | `yaml/models.json` | Client adapters and endpoints for batch STT, LLM, VLM, and acknowledgement TTS |
 | `model-servers/yaml/<gpu-profile>.yaml` | Local model-server GPU placement and workload budgets |
-| `yaml/voice_gate.yaml` | Silent, wake-word-free narration input |
-| `yaml/voice_gate.guide.yaml` | Wake-word-free guide questions and controls |
+| `yaml/voice_gate.yaml` | Shared wake-word-free speech input for capture and guide |
 | `yaml/device_io_hub.yaml` | Room, ports, and web client |
 
 For example, increase the interval between captions in `yaml/capture-agent-config.yaml`:

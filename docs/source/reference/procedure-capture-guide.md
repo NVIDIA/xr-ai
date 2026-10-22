@@ -703,8 +703,7 @@ cannot cancel its own response.
 | `yaml/guide-agent-config.yaml` | Local guide directory and visual verification timeout |
 | `yaml/models.json` | Shared batch STT, LLM, VLM, and TTS services and endpoints |
 | `yaml/media_capture.yaml` | Opt-in session recording output, profile, and participant lifetime |
-| `yaml/voice_gate.yaml` | Silent, wake-word-free input with sample-owned recording commands |
-| `yaml/voice_gate.guide.yaml` | Wake-word-free guide questions and guide controls |
+| `yaml/voice_gate.yaml` | Shared wake-word-free speech input; each mode handles its own commands |
 | `yaml/device_io_hub.yaml` | Room and web server |
 
 `worker.yaml` selects the capture YAML through `capture_config`, resolved relative
