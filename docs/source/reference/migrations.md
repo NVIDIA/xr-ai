@@ -44,6 +44,12 @@ removed. Route requests through `AgentRouter`, or call
 with an async `started` callable; the conversation streams its answer to the
 configured output topic.
 
+`AgentRouter` can now be registered directly with `AgentRuntime`. Install
+`xr-ai-routing[voice]` and supply explicit query and output topics; optional
+participant and interruption topics also require explicit configuration.
+Runtime queries use the configured output topic for router-owned control text;
+direct `handle(turn)` calls require the constructor callback described above. Refer to
+{doc}`agent-sdk-routing` for output and lifecycle ownership.
 
 ### Persistent services after startup failure
 

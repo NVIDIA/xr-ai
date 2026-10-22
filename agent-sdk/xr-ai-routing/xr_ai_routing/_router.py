@@ -19,9 +19,9 @@ from typing import TYPE_CHECKING
 
 import nemo_relay
 from xr_ai_models import ChatMessage, DecisionQuestion, DecisionService, LLMService
+from xr_ai_runtime import Agent, Topic
 
 if TYPE_CHECKING:
-    from xr_ai_runtime import Agent, Topic
     from xr_ai_voice import UserQuery, VoiceInterrupted, VoiceOutput, VoiceParticipantJoined, VoiceParticipantLeft
 
     from ._runtime import _RuntimeTurn
@@ -74,7 +74,7 @@ class _TurnOutput:
     """The destination signaled its response start."""
 
 
-class AgentRouter:
+class AgentRouter(Agent):
     """Route a turn, check admission before speech, and retain explicit focus.
 
     A focused destination receives the participant's next turn first. It can
@@ -104,11 +104,10 @@ class AgentRouter:
     destination signals its first meaningful response, excluding routing, admission,
     waiting for committed acknowledgment delivery, and audio playback.
 
-    Supply ``query_topic`` and ``output_topic`` together, then register
-    ``runtime_subscriber()`` with :class:`xr_ai_runtime.AgentRuntime`. This
-    requires the ``xr-ai-routing[voice]`` extra; ordinary ``handle()`` use never
-    imports the runtime or voice media. No input or lifecycle topic is
-    subscribed unless explicitly supplied.
+    Supply ``query_topic`` and ``output_topic`` together to register this router
+    directly with :class:`xr_ai_runtime.AgentRuntime`. This requires the
+    ``xr-ai-routing[voice]`` extra; ordinary ``handle()`` use never imports voice
+    media. No input or lifecycle topic is subscribed unless explicitly supplied.
     Runtime queries use their publication identity and originating timestamp.
     Destinations publish their own output; the router publishes only finite
     admission, clarification, acknowledgment, and failure messages for turns that
@@ -130,9 +129,14 @@ class AgentRouter:
     :param query_topic: Explicit runtime input topic carrying ``xr_ai_voice.UserQuery``.
     :param output_topic: Explicit topic carrying ``xr_ai_voice.VoiceOutput`` for router control output.
     :param participant_joined_topic: Optional explicit ``VoiceParticipantJoined`` topic reopening admission.
-    :param participant_left_topic: Optional explicit ``VoiceParticipantLeft`` topic for departure cleanup;
-        requires ``participant_joined_topic`` so a departed participant can be readmitted.
+    :param participant_left_topic: Optional explicit ``VoiceParticipantLeft`` topic for departure cleanup.
     :param interrupted_topic: Optional explicit ``VoiceInterrupted`` topic for participant or global interruption.
+    :param initialize_participant: Optional initialization, awaited once before the participant's first turn,
+        whether called directly or published.
+    :param cleanup_participant: Optional idempotent application cleanup after destination work is drained.
+        Used also for initialized participants who never selected a route; failed cleanup can be retried.
+    :param set_status: Optional asynchronous callback receiving ``processing`` or ``idle``, then the participant ID.
+        All callbacks run on the delivery event loop and must not reenter this router's operations.
 
     Topic payload classes must match exactly and configured topic names must be
     distinct. Incomplete runtime configuration raises ``ValueError``; a wrong
@@ -156,7 +160,11 @@ class AgentRouter:
         participant_joined_topic: Topic[VoiceParticipantJoined] | None = None,
         participant_left_topic: Topic[VoiceParticipantLeft] | None = None,
         interrupted_topic: Topic[VoiceInterrupted] | None = None,
+        initialize_participant: Callable[[str], Awaitable[None]] | None = None,
+        cleanup_participant: Callable[[str], Awaitable[None]] | None = None,
+        set_status: Callable[[str, str], Awaitable[None]] | None = None,
     ) -> None:
+        super().__init__()
         if not destinations or default_destination not in destinations:
             raise ValueError("default destination must be registered")
         self._output = output
@@ -186,9 +194,13 @@ class AgentRouter:
         self._history_exchange_ids: dict[str, list[object | None]] = {}
         self._destinations_used: dict[str, set[str]] = {}
         self._first_answer_samples: dict[str, dict[str, list[tuple[str, float]]]] = {}
+        self._initialized: set[str] = set()
         self._departed: set[str] = set()
         self._participant_epochs: dict[str, object] = {}
         self._lifecycle = object()
+        self._initialize_participant = initialize_participant
+        self._cleanup_participant = cleanup_participant
+        self._set_status = set_status
         self._runtime = None
         if query_topic is None:
             if any(
@@ -198,6 +210,9 @@ class AgentRouter:
                     participant_joined_topic,
                     participant_left_topic,
                     interrupted_topic,
+                    initialize_participant,
+                    cleanup_participant,
+                    set_status,
                 )
             ):
                 raise ValueError("runtime options require query_topic and output_topic")
@@ -206,8 +221,6 @@ class AgentRouter:
         else:
             if output_topic is None:
                 raise ValueError("runtime routing requires output_topic")
-            if participant_left_topic is not None and participant_joined_topic is None:
-                raise ValueError("participant_left_topic requires participant_joined_topic to readmit participants")
             from ._runtime import _RuntimeRouting
 
             self._runtime = _RuntimeRouting(
@@ -218,17 +231,6 @@ class AgentRouter:
                 participant_left_topic=participant_left_topic,
                 interrupted_topic=interrupted_topic,
             )
-
-    def runtime_subscriber(self) -> Agent:
-        """Return the runtime agent that delivers configured topics to this router.
-
-        Register it once with the application's ``AgentRuntime``. Requires
-        ``query_topic`` and ``output_topic`` on the constructor.
-        """
-
-        if self._runtime is None:
-            raise ValueError("runtime_subscriber() requires query_topic and output_topic")
-        return self._runtime.subscriber()
 
     async def handle(
         self,
@@ -297,7 +299,6 @@ class AgentRouter:
             if reason is None:
                 return True
             if runtime_turn is not None:
-                _logger.warning("runtime query dropped participant=%r: %s", participant_id, reason)
                 return False
             raise RuntimeError(reason)
 
@@ -346,18 +347,32 @@ class AgentRouter:
                         raise
 
             async def run_handle() -> DestinationResult:
-                # A turn refused here never ran, so it gets no failure message.
-                if not admitted() or self._generation.get(participant_id) is not generation:
-                    raise asyncio.CancelledError
                 scope = self._runtime.scope(current_turn, runtime_turn) if runtime_turn is not None else nullcontext()
                 with scope:
                     timestamp_token = _active_history_timestamps.set(timestamps)
                     history_id_token = _active_history_exchange_ids.set(exchange_ids)
                     current_id_token = _active_exchange_id.set(current_exchange_id)
-                    try:
+
+                    async def route() -> DestinationResult:
                         return await self._handle(
-                            current_turn, emit=emit_if_current, generation=generation, turn_output=turn_output,
+                            current_turn,
+                            emit=emit_if_current,
+                            generation=generation,
+                            turn_output=turn_output,
                         )
+
+                    try:
+                        async with lock:
+                            if not admitted():
+                                raise asyncio.CancelledError
+                            await self._initialize_once(participant_id, generation=generation)
+                            if self._generation.get(participant_id) is not generation:
+                                raise asyncio.CancelledError
+                            if not admitted():
+                                raise asyncio.CancelledError
+                        if runtime_turn is not None:
+                            return await self._runtime.run(current_turn, runtime_turn, route)
+                        return await route()
                     except Exception:
                         if not turn_output.response and not turn_output.control_failed:
                             try:
@@ -401,15 +416,27 @@ class AgentRouter:
             return "participant has left; a participant-joined event is required"
         return None
 
+    async def _initialize_once(self, participant_id: str, *, generation: object | None = None) -> None:
+        if participant_id not in self._initialized:
+            if self._initialize_participant is not None:
+                await self._call_hook(self._initialize_participant, participant_id)
+            task = asyncio.current_task()
+            if (task is not None and task.cancelling()) or (
+                generation is not None and self._generation.get(participant_id) is not generation
+            ):
+                raise asyncio.CancelledError
+            self._initialized.add(participant_id)
+
     async def _participant_joined(self, participant_id: str) -> None:
         self._check_lifecycle_caller()
         lifecycle = self._lifecycle
         participant_epoch = self._participant_epochs.setdefault(participant_id, object())
         if self._stop_task is not None:
             return
-        if participant_id in self._departure_tasks:
-            # Joins an in-flight departure, or retries one whose cleanup failed.
-            await self._participant_left(participant_id)
+        departure = self._departure_tasks.get(participant_id)
+        if departure is not None:
+            await _drain_tasks((departure,))
+            departure.result()
         lock = self._locks.setdefault(participant_id, asyncio.Lock())
         async with lock:
             if (
@@ -420,6 +447,14 @@ class AgentRouter:
             ):
                 return
             self._departed.discard(participant_id)
+            await self._initialize_once(participant_id)
+
+    async def _call_hook(self, callback: Callable[..., Awaitable[None]], *args: str) -> None:
+        token = _active_routers.set(_active_routers.get() | {self._owner_identity})
+        try:
+            await callback(*args)
+        finally:
+            _active_routers.reset(token)
 
     async def interrupt(self, participant_id: str | None = None) -> None:
         """Cancel active response work while retaining completed history and focus.
@@ -470,10 +505,9 @@ class AgentRouter:
         if self._runtime is not None:
             self._departed.add(participant_id)
         self._participant_epochs[participant_id] = object()
-        stop_task = self._stop_task
-        if stop_task is not None:
-            await _drain_tasks((stop_task,))
-            stop_task.result()
+        if self._stop_task is not None:
+            await _drain_tasks((self._stop_task,))
+            self._stop_task.result()
             return
         await self._participant_left(participant_id)
 
@@ -557,8 +591,14 @@ class AgentRouter:
                     errors.append(error)
                 else:
                     self._forget_destination(participant_id, destination_name)
+            if self._cleanup_participant is not None:
+                try:
+                    await self._call_hook(self._cleanup_participant, participant_id)
+                except Exception as error:  # noqa: BLE001 -- attempt independent cleanup owners before raising.
+                    errors.append(error)
             if errors:
                 raise ExceptionGroup(f"failed to release destinations for {participant_id!r}", errors)
+            self._initialized.discard(participant_id)
             self._departure_tasks.pop(participant_id)
             self._locks.pop(participant_id, None)
 

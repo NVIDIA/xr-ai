@@ -5,14 +5,15 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Awaitable, Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import partial
+from types import MethodType
 from typing import TYPE_CHECKING, Any
 
 import nemo_relay
-from xr_ai_runtime import Agent, RuntimeContext, Topic, subscribe
+from xr_ai_runtime import RuntimeContext, Topic, subscribe
 
 try:
     from xr_ai_voice import UserQuery, VoiceInterrupted, VoiceOutput, VoiceParticipantJoined, VoiceParticipantLeft
@@ -21,7 +22,7 @@ except ModuleNotFoundError as error:
         raise
     raise ImportError("runtime routing requires the xr-ai-routing[voice] extra") from error
 
-from ._contracts import AgentTurn
+from ._contracts import AgentTurn, DestinationResult
 
 if TYPE_CHECKING:
     from ._router import AgentRouter
@@ -44,32 +45,32 @@ class _RuntimeRouting:
         interrupted_topic: Topic[VoiceInterrupted] | None,
     ) -> None:
         subscriptions = (
-            (query_topic, UserQuery, _query_receiver),
-            (participant_joined_topic, VoiceParticipantJoined, _joined_receiver),
-            (participant_left_topic, VoiceParticipantLeft, _left_receiver),
-            (interrupted_topic, VoiceInterrupted, _interrupted_receiver),
+            (query_topic, UserQuery, self._query),
+            (participant_joined_topic, VoiceParticipantJoined, self._joined),
+            (participant_left_topic, VoiceParticipantLeft, self._left),
+            (interrupted_topic, VoiceInterrupted, self._interrupted),
         )
         names = [topic.name for topic, _, _ in subscriptions if topic is not None]
         if len(set(names)) != len(names) or output_topic.name in names:
             raise ValueError("router input, lifecycle, and output topic names must be distinct")
         if output_topic.message_type is not VoiceOutput:
             raise TypeError("router output_topic must carry VoiceOutput")
-        for topic, expected, _receiver in subscriptions:
-            if topic is not None and topic.message_type is not expected:
-                raise TypeError(f"router topic {topic.name!r} must carry {expected.__name__}")
         self._owner = owner
         self._output_topic = output_topic
-        self._subscriptions = subscriptions
-
-    def subscriber(self) -> Agent:
-        """Bind the configured topics to one runtime agent that delivers to this router."""
-
-        namespace: dict[str, Any] = {"__module__": __name__}
-        for index, (topic, _expected, receiver) in enumerate(self._subscriptions):
+        for index, (topic, expected, handler) in enumerate(subscriptions):
             if topic is not None:
-                namespace[f"receive_{index}"] = subscribe(topic)(receiver())
-        subscriber_type = type("RouterRuntimeAgent", (_RouterRuntimeAgent,), namespace)
-        return subscriber_type(self._owner)
+                if topic.message_type is not expected:
+                    raise TypeError(f"router topic {topic.name!r} must carry {expected.__name__}")
+                self._bind_subscription(index, topic, handler)
+
+    def _bind_subscription(self, index: int, topic: Topic[Any], handler: Callable[..., Awaitable[None]]) -> None:
+        async def receive(_owner: AgentRouter, message: Any, context: RuntimeContext) -> None:
+            _owner._check_lifecycle_caller()
+            await handler(message, context)
+
+        # Runtime discovery requires the exact configured model on each bound method.
+        receive.__annotations__ = {"message": topic.message_type, "context": RuntimeContext, "return": None}
+        setattr(self._owner, f"_runtime_subscription_{index}", MethodType(subscribe(topic)(receive), self._owner))
 
     async def _query(self, request: UserQuery, ctx: RuntimeContext) -> None:
         turn = AgentTurn(_participant(ctx), ctx.metadata.message_id, request.text, timestamp_us=request.timestamp_us)
@@ -110,44 +111,19 @@ class _RuntimeRouting:
         ):
             await state.context.publish(self._output_topic, VoiceOutput(text=text, timestamp_us=turn.timestamp_us))
 
-
-class _RouterRuntimeAgent(Agent):
-    def __init__(self, router: AgentRouter) -> None:
-        super().__init__()
-        self._router = router
-
-
-# Each factory returns a fresh handler so ``subscribe`` never marks a shared function.
-def _query_receiver() -> Any:
-    async def receive(self: _RouterRuntimeAgent, message: UserQuery, ctx: RuntimeContext) -> None:
-        self._router._check_lifecycle_caller()
-        await self._router._runtime._query(message, ctx)
-
-    return receive
-
-
-def _joined_receiver() -> Any:
-    async def receive(self: _RouterRuntimeAgent, message: VoiceParticipantJoined, ctx: RuntimeContext) -> None:
-        self._router._check_lifecycle_caller()
-        await self._router._runtime._joined(message, ctx)
-
-    return receive
-
-
-def _left_receiver() -> Any:
-    async def receive(self: _RouterRuntimeAgent, message: VoiceParticipantLeft, ctx: RuntimeContext) -> None:
-        self._router._check_lifecycle_caller()
-        await self._router._runtime._left(message, ctx)
-
-    return receive
-
-
-def _interrupted_receiver() -> Any:
-    async def receive(self: _RouterRuntimeAgent, message: VoiceInterrupted, ctx: RuntimeContext) -> None:
-        self._router._check_lifecycle_caller()
-        await self._router._runtime._interrupted(message, ctx)
-
-    return receive
+    async def run(
+        self,
+        turn: AgentTurn,
+        state: _RuntimeTurn,
+        route: Callable[[], Awaitable[DestinationResult]],
+    ) -> DestinationResult:
+        try:
+            if self._owner._set_status is not None:
+                await self._owner._call_hook(self._owner._set_status, "processing", turn.participant_id)
+            return await route()
+        finally:
+            if self._owner._set_status is not None:
+                await self._owner._call_hook(self._owner._set_status, "idle", turn.participant_id)
 
 
 def _participant(ctx: RuntimeContext) -> str:
