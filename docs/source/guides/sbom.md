@@ -59,9 +59,3 @@ bundled inside wheels or SDK archives, Apple client dependencies, and Python
 build-system requirements outside the lock are outside this inventory's scope.
 Use an SBOM generated from the final wheel, application, or container to describe
 redistributed contents.
-
-[IsaacCapture's SBOM collector](https://github.com/NVIDIA/IsaacCapture/blob/main/scripts/sbom/README.md)
-implements that artifact-level approach for its wheels: it inventories their
-files and bundled native components, packages license evidence, and checks
-digests and coverage before release. xr-ai's workflow provides dependency
-snapshot SBOMs; it does not implement IsaacCapture's wheel contents collector.
