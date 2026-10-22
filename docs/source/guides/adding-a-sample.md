@@ -55,8 +55,8 @@ agent-samples/<name>/
 adapter and endpoint spec, with optional deployment metadata. Consumer samples
 omit `deployment` and connect to configured endpoints. A sample-local
 `model-servers/` convenience launcher declares the required local servers
-separately and owns small GPU-profile overrides; shared defaults live under
-`utils/xr-ai-model-server-stack/yaml/`. For startup probes, refer to
+separately and owns small GPU-profile overrides; service defaults live in
+`services/<service>/`. For startup probes, refer to
 {py:class}`~xr_ai_voice.VoiceAgent` and {ref}`consumer-model-readiness`.
 Worker-only profiles may remain in the legacy flat JSON or YAML shape; a profile
 read through the generic launcher deployment loaders requires the

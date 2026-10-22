@@ -44,7 +44,11 @@ def test_config_catalog_covers_every_top_level_sample() -> None:
                 if path.is_file() and path.suffix in {".json", ".yaml", ".yml"}
             )
 
-    expected.update(path.relative_to(_ROOT) for path in (_ROOT / "utils/xr-ai-model-server-stack/yaml").glob("*.yaml"))
+    expected.update(
+        path.relative_to(_ROOT)
+        for path in (_ROOT / "services").glob("*/*.yaml")
+        if "model_cache:" in path.read_text()
+    )
     assert {config.path for config in configs} == expected
     # A sample whose service owns its configuration has nothing to catalog.
     projects = {
@@ -52,7 +56,7 @@ def test_config_catalog_covers_every_top_level_sample() -> None:
         for path in project_paths
         if any(config.is_relative_to(path.parent.relative_to(_ROOT)) for config in expected)
     }
-    assert {config.sample for config in configs} == projects | {"Shared model-server defaults"}
+    assert {config.sample for config in configs} == projects | {"Model-server defaults"}
 
 
 def test_config_catalog_preserves_source_and_language() -> None:

@@ -62,13 +62,16 @@ def load_config_catalog(repository_root: Path) -> tuple[SampleConfig, ...]:
                     content=content,
                 )
             )
-    for path in sorted((repository_root / "utils/xr-ai-model-server-stack/yaml").glob("*.yaml")):
+    for path in sorted((repository_root / "services").glob("*/*.yaml")):
+        content = path.read_text(encoding="utf-8")
+        if "model_cache:" not in content:
+            continue
         if path.is_symlink():
-            raise ValueError(f"{path}: shared configurations must not be symbolic links")
+            raise ValueError(f"{path}: service configurations must not be symbolic links")
         configs.append(SampleConfig(
-            sample="Shared model-server defaults",
+            sample="Model-server defaults",
             path=path.relative_to(repository_root),
-            content=path.read_text(encoding="utf-8"),
+            content=content,
         ))
     return tuple(configs)
 

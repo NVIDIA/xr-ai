@@ -14,8 +14,8 @@ for startup, shutdown, switching samples, and configuration composition.
 
 `yaml/<gpu-profile>.yaml` contains sample-specific placement and workload budgets.
 For example, edit `cuda_visible_devices` for a server in `yaml/dual_48G_ada.yaml`
-to change its GPU placement. Shared defaults live under
-`utils/xr-ai-model-server-stack/yaml/`. Use `--gpu-profile NAME` for an explicit
+to change its GPU placement. Ports, models, and images
+come from each service's own YAML under `services/`. Use `--gpu-profile NAME` for an explicit
 profile on both start and stop.
 
 Refer to the
