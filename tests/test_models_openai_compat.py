@@ -260,7 +260,9 @@ async def test_llm_chat_passes_through_max_tokens_temperature() -> None:
     assert body["temperature"] == 0.7
 
 
-async def test_llm_chat_folds_thinking_kwargs_into_chat_template_kwargs() -> None:
+async def test_llm_chat_sends_thinking_budget_as_vllm_token_budget() -> None:
+    # Chat templates differ in budget variable names (Nemotron Omni reads
+    # reasoning_budget as a prompt hint); vLLM enforces thinking_token_budget.
     stub = StubOpenAI()
     async with OpenAICompatLLM(
         "http://stub", "llm", client=stub.client(),
@@ -270,13 +272,11 @@ async def test_llm_chat_folds_thinking_kwargs_into_chat_template_kwargs() -> Non
             enable_thinking=True, thinking_budget=1024,
         )
     body = stub.last_json()
-    assert body["chat_template_kwargs"] == {
-        "enable_thinking": True,
-        "thinking_budget": 1024,
-    }
+    assert body["chat_template_kwargs"] == {"enable_thinking": True}
+    assert body["thinking_token_budget"] == 1024
 
 
-async def test_llm_chat_default_extras_merged_with_per_call() -> None:
+async def test_llm_chat_omits_thinking_budget_when_reasoning_is_off() -> None:
     stub = StubOpenAI()
     async with OpenAICompatLLM(
         "http://stub", "llm",
@@ -287,11 +287,14 @@ async def test_llm_chat_default_extras_merged_with_per_call() -> None:
             [ChatMessage(role="user", content="x")],
             thinking_budget=256,
         )
-    body = stub.last_json()
-    assert body["chat_template_kwargs"] == {
-        "enable_thinking": False,
-        "thinking_budget": 256,
-    }
+        body = stub.last_json()
+        assert body["chat_template_kwargs"] == {"enable_thinking": False}
+        assert "thinking_token_budget" not in body
+        await llm.chat(
+            [ChatMessage(role="user", content="x")],
+            enable_thinking=True, thinking_budget=256,
+        )
+        assert stub.last_json()["thinking_token_budget"] == 256
 
 
 async def test_llm_chat_per_call_thinking_overrides_default_extras() -> None:
@@ -342,12 +345,14 @@ async def test_llm_typed_thinking_default_with_per_call_override(
         assert stub.last_json()["chat_template_kwargs"] == {"enable_thinking": expected}
 
 
-async def test_llm_chat_thinking_control_none_sends_no_switch() -> None:
-    # Strict or switchless endpoints opt out of template arguments entirely.
+@pytest.mark.parametrize("control", ["none", "system_prompt"])
+async def test_llm_chat_non_template_controls_send_no_template_args(control) -> None:
+    # Strict, switchless, and system-prompt endpoints get neither template
+    # arguments nor a budget their server cannot enforce.
     stub = StubOpenAI()
     async with OpenAICompatLLM(
         "http://stub", "llm",
-        thinking=ThinkingSpec(control="none", default=False),
+        thinking=ThinkingSpec(control=control, default=False),
         client=stub.client(),
     ) as llm:
         await llm.chat(
@@ -355,6 +360,7 @@ async def test_llm_chat_thinking_control_none_sends_no_switch() -> None:
             enable_thinking=True, thinking_budget=64,
         )
     assert "chat_template_kwargs" not in stub.last_json()
+    assert "thinking_token_budget" not in stub.last_json()
 
 
 @pytest.mark.parametrize("control", ["none", "system_prompt"])

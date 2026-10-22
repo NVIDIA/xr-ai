@@ -145,7 +145,7 @@ the adapter's `thinking` setting decides how the switch reaches the model:
 
 | `control` | Wire behavior | Used by |
 |---|---|---|
-| `chat_template` | `chat_template_kwargs.enable_thinking`, plus `thinking_budget` | `nemotron3_nano`, `nemotron_omni`, `cosmos_vlm` |
+| `chat_template` | `chat_template_kwargs.enable_thinking`; `thinking_budget` as vLLM's `thinking_token_budget` | `nemotron3_nano`, `nemotron_omni`, `cosmos_vlm` |
 | `system_prompt` | A `detailed thinking on` or `off` line at the start of the system message | Profiles for Llama-Nemotron endpoints |
 | `none` | Nothing is sent; the model has no switch or rejects template arguments | `cosmos3_nano_reasoner` |
 | unset | `chat_template` when `default` is set; otherwise only `enable_thinking=True` is sent | Profiles without a preset |
