@@ -15,7 +15,6 @@ from typing import Any
 
 from .cosmos3_nano_reasoner import COSMOS3_NANO_REASONER
 from .cosmos_vlm      import COSMOS_VLM
-from .llama_nemotron  import LLAMA_NEMOTRON
 from .magpie_tts      import MAGPIE_TTS
 from .nemotron3_nano  import NEMOTRON3_NANO
 from .nemotron_omni   import NEMOTRON_OMNI
@@ -27,7 +26,6 @@ from .pocket_tts       import POCKET_TTS
 _PRESETS: dict[str, dict[str, Any]] = {
     "cosmos3_nano_reasoner": COSMOS3_NANO_REASONER,
     "cosmos_vlm":     COSMOS_VLM,
-    "llama_nemotron": LLAMA_NEMOTRON,
     "magpie_tts":     MAGPIE_TTS,
     "nemotron3_nano": NEMOTRON3_NANO,
     "nemotron_omni":  NEMOTRON_OMNI,

@@ -408,28 +408,6 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Commands:
   - `embedding_server` → `embedding_server.__main__:run`
 
-#### `llama-nemotron-llm-server` — [`services/llama-nemotron-llm/`](services/llama-nemotron-llm/)
-
-- Python: `>=3.11,<3.15`
-- Build dependencies:
-  - `hatchling`
-- Runtime dependencies:
-  - `multidict>=6.9.1`
-  - `urllib3>=2.8.0`
-  - `pyjwt>=2.15.1`
-  - `transformers>=5.17.0`
-  - `vllm>=0.30.0`
-  - `mcp>=2.2.0`
-  - `pillow>=13.0.0`
-  - `pyyaml>=6.0`
-  - `huggingface-hub>=0.32.0`
-  - `hf-xet>=1.1.2,<2.0.0`
-  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
-  - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
-- Optional dependency groups: none
-- Commands:
-  - `llama_nemotron_llm_server` → `llama_nemotron_llm_server.__main__:run`
-
 #### `magpie-tts-server` — [`services/magpie-tts/`](services/magpie-tts/)
 
 - Python: `>=3.11,<3.14`
@@ -992,7 +970,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
     - `xr-ai-voicegate` → [`xr-ai-voicegate`](utils/xr-ai-voicegate/) (local, editable)
   - `vllm`:
     - `embedding-server` → [`embedding-server`](services/embedding-server/) (local, editable)
-    - `llama-nemotron-llm-server` → [`llama-nemotron-llm-server`](services/llama-nemotron-llm/) (local, editable)
+    - `llama-nemotron-llm-server`
     - `nemotron-omni-llm-server` → [`nemotron-omni-llm-server`](services/nemotron-omni-llm/) (local, editable)
     - `nemotron3-nano-llm-server` → [`nemotron3-nano-llm-server`](services/nemotron3-nano-llm/) (local, editable)
     - `vlm-server` → [`vlm-server`](services/vlm-server/) (local, editable)
@@ -1012,7 +990,6 @@ Python dependency metadata, so they remain curated here.
 | `services/stt-server/` | `stt-server` | `stt_server` | 8103 | parakeet-tdt-0.6b-v3 | NeMo ASR in-process |
 | `services/magpie-tts/` | `magpie-tts-server` | `magpie_tts_server` | 8104 | magpie_tts_multilingual_357m | NeMo TTS in-process |
 | `services/pocket-tts/` | `pocket-tts-server` | `pocket_tts_server` | 8105 | kyutai/pocket-tts | Pocket TTS in-process |
-| `services/llama-nemotron-llm/` | `llama-nemotron-llm-server` | `llama_nemotron_llm_server` | 8106 | Llama-3.1-Nemotron-Nano-8B-v1 | vLLM (pip or docker) |
 | `services/nemotron3-nano-llm/` | `nemotron3-nano-llm-server` | `nemotron3_nano_llm_server` | 8107 | NVIDIA-Nemotron-3-Nano-30B-A3B (GPU-selected quantization) | vLLM (pip or docker) |
 | `services/nemotron-omni-llm/` | `nemotron-omni-llm-server` | `nemotron_omni_llm_server` | 8108 | Nemotron-3-Nano-Omni-30B-A3B-Reasoning | vLLM (pip or docker), multimodal |
 | `services/embedding-server/` | `embedding-server` | `embedding_server` | 8109 | Nemotron-3-Embed-1B-BF16 | vLLM (pip or docker) |

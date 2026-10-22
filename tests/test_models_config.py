@@ -47,11 +47,10 @@ def test_package_root_exports_complete_config_surface() -> None:
     assert DecisionSpec in get_args(Spec)
 
 
-def test_nine_presets_registered() -> None:
+def test_eight_presets_registered() -> None:
     assert set(available_presets()) == {
         "cosmos3_nano_reasoner",
         "cosmos_vlm",
-        "llama_nemotron",
         "magpie_tts",
         "nemotron3_nano",
         "nemotron_omni",
@@ -77,12 +76,12 @@ def test_nemotron_omni_disables_thinking_by_default() -> None:
 
 def test_profile_thinking_overrides_merge_onto_preset() -> None:
     cfg = load_models_config_from_dict({"llm": {
-        "adapter": {"preset": "llama_nemotron", "thinking": {"default": True}},
-        "endpoint": {"base_url": "http://localhost:8102"},
+        "adapter": {"preset": "nemotron3_nano", "thinking": {"default": True}},
+        "endpoint": {"base_url": "http://localhost:8107"},
     }})
 
     assert cfg.llm("llm").adapter.thinking == ThinkingSpec(
-        control="system_prompt", default=True,
+        control="chat_template", default=True,
     )
 
 
@@ -103,22 +102,26 @@ def test_profile_legacy_thinking_key_overrides_preset_default() -> None:
     assert spec.default_extras == {"chat_template_kwargs": {"thinking_budget": 256}}
 
 
-@pytest.mark.parametrize("preset", ["cosmos3_nano_reasoner", "llama_nemotron"])
-def test_profile_legacy_thinking_key_passes_through_other_controls(preset) -> None:
+@pytest.mark.parametrize("entry, thinking", [
+    ({"adapter": {"preset": "cosmos3_nano_reasoner"}}, ThinkingSpec(control="none")),
+    (
+        {"category": "llm",
+         "adapter": {"model_name": "llm", "thinking": {"control": "system_prompt"}}},
+        ThinkingSpec(control="system_prompt"),
+    ),
+])
+def test_profile_legacy_thinking_key_passes_through_other_controls(entry, thinking) -> None:
     # A copy of the earlier NIM profile keeps sending its raw field.
     extras = {"chat_template_kwargs": {"enable_thinking": False}}
     cfg = load_models_config_from_dict({"m": {
-        "adapter": {"preset": preset, "default_extras": extras},
+        **entry,
+        "adapter": {**entry["adapter"], "default_extras": extras},
         "endpoint": {"base_url": "http://localhost:8100"},
     }})
 
     entry = cfg.entries["m"]
     assert entry.default_extras == extras
-    assert entry.adapter.thinking == _preset_thinking(preset)
-
-
-def _preset_thinking(name: str) -> ThinkingSpec:
-    return ThinkingSpec.from_mapping(get_preset(name)["thinking"])
+    assert entry.adapter.thinking == thinking
 
 
 @pytest.mark.parametrize("adapter, match", [
@@ -702,8 +705,8 @@ def test_direct_nested_mapping_without_models_root_is_supported() -> None:
 def test_multiple_named_llm_fixture_remains_compatible() -> None:
     cfg = load_models_config_from_dict({
         "summarizer": {
-            "kind": "preset:llama_nemotron",
-            "base_url": "http://localhost:8106",
+            "kind": "preset:nemotron_omni",
+            "base_url": "http://localhost:8108",
         },
         "planner": {
             "kind": "preset:nemotron3_nano",
@@ -724,7 +727,7 @@ def test_multiple_named_llm_fixture_remains_compatible() -> None:
     }, source="multi-LLM fixture")
 
     assert set(cfg.entries) == {"summarizer", "planner", "stt", "tts", "vlm"}
-    assert cfg.llm("summarizer").base_url == "http://localhost:8106"
+    assert cfg.llm("summarizer").base_url == "http://localhost:8108"
     assert cfg.llm("planner").base_url == "http://localhost:8107"
     assert cfg.llm("planner").adapter.reasoning_field == "reasoning"
     assert cfg.vlm("vlm").endpoint.base_url == "http://localhost:8100"
