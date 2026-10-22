@@ -129,6 +129,8 @@ microphone access.
 
 ### Step 3 — Meet the agent
 
+First say “Hey agent, let's start talking” and wait for the listening confirmation.
+
 Try this first spoken interaction:
 
 ```text
