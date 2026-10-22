@@ -624,23 +624,6 @@ wheels = [
 ]
 
 [[package]]
-name = "clef-flash-model-server"
-version = "0.1.0"
-source = { editable = "../model-server-samples/clef-flash" }
-dependencies = [
-    { name = "xr-ai-launcher" },
-    { name = "xr-ai-logging" },
-    { name = "xr-ai-vllm" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "xr-ai-launcher", editable = "../utils/xr-ai-launcher" },
-    { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
-    { name = "xr-ai-vllm", editable = "../utils/xr-ai-vllm" },
-]
-
-[[package]]
 name = "clef-server"
 version = "0.1.0"
 source = { editable = "../services/clef-server" }
@@ -655,8 +638,8 @@ dependencies = [
     { name = "torchvision" },
     { name = "transformers" },
     { name = "uvicorn", extra = ["standard"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
+    { name = "xr-ai-launcher" },
     { name = "xr-ai-logging" },
-    { name = "xr-ai-vllm" },
 ]
 
 [package.metadata]
@@ -671,8 +654,8 @@ requires-dist = [
     { name = "torchvision", specifier = ">=0.28.0" },
     { name = "transformers", specifier = ">=5.17.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34.0" },
+    { name = "xr-ai-launcher", editable = "../utils/xr-ai-launcher" },
     { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
-    { name = "xr-ai-vllm", editable = "../utils/xr-ai-vllm" },
 ]
 
 [[package]]
@@ -7787,7 +7770,6 @@ source = { virtual = "." }
 
 [package.optional-dependencies]
 repository = [
-    { name = "clef-flash-model-server" },
     { name = "clef-server" },
     { name = "cloudxr-runtime" },
     { name = "device-io-hub" },
@@ -7841,7 +7823,6 @@ vllm = [
 
 [package.metadata]
 requires-dist = [
-    { name = "clef-flash-model-server", marker = "extra == 'repository'", editable = "../model-server-samples/clef-flash" },
     { name = "clef-server", marker = "extra == 'repository'", editable = "../services/clef-server" },
     { name = "cloudxr-runtime", marker = "extra == 'repository'", editable = "../services/cloudxr-runtime" },
     { name = "device-io-hub", marker = "extra == 'repository'", editable = "../services/device-io-hub" },
@@ -7917,7 +7898,7 @@ name = "xr-ai-launcher"
 version = "0.1.0"
 source = { editable = "../utils/xr-ai-launcher" }
 dependencies = [
-    { name = "xr-ai-gpu" },
+    { name = "xr-ai-gpu", marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository' or extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
 ]
 
 [package.metadata]
@@ -8156,6 +8137,12 @@ requires-dist = [
 name = "xr-ai-vllm"
 version = "0.1.0"
 source = { editable = "../utils/xr-ai-vllm" }
+dependencies = [
+    { name = "xr-ai-launcher", marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository' or extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "xr-ai-launcher", editable = "../utils/xr-ai-launcher" }]
 
 [[package]]
 name = "xr-ai-voice"

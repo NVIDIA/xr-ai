@@ -6,16 +6,9 @@
 from __future__ import annotations
 
 import asyncio
-import importlib.util
 import json
 import math
-import os
-import signal
-import socket
-import subprocess
 import sys
-import threading
-import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
@@ -37,14 +30,6 @@ from clef_server._service import (  # noqa: E402
     _normalize_response,
     create_app,
 )
-
-_SAMPLE_SPEC = importlib.util.spec_from_file_location(
-    "clef_flash_sample",
-    _REPO_ROOT / "model-server-samples" / "clef-flash" / "main.py",
-)
-assert _SAMPLE_SPEC and _SAMPLE_SPEC.loader
-clef_sample = importlib.util.module_from_spec(_SAMPLE_SPEC)
-_SAMPLE_SPEC.loader.exec_module(clef_sample)
 
 REVISION = "17f0b0ad64efb65d273590632833508766b2aae6"
 
@@ -306,173 +291,10 @@ def test_clef_ownership_uses_exact_environment_not_command_line(tmp_path: Path, 
 
     assert not has_ownership_marker(1234, 8120, clef_main._MARKER)
     (proc_root / "environ").write_bytes(
-        b"XR_AI_CLEF_MANAGED=1\0XR_AI_CLEF_PORT=8120\0"
+        b"XR_AI_VLLM_MANAGED=1\0XR_AI_VLLM_PORT=8120\0"
     )
     assert has_ownership_marker(1234, 8120, clef_main._MARKER)
     assert not has_ownership_marker(1234, 8121, clef_main._MARKER)
-
-
-@pytest.fixture
-def process_handle(monkeypatch):
-    monkeypatch.setattr(clef_sample.os, "pidfd_open", lambda _pid: 999)
-    monkeypatch.setattr(clef_sample.os, "close", lambda _fd: None)
-
-
-def test_stop_ignores_docker_and_rejects_unowned_listener(monkeypatch, process_handle) -> None:
-    monkeypatch.setattr(clef_sample, "pid_on_port_checked", lambda _port: (1234, True, True))
-    monkeypatch.setattr(clef_sample, "has_ownership_marker", lambda *_args: False)
-    monkeypatch.setattr(
-        "xr_ai_vllm._docker.container_on_port_checked",
-        lambda *_args: (_ for _ in ()).throw(AssertionError("Clef stop must not inspect Docker")),
-    )
-    monkeypatch.setattr(
-        clef_sample.signal,
-        "pidfd_send_signal",
-        lambda *_args: (_ for _ in ()).throw(AssertionError("must not signal unowned listener")),
-    )
-
-    assert not clef_sample._stop_clef(8120)
-
-
-def test_stop_rechecks_listener_pid_before_signalling(monkeypatch, process_handle) -> None:
-    listeners = iter([(1234, True, True), (5678, True, True)])
-    monkeypatch.setattr(clef_sample, "pid_on_port_checked", lambda _port: next(listeners))
-    monkeypatch.setattr(clef_sample, "has_ownership_marker", lambda *_args: True)
-    monkeypatch.setattr(
-        clef_sample.signal,
-        "pidfd_send_signal",
-        lambda *_args: (_ for _ in ()).throw(AssertionError("must not signal replacement listener")),
-    )
-
-    assert not clef_sample._stop_clef(8120)
-
-
-def test_stop_signals_verified_process_handle(monkeypatch, process_handle) -> None:
-    signals = []
-    monkeypatch.setattr(clef_sample, "pid_on_port_checked", lambda _port: (1234, True, True))
-    monkeypatch.setattr(clef_sample, "has_ownership_marker", lambda *_args: True)
-    monkeypatch.setattr(clef_sample.signal, "pidfd_send_signal", lambda fd, sig: signals.append((fd, sig)))
-    monkeypatch.setattr(clef_sample, "_wait_for_process_exit", lambda *_args: True)
-
-    assert clef_sample._stop_clef(8120)
-    assert signals == [(999, signal.SIGTERM)]
-
-
-def test_force_stop_keeps_captured_identity_after_listener_replacement(monkeypatch, process_handle) -> None:
-    listeners = iter([(1234, True, True), (1234, True, True), (5678, True, True)])
-    monkeypatch.setattr(clef_sample, "pid_on_port_checked", lambda _port: next(listeners))
-    monkeypatch.setattr(clef_sample, "has_ownership_marker", lambda *_args: True)
-    signals = []
-    monkeypatch.setattr(clef_sample.signal, "pidfd_send_signal", lambda fd, sig: signals.append((fd, sig)))
-    waits = iter([False, True])
-    monkeypatch.setattr(clef_sample, "_wait_for_process_exit", lambda *_args: next(waits))
-    assert clef_sample._stop_clef(8120)
-    assert signals == [(999, signal.SIGTERM), (999, signal.SIGKILL)]
-    assert next(listeners) == (5678, True, True)
-
-
-def test_stop_waits_for_real_uvicorn_process_and_native_work(tmp_path, monkeypatch):
-    import httpx
-
-    with socket.socket() as reserve:
-        reserve.bind(("127.0.0.1", 0))
-        port = reserve.getsockname()[1]
-    script = '''
-import asyncio, sys, time
-from pathlib import Path
-from concurrent.futures import ThreadPoolExecutor
-import uvicorn
-from clef_server._config import ServerConfig, DEFAULT_REVISION
-from clef_server._service import create_app
-root=Path(sys.argv[1]);port=int(sys.argv[2])
-cfg=ServerConfig(
-    model_name='test',
-    model_revision=DEFAULT_REVISION,
-    model_cache=root,
-    host='127.0.0.1',
-    port=port,
-    device='cpu',
-    dtype='float32',
-    max_length=256,
-    max_body_bytes=4096,
-)
-class Backend:
-    model=object();revision=DEFAULT_REVISION;config=cfg
-    executor=ThreadPoolExecutor(max_workers=1)
-    def validate_length(self,body):pass
-    def answer(self,body):
-        if body['state']=='blocked':
-            (root/'entered').touch()
-            while not (root/'release').exists():time.sleep(.01)
-        answers={}
-        for key,question in body['questions'].items():
-            labels=list(question['criteria'])
-            answers[key]={'type':'choice','choice':labels[0],'confidence':1,
-                          'probabilities':{label:float(i==0) for i,label in enumerate(labels)}}
-        return {'answers':answers,'usage':{}}
-    async def close(self):
-        await asyncio.to_thread(self.executor.shutdown,wait=True)
-        (root/'closed').touch()
-uvicorn.run(create_app(cfg,Backend()),host='127.0.0.1',port=port,log_level='error')
-'''
-    env = os.environ | {
-        "PYTHONPATH": str(_REPO_ROOT / "services/clef-server"),
-        "XR_AI_CLEF_MANAGED": "1", "XR_AI_CLEF_PORT": str(port),
-    }
-    process = subprocess.Popen([sys.executable, "-c", script, str(tmp_path), str(port)], env=env)
-    request_errors = []
-    results = []
-
-    def listener(_port):
-        with socket.socket() as probe:
-            probe.settimeout(0.1)
-            return (process.pid, True, True) if probe.connect_ex(("127.0.0.1", port)) == 0 else (None, True, False)
-
-    def request():
-        try:
-            with httpx.Client(timeout=10) as client:
-                response = client.post(f"http://127.0.0.1:{port}/v1/systemone", json={
-                    "model": "test", "state": "blocked", "questions": {
-                        "q": {"type": "choice", "instructions": "choose", "criteria": {"a": "A", "b": "B"}},
-                    },
-                })
-                response.raise_for_status()
-        except BaseException as exc:
-            request_errors.append(exc)
-
-    def wait_for(predicate):
-        deadline = time.monotonic() + 5
-        while not predicate():
-            assert time.monotonic() < deadline
-            time.sleep(0.01)
-
-    request_thread = threading.Thread(target=request)
-    stop_thread = threading.Thread(target=lambda: results.append(clef_sample._stop_clef(port)))
-    try:
-        wait_for(lambda: listener(port)[2])
-        monkeypatch.setattr(clef_sample, "pid_on_port_checked", listener)
-        request_thread.start()
-        wait_for(lambda: (tmp_path / "entered").exists())
-        stop_thread.start()
-        wait_for(lambda: not listener(port)[2])
-        assert process.poll() is None
-        assert request_thread.is_alive() and stop_thread.is_alive()
-        assert not results and not (tmp_path / "closed").exists()
-        (tmp_path / "release").touch()
-        request_thread.join(timeout=5)
-        stop_thread.join(timeout=5)
-        process.wait(timeout=5)
-        assert results == [True] and not request_errors
-        assert (tmp_path / "closed").exists()
-    finally:
-        (tmp_path / "release").touch()
-        if process.poll() is None:
-            process.kill()
-        process.wait(timeout=5)
-        if request_thread.ident is not None:
-            request_thread.join(timeout=5)
-        if stop_thread.ident is not None:
-            stop_thread.join(timeout=5)
 
 
 @pytest.mark.asyncio
