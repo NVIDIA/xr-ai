@@ -184,7 +184,7 @@ async def test_uncertain_routing_probes_eligible_destination_before_clarifying(d
                 return Admission("clarify", text="Which item do you mean?")
             return Admission("accept")
 
-        async def answer(self, _turn):
+        async def answer(self, _turn, *, started):
             self.answers += 1
             await capture_emit(self.name, "Accepted the request.")
             return DestinationResult("answer", "Accepted the request.")
@@ -277,7 +277,7 @@ async def test_declined_default_never_becomes_the_answer_fallback(decision_only)
             self.admissions += 1
             return Admission("decline")
 
-        async def answer(self, _turn):
+        async def answer(self, _turn, *, started):
             self.answers += 1
             return DestinationResult("answer", "Must not answer a declined request.")
 

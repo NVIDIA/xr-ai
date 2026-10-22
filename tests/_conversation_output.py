@@ -29,10 +29,14 @@ class CapturingAgentRouter(AgentRouter):
         super().__init__(*args, **kwargs)
 
 
+async def standalone_started() -> bool:
+    return True
+
+
 async def answer(destination, turn, *, emit):
     token = _output.set(emit)
     try:
-        return await destination.answer(turn)
+        return await destination.answer(turn, started=standalone_started)
     finally:
         _output.reset(token)
 

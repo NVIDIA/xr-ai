@@ -346,6 +346,12 @@ def _destinations(recorder: _DecisionRecorder, context_budget: int):
     )
 
 
+async def _started() -> bool:
+    """Response-start signal for destination answers called without a router."""
+
+    return True
+
+
 async def run_decisions(flows, cases, recorder, *, context_budget: int):
     router, destinations, monitor, notes_conversation, frames, context_updates = _destinations(recorder, context_budget)
     turns_out: list[dict[str, Any]] = []
@@ -580,7 +586,7 @@ async def _evaluate_turn(
                 action_call_index = len(recorder.calls) - 1
                 if action in {"start", "retarget"}:
                     frames.reset_sample(participant)
-                await destinations[selected].answer(turn)
+                await destinations[selected].answer(turn, started=_started)
                 entry["action"] = action
                 entry["action_decision_call_index"] = action_call_index
                 if action in {"start", "retarget"}:
@@ -590,7 +596,7 @@ async def _evaluate_turn(
             action = pending[1] if pending and pending[0] == turn.turn_id else None
             if action in {"start", "capture", "readback", "finish"}:
                 action_call_index = len(recorder.calls) - 1
-                result = await destinations[selected].answer(turn)
+                result = await destinations[selected].answer(turn, started=_started)
                 entry["action"] = action
                 entry["action_decision_call_index"] = action_call_index
                 if result.disposition == "focus":

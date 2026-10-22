@@ -21,7 +21,6 @@ from xr_ai_routing import (
     DestinationResult,
     RoutableAgent,
     RoutingAid,
-    notify_response_started,
 )
 from xr_ai_runtime import AgentRuntime, RuntimeClosedError, Topic
 from xr_ai_tools.current_frame import CurrentFrameRequest, CurrentFrameTool
@@ -80,17 +79,18 @@ class VisualObservationAgent(RoutableAgent):
         del focused
         return Admission("accept")
 
-    async def answer(self, turn: AgentTurn) -> DestinationResult:
+    async def answer(self, turn: AgentTurn, *, started: Callable[[], Awaitable[bool]]) -> DestinationResult:
         opened = False
         publication_failed = False
-        cancelled = False
+        interrupt = False
 
         async def emit(text: str) -> None:
-            nonlocal opened, publication_failed
+            nonlocal opened, publication_failed, interrupt
+            if not opened:
+                interrupt = await started()
             task = asyncio.current_task()
             if task is not None and task.cancelling():
                 raise asyncio.CancelledError
-            notify_response_started()
             try:
                 await self._runtime.publish(
                     self._output_topic,
@@ -98,7 +98,7 @@ class VisualObservationAgent(RoutableAgent):
                         text=text,
                         response_id=turn.turn_id,
                         final=False,
-                        interrupt=not opened,
+                        interrupt=interrupt and not opened,
                         timestamp_us=turn.timestamp_us,
                     ),
                     participant_id=turn.participant_id,
@@ -110,34 +110,15 @@ class VisualObservationAgent(RoutableAgent):
             opened = True
 
         try:
-            result = await self._answer(turn, emit)
-            task = asyncio.current_task()
-            if task is not None and task.cancelling():
-                raise asyncio.CancelledError
-            return result
-        except asyncio.CancelledError:
-            cancelled = True
-            raise
+            return await self._answer(turn, emit)
         except Exception:
             task = asyncio.current_task()
             if task is not None and task.cancelling():
                 raise asyncio.CancelledError from None
-            if not opened and not publication_failed:
-                with suppress(RuntimeClosedError):
-                    await self._runtime.publish(
-                        self._output_topic,
-                        VoiceOutput(
-                            text="I couldn't complete that request. Please try again.",
-                            timestamp_us=turn.timestamp_us,
-                        ),
-                        participant_id=turn.participant_id,
-                        source="observation",
-                    )
             raise
         finally:
-            task = asyncio.current_task()
-            cancelled = cancelled or (task is not None and task.cancelling() > 0)
-            if opened and not cancelled and not publication_failed:
+            # Close an opened stream even when canceled so later output does not queue behind it.
+            if opened and not publication_failed:
                 with suppress(RuntimeClosedError):
                     await self._runtime.publish(
                         self._output_topic,

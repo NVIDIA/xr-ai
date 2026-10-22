@@ -108,7 +108,7 @@ class _Conversation:
             await self.admit_gate.wait()
         return Admission("accept")
 
-    async def answer(self, turn):
+    async def answer(self, turn, *, started):
         self.answers.append(turn)
         await capture_emit(self.name, self.answer_text)
         return DestinationResult("answer", self.answer_text)
@@ -334,7 +334,7 @@ async def test_initial_agent_summaries_reach_first_query_and_remain_participant_
         cleanup_participant=cleanup,
     )
     output = OutputCollector()
-    runtime.register("conversation-example", router)
+    runtime.register("conversation-example", router.runtime_subscriber())
     runtime.register("output", output)
 
     async with runtime:
