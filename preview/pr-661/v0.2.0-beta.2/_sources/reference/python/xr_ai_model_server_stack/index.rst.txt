@@ -30,11 +30,11 @@ Package Contents
    resolved against the current working directory. Service projects are
    resolved under that repository's ``services/`` directory.
 
-   ``services`` selects from ``speaker-stt``, ``stt``, ``tts``, ``omni``, ``vlm``, and
-   ``embedding``. The selected ``base/yaml/<gpu_profile>.yaml`` must contain
+   ``services`` selects from ``speaker-stt``, ``stt``, ``tts``, ``omni``, ``vlm``,
+   ``clef``, and ``embedding``. The selected ``base/yaml/<gpu_profile>.yaml`` must contain
    exactly those server mappings. Each mapping overrides the corresponding
-   service's own YAML in ``services/``. Launch order is speaker ASR, batch STT, TTS, Omni, VLM, then embedding,
-   omitting unselected services.
+   service's own YAML in ``services/``. Launch order is speaker ASR, batch STT, TTS,
+   Omni, VLM, Clef, then embedding, omitting unselected services.
 
    ``gpu_profile`` selects a checked-in profile by filename stem; ``None``
    detects the hardware automatically for startup. ``stop=False`` requires ``HF_TOKEN``,
