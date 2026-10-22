@@ -34,7 +34,7 @@ from procedure_capture_guide_worker.config import load_config
 from procedure_capture_guide_worker.guide._workflow_spec import parse_workflow
 from procedure_capture_guide_worker.guide.agent import GuideAgent
 from procedure_capture_guide_worker.guide.events import PARTICIPANT_JOINED_TOPIC, USER_QUERY_TOPIC
-from procedure_capture_guide_worker.guide.guides import SelectedGuide, select_guide
+from procedure_capture_guide_worker.guide.guides import SelectedGuide, load_guide
 from xr_ai_hub import FrameData, FrameSignal, PixelFormat
 from xr_ai_models import load_models_config, make_llm, make_vlm
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, subscribe
@@ -150,7 +150,7 @@ async def evaluate(manifest_path: Path | None, output: Path, *, packet: Path | N
                     "tail_s": tail_s, "actions": actions}
     else:
         manifest = yaml.safe_load(manifest_path.read_text())
-        guide = select_guide((manifest_path.parent / manifest["guides_dir"]).resolve(), manifest["guide"])
+        guide = load_guide(manifest_path.parent / manifest["guide_path"])
         raw = guide.path.read_bytes()
     if hashlib.sha256(raw).hexdigest() != guide.sha256:
         raise ValueError("guide changed while loading; retry with a fixed guide")
@@ -180,7 +180,7 @@ async def evaluate(manifest_path: Path | None, output: Path, *, packet: Path | N
     with tempfile.TemporaryDirectory(prefix="guide-eval-config-") as temporary:
         request = Path(temporary) / "request.json"
         request.write_text(json.dumps({"worker_config": str(_SAMPLE / "yaml/worker.yaml"),
-                                       "mode": "guide", "guide_name": guide.workflow.name}))
+                                       "mode": "guide", "guide_path": str(guide.path.resolve())}))
         settings = load_config(request)
     models = load_models_config(settings.models_config)
     llm, vlm = make_llm(models, "llm"), make_vlm(models, "vlm")

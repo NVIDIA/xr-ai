@@ -3,8 +3,7 @@
 
 # Generated label cards exercise the real VLM and guide, not photographic accuracy.
 # Expected responses are assertions; they are never supplied to the VLM.
-guides_dir: ../guides
-guide: Tea Making
+guide_path: ../examples/tea-making/guide.yaml
 scenes:
   green: {text: "TEA PACKET\nGREEN"}
   breakfast: {text: "TEA PACKET\nBREAKFAST BLACK"}

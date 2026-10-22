@@ -45,7 +45,7 @@ from procedure_capture_guide_worker.guide.events import (  # noqa: E402
     PARTICIPANT_LEFT_TOPIC,
     USER_QUERY_TOPIC,
 )
-from procedure_capture_guide_worker.guide.guides import SelectedGuide, select_guide  # noqa: E402
+from procedure_capture_guide_worker.guide.guides import SelectedGuide, load_guide  # noqa: E402
 from procedure_capture_guide_worker.guide.guiding import (  # noqa: E402
     _AdvanceGuideRequest,
     _CommitRequest,
@@ -122,10 +122,9 @@ def write_guide(directory, document, name="test.guide.yaml"):
     return path
 
 
-@pytest.mark.parametrize("name", ["Tea Making", "tea making", "tea_making"])
-def test_shipped_tea_guide_is_selectable_with_default_configuration(name):
-    guide = select_guide(_SAMPLE / "guides", name)
-    assert guide.path == _SAMPLE / "guides/tea-making.guide.yaml"
+def test_shipped_tea_guide_is_selectable_by_example_path():
+    guide = load_guide(_SAMPLE / "examples/tea-making/guide.yaml")
+    assert guide.path == _SAMPLE / "examples/tea-making/guide.yaml"
     assert guide.workflow.runnable
     workflow = guide.workflow
     chain = []
@@ -164,7 +163,7 @@ def test_shipped_tea_guide_is_selectable_with_default_configuration(name):
     ("YES, CHAMOMILE", False), ("YES\nNO", False),
 ])
 def test_shipped_tea_identification_requires_an_affirmative_answer(answer, should_match):
-    guide = select_guide(_SAMPLE / "guides", "Tea Making")
+    guide = load_guide(_SAMPLE / "examples/tea-making/guide.yaml")
     pattern = guide.workflow.steps["identify"].evidence.pattern
     assert (re.fullmatch(pattern, answer.strip()) is not None) == should_match
 
@@ -172,8 +171,8 @@ def test_shipped_tea_identification_requires_an_affirmative_answer(answer, shoul
 def test_tea_identification_eval_uses_the_shipped_guide():
     path = _SAMPLE / "eval/tea_identification.yaml"
     manifest = yaml.safe_load(path.read_text())
-    guide = select_guide((path.parent / manifest["guides_dir"]).resolve(), manifest["guide"])
-    assert guide.path == _SAMPLE / "guides/tea-making.guide.yaml"
+    guide = load_guide(path.parent / manifest["guide_path"])
+    assert guide.path == _SAMPLE / "examples/tea-making/guide.yaml"
     scenes = manifest["scenes"]
     assert all(action["scene"] in scenes for action in manifest["actions"] if action["action"] == "image")
     assert any(action.get("answers") == ["UNKNOWN", "Unknown", "unknown"] for action in manifest["actions"])
@@ -185,7 +184,7 @@ async def test_shipped_tea_guide_verification_and_runtime_timer(engine, monkeypa
     now = 1000.0
     monkeypatch.setattr(guiding, "time", SimpleNamespace(monotonic=lambda: now))
     backend = engine._backend
-    backend._guide = select_guide(_SAMPLE / "guides", "Tea Making")
+    backend._guide = load_guide(_SAMPLE / "examples/tea-making/guide.yaml")
     await engine.participant_left(None, context())
     await engine.participant_joined(None, context())
     session = backend._sessions["alice"]
@@ -256,7 +255,7 @@ async def test_shipped_tea_guide_verification_and_runtime_timer(engine, monkeypa
 @pytest.mark.parametrize("step_id", ["identify", "heat_water", "start_steeping", "steep_timer"])
 async def test_shipped_tea_guide_skip_never_claims_verified_completion(engine, step_id):
     backend = engine._backend
-    backend._guide = select_guide(_SAMPLE / "guides", "Tea Making")
+    backend._guide = load_guide(_SAMPLE / "examples/tea-making/guide.yaml")
     backend._start("alice")
     session = backend._sessions["alice"]
     session.step_id = step_id
@@ -317,31 +316,49 @@ async def test_automatic_finish_reports_skipped_prerequisite(engine, document):
     assert not session.active
 
 
-def test_approved_exact_name_and_id_are_pinned(tmp_path, document):
+def test_approved_file_contents_are_pinned(tmp_path, document):
     path = write_guide(tmp_path, document)
     original = path.read_bytes()
-    guide = select_guide(tmp_path, "align parts")
+    guide = load_guide(path)
     assert guide.sha256 == hashlib.sha256(original).hexdigest()
-    assert select_guide(tmp_path, "ALIGN_PARTS").path == path
+    assert guide.path == path
     document["task"]["status"] = "draft"
     write_guide(tmp_path, document)
     assert guide.workflow.status == "approved"
     with pytest.raises(ValueError, match="draft"):
-        select_guide(tmp_path, "Align Parts")
-    with pytest.raises(ValueError, match="No guide"):
-        select_guide(tmp_path, "align")
+        load_guide(tmp_path / "test.guide.yaml")
 
 
-def test_ambiguity_and_symlinks_are_rejected(tmp_path, document):
+def test_explicit_path_ignores_duplicate_names_and_invalid_siblings(tmp_path, document):
     path = write_guide(tmp_path, document)
-    write_guide(tmp_path, document, "other.guide.yaml")
-    with pytest.raises(ValueError, match="Ambiguous"):
-        select_guide(tmp_path, "Align Parts")
+    other = write_guide(tmp_path, document, "other guide.yml")
+    (tmp_path / "invalid.guide.yaml").write_text("not a guide")
+    assert load_guide(path).path == path
+    assert load_guide(other).path == other
+    with pytest.raises(ValueError, match="Cannot load guide"):
+        load_guide(tmp_path / "Align Parts")
+
+
+def test_symlink_guide_is_rejected(tmp_path, document):
+    path = write_guide(tmp_path, document)
     sub = tmp_path / "linked"
     sub.mkdir()
     (sub / "link.guide.yaml").symlink_to(path)
     with pytest.raises(ValueError, match="symbolic-link"):
-        select_guide(sub, "Align Parts")
+        load_guide(sub / "link.guide.yaml")
+
+
+@pytest.mark.parametrize("kind", ["missing", "directory", "oversize", "malformed"])
+def test_invalid_guide_file_is_rejected(tmp_path, kind):
+    path = tmp_path / "guide.yaml"
+    if kind == "directory":
+        path.mkdir()
+    elif kind == "oversize":
+        path.write_bytes(b" " * 1_000_001)
+    elif kind == "malformed":
+        path.write_text("task: [")
+    with pytest.raises(ValueError, match="Cannot load guide"):
+        load_guide(path)
 
 
 @pytest.mark.parametrize("trigger", [
@@ -359,8 +376,8 @@ def test_ambiguity_and_symlinks_are_rejected(tmp_path, document):
 def test_invalid_trigger_rejected_before_guide(tmp_path, document, trigger):
     document["steps"][0]["trigger"] = {"interval_s": 1, **trigger}
     write_guide(tmp_path, document)
-    with pytest.raises(ValueError, match="Invalid guides"):
-        select_guide(tmp_path, "Align Parts")
+    with pytest.raises(ValueError, match="Cannot load guide"):
+        load_guide(tmp_path / "test.guide.yaml")
 
 
 @pytest.mark.parametrize("path", [
@@ -383,7 +400,7 @@ def test_non_string_text_rejected_before_guide(tmp_path, document, path, value):
     target[path[-1]] = value
     write_guide(tmp_path, document)
     with pytest.raises(ValueError, match="must be a string"):
-        select_guide(tmp_path, "Align Parts")
+        load_guide(tmp_path / "test.guide.yaml")
 
 
 def test_string_regex_and_whitespace_keep_their_meaning(document):
@@ -423,7 +440,7 @@ def test_duplicate_requirements_rejected_before_guide(tmp_path, document, origin
     path = tmp_path / "invalid.guide.yaml"
     path.write_text(changed)
     with pytest.raises(ValueError, match=f"duplicate mapping key '{key}'"):
-        select_guide(tmp_path, "Align Parts")
+        load_guide(path)
     assert path.read_text() == changed
 
 
@@ -1247,7 +1264,7 @@ async def test_timer_unavailability_is_a_tool_result(engine, document, missing):
     ("Target 100 C", False), ("UNKNOWN", False), ("100 C or 212 F", False),
 ])
 def test_tea_temperature_accepts_formatting_not_different_measurements(text, accepted):
-    step = select_guide(_SAMPLE / "guides", "Tea Making").workflow.steps["heat_water"]
+    step = load_guide(_SAMPLE / "examples/tea-making/guide.yaml").workflow.steps["heat_water"]
     for source in ("CURRENT", "ACTUAL", "THERMOMETER"):
         assert bool(re.fullmatch(step.evidence.pattern, f"{source} | {text}")) is accepted
     for source in ("TARGET", "SET", "PRESET", "UNKNOWN"):
@@ -1283,7 +1300,7 @@ def test_guide_eval_cli_runs_public_runtime_scenario(tmp_path, monkeypatch, time
     elif failed_probe == "observe":
         observation = next(item for item in manifest["actions"] if item["action"] == "observe")
         observation["answers"] = ["YES"]
-    manifest["guides_dir"] = "."
+    manifest["guide_path"] = "indicator.guide.yaml"
     (tmp_path / "indicator.guide.yaml").write_text(yaml.safe_dump(guide))
     manifest_path = tmp_path / "scenario.yaml"
     manifest_path.write_text(yaml.safe_dump(manifest))
@@ -1333,13 +1350,20 @@ def test_guide_eval_cli_runs_public_runtime_scenario(tmp_path, monkeypatch, time
 
 
 @pytest.mark.parametrize("session_recording", [False, True])
-def test_cli_selects_guide_with_independent_session_recording(monkeypatch, session_recording):
+@pytest.mark.parametrize("external", [False, True])
+def test_cli_selects_guide_with_independent_session_recording(
+    monkeypatch, tmp_path, document, session_recording, external,
+):
     spec = importlib.util.spec_from_file_location("sop_guide_main", _SAMPLE / "main.py")
     main = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(main)
     requests = []
     extra = ["--session-recording"] if session_recording else []
     expected = ["hub", "capture", "worker"] if session_recording else ["hub", "worker"]
+    selected = (str(write_guide(tmp_path, document, "external guide.yaml")) if external
+                else "examples/tea-making/guide.yaml")
+    expected_path = Path(selected) if external else _SAMPLE / selected
+    monkeypatch.chdir(tmp_path)
 
     def launch(processes, base):
         assert [p.name for p in processes] == expected
@@ -1347,7 +1371,8 @@ def test_cli_selects_guide_with_independent_session_recording(monkeypatch, sessi
         requests.append(json.loads(processes[-1].config.read_text()))
         config = load_config(processes[-1].config)
         assert config.mode == "guide" and config.capture is None
-        assert config.guide.guide_name == "Align Parts"
+        assert config.guide.guide_path == expected_path
+        assert load_guide(config.guide.guide_path).path == expected_path
         assert config.voice_gate_yaml == _SAMPLE / "yaml/voice_gate.guide.yaml"
         if session_recording:
             recorder = processes[1]
@@ -1358,9 +1383,9 @@ def test_cli_selects_guide_with_independent_session_recording(monkeypatch, sessi
         assert base == _SAMPLE
 
     monkeypatch.setattr(main, "run_stack", launch)
-    main.run(["--mode", "guide", "Align Parts", *extra])
+    main.run(["--mode", "guide", selected, *extra])
     assert requests == [{"worker_config": str(_SAMPLE / "yaml/worker.yaml"), "mode": "guide",
-                         "guide_name": "Align Parts", "output_root": None}]
+                         "guide_path": selected, "output_root": None}]
     for arguments in (["--mode", "guide"], ["--mode", "guide", " "],
                       ["--mode", "replay", "Align Parts"],
                       ["--mode", "capture", "Align Parts"], ["--mode", "unknown"],
@@ -1381,7 +1406,7 @@ async def test_unapproved_selection_fails_before_model_construction(tmp_path, do
         await app.run_app(WorkerConfig(
             mode="guide", models_config=_SAMPLE / "yaml/models.json",
             voice_gate_yaml=_SAMPLE / "yaml/voice_gate.guide.yaml",
-            guide=GuideConfig(tmp_path, "Align Parts"),
+            guide=GuideConfig(tmp_path / "test.guide.yaml"),
         ))
     models.assert_not_called()
 
@@ -1391,13 +1416,13 @@ def test_mode_configuration_is_isolated_and_models_are_shared(tmp_path):
     assert capture.mode == "capture" and capture.guide is None
     request = tmp_path / "request.json"
     request.write_text(json.dumps({
-        "worker_config": str(_SAMPLE / "yaml/worker.yaml"), "mode": "guide", "guide_name": "Align Parts",
+        "worker_config": str(_SAMPLE / "yaml/worker.yaml"), "mode": "guide",
+        "guide_path": "examples/tea-making/guide.yaml",
     }))
     guide = load_config(request)
     assert guide.mode == "guide" and guide.capture is None
     assert guide.models_config == capture.models_config
-    assert guide.guide.guide_name == "Align Parts"
-    assert guide.guide.guides_dir.resolve() == _SAMPLE / "guides"
+    assert guide.guide.guide_path == _SAMPLE / "examples/tea-making/guide.yaml"
     assert guide.voice_gate_yaml == _SAMPLE / "yaml/voice_gate.guide.yaml"
 
 
@@ -1410,7 +1435,7 @@ def test_config_does_not_load_inactive_capability(tmp_path, mode):
     request = tmp_path / "request.json"
     request.write_text(json.dumps({
         "worker_config": str(settings), "mode": mode,
-        "guide_name": "Align Parts" if mode == "guide" else None,
+        "guide_path": "guides/parts.yaml" if mode == "guide" else None,
     }))
     config = load_config(request)
     assert (config.capture is not None) == (mode == "capture")
@@ -1428,7 +1453,7 @@ async def test_capture_composition_does_not_construct_guide_or_llm(tmp_path, mon
     for name in ("make_vlm", "make_stt", "make_tts"):
         monkeypatch.setattr(app, name, lambda *_args: model)
     forbidden = Mock(side_effect=AssertionError("Capture must not construct guide or LLM"))
-    for name in ("make_llm", "GuideAgent", "VoiceAggregationAgent", "select_guide"):
+    for name in ("make_llm", "GuideAgent", "VoiceAggregationAgent", "load_guide"):
         monkeypatch.setattr(app, name, forbidden)
 
     async def receive():
@@ -1476,11 +1501,11 @@ def test_hash_and_approval_use_same_snapshot_during_edit(tmp_path, document, mon
         return parse(content)
 
     monkeypatch.setattr(guides, "parse_workflow", edit_during_parse)
-    pinned = guides.select_guide(tmp_path, "Align Parts")
+    pinned = guides.load_guide(tmp_path / "test.guide.yaml")
     assert pinned.workflow.runnable
     assert pinned.sha256 == hashlib.sha256(approved).hexdigest()
     with pytest.raises(ValueError, match="draft"):
-        guides.select_guide(tmp_path, "Align Parts")
+        guides.load_guide(tmp_path / "test.guide.yaml")
 
 
 async def test_guide_app_composition_starts_and_cleans_up(tmp_path, document, monkeypatch):
@@ -1489,7 +1514,7 @@ async def test_guide_app_composition_starts_and_cleans_up(tmp_path, document, mo
     write_guide(tmp_path, document)
     config = WorkerConfig(
         mode="guide", models_config=_SAMPLE / "yaml/models.json",
-        voice_gate_yaml=_SAMPLE / "yaml/voice_gate.guide.yaml", guide=GuideConfig(tmp_path, "Align Parts"),
+        voice_gate_yaml=_SAMPLE / "yaml/voice_gate.guide.yaml", guide=GuideConfig(tmp_path / "test.guide.yaml"),
     )
     llm = Mock(health=AsyncMock(return_value=True), close=AsyncMock())
     for name in ("make_llm", "make_vlm", "make_stt", "make_tts"):
