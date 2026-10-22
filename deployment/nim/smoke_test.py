@@ -22,6 +22,7 @@ from xr_ai_models import (
     load_models_config,
     make_embedding,
     make_llm,
+    make_ocr,
     make_stt,
     make_tts,
     make_vlm,
@@ -50,10 +51,10 @@ def _wav_16khz(audio: bytes) -> bytes:
     return result.getvalue()
 
 
-async def check(profile: Path) -> None:
+async def check(profile: Path, *, ocr_image: Path | None = None) -> None:
     """Check every role, including TTS-to-STT and image inference; fail on errors."""
     config = load_models_config(profile)
-    roles = {"stt", "tts", "llm", "vlm", "embedding"}
+    roles = {"stt", "tts", "llm", "vlm", "embedding", "ocr"}
     if not config.entries:
         raise ValueError("smoke profile must contain at least one supported sample role")
     unsupported = config.entries.keys() - roles
@@ -65,7 +66,8 @@ async def check(profile: Path) -> None:
     async with AsyncExitStack() as stack:
         clients = {}
         for name, factory in (("stt", make_stt), ("tts", make_tts), ("llm", make_llm),
-                              ("vlm", make_vlm), ("embedding", make_embedding)):
+                              ("vlm", make_vlm),
+                              ("embedding", make_embedding), ("ocr", make_ocr)):
             if name not in config.entries:
                 continue
             client = factory(config, name)
@@ -141,6 +143,17 @@ async def check(profile: Path) -> None:
                 raise RuntimeError("VLM returned no streamed text for an image request")
             print(f"PASS streamed image: {streamed.strip()}", flush=True)
 
+        if "ocr" in clients:
+            spans = await clients["ocr"].read_text(ocr_image if ocr_image is not None else _red_image())
+            if ocr_image is not None:
+                if not any(span.text.strip() for span in spans):
+                    raise RuntimeError("OCR returned no text for the supplied text image")
+                print(f"PASS OCR: {len(spans)} text spans; verify transcription against the image", flush=True)
+            elif spans:
+                raise RuntimeError("OCR returned text for a blank image")
+            else:
+                print("PASS OCR: blank image returned no text (use --ocr-image to check recognition)", flush=True)
+
         if "embedding" in clients:
             vectors = await clients["embedding"].embed([
                 "query: What is XR AI?", "passage: XR AI connects multimodal agents to XR clients.",
@@ -161,4 +174,6 @@ if __name__ == "__main__":
         default=Path(__file__).resolve().parent / "models.yaml",
         help="Consumer model profile (JSON or YAML); defaults to the NIM endpoint example.",
     )
-    asyncio.run(check(parser.parse_args().models))
+    parser.add_argument("--ocr-image", type=Path, help="PNG or JPEG containing readable text for OCR validation.")
+    args = parser.parse_args()
+    asyncio.run(check(args.models, ocr_image=args.ocr_image))

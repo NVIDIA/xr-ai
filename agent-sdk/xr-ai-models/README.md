@@ -5,7 +5,7 @@
 
 # xr-ai-models
 
-Typed LLM, VLM, STT, TTS, and embedding service protocols plus factories for
+Typed LLM, VLM, STT, TTS, embedding, and OCR service protocols plus factories for
 model deployment profiles. It keeps endpoint credentials and provider-specific
 OpenAI-compatible behavior out of workers.
 
