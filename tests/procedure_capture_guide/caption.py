@@ -27,7 +27,7 @@ from xr_ai_models import load_models_config, make_vlm
 from xr_ai_tools.image import ImageRegistry
 from xr_ai_tools.vision import MultiImageQueryRequest, MultiImageQueryTool
 
-_SAMPLE = Path(__file__).resolve().parents[1]
+_SAMPLE = Path(__file__).resolve().parents[2] / "agent-samples/procedure-capture-guide"
 
 
 def render(objects: list, path: Path) -> None:

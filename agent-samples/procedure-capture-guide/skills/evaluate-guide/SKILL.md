@@ -11,7 +11,7 @@ description: Test a draft SOP against recorded camera input using the XR-AI guid
 # Evaluate Guide
 
 Run the fixed draft through XR-AI, observe its outputs, and write
-`<slug>.evaluation.md`. Do not edit the guide; the
+`evaluation.md` beside its `guide.yaml`. Do not edit the guide; the
 [authoring skill](../recording-to-guide/SKILL.md) owns revisions. Do not approve
 the source guide or modify the recording, runner, runtime, models, or skills to
 make a test pass.
@@ -40,8 +40,8 @@ Luna, fabricated tool responses, mock commits, or a mental walkthrough.
 ## Run the recorded-camera test
 
 Refer to [the runner contract](references/runtime-replay.md) for prerequisites,
-the exact command, artifacts, and limits. The sample's `eval/guide.py --packet`
-mode supplies recorded pixels at the camera endpoint boundary to the real
+the exact command, artifacts, and limits. This skill's
+[scripts/evaluate.py](scripts/evaluate.py) supplies recorded pixels at the camera endpoint boundary to the real
 current-frame tool at original relative timing. It runs the real
 guide agent and voice aggregation without a browser or physical microphone.
 Its synthetic user says "start guide", then Next after observed completion through the configured
@@ -115,6 +115,6 @@ and the last verification without edits are not modification rounds.
 Disclose remaining failures and missing tests for human review without treating
 every recording coverage gap as a defective requirement. Flag consequential
 unresolved requirements and unsupported verification as approval blockers;
-the author records their impact and confirmation questions in `.review.md`.
+the author records their impact and confirmation questions in `review.md`.
 Runtime completion alone is not proof of task fidelity, physical correctness,
 or generalization. Keep the guide draft for human approval.

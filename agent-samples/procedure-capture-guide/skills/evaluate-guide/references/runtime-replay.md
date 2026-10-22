@@ -13,14 +13,17 @@ starts, stops, or substitutes model servers.
 From the repository root, using a new output directory:
 
 ```bash
-PYTHONPATH=agent-samples/procedure-capture-guide/worker uv run --project agent-samples/procedure-capture-guide/worker python agent-samples/procedure-capture-guide/eval/guide.py --packet /path/to/packet.json --guide /path/to/draft.yaml --output /path/to/evaluation/run-001
+PYTHONPATH=agent-samples/procedure-capture-guide/worker uv run --project agent-samples/procedure-capture-guide/worker python agent-samples/procedure-capture-guide/skills/evaluate-guide/scripts/evaluate.py --packet /path/to/packet.json --guide agent-samples/procedure-capture-guide/<slug>-guide/guide.yaml --output agent-samples/procedure-capture-guide/<slug>-guide/evaluation/run-001
 ```
 
 The runner imports the runtime's YAML parser and uses the worker's model,
 frame-freshness, frame-timeout, and verification-timeout configuration.
 Draft eligibility exists only in its in-memory test fixture; the source stays
 unchanged. The authoring LLM observes outputs and revises YAML directly.
-This command never generates YAML or approves a guide.
+This command never generates YAML or approves a guide. Run the script from the
+target checkout even if the skills were installed elsewhere; it locates that
+checkout's sample configuration from its own path. The packet evaluator needs
+no tea-example files or regression fixtures from `tests/`.
 
 ## Playback and controls
 
@@ -80,7 +83,7 @@ controls, visual evidence deduplication, elapsed timers, automatic and explicit
 completion, draft preservation and artifacts. They test plumbing, not local
 model perception. Live-model failures must be reported separately.
 
-`agent-samples/procedure-capture-guide/eval/guide_generation_cases.yaml` holds
+`tests/procedure_capture_guide/guide_generation_cases.yaml` holds
 seven text-only authoring probes. Give the author only each case's `input` and
 the documented authoring prompt, skills and examples. Keep `checks` in an
 independent reviewer context. Save package hashes, prompt, raw model/tool trace,

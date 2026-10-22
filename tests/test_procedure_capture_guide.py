@@ -27,6 +27,7 @@ from xr_ai_tools.image import ImageRegistry
 from xr_ai_voice import VOICE_OUTPUT_TOPIC
 
 _SAMPLE = Path(__file__).resolve().parents[1] / "agent-samples/procedure-capture-guide"
+_TEST_DATA = Path(__file__).resolve().parent / "procedure_capture_guide"
 sys.path.insert(0, str(_SAMPLE / "worker"))
 
 from procedure_capture_guide_worker.capture.agent import CAPTURE_INPUT_TOPIC, CaptureAgent  # noqa: E402
@@ -198,7 +199,7 @@ def test_caption_eval_cli_reports_contract_failures(tmp_path, monkeypatch, capsy
     import xr_ai_models
     import yaml
 
-    cases = yaml.safe_load((_SAMPLE / "eval/caption_cases.yaml").read_text())["cases"]
+    cases = yaml.safe_load((_TEST_DATA / "caption_cases.yaml").read_text())["cases"]
     valid = json.dumps({"activity": "Arrange", "phase": "Place", "caption": "A block", "delta": "Unchanged"})
     replies = [SimpleNamespace(content=valid) for _ in cases]
     if failure == "one_invalid":
@@ -209,9 +210,9 @@ def test_caption_eval_cli_reports_contract_failures(tmp_path, monkeypatch, capsy
                close=AsyncMock())
     monkeypatch.setattr(xr_ai_models, "make_vlm", lambda *args: vlm)
     output = tmp_path / "caption-eval"
-    monkeypatch.setattr(sys, "argv", [str(_SAMPLE / "eval/caption.py"), "--output", str(output)])
+    monkeypatch.setattr(sys, "argv", [str(_TEST_DATA / "caption.py"), "--output", str(output)])
     with pytest.raises(SystemExit) as result:
-        runpy.run_path(str(_SAMPLE / "eval/caption.py"), run_name="__main__")
+        runpy.run_path(str(_TEST_DATA / "caption.py"), run_name="__main__")
     assert result.value.code == (0 if failure is None else 1)
     vlm.close.assert_awaited_once()
     assert vlm.ask_images.await_count == len(cases)

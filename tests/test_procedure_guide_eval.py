@@ -18,24 +18,26 @@ from PIL import Image
 from xr_ai_models import ChatResponse, ToolCall
 
 _SAMPLE = Path(__file__).resolve().parents[1] / "agent-samples/procedure-capture-guide"
+_TEST_DATA = Path(__file__).resolve().parent / "procedure_capture_guide"
+_TEA_EVAL = _SAMPLE / "example-guides/tea-making/eval"
 
 
 @pytest.fixture
 def evaluator(monkeypatch):
     monkeypatch.syspath_prepend(str(_SAMPLE / "worker"))
-    monkeypatch.syspath_prepend(str(_SAMPLE / "eval"))
-    spec = importlib.util.spec_from_file_location("visual_eval", _SAMPLE / "eval/visual.py")
+    monkeypatch.syspath_prepend(str(_TEA_EVAL))
+    spec = importlib.util.spec_from_file_location("visual_eval", _TEA_EVAL / "visual.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
 
 
 def test_scenes_are_reproducible_and_distinct(evaluator, tmp_path):
-    cases, guide = evaluator.prepare(_SAMPLE / "examples/tea-making/eval/visual_expectations.yaml", tmp_path / "images")
+    cases, guide = evaluator.prepare(_TEA_EVAL / "visual_expectations.yaml", tmp_path / "images")
     assert len(cases) == 25
-    assert guide.path == _SAMPLE / "examples/tea-making/guide.yaml"
+    assert guide.path == _SAMPLE / "example-guides/tea-making/guide.yaml"
     assert guide.workflow.steps["steep_timer"].trigger.arguments["duration_s"] == 300
-    scenes = yaml.safe_load((_SAMPLE / "examples/tea-making/eval/image_scenes.yaml").read_text())
+    scenes = yaml.safe_load((_TEA_EVAL / "image_scenes.yaml").read_text())
     for scene in scenes.values():
         if scene["kind"] == "packet":
             assert set(scene) <= {"kind", "blend", "color", "covered"}
@@ -53,23 +55,24 @@ def test_scenes_are_reproducible_and_distinct(evaluator, tmp_path):
     assert len(provenance["images"]) == len(cases)
     assert provenance["guide_sha256"] == guide.sha256
     with pytest.raises(FileExistsError):
-        evaluator.prepare(_SAMPLE / "examples/tea-making/eval/visual_expectations.yaml", tmp_path / "images")
+        evaluator.prepare(_TEA_EVAL / "visual_expectations.yaml", tmp_path / "images")
 
 
 def test_visual_entry_point_renders_tea_manifest_without_models(tmp_path, monkeypatch):
     monkeypatch.setenv("PYTHONPATH", str(_SAMPLE / "worker"))
     output = tmp_path / "preview"
     result = subprocess.run(
-        [sys.executable, "eval/visual.py", "--manifest", "examples/tea-making/eval/visual_expectations.yaml",
+        [sys.executable, "example-guides/tea-making/eval/visual.py",
+         "--manifest", "example-guides/tea-making/eval/visual_expectations.yaml",
          "--render-only", "--output", str(output)],
         cwd=_SAMPLE, capture_output=True, text=True, timeout=30,
     )
     assert result.returncode == 0, result.stdout + result.stderr
     provenance = json.loads((output / "provenance.json").read_text())
     assert len(provenance["images"]) == 25
-    assert str(_SAMPLE / "examples/tea-making/guide.yaml") in provenance["source_sha256"]
-    assert str(_SAMPLE / "eval/_scene_rendering.py") in provenance["source_sha256"]
-    assert str(_SAMPLE / "eval/_visual_expectations.py") in provenance["source_sha256"]
+    assert str(_SAMPLE / "example-guides/tea-making/guide.yaml") in provenance["source_sha256"]
+    assert str(_TEA_EVAL / "_scene_rendering.py") in provenance["source_sha256"]
+    assert str(_TEA_EVAL / "_visual_expectations.py") in provenance["source_sha256"]
 
 
 @pytest.mark.parametrize("text,available,recognition,gate", [
@@ -107,8 +110,8 @@ async def test_visual_evaluator_uses_guide_question_not_answer(evaluator, tmp_pa
     requests = []
     fake_vlm = SimpleNamespace(close=AsyncMock())
     monkeypatch.setattr(evaluator, "make_vlm", lambda *_args: fake_vlm)
-    manifest = yaml.safe_load((_SAMPLE / "examples/tea-making/eval/visual_expectations.yaml").read_text())
-    scenes = evaluator.load_scenes(_SAMPLE / "examples/tea-making/eval/visual_expectations.yaml", manifest)
+    manifest = yaml.safe_load((_TEA_EVAL / "visual_expectations.yaml").read_text())
+    scenes = evaluator.load_scenes(_TEA_EVAL / "visual_expectations.yaml", manifest)
     canonical = []
     for case in manifest["cases"]:
         if case["step"] == "heat_water" and case["answer"] != "UNKNOWN":
@@ -132,7 +135,7 @@ async def test_visual_evaluator_uses_guide_question_not_answer(evaluator, tmp_pa
 
     monkeypatch.setattr(evaluator, "ImageQueryTool", FakeTool)
     output = tmp_path / "visual"
-    summary = await evaluator.evaluate(_SAMPLE / "examples/tea-making/eval/visual_expectations.yaml", output,
+    summary = await evaluator.evaluate(_TEA_EVAL / "visual_expectations.yaml", output,
                                       _SAMPLE / "yaml/models.json", 2, 1)
     assert summary["attempts"] == 50
     assert summary["false_rejects"] == (0 if correct else 10)
@@ -142,7 +145,7 @@ async def test_visual_evaluator_uses_guide_question_not_answer(evaluator, tmp_pa
         assert summary["recognition_correct"] == 50
         assert all(step["passed"] for step in summary["by_step"].values())
     rows = [json.loads(line) for line in (output / "results.jsonl").read_text().splitlines()]
-    guide = evaluator.load_guide(_SAMPLE / "examples/tea-making/guide.yaml")
+    guide = evaluator.load_guide(_SAMPLE / "example-guides/tea-making/guide.yaml")
     for row, request in zip(rows, requests, strict=True):
         assert request.query == guide.workflow.steps[row["step"]].trigger.arguments["question"]
     fake_vlm.close.assert_awaited_once()
@@ -162,7 +165,7 @@ async def test_timeout_is_not_a_correct_negative(evaluator, tmp_path, monkeypatc
 
     monkeypatch.setattr(evaluator, "ImageQueryTool", TimeoutTool)
     summary = await evaluator.evaluate(
-        _SAMPLE / "examples/tea-making/eval/visual_expectations.yaml", tmp_path / "timeouts",
+        _TEA_EVAL / "visual_expectations.yaml", tmp_path / "timeouts",
         _SAMPLE / "yaml/models.json", 1, 1,
     )
     assert summary["unavailable"] == 25
@@ -173,10 +176,10 @@ async def test_timeout_is_not_a_correct_negative(evaluator, tmp_path, monkeypatc
 
 @pytest.mark.parametrize("filename", ["step_verification_scenario.yaml", "full_run_scenario.yaml"])
 def test_flow_uses_shipped_guide_and_control_contract(evaluator, filename):
-    path = _SAMPLE / "examples/tea-making/eval" / filename
+    path = _SAMPLE / "example-guides/tea-making/eval" / filename
     manifest = yaml.safe_load(path.read_text())
     guide = evaluator.load_guide(path.parent / manifest["guide_path"])
-    assert guide.path == _SAMPLE / "examples/tea-making/guide.yaml"
+    assert guide.path == _SAMPLE / "example-guides/tea-making/guide.yaml"
     scenes = evaluator.load_scenes(path, manifest)
     assert all(action["scene"] in scenes for action in manifest["actions"] if action["action"] == "image")
     utterances = [action for action in manifest["actions"] if action["action"] == "say"]
@@ -213,10 +216,10 @@ def test_flow_uses_shipped_guide_and_control_contract(evaluator, filename):
 
 
 @pytest.mark.parametrize("filename,fail_fast", [
-    ("examples/tea-making/eval/step_verification_scenario.yaml", True),
-    ("examples/tea-making/eval/full_run_scenario.yaml", True),
-    ("eval/guide_cases.yaml", True),
-    ("eval/guide_routing.yaml", False),
+    ("example-guides/tea-making/eval/step_verification_scenario.yaml", True),
+    ("example-guides/tea-making/eval/full_run_scenario.yaml", True),
+    ("../../tests/procedure_capture_guide/guide_cases.yaml", True),
+    ("../../tests/procedure_capture_guide/guide_routing.yaml", False),
 ])
 def test_manifest_declares_dependent_or_independent_checks(filename, fail_fast):
     manifest = yaml.safe_load((_SAMPLE / filename).read_text())
@@ -226,7 +229,7 @@ def test_manifest_declares_dependent_or_independent_checks(filename, fail_fast):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("value", ["false", 1, None])
 async def test_manifest_rejects_non_boolean_fail_fast(evaluator, tmp_path, value):
-    spec = importlib.util.spec_from_file_location("guide_eval", _SAMPLE / "eval/guide.py")
+    spec = importlib.util.spec_from_file_location("guide_eval", _TEA_EVAL / "scenario.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     manifest = tmp_path / "scenario.yaml"
@@ -236,10 +239,10 @@ async def test_manifest_rejects_non_boolean_fail_fast(evaluator, tmp_path, value
 
 
 def test_inline_scene_manifest_preserves_provenance(evaluator, tmp_path):
-    manifest = yaml.safe_load((_SAMPLE / "examples/tea-making/eval/visual_expectations.yaml").read_text())
-    manifest["scenes"] = evaluator.load_scenes(_SAMPLE / "examples/tea-making/eval/visual_expectations.yaml", manifest)
+    manifest = yaml.safe_load((_TEA_EVAL / "visual_expectations.yaml").read_text())
+    manifest["scenes"] = evaluator.load_scenes(_TEA_EVAL / "visual_expectations.yaml", manifest)
     del manifest["scenes_file"]
-    manifest["guide_path"] = str(_SAMPLE / "examples/tea-making/guide.yaml")
+    manifest["guide_path"] = str(_SAMPLE / "example-guides/tea-making/guide.yaml")
     path = tmp_path / "inline.yaml"
     path.write_text(yaml.safe_dump(manifest))
     cases, _guide = evaluator.prepare(path, tmp_path / "output")
@@ -261,9 +264,9 @@ def test_inline_scene_manifest_preserves_provenance(evaluator, tmp_path):
     ("chamomile", "YES\n", True, True),
 ])
 def test_recognition_and_runtime_gate_have_distinct_contracts(evaluator, scene, text, recognition, accepted):
-    manifest = yaml.safe_load((_SAMPLE / "examples/tea-making/eval/visual_expectations.yaml").read_text())
+    manifest = yaml.safe_load((_TEA_EVAL / "visual_expectations.yaml").read_text())
     case = evaluator.visual_cases(manifest)[scene]
-    guide = evaluator.load_guide(_SAMPLE / "examples/tea-making/eval" / manifest["guide_path"])
+    guide = evaluator.load_guide(_SAMPLE / "example-guides/tea-making/eval" / manifest["guide_path"])
     pattern = guide.workflow.steps[case["step"]].evidence.pattern
     row = evaluator.score(case, pattern, text, True)
     assert row["recognition"] is recognition
@@ -280,7 +283,7 @@ def test_recognition_normalization_does_not_relax_evidence_gate(evaluator):
 
 @pytest.fixture
 def runtime_evaluator(evaluator, monkeypatch):
-    spec = importlib.util.spec_from_file_location("guide_eval", _SAMPLE / "eval/guide.py")
+    spec = importlib.util.spec_from_file_location("guide_eval", _TEA_EVAL / "scenario.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
 
@@ -294,13 +297,13 @@ def runtime_evaluator(evaluator, monkeypatch):
 
     llm = Mock(chat=AsyncMock(side_effect=chat), close=AsyncMock())
     vlm = Mock(ask_images=AsyncMock(return_value=SimpleNamespace(content="NO")), close=AsyncMock())
-    monkeypatch.setattr(module, "make_llm", Mock(return_value=llm))
-    monkeypatch.setattr(module, "make_vlm", Mock(return_value=vlm))
+    monkeypatch.setattr(module.runtime.xr_ai_models, "make_llm", Mock(return_value=llm))
+    monkeypatch.setattr(module.runtime.xr_ai_models, "make_vlm", Mock(return_value=vlm))
     return module
 
 
 def timer_scenario(tmp_path, actions):
-    guide = yaml.safe_load((_SAMPLE / "eval/fixtures/indicator.yaml").read_text())
+    guide = yaml.safe_load((_TEST_DATA / "fixtures/indicator.yaml").read_text())
     guide["task"]["start_step"] = "wait"
     guide["steps"] = [guide["steps"][1]]
     guide["steps"][0]["trigger"]["arguments"]["duration_s"] = 1
@@ -356,15 +359,15 @@ async def test_quiet_detects_runtime_announcement(runtime_evaluator, tmp_path, s
 async def test_quiet_includes_speech_during_image_switch(runtime_evaluator, tmp_path, monkeypatch):
     module = runtime_evaluator
     runtime = None
-    publish = module.AgentRuntime.publish
+    publish = module.runtime.AgentRuntime.publish
 
     async def remember_runtime(self, *args, **kwargs):
         nonlocal runtime
         runtime = self
         return await publish(self, *args, **kwargs)
 
-    monkeypatch.setattr(module.AgentRuntime, "publish", remember_runtime)
-    publish_frame = module.Camera.publish
+    monkeypatch.setattr(module.runtime.AgentRuntime, "publish", remember_runtime)
+    publish_frame = module.runtime.Camera.publish
     injected = False
 
     async def noisy_frame(self, **kwargs):
@@ -372,10 +375,13 @@ async def test_quiet_includes_speech_during_image_switch(runtime_evaluator, tmp_
         await publish_frame(self, **kwargs)
         if not injected:
             injected = True
-            await runtime.publish(module.VOICE_OUTPUT_TOPIC, module.VoiceOutput(text="Obsolete completion"),
-                                  participant_id=module._PID)
+            await runtime.publish(
+                module.runtime.VOICE_OUTPUT_TOPIC,
+                module.runtime.VoiceOutput(text="Obsolete completion"),
+                participant_id=module.runtime._PID,
+            )
 
-    monkeypatch.setattr(module.Camera, "publish", noisy_frame)
+    monkeypatch.setattr(module.runtime.Camera, "publish", noisy_frame)
     image = tmp_path / "image.png"
     Image.new("RGB", (32, 32), "blue").save(image)
     manifest = timer_scenario(tmp_path, [
@@ -405,8 +411,8 @@ async def test_quiet_rejects_intervening_checks_before_model_work(runtime_evalua
     ]}))
     with pytest.raises(ValueError, match="action 4: quiet requires.*only image actions between"):
         await runtime_evaluator.evaluate(manifest, tmp_path / "output")
-    runtime_evaluator.make_llm.assert_not_called()
-    runtime_evaluator.make_vlm.assert_not_called()
+    runtime_evaluator.runtime.xr_ai_models.make_llm.assert_not_called()
+    runtime_evaluator.runtime.xr_ai_models.make_vlm.assert_not_called()
     assert not (tmp_path / "output").exists()
 
 
@@ -445,8 +451,8 @@ async def test_invalid_actions_fail_before_model_work(runtime_evaluator, tmp_pat
     manifest.write_text(yaml.safe_dump({"actions": [{"action": "say", "text": "Start guide"}, action]}))
     with pytest.raises(ValueError, match="action 1"):
         await runtime_evaluator.evaluate(manifest, tmp_path / "output")
-    runtime_evaluator.make_llm.assert_not_called()
-    runtime_evaluator.make_vlm.assert_not_called()
+    runtime_evaluator.runtime.xr_ai_models.make_llm.assert_not_called()
+    runtime_evaluator.runtime.xr_ai_models.make_vlm.assert_not_called()
     assert not (tmp_path / "output").exists()
 
 
@@ -454,8 +460,8 @@ async def test_invalid_actions_fail_before_model_work(runtime_evaluator, tmp_pat
 @pytest.mark.parametrize("answer,expected", [(" \nno\t", True), ("YES", False)])
 async def test_runtime_observe_uses_shared_visual_case(runtime_evaluator, tmp_path, answer, expected):
     module = runtime_evaluator
-    module.make_vlm.return_value.ask_images.return_value = SimpleNamespace(content=answer)
-    guide = yaml.safe_load((_SAMPLE / "eval/fixtures/indicator.yaml").read_text())
+    module.runtime.xr_ai_models.make_vlm.return_value.ask_images.return_value = SimpleNamespace(content=answer)
+    guide = yaml.safe_load((_TEST_DATA / "fixtures/indicator.yaml").read_text())
     guide["steps"] = guide["steps"][:1]
     guide["steps"][0]["next"] = None
     (tmp_path / "test.guide.yaml").write_text(yaml.safe_dump(guide))

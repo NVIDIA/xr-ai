@@ -49,16 +49,16 @@ To choose where packets are saved, launch with `uv run main.py --mode capture --
 To test guide mode with the included chamomile tea example:
 
 ```bash
-uv run main.py --mode guide examples/tea-making
+uv run main.py --mode guide example-guides/tea-making/guide.yaml
 ```
 
 Use tea labeled chamomile, boiling water, a five-minute steep, and a kettle
 or thermometer that shows the current water temperature. For another locally
-reviewed guide, pass its YAML file path, such as `guides/my-procedure.guide.yaml`,
-or a directory containing exactly one top-level YAML file.
-The launcher resolves relative paths from this sample directory; absolute paths are also
-supported. Quote paths containing spaces. The `guides/` folder remains available
-for local guides; checked-in examples live under `examples/`.
+reviewed guide, pass its YAML file path, such as `assemble-toy-guide/guide.yaml`.
+Relative paths resolve from this sample directory; absolute paths are also
+supported. Quote paths containing spaces. Generated guides and their review
+artifacts stay in local `<name>-guide/` directories; checked-in examples live
+under `example-guides/`.
 The guide must have `task.status: approved`. Guide mode uses the same model servers;
 say **start guide** to begin and **stop guide** to cancel. Say **start guide**
 again to begin a fresh run of the same command-line-selected guide.
@@ -70,7 +70,7 @@ spoken capture or guide commands, use:
 
 ```bash
 uv run main.py --mode capture --session-recording
-uv run main.py --mode guide examples/tea-making/guide.yaml --session-recording
+uv run main.py --mode guide example-guides/tea-making/guide.yaml --session-recording
 ```
 
 In capture mode, this flag can also be combined with `--output-root PATH`. Refer to the

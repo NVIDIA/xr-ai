@@ -88,7 +88,7 @@ report that limitation rather than inventing a guide.
 Organize and word the procedure without seeking confirmation for ordinary
 editorial decisions. If an assumption could materially change an action or its
 success criteria, identify the assumption, its effect, and the question needing
-human confirmation in `.review.md`. Do not silently resolve consequential
+human confirmation in `review.md`. Do not silently resolve consequential
 ambiguity; continue drafting the parts that are sufficiently understood.
 
 ## Choose the check
@@ -115,10 +115,11 @@ commits. Prefer direct `evidence.commit`; uncertainty and failure never complete
 
 ## Write, validate, and review
 
-Write `agent-samples/procedure-capture-guide/guides/<slug>.yaml` and the matching
-`<slug>.review.md`, or use the user's specified directory. Derive a lowercase,
-hyphen-separated slug from the guide name, such as `assemble-toy.yaml`; do not
-insert `.guide` before `.yaml`. Do not overwrite
+Create `agent-samples/procedure-capture-guide/<slug>-guide/` and write `guide.yaml`
+and `review.md` inside it, or use the user's specified directory. Derive a
+lowercase, hyphen-separated slug from the guide name, for example
+`assemble-toy-guide/guide.yaml`. Keep the guide and its review artifacts together;
+do not create a shared `guides/` directory or insert `.guide` before `.yaml`. Do not overwrite
 without permission. Put the exact packet session ID in review notes, not in
 the strict guide YAML. Keep `task.status: draft`, a 1–5 word punctuation-free name, and a
 version increment for an authorized replacement. Use block-style YAML and
@@ -137,7 +138,7 @@ Preserve the linked step chain and user-controlled advancement.
 Validate from the repository root and repair YAML yourself until it passes:
 
 ```bash
-uv run --project agent-samples/procedure-capture-guide/worker python -m procedure_capture_guide_worker._validate_guide agent-samples/procedure-capture-guide/guides/<slug>.yaml
+uv run --project agent-samples/procedure-capture-guide/worker python -m procedure_capture_guide_worker._validate_guide agent-samples/procedure-capture-guide/<slug>-guide/guide.yaml
 ```
 
 Then compare each review-table row to the actual trigger and gate: no omitted
@@ -153,7 +154,7 @@ After validation, use [evaluate-guide](../evaluate-guide/SKILL.md) with the draf
 and original packet. Prefer a fresh evaluator context when available; provide
 the shared contract and source evidence, not your self-review or expected test
 answers. If evaluation uses the authoring context, disclose that limitation.
-The evaluator writes `<slug>.evaluation.md` without changing the guide.
+The evaluator writes `evaluation.md` beside `guide.yaml` without changing the guide.
 
 Evaluation must execute the recorded-camera runner with the real XR-AI guide
 runtime, configured local models, prompts, tools, and clock. You are only the
@@ -165,7 +166,7 @@ editing. Report unavailable local models or guide runtime dependencies as blocke
 Use its findings to revise the draft's questions, instructions, steps, or state
 logic. Preserve the source-action inventory and required conditions across
 edits; do not weaken them or remove actions just to make the recording pass.
-Keep authoring decisions and changes in `<slug>.review.md`, separate from the
+Keep authoring decisions and changes in `review.md`, separate from the
 evaluation findings. Do not change either skill, the examples, or source records
 while generating a guide.
 

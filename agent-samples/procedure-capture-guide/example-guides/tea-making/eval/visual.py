@@ -5,7 +5,7 @@
 
 Run each step independently so an early recognition failure cannot hide later
 cases. Save image and prompt provenance, raw responses, and separate recognition
-and evidence-gate scores. Use eval/guide.py for conversational and execution coverage.
+and evidence-gate scores. Use the adjacent scenario.py for conversational and execution coverage.
 No model server processes are started or stopped here.
 """
 
@@ -27,7 +27,7 @@ from xr_ai_models import load_models_config, make_vlm
 from xr_ai_tools.image import ImageRegistry
 from xr_ai_tools.vision import ImageQueryRequest, ImageQueryTool
 
-_SAMPLE = Path(__file__).resolve().parents[1]
+_SAMPLE = Path(__file__).resolve().parents[3]
 _PROMPT = _SAMPLE / "worker/procedure_capture_guide_worker/guide/prompts/guide_vision.txt"
 
 

@@ -24,13 +24,15 @@ import yaml
 from PIL import Image
 
 _SAMPLE = Path(__file__).resolve().parents[1] / "agent-samples/procedure-capture-guide"
+_TEST_DATA = Path(__file__).resolve().parent / "procedure_capture_guide"
+_SCRIPTS = _SAMPLE / "skills/evaluate-guide/scripts"
 
 
 @pytest.fixture
 def packets(monkeypatch):
     monkeypatch.syspath_prepend(str(_SAMPLE / "worker"))
-    monkeypatch.syspath_prepend(str(_SAMPLE / "eval"))
-    spec = importlib.util.spec_from_file_location("recorded_camera_eval", _SAMPLE / "eval/_recorded_camera.py")
+    monkeypatch.syspath_prepend(str(_SCRIPTS))
+    spec = importlib.util.spec_from_file_location("recorded_camera_eval", _SCRIPTS / "_recorded_camera.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -111,7 +113,7 @@ def test_packet_cli_uses_runtime_controls_and_unique_source_evidence(
 ):
     llm, vlm = runtime_models
     packet = make_packet(tmp_path, count, color)
-    guide = yaml.safe_load((_SAMPLE / "eval/fixtures/indicator.yaml").read_text())
+    guide = yaml.safe_load((_TEST_DATA / "fixtures/indicator.yaml").read_text())
     guide["task"]["status"] = "draft"
     guide["steps"][1]["trigger"]["arguments"]["duration_s"] = 1
     guide["steps"][1]["finish_on_complete"] = automatic
@@ -123,7 +125,7 @@ def test_packet_cli_uses_runtime_controls_and_unique_source_evidence(
     monkeypatch.setattr(sys, "argv", ["guide.py", "--packet", str(packet), "--guide", str(path),
                                     "--output", str(output), "--tail-s", "15" if expected else "2"])
     with pytest.raises(SystemExit) as exit_status:
-        runpy.run_path(str(_SAMPLE / "eval/guide.py"), run_name="__main__")
+        runpy.run_path(str(_SCRIPTS / "evaluate.py"), run_name="__main__")
     assert exit_status.value.code == (0 if expected else 1)
     result = json.loads((output / "result.json").read_text())
     assert result["passed"] is expected
@@ -148,7 +150,11 @@ def test_packet_cli_uses_runtime_controls_and_unique_source_evidence(
         assert result["checks_not_scored"] == 0
     else:
         assert result["checks_not_scored"] > 0
-    assert (output / "runtime.json").is_file()
+    sources = json.loads((output / "runtime.json").read_text())
+    assert {"skills/evaluate-guide/scripts/evaluate.py",
+            "skills/evaluate-guide/scripts/_recorded_camera.py",
+            "skills/evaluate-guide/scripts/_guide_runtime.py"} <= sources.keys()
+    assert not any("example-guides/" in source or "tests/" in source for source in sources)
     assert (output / "relay.jsonl").is_file()
     llm.close.assert_awaited_once()
     vlm.close.assert_awaited_once()
@@ -161,7 +167,7 @@ def test_packet_cli_rejects_announcements_that_disagree_with_progress(
     from procedure_capture_guide_worker.guide.guiding import _Guide
 
     packet = make_packet(tmp_path)
-    guide = yaml.safe_load((_SAMPLE / "eval/fixtures/indicator.yaml").read_text())
+    guide = yaml.safe_load((_TEST_DATA / "fixtures/indicator.yaml").read_text())
     guide["task"]["status"] = "draft"
     guide["steps"] = guide["steps"][:1]
     guide["steps"][0]["next"] = None
@@ -194,7 +200,7 @@ def test_packet_cli_rejects_announcements_that_disagree_with_progress(
     monkeypatch.setattr(sys, "argv", ["guide.py", "--packet", str(packet), "--guide", str(path),
                                     "--output", str(output), "--tail-s", "15"])
     with pytest.raises(SystemExit) as exit_status:
-        runpy.run_path(str(_SAMPLE / "eval/guide.py"), run_name="__main__")
+        runpy.run_path(str(_SCRIPTS / "evaluate.py"), run_name="__main__")
     assert exit_status.value.code == 1
     assert injected > 0
     result = json.loads((output / "result.json").read_text())
@@ -214,7 +220,7 @@ def test_packet_cli_rejects_announcements_that_disagree_with_progress(
 
 
 def test_runtime_provenance_excludes_environment_and_tracks_loaded_sdk(packets, tmp_path, monkeypatch):
-    runtime_hashes = runpy.run_path(str(_SAMPLE / "eval/guide.py"))["_runtime_hashes"]
+    from _guide_runtime import _runtime_hashes as runtime_hashes
     sample = tmp_path / "sample"
     sources = ["yaml/models.json", "yaml/worker.yaml", "yaml/guide-agent-config.yaml",
                "worker/procedure_capture_guide_worker/guide/agent.py",
@@ -240,7 +246,7 @@ def test_runtime_provenance_excludes_environment_and_tracks_loaded_sdk(packets, 
 
 
 def test_generation_cases_have_separate_inputs_and_review_criteria():
-    cases = yaml.safe_load((_SAMPLE / "eval/guide_generation_cases.yaml").read_text())
+    cases = yaml.safe_load((_TEST_DATA / "guide_generation_cases.yaml").read_text())
     assert len(cases) == 7
     assert len({case["id"] for case in cases}) == len(cases)
     for case in cases:

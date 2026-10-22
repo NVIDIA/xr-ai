@@ -15,6 +15,7 @@ import pytest
 import yaml
 
 _SAMPLE = Path(__file__).resolve().parents[1] / "agent-samples/procedure-capture-guide"
+_TEST_DATA = Path(__file__).resolve().parent / "procedure_capture_guide"
 _REFERENCES = _SAMPLE / "skills/recording-to-guide/references"
 sys.path.insert(0, str(_SAMPLE / "worker"))
 
@@ -40,16 +41,41 @@ def test_installed_skill_pair_resolves_shared_contract_and_references(tmp_path):
         assert f"${name}" in interface["default_prompt"]
 
 
+def test_packet_entry_point_imports_without_example_or_test_helpers(tmp_path):
+    scripts = tmp_path / "sample/skills/evaluate-guide/scripts"
+    shutil.copytree(_SAMPLE / "skills/evaluate-guide/scripts", scripts)
+    result = subprocess.run(
+        [sys.executable, str(scripts / "evaluate.py"), "--help"],
+        cwd=tmp_path, env={**os.environ, "PYTHONPATH": str(_SAMPLE / "worker")},
+        capture_output=True, text=True, timeout=30,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "--packet" in result.stdout and "--guide" in result.stdout
+    assert "--manifest" not in result.stdout
+
+
+def test_generated_guide_packages_are_local_but_example_guides_are_tracked():
+    result = subprocess.run(
+        ["git", "check-ignore", "--stdin"], cwd=_SAMPLE, text=True, capture_output=True,
+        input="assemble-toy-guide/guide.yaml\nassemble-toy-guide/review.md\n"
+              "assemble-toy-guide/evaluation.md\nexample-guides/tea-making/guide.yaml\n",
+        check=True,
+    )
+    assert result.stdout.splitlines() == [
+        "assemble-toy-guide/guide.yaml", "assemble-toy-guide/review.md", "assemble-toy-guide/evaluation.md",
+    ]
+
+
 def test_validator_accepts_examples_and_shipped_guides_without_a_schema_fork(capsys):
     from procedure_capture_guide_worker import _validate_guide
 
     assert _validate_guide.load_workflow is load_workflow
     paths = (sorted(_REFERENCES.glob("*.yaml"))
-             + sorted((_SAMPLE / "examples").glob("*/guide.yaml"))
-             + sorted((_SAMPLE / "eval/fixtures").glob("*.yaml")))
+             + sorted((_SAMPLE / "example-guides").glob("*/guide.yaml"))
+             + sorted((_TEST_DATA / "fixtures").glob("*.yaml")))
     assert len(paths) >= 5
-    assert _SAMPLE / "eval/fixtures/indicator.yaml" in paths
-    assert _SAMPLE / "examples/tea-making/guide.yaml" in paths
+    assert _SAMPLE / "example-guides/tea-making/guide.yaml" in paths
+    assert _TEST_DATA / "fixtures/indicator.yaml" in paths
     originals = {path: path.read_bytes() for path in paths}
     assert main([str(path) for path in paths]) == 0
     assert not capsys.readouterr().err

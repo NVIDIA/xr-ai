@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Evaluation scenario for eval/guide.py, not a procedure guide definition.
+# Evaluation scenario for scenario.py, not a procedure guide definition.
 # Follow the successful path through the five-minute timer, restart, and stop.
 # This runs independently so a failure in the step-verification scenario
 # cannot hide timer and lifecycle coverage.

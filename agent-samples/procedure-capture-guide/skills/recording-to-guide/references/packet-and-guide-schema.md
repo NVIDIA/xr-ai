@@ -53,8 +53,10 @@ unquoted flow mappings (`{...}`) can silently create unintended fields.
 `foreground_prompt`, `complete_message`. Use a stable lowercase identifier
 matching `^[a-z][a-z0-9_-]*$`, a 1–5 word punctuation-free name, a positive integer
 version, and `status: draft`. Only human-reviewed `approved` guides may run in guide mode.
-Name, ID, and filename are separate. Save the guide as `<slug>.yaml`, with a
-lowercase, hyphen-separated slug derived from its name, without a `.guide` infix.
+Name, ID, and output path are separate. Save the guide as `<slug>-guide/guide.yaml`,
+with a lowercase, hyphen-separated slug derived from its name, for example
+`assemble-toy-guide/guide.yaml`. Keep `review.md` and `evaluation.md` in that
+same directory, outside the executable YAML.
 Use the same intended task in all prompts
 and completion messages; do not copy the worked example's wording.
 
@@ -167,7 +169,7 @@ visible states can verify ordinary placements. Block when the required success
 condition is the past motion or order itself, rather than the visible result.
 
 Store evidence mappings, caption corrections, and approval blockers in the
-separate `.review.md` file. It is a human review aid, not executable guide state.
+separate `review.md` file. It is a human review aid, not executable guide state.
 For consequential assumptions, explain their effect on the procedure or success
 criteria and the question needing human confirmation. Distinguish uncertainty
 about requirements from recording coverage gaps and unsupported verification;
@@ -176,12 +178,12 @@ Continue drafting sufficiently understood actions without seeking confirmation
 for ordinary organization and wording.
 Keep authoring changes in those notes. The
 [evaluation skill](../../evaluate-guide/SKILL.md) writes its observed outcomes,
-untested checks, and revision findings separately in `<slug>.evaluation.md`.
+untested checks, and revision findings separately in `evaluation.md`.
 Do not add test results to YAML.
 Runtime evaluation uses the guide runtime and configured local models with
 recorded camera input. The authoring model observes actual traces and revises
 the guide; it does not replace visual inference, tool results, or state commits.
 Test artifacts and recording timestamps stay outside the executable guide.
-Write these outputs under `agent-samples/procedure-capture-guide/guides/` from the repository
-root, unless a different output directory was requested. Links between these
+Write these outputs under `agent-samples/procedure-capture-guide/<slug>-guide/`
+from the repository root, unless a different output directory was requested. Links between these
 references resolve relative to their containing files, not the working directory.

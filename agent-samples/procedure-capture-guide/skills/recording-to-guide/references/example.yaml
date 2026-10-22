@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Schema example, not a recording: replace every task-specific value.
+# Save a real result as <slug>-guide/guide.yaml with review.md and evaluation.md
+# beside it, for example arrange-workpiece-guide/guide.yaml.
 # Before handoff, use ../../evaluate-guide/SKILL.md: "Are clips attached?"
 # question can pass one clip or inward tabs. Test the full question below on
 # available incomplete and completed views through the actual guide VLM/tool,

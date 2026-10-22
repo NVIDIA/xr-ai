@@ -28,6 +28,8 @@ from xr_ai_tools.vision import ImageQueryResult
 from xr_ai_voice import VOICE_OUTPUT_TOPIC, VoiceAggregationAgent
 
 _SAMPLE = Path(__file__).resolve().parents[1] / "agent-samples/procedure-capture-guide"
+_TEST_DATA = Path(__file__).resolve().parent / "procedure_capture_guide"
+_TEA_EVAL = _SAMPLE / "example-guides/tea-making/eval"
 sys.path.insert(0, str(_SAMPLE / "worker"))
 
 from procedure_capture_guide_worker.config import WorkerConfig, load_config  # noqa: E402
@@ -119,9 +121,23 @@ def write_guide(directory, document, name="test.guide.yaml"):
     return path
 
 
+def test_checked_in_eval_manifests_load_their_selected_guides():
+    selected = set()
+    for root in (_TEST_DATA, _SAMPLE / "example-guides"):
+        for path in sorted(root.rglob("*.yaml")):
+            manifest = yaml.safe_load(path.read_text())
+            if not isinstance(manifest, dict) or not {"guide_path", "guides_dir"}.intersection(manifest):
+                continue
+            assert "guide_path" in manifest, path
+            guide = load_guide(path.parent / manifest["guide_path"])
+            assert guide.workflow.runnable, path
+            selected.add(path)
+    assert {_TEST_DATA / "guide_cases.yaml", _TEST_DATA / "guide_routing.yaml"} <= selected
+
+
 def test_shipped_tea_guide_is_selectable_by_example_path():
-    guide = load_guide(_SAMPLE / "examples/tea-making/guide.yaml")
-    assert guide.path == _SAMPLE / "examples/tea-making/guide.yaml"
+    guide = load_guide(_SAMPLE / "example-guides/tea-making/guide.yaml")
+    assert guide.path == _SAMPLE / "example-guides/tea-making/guide.yaml"
     assert guide.workflow.runnable
     workflow = guide.workflow
     chain = []
@@ -160,16 +176,16 @@ def test_shipped_tea_guide_is_selectable_by_example_path():
     ("YES, CHAMOMILE", False), ("YES\nNO", False),
 ])
 def test_shipped_tea_identification_requires_an_affirmative_answer(answer, should_match):
-    guide = load_guide(_SAMPLE / "examples/tea-making/guide.yaml")
+    guide = load_guide(_SAMPLE / "example-guides/tea-making/guide.yaml")
     pattern = guide.workflow.steps["identify"].evidence.pattern
     assert (re.fullmatch(pattern, answer.strip()) is not None) == should_match
 
 
 def test_tea_identification_eval_uses_the_shipped_guide():
-    path = _SAMPLE / "examples/tea-making/eval/label_reading_scenario.yaml"
+    path = _SAMPLE / "example-guides/tea-making/eval/label_reading_scenario.yaml"
     manifest = yaml.safe_load(path.read_text())
     guide = load_guide(path.parent / manifest["guide_path"])
-    assert guide.path == _SAMPLE / "examples/tea-making/guide.yaml"
+    assert guide.path == _SAMPLE / "example-guides/tea-making/guide.yaml"
     scenes = manifest["scenes"]
     assert all(action["scene"] in scenes for action in manifest["actions"] if action["action"] == "image")
     assert any(action.get("answers") == ["UNKNOWN", "Unknown", "unknown"] for action in manifest["actions"])
@@ -181,7 +197,7 @@ async def test_shipped_tea_guide_verification_and_runtime_timer(engine, monkeypa
     now = 1000.0
     monkeypatch.setattr(guiding, "time", SimpleNamespace(monotonic=lambda: now))
     backend = engine._backend
-    backend._guide = load_guide(_SAMPLE / "examples/tea-making/guide.yaml")
+    backend._guide = load_guide(_SAMPLE / "example-guides/tea-making/guide.yaml")
     await engine.participant_left(None, context())
     await engine.participant_joined(None, context())
     session = backend._sessions["alice"]
@@ -252,7 +268,7 @@ async def test_shipped_tea_guide_verification_and_runtime_timer(engine, monkeypa
 @pytest.mark.parametrize("step_id", ["identify", "heat_water", "start_steeping", "steep_timer"])
 async def test_shipped_tea_guide_skip_never_claims_verified_completion(engine, step_id):
     backend = engine._backend
-    backend._guide = load_guide(_SAMPLE / "examples/tea-making/guide.yaml")
+    backend._guide = load_guide(_SAMPLE / "example-guides/tea-making/guide.yaml")
     backend._start("alice")
     session = backend._sessions["alice"]
     session.step_id = step_id
@@ -1406,7 +1422,7 @@ async def test_timer_unavailability_is_a_tool_result(engine, document, missing):
     ("Target 100 C", False), ("UNKNOWN", False), ("100 C or 212 F", False),
 ])
 def test_tea_temperature_accepts_formatting_not_different_measurements(text, accepted):
-    step = load_guide(_SAMPLE / "examples/tea-making/guide.yaml").workflow.steps["heat_water"]
+    step = load_guide(_SAMPLE / "example-guides/tea-making/guide.yaml").workflow.steps["heat_water"]
     for source in ("CURRENT", "ACTUAL", "THERMOMETER"):
         assert bool(re.fullmatch(step.evidence.pattern, f"{source} | {text}")) is accepted
     for source in ("TARGET", "SET", "PRESET", "UNKNOWN"):
@@ -1423,7 +1439,7 @@ def test_tea_temperature_accepts_formatting_not_different_measurements(text, acc
     (True, None, True),
 ])
 def test_guide_eval_cli_runs_public_runtime_scenario(tmp_path, monkeypatch, timer, failed_probe, fail_fast):
-    monkeypatch.syspath_prepend(str(_SAMPLE / "eval"))
+    monkeypatch.syspath_prepend(str(_TEA_EVAL))
 
     import io
     import runpy
@@ -1431,8 +1447,8 @@ def test_guide_eval_cli_runs_public_runtime_scenario(tmp_path, monkeypatch, time
     import xr_ai_models
     from PIL import Image
 
-    guide = yaml.safe_load((_SAMPLE / "eval/fixtures/indicator.yaml").read_text())
-    manifest = yaml.safe_load((_SAMPLE / "eval/guide_cases.yaml").read_text())
+    guide = yaml.safe_load((_TEST_DATA / "fixtures/indicator.yaml").read_text())
+    manifest = yaml.safe_load((_TEST_DATA / "guide_cases.yaml").read_text())
     if fail_fast is None:
         manifest.pop("fail_fast", None)
     else:
@@ -1489,7 +1505,7 @@ def test_guide_eval_cli_runs_public_runtime_scenario(tmp_path, monkeypatch, time
     output = tmp_path / "results"
     monkeypatch.setattr(sys, "argv", ["guide.py", "--manifest", str(manifest_path), "--output", str(output)])
     with pytest.raises(SystemExit) as result:
-        runpy.run_path(str(_SAMPLE / "eval/guide.py"), run_name="__main__")
+        runpy.run_path(str(_TEA_EVAL / "scenario.py"), run_name="__main__")
     assert result.value.code == (0 if failed_probe is None else 1)
     report = json.loads((output / "result.json").read_text())
     assert report["passed"] is (failed_probe is None)
@@ -1528,7 +1544,7 @@ def test_cli_selects_guide_with_independent_session_recording(
     extra = ["--session-recording"] if session_recording else []
     expected = ["hub", "capture", "worker"] if session_recording else ["hub", "worker"]
     selected = (str(write_guide(tmp_path, document, "external guide.yaml")) if external
-                else "examples/tea-making/guide.yaml")
+                else "example-guides/tea-making/guide.yaml")
     expected_path = Path(selected) if external else _SAMPLE / selected
     if directory:
         selected = str(Path(selected).parent)
@@ -1617,12 +1633,12 @@ def test_mode_configuration_is_isolated_and_models_are_shared(tmp_path):
     request = tmp_path / "request.json"
     request.write_text(json.dumps({
         "worker_config": str(_SAMPLE / "yaml/worker.yaml"), "mode": "guide",
-        "guide_path": str(_SAMPLE / "examples/tea-making/guide.yaml"),
+        "guide_path": "example-guides/tea-making/guide.yaml",
     }))
     guide = load_config(request)
     assert guide.mode == "guide" and guide.capture is None
     assert guide.models_config == capture.models_config
-    assert guide.guide.guide_path == _SAMPLE / "examples/tea-making/guide.yaml"
+    assert guide.guide.guide_path == _SAMPLE / "example-guides/tea-making/guide.yaml"
     assert guide.voice_gate_yaml == _SAMPLE / "yaml/voice_gate.yaml"
 
 
