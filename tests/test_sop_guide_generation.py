@@ -46,8 +46,9 @@ def test_validator_accepts_examples_and_shipped_guides_without_a_schema_fork(cap
     assert _validate_guide.load_workflow is load_workflow
     paths = (sorted(_REFERENCES.glob("*.yaml"))
              + sorted((_SAMPLE / "examples").glob("*/guide.yaml"))
-             + sorted((_SAMPLE / "eval/fixtures").glob("*.guide.yaml")))
+             + sorted((_SAMPLE / "eval/fixtures").glob("*.yaml")))
     assert len(paths) >= 5
+    assert _SAMPLE / "eval/fixtures/indicator.yaml" in paths
     assert _SAMPLE / "examples/tea-making/guide.yaml" in paths
     originals = {path: path.read_bytes() for path in paths}
     assert main([str(path) for path in paths]) == 0

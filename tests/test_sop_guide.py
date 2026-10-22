@@ -1431,7 +1431,7 @@ def test_guide_eval_cli_runs_public_runtime_scenario(tmp_path, monkeypatch, time
     import xr_ai_models
     from PIL import Image
 
-    guide = yaml.safe_load((_SAMPLE / "eval/fixtures/indicator.guide.yaml").read_text())
+    guide = yaml.safe_load((_SAMPLE / "eval/fixtures/indicator.yaml").read_text())
     manifest = yaml.safe_load((_SAMPLE / "eval/guide_cases.yaml").read_text())
     if fail_fast is None:
         manifest.pop("fail_fast", None)
@@ -1455,8 +1455,8 @@ def test_guide_eval_cli_runs_public_runtime_scenario(tmp_path, monkeypatch, time
     elif failed_probe == "observe":
         observation = next(item for item in manifest["actions"] if item["action"] == "observe")
         observation["answers"] = ["YES"]
-    manifest["guide_path"] = "indicator.guide.yaml"
-    (tmp_path / "indicator.guide.yaml").write_text(yaml.safe_dump(guide))
+    manifest["guide_path"] = "indicator.yaml"
+    (tmp_path / "indicator.yaml").write_text(yaml.safe_dump(guide))
     manifest_path = tmp_path / "scenario.yaml"
     manifest_path.write_text(yaml.safe_dump(manifest))
 
