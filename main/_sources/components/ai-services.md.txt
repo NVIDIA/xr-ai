@@ -590,7 +590,10 @@ cleanup.
   wire format (`finish_reason: "tool_calls"`). Per-turn reasoning toggle via
   `"detailed thinking on"` or `"detailed thinking off"` in a system or user
   message. Without either phrase, this model reasons by default; the reasoning
-  preamble is **not** stripped server-side. To swap checkpoints, change `model`
+  preamble is **not** stripped server-side. The `llama_nemotron` client preset
+  therefore sends `detailed thinking off` unless a call passes
+  `enable_thinking=True`; refer to {ref}`agent-sdk-models-thinking`. To swap
+  checkpoints, change `model`
   only to one with a compatible chat template, and update `tool_call_parser`
   for the replacement model's tool syntax. Revisit `max_model_len`,
   `gpu_memory_utilization`, and `tensor_parallel_size` for its context and GPU

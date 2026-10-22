@@ -570,7 +570,7 @@ and its transport-specific settings.</p>
 <span class="w">      </span><span class="c1"># model_name: llm</span>
 <span class="w">      </span><span class="c1"># reasoning_field: reasoning_content</span>
 <span class="w">      </span><span class="c1"># capabilities: {streaming: true, tool_calls: true}</span>
-<span class="w">      </span><span class="c1"># default_extras: {chat_template_kwargs: {enable_thinking: false}}</span>
+<span class="w">      </span><span class="c1"># thinking: {default: true}    # Reasoning when a call does not choose.</span>
 <span class="w">    </span><span class="nt">endpoint</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">base_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://127.0.0.1:8108</span><span class="w"> </span><span class="c1"># HTTP origin, without /v1 routes.</span>
 <span class="w">      </span><span class="nt">timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">60.0</span><span class="w">                  </span><span class="c1"># Positive seconds; speech defaults to 30.</span>
@@ -646,7 +646,7 @@ refer to <a class="reference internal" href="../components/launcher-and-process-
 <tbody>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">cosmos3_nano_reasoner</span></code></p></td>
 <td><p>Cosmos3 Nano VLM</p></td>
-<td><p>Image; video requires <code class="docutils literal notranslate"><span class="pre">max_videos_per_prompt</span> <span class="pre">&gt;=</span> <span class="pre">1</span></code>; no reasoning-field mapping</p></td>
+<td><p>Image; video requires <code class="docutils literal notranslate"><span class="pre">max_videos_per_prompt</span> <span class="pre">&gt;=</span> <span class="pre">1</span></code>; no reasoning switch</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">cosmos_vlm</span></code></p></td>
 <td><p>Cosmos-Reason1 compatibility</p></td>
@@ -654,7 +654,7 @@ refer to <a class="reference internal" href="../components/launcher-and-process-
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">llama_nemotron</span></code></p></td>
 <td><p>Llama Nemotron LLM</p></td>
-<td><p>Server-side <code class="docutils literal notranslate"><span class="pre">llama3_json</span></code> tool calls</p></td>
+<td><p>Server-side <code class="docutils literal notranslate"><span class="pre">llama3_json</span></code> tool calls; thinking disabled unless requested</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">nemotron3_nano</span></code></p></td>
 <td><p>Nemotron 3 Nano LLM</p></td>
@@ -688,6 +688,59 @@ server controls whether video input is enabled. Every checked-in <code class="do
 profile sets <code class="docutils literal notranslate"><span class="pre">max_videos_per_prompt:</span> <span class="pre">0</span></code> to avoid reserving unused activation
 memory. Set it to at least <code class="docutils literal notranslate"><span class="pre">1</span></code> and restart the persistent VLM server before
 sending a video request.</p>
+</section>
+<section id="reasoning-control">
+<span id="agent-sdk-models-thinking"></span><h2>Reasoning control<a class="headerlink" href="#reasoning-control" title="Link to this heading">#</a></h2>
+<p>Callers request reasoning per call with <code class="docutils literal notranslate"><span class="pre">enable_thinking</span></code>. <code class="docutils literal notranslate"><span class="pre">True</span></code> or <code class="docutils literal notranslate"><span class="pre">False</span></code>
+always applies to that call; omitting it (<code class="docutils literal notranslate"><span class="pre">None</span></code>) uses the endpoint default.
+Code written this way runs unchanged when a deployment swaps models, because
+the adapter’s <code class="docutils literal notranslate"><span class="pre">thinking</span></code> setting decides how the switch reaches the model:</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p><code class="docutils literal notranslate"><span class="pre">control</span></code></p></th>
+<th class="head"><p>Wire behavior</p></th>
+<th class="head"><p>Used by</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">chat_template</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">chat_template_kwargs.enable_thinking</span></code>, plus <code class="docutils literal notranslate"><span class="pre">thinking_budget</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">nemotron3_nano</span></code>, <code class="docutils literal notranslate"><span class="pre">nemotron_omni</span></code>, <code class="docutils literal notranslate"><span class="pre">cosmos_vlm</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">system_prompt</span></code></p></td>
+<td><p>A <code class="docutils literal notranslate"><span class="pre">detailed</span> <span class="pre">thinking</span> <span class="pre">on</span></code> or <code class="docutils literal notranslate"><span class="pre">off</span></code> line at the start of the system message</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">llama_nemotron</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">none</span></code></p></td>
+<td><p>Nothing is sent; the model has no switch or rejects template arguments</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">cosmos3_nano_reasoner</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>unset</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">chat_template</span></code> when <code class="docutils literal notranslate"><span class="pre">default</span></code> is set; otherwise only <code class="docutils literal notranslate"><span class="pre">enable_thinking=True</span></code> is sent</p></td>
+<td><p>Profiles without a preset</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">default</span></code> is the endpoint’s reasoning state when a call does not choose one;
+<code class="docutils literal notranslate"><span class="pre">null</span></code> sends no switch and leaves the model’s own default. With <code class="docutils literal notranslate"><span class="pre">system_prompt</span></code>,
+a complete <code class="docutils literal notranslate"><span class="pre">detailed</span> <span class="pre">thinking</span> <span class="pre">on</span></code> or <code class="docutils literal notranslate"><span class="pre">off</span></code> line already in the system message
+stands for the default, and an explicit <code class="docutils literal notranslate"><span class="pre">enable_thinking</span></code> replaces it. A profile
+overrides either key on top of its preset:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">adapter</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">preset</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nemotron3_nano</span>
+<span class="w">  </span><span class="nt">thinking</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">default</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</pre></div>
+</div>
+<p>Set <code class="docutils literal notranslate"><span class="pre">control:</span> <span class="pre">none</span></code> for a hosted endpoint that rejects unknown request fields;
+such a model ignores <code class="docutils literal notranslate"><span class="pre">enable_thinking</span></code>. <code class="docutils literal notranslate"><span class="pre">capabilities.reasoning</span></code> reports only
+whether responses carry a separate reasoning field, not whether the switch is
+honored. A legacy <code class="docutils literal notranslate"><span class="pre">default_extras.chat_template_kwargs.enable_thinking</span></code>
+boolean is still accepted: with <code class="docutils literal notranslate"><span class="pre">control:</span> <span class="pre">chat_template</span></code> or unset it becomes
+<code class="docutils literal notranslate"><span class="pre">thinking.default</span></code>, overriding the preset’s, and a call can override it. With
+another control it is sent unchanged. A profile that sets both keys to
+different values is rejected.</p>
 <p><a id="protocols"></a></p>
 <p id="agent-sdk-models-protocols"><code class="docutils literal notranslate"><span class="pre">ChatResponse.reasoning</span></code> is the canonical post-normalization field. Model
 adapters absorb whether the provider calls it <code class="docutils literal notranslate"><span class="pre">reasoning</span></code> or
@@ -815,6 +868,7 @@ repository root:</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#annotated-consumer-configuration">Annotated consumer configuration</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#request-failures">Request failures</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#built-in-adapters">Built-in adapters</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reasoning-control">Reasoning control</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hosted-endpoints">Hosted endpoints</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#id1">Deployment profiles</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#riva-speech-over-grpc">Riva speech over gRPC</a></li>

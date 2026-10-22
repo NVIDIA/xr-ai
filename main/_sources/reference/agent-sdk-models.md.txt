@@ -120,9 +120,9 @@ refer to {ref}`consumer-model-readiness`.
 
 | Preset | Target | Important behavior |
 |---|---|---|
-| `cosmos3_nano_reasoner` | Cosmos3 Nano VLM | Image; video requires `max_videos_per_prompt >= 1`; no reasoning-field mapping |
+| `cosmos3_nano_reasoner` | Cosmos3 Nano VLM | Image; video requires `max_videos_per_prompt >= 1`; no reasoning switch |
 | `cosmos_vlm` | Cosmos-Reason1 compatibility | Image; video requires `max_videos_per_prompt >= 1`; thinking disabled by default |
-| `llama_nemotron` | Llama Nemotron LLM | Server-side `llama3_json` tool calls |
+| `llama_nemotron` | Llama Nemotron LLM | Server-side `llama3_json` tool calls; thinking disabled unless requested |
 | `nemotron3_nano` | Nemotron 3 Nano LLM | Normalizes the `reasoning` field; thinking disabled unless requested |
 | `nemotron_omni` | Nemotron Omni | Tool calls, image and video, `reasoning_content` normalization; thinking disabled unless requested |
 | `nemotron_embedding` | Embedding server | OpenAI-compatible dense vectors |
@@ -135,6 +135,43 @@ server controls whether video input is enabled. Every checked-in `vlm-server`
 profile sets `max_videos_per_prompt: 0` to avoid reserving unused activation
 memory. Set it to at least `1` and restart the persistent VLM server before
 sending a video request.
+
+(agent-sdk-models-thinking)=
+## Reasoning control
+
+Callers request reasoning per call with `enable_thinking`. `True` or `False`
+always applies to that call; omitting it (`None`) uses the endpoint default.
+Code written this way runs unchanged when a deployment swaps models, because
+the adapter's `thinking` setting decides how the switch reaches the model:
+
+| `control` | Wire behavior | Used by |
+|---|---|---|
+| `chat_template` | `chat_template_kwargs.enable_thinking`, plus `thinking_budget` | `nemotron3_nano`, `nemotron_omni`, `cosmos_vlm` |
+| `system_prompt` | A `detailed thinking on` or `off` line at the start of the system message | `llama_nemotron` |
+| `none` | Nothing is sent; the model has no switch or rejects template arguments | `cosmos3_nano_reasoner` |
+| unset | `chat_template` when `default` is set; otherwise only `enable_thinking=True` is sent | Profiles without a preset |
+
+`default` is the endpoint's reasoning state when a call does not choose one;
+`null` sends no switch and leaves the model's own default. With `system_prompt`,
+a complete `detailed thinking on` or `off` line already in the system message
+stands for the default, and an explicit `enable_thinking` replaces it. A profile
+overrides either key on top of its preset:
+
+```yaml
+adapter:
+  preset: nemotron3_nano
+  thinking:
+    default: true
+```
+
+Set `control: none` for a hosted endpoint that rejects unknown request fields;
+such a model ignores `enable_thinking`. `capabilities.reasoning` reports only
+whether responses carry a separate reasoning field, not whether the switch is
+honored. A legacy `default_extras.chat_template_kwargs.enable_thinking`
+boolean is still accepted: with `control: chat_template` or unset it becomes
+`thinking.default`, overriding the preset's, and a call can override it. With
+another control it is sent unchanged. A profile that sets both keys to
+different values is rejected.
 
 <a id="protocols"></a>
 (agent-sdk-models-protocols)=

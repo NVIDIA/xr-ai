@@ -1132,7 +1132,10 @@ the model’s chat template and the resulting tool calls come back in OpenAI
 wire format (<code class="docutils literal notranslate"><span class="pre">finish_reason:</span> <span class="pre">&quot;tool_calls&quot;</span></code>). Per-turn reasoning toggle via
 <code class="docutils literal notranslate"><span class="pre">&quot;detailed</span> <span class="pre">thinking</span> <span class="pre">on&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;detailed</span> <span class="pre">thinking</span> <span class="pre">off&quot;</span></code> in a system or user
 message. Without either phrase, this model reasons by default; the reasoning
-preamble is <strong>not</strong> stripped server-side. To swap checkpoints, change <code class="docutils literal notranslate"><span class="pre">model</span></code>
+preamble is <strong>not</strong> stripped server-side. The <code class="docutils literal notranslate"><span class="pre">llama_nemotron</span></code> client preset
+therefore sends <code class="docutils literal notranslate"><span class="pre">detailed</span> <span class="pre">thinking</span> <span class="pre">off</span></code> unless a call passes
+<code class="docutils literal notranslate"><span class="pre">enable_thinking=True</span></code>; refer to <a class="reference internal" href="../reference/agent-sdk-models.html#agent-sdk-models-thinking"><span class="std std-ref">Reasoning control</span></a>. To swap
+checkpoints, change <code class="docutils literal notranslate"><span class="pre">model</span></code>
 only to one with a compatible chat template, and update <code class="docutils literal notranslate"><span class="pre">tool_call_parser</span></code>
 for the replacement model’s tool syntax. Revisit <code class="docutils literal notranslate"><span class="pre">max_model_len</span></code>,
 <code class="docutils literal notranslate"><span class="pre">gpu_memory_utilization</span></code>, and <code class="docutils literal notranslate"><span class="pre">tensor_parallel_size</span></code> for its context and GPU

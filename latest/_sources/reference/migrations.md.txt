@@ -212,6 +212,33 @@ during startup returns 130. Refer to
 {doc}`../components/launcher-and-process-model` for failure diagnostics and
 shutdown behavior.
 
+### Model reasoning control
+
+Model profiles now declare reasoning with a typed `adapter.thinking` setting.
+A per-call `enable_thinking=True` or `False` always applies to that call. A
+legacy `default_extras.chat_template_kwargs.enable_thinking: true` default could
+previously not be turned off per call. Refer to {ref}`agent-sdk-models-thinking`.
+
+- **`llama_nemotron` profiles:** requests now start the system message with
+  `detailed thinking off` unless a call passes `enable_thinking=True`; the model
+  previously reasoned by default and its preamble appeared in the response. To
+  keep reasoning on by default, set it in the profile:
+
+  ```yaml
+  adapter:
+    preset: llama_nemotron
+    thinking:
+      default: true
+  ```
+
+- **Custom `LLMService` implementations:** `enable_thinking` now defaults to
+  `None` instead of `False`. Treat `None` as the endpoint's configured default.
+- **Profiles with the legacy key:** no change is required. With a template-driven
+  or presetless adapter, the value becomes `thinking.default`, so a call can
+  override it. It must now be a boolean, and a profile that also sets a
+  different `thinking.default` is rejected. Prefer `thinking.default` in new
+  profiles.
+
 ### Operator-visible runtime changes
 
 Recorded-video perception is enabled when `video_history_enabled` is omitted
