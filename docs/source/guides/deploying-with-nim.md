@@ -23,13 +23,15 @@ The local server defaults and sample model profiles remain the development path.
 A profile describes the client adapter and the endpoint separately. The adapter
 selects the wire protocol; the endpoint describes connectivity. NIM is a serving
 implementation, not a new model role. Local and deployment profiles use the same
-`make_llm`, `make_vlm`, `make_stt`, `make_tts`, and `make_embedding` factories.
+`make_llm`, `make_vlm`, `make_stt`, `make_tts`, `make_embedding`, and `make_ocr` factories.
 
 Chat and image inference use OpenAI-compatible HTTP. The speech NIMs used here
 expose Riva gRPC, so speech entries select the existing `riva_grpc` adapter.
 Embedding NIMs use OpenAI-compatible HTTP with a batch-wide `input_type` field.
 That difference is handled inside the embedding client with existing request
-defaults, rather than another server process. Refer to
+defaults, rather than another server process. OCR uses the native
+`POST /v1/ocr` HTTP protocol through the `nemotron_ocr` adapter, not the
+OpenAI chat protocol. Refer to
 {doc}`/reference/agent-sdk-models` for the profile contract.
 
 ## Deploy the required models
@@ -43,7 +45,9 @@ and the deployment guide for each selected model and container version.
 
 The example in `deployment/nim/models.yaml` selects Nemotron Omni for LLM
 chat and tool calls, Cosmos3 for vision, Parakeet for recognition, Magpie for
-synthesis, and Llama Nemotron Embed for retrieval. These are endpoint
+synthesis, Llama Nemotron Embed for retrieval, and multilingual Nemotron OCR v2
+for text recognition. The OCR entry is available for future integrations; no
+supplied sample consumes it. These are endpoint
 configuration examples, not a claim of production or hardware qualification.
 Match model IDs, supported languages, voices, input limits, and inference options
 to the deployed versions.
@@ -103,6 +107,22 @@ Model endpoint selection and speaker-backend selection are separate settings.
 Changing the model profile alone does not disable required speaker selection.
 The native deployment profile connects to external Riva endpoints;
 it does not start, stop, or use the local speaker-ASR service.
+
+### OCR inputs and model variant
+
+Deploy Nemotron OCR v2 with `NIM_ENGINE_MODEL_VARIANT=multilingual` in the
+operator's environment. The consumer's `nemotron_ocr` preset selects the wire
+protocol, not the server's model variant. GPU placement, engine counts, batch
+limits, downloads, and cache mounts remain operator-owned. Refer to NVIDIA's
+[OCR NIM configuration](https://docs.nvidia.com/nim/ingestion/image-ocr/latest/environment-variables.html).
+
+Copy the `ocr` entry from `deployment/nim/models.yaml` into an application's
+consumer profile only when that application uses OCR. Set `base_url` to the
+endpoint root, excluding `/v1/ocr`, and retain `ownership: external`. Use
+`make_ocr(config, "ocr")` and `read_text(image)` with PNG or JPEG bytes, a
+local path, or an inline data URL. The client returns text spans with confidence
+and normalized polygons; it does not launch a container or change the input
+resolution. Refer to {ref}`ocr-serving` for the shared local and NIM contract.
 
 ### Embedding inputs
 
@@ -172,6 +192,13 @@ function calls when declared, and query and passage embeddings. An STT-only
 profile reports that recognition inference was skipped; a channel-ready result
 alone does not qualify speech. Small embedding checks report actual dimensions;
 configure RAG dimensions and rebuild its index when changing embedding models.
+
+For an OCR endpoint, the default smoke check sends a blank image and checks
+for an empty detection list. This checks the request contract, not recognition
+accuracy. To exercise text recognition, add `--ocr-image /path/to/text.png`
+to the smoke command with a PNG or JPEG containing readable text. That check
+requires nonempty recognized text; compare the actual transcription with the
+source image separately. It does not establish multilingual accuracy.
 
 Remove unused role entries before validation. The smoke check is an inference
 sanity check, not a load test or an application evaluation. Qualify cold start,

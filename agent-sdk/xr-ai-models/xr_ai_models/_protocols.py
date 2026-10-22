@@ -19,6 +19,48 @@ from typing import Any, AsyncIterator, Literal, Mapping, Protocol, Sequence, run
 ImageInput = bytes | Path | str
 """Image bytes, a filesystem path, a ``data:`` URL, or an HTTP(S) URL."""
 
+
+@dataclass(frozen=True)
+class OCRRegion:
+    """One recognized text region; polygon coordinates are normalized to [0, 1]."""
+
+    text: str
+    """Transcribed text."""
+    confidence: float
+    """Recognition confidence reported by the backend."""
+    polygon: tuple[tuple[float, float], ...]
+    """Ordered (x, y) vertices in the input image's coordinate system."""
+
+
+@runtime_checkable
+class OCRService(Protocol):
+    """Single-image OCR shared by local Hugging Face and NIM v2 servers."""
+
+    async def read_text(
+        self, image: ImageInput, *, merge_level: Literal["word", "sentence", "paragraph"] = "word",
+        timeout: float | None = None,
+    ) -> list[OCRRegion]:
+        """Transcribe inline PNG/JPEG bytes, a Path, or a base64 data URL.
+
+        Remote URLs are not accepted. Regions follow backend reading order.
+        This method does not crop, sharpen, parse fields, or change resolution.
+
+        Raises:
+            OCRRequestError: Input-file, transport, timeout, or HTTP failure.
+
+            OCRResponseError: The endpoint returned malformed OCR data.
+        """
+        ...
+
+    async def health(self) -> bool:
+        """Return whether the configured endpoint is ready."""
+        ...
+
+    async def close(self) -> None:
+        """Release owned client resources."""
+        ...
+
+
 VideoInput = bytes | Path | str
 """Video bytes, a filesystem path, a ``data:`` URL, or an HTTP(S) URL."""
 
@@ -523,7 +565,7 @@ class _StreamingTTSService(TTSService, Protocol):
 
 
 class ModelServiceError(RuntimeError):
-    """Failure to determine or maintain an embedding model's reported identity."""
+    """Base for model-service failures, including embedding identity and OCR errors."""
 
 
 @runtime_checkable

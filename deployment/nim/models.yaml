@@ -6,6 +6,18 @@
 # HTTP base URLs exclude /v1; gRPC addresses are host:port without a scheme.
 # External ownership never grants a consumer permission to start or stop a NIM.
 models:
+  ocr:
+    # Optional reference for future integrations; no supplied sample uses OCR.
+    # Deploy Nemotron OCR v2 with NIM_ENGINE_MODEL_VARIANT=multilingual.
+    # Variant, GPU allocation, and container lifecycle are operator-owned.
+    adapter:
+      preset: nemotron_ocr
+    endpoint:
+      base_url: https://ocr.example.com
+      api_key_env: NIM_ENDPOINT_API_KEY
+      health_path: /v1/health/ready
+    deployment:
+      ownership: external
   llm:
     adapter:
       preset: nemotron_omni
