@@ -148,7 +148,18 @@ the adapter's `thinking` setting decides how the switch reaches the model:
 | `chat_template` | `chat_template_kwargs.enable_thinking`; `thinking_budget` as vLLM's `thinking_token_budget` | `nemotron3_nano`, `nemotron_omni`, `cosmos_vlm` |
 | `system_prompt` | A `detailed thinking on` or `off` line at the start of the system message | Profiles for Llama-Nemotron endpoints |
 | `none` | Nothing is sent; the model has no switch or rejects template arguments | `cosmos3_nano_reasoner` |
-| unset | `chat_template` when `default` is set; otherwise only `enable_thinking=True` is sent | Profiles without a preset |
+| unset | `chat_template` when `default` is set; otherwise only an explicit `enable_thinking=True` sends the switch. A supplied budget is sent unless reasoning is explicitly off. | Profiles without a preset |
+
+The per-call `thinking_budget` is sent as `thinking_token_budget` for
+`chat_template` and unset controls unless reasoning is off. Budget enforcement
+requires support in the deployed model server, independently of support for
+the thinking switch. It has been verified on Nemotron Omni served by vLLM with
+`--reasoning-parser nemotron_v3`; NIM budget support has not been qualified.
+Other endpoints may reject or ignore the field. The SDK does not detect budget
+support or retry without it. Omitting `thinking_budget` (or passing `None`)
+leaves the thinking switch available without requesting a reasoning cap.
+Sample requests that explicitly pass a budget continue to send it; selecting
+a different endpoint profile does not independently disable that budget.
 
 `default` is the endpoint's reasoning state when a call does not choose one;
 `null` sends no switch and leaves the model's own default. With `system_prompt`,
