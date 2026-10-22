@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import asyncio
-import importlib.util
 import json
 import math
 import os
@@ -37,14 +36,6 @@ from clef_server._service import (  # noqa: E402
     _normalize_response,
     create_app,
 )
-
-_SAMPLE_SPEC = importlib.util.spec_from_file_location(
-    "clef_flash_sample",
-    _REPO_ROOT / "model-server-samples" / "clef-flash" / "main.py",
-)
-assert _SAMPLE_SPEC and _SAMPLE_SPEC.loader
-clef_sample = importlib.util.module_from_spec(_SAMPLE_SPEC)
-_SAMPLE_SPEC.loader.exec_module(clef_sample)
 
 REVISION = "17f0b0ad64efb65d273590632833508766b2aae6"
 
@@ -316,15 +307,6 @@ def test_clef_ownership_uses_exact_environment_not_command_line(tmp_path: Path, 
 def process_handle(monkeypatch):
     monkeypatch.setattr(_ownership.os, "pidfd_open", lambda _pid: 999)
     monkeypatch.setattr(_ownership.os, "close", lambda _fd: None)
-
-
-def test_sample_stop_uses_the_configured_port(monkeypatch) -> None:
-    stopped = []
-    monkeypatch.setattr(clef_sample, "stop_marked_listener", lambda *args: stopped.append(args) or True)
-    monkeypatch.setenv("UV_CONFIG_FILE", "unused")
-    monkeypatch.setattr(sys, "argv", ["clef_flash_model", "--stop"])
-    clef_sample.run()
-    assert stopped == [(8120, "XR_AI_CLEF", "clef-flash")]
 
 
 def test_stop_rejects_unowned_listener(monkeypatch, process_handle) -> None:

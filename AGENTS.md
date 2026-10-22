@@ -21,7 +21,6 @@ coding-agent skills and installation.
 client-samples/  Platform clients
 agent-sdk/       Agent runtime, hub IPC, model, tool, and voice libraries
 agent-samples/   Runnable agent stacks
-model-server-samples/  Standalone model-server samples (CLEF)
 deployment/      External model endpoint profiles and validation
 apps/            Application workspaces outside repository sample tooling
 services/        Hub, model servers, and typed capability services
@@ -184,7 +183,7 @@ workflows, operations, troubleshooting, and reference material. Do not duplicate
 that content in a README. A README is a concise repository entry point: state
 what the directory contains, link to the canonical documentation, and keep only
 the minimum local information needed before following that link. A top-level
-sample README under `agent-samples/` or `model-server-samples/` additionally keeps
+sample README under `agent-samples/` additionally keeps
 the exact commands needed to start that sample. State the sample directory as
 the working directory and write every command relative to it, including commands
 that invoke a nested project such as `model-servers` from an agent sample. It also includes a compact configuration entry point:

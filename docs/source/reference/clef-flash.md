@@ -30,18 +30,18 @@ worker call finishes. `GET /health` and
 `POST /v1/systemone` returns the standard answers and usage object with the
 same provenance fields.
 
+(clef-launching)=
 ## Launching
 
-From `model-server-samples/clef-flash/`, run:
+From the repository root, start the service with:
 
 ```bash
-export UV_CONFIG_FILE=../../uv.toml
-uv sync
-uv run clef_flash_model
+uv --config-file uv.toml run --project services/clef-server clef_server \
+  --config services/clef-server/clef_server.yaml
 ```
 
-The sample starts `services/clef-server` persistently on `127.0.0.1:8120`.
-Its `services/clef-server/clef_server.yaml` pins model revision
+A sample model stack can also launch it by selecting `clef`. The service listens
+on `127.0.0.1:8120`. Its `services/clef-server/clef_server.yaml` pins model revision
 `17f0b0ad64efb65d273590632833508766b2aae6` from the
 `Cloudflare/clef-flash` model repository. The service resolves the configured
 pinned snapshot from the repository's ignored `models/` cache first and passes
@@ -51,9 +51,8 @@ model loading with the model, revision, and cache directory. Offline startup
 assumes a previously working cache. Refer to
 {ref}`starting-model-services-without-network-access` for cache behavior.
 
-With `UV_CONFIG_FILE` still set, use `uv run clef_flash_model --stop` from the
-sample directory to stop only a listener carrying the matching Clef ownership
-and port markers. It waits for that process to exit, including request and native
+A sample model stack that selects `clef` stops only a listener carrying the
+matching Clef ownership and port markers with its `--stop` command. It waits for that process to exit, including request and native
 inference cleanup, before reporting success; closing the HTTP listener alone
 does not complete shutdown. Linux process handles keep termination and timeout
 escalation tied to the same verified process. The stop command never treats a
@@ -71,17 +70,20 @@ limit receive HTTP 422; increase `max_length` only when GPU memory allows it.
 ## Updating a running service
 
 Before updating the checkout or changing server configuration, stop the service
-from the old checkout in `model-server-samples/clef-flash/`. The service
-configuration now lives in `services/clef-server/clef_server.yaml`; copy any edits
-you made to the sample's former `yaml/clef_server.yaml` there:
+from the old checkout. If it has `model-server-samples/clef-flash/`, run this
+from that directory:
 
 ```bash
 export UV_CONFIG_FILE=../../uv.toml
 uv run clef_flash_model --stop
 ```
 
-Update the checkout or configuration, then start the service with
-`uv run clef_flash_model`. Model and configuration identity do not identify the
+The standalone `clef-flash` launcher no longer exists. The service configuration
+now lives in `services/clef-server/clef_server.yaml`; copy any edits you made to
+the launcher's former `yaml/clef_server.yaml` there.
+
+Update the checkout or configuration, then start the service as described in
+{ref}`Launching <clef-launching>`. Model and configuration identity do not identify the
 running application code version. Restarting ensures that requests reach the
 updated implementation, including support for image decisions.
 

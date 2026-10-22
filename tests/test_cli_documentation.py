@@ -20,7 +20,6 @@ def test_sample_command_catalog_matches_top_level_projects() -> None:
     commands = {command.program: command for command in load_cli_catalog(_ROOT)}
 
     assert set(commands) == {
-        "clef_flash_model",
         "lab_instrument_monitoring",
         "simple_vlm_example_model_servers",
         "lab_instrument_monitoring_model_servers",
@@ -32,12 +31,6 @@ def test_sample_command_catalog_matches_top_level_projects() -> None:
         "tea_making_sample",
         "xr_render_demo",
     }
-    assert [argument.flags for argument in commands["clef_flash_model"].arguments] == [
-        ("--stop",),
-    ]
-    assert commands["clef_flash_model"].project_dir == Path(
-        "model-server-samples/clef-flash"
-    )
     assert [argument.flags for argument in commands["lab_instrument_monitoring"].arguments] == [
         ("--expose-web-events",),
         ("--session-recording",),

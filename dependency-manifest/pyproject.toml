@@ -41,7 +41,6 @@ repository = [
     "xr-ai-tools[capture,frames,image-editing,marker-tracking,relay,services,vision]",
     "xr-ai-voice",
     "xr-ai-web-events",
-    "clef-flash-model-server",
     "clef-server",
     "cloudxr-runtime",
     "device-io-hub",
@@ -98,7 +97,6 @@ conflicts = [[{ extra = "repository" }, { extra = "vllm" }]]
 "xr-ai-tools"                             = { path = "../agent-sdk/xr-ai-tools", editable = true }
 "xr-ai-voice"                             = { path = "../agent-sdk/xr-ai-voice", editable = true }
 "xr-ai-web-events"                        = { path = "../agent-sdk/xr-ai-web-events", editable = true }
-"clef-flash-model-server"                 = { path = "../model-server-samples/clef-flash", editable = true }
 "clef-server"                             = { path = "../services/clef-server", editable = true }
 "cloudxr-runtime"                         = { path = "../services/cloudxr-runtime", editable = true }
 "device-io-hub"                           = { path = "../services/device-io-hub", editable = true }

@@ -50,12 +50,7 @@ def test_config_catalog_covers_every_top_level_sample() -> None:
         if "model_cache:" in path.read_text()
     )
     assert {config.path for config in configs} == expected
-    # A sample whose service owns its configuration has nothing to catalog.
-    projects = {
-        path.parent.name
-        for path in project_paths
-        if any(config.is_relative_to(path.parent.relative_to(_ROOT)) for config in expected)
-    }
+    projects = {path.parent.name for path in project_paths}
     assert {config.sample for config in configs} == projects | {"Model-server defaults"}
 
 
