@@ -274,8 +274,10 @@ From the repository root, give the agent this request:
 Read agent-samples/procedure-capture-guide/skills/recording-to-guide/SKILL.md,
 its schema reference, and applicable examples.
 Use agent-samples/procedure-capture-guide/artifacts/sessions/<session-id>/packet.json.
-Write the demonstrated procedure directly as draft guide YAML and matching
-evidence review notes under agent-samples/procedure-capture-guide/guides/.
+Write the demonstrated procedure directly as guides/<slug>.yaml and matching
+guides/<slug>.review.md under agent-samples/procedure-capture-guide/.
+Use a lowercase, hyphen-separated filename derived from the guide name,
+such as assemble-toy.yaml, without a .guide infix. Keep the guide draft.
 Reuse narration and captions; inspect original images where evidence is unclear.
 Interpret all capture sources together as complementary, fallible evidence of
 the intended task, not observations to translate literally into steps. Use
@@ -304,7 +306,7 @@ packet paths explicit; the evaluator runs that checkout's implementation.
 
 The outputs are local and Git-ignored:
 
-- `guides/<slug>.guide.yaml`: model-authored draft.
+- `guides/<slug>.yaml`: model-authored draft.
 - `guides/<slug>.review.md`: action-to-evidence mapping, capture ID, source
   frame references, corrections, revisions, consequential assumptions and
   questions needing human confirmation.
@@ -320,7 +322,7 @@ together when changing this workflow.
 Run the read-only validator from the repository root:
 
 ```bash
-uv run --project agent-samples/procedure-capture-guide/worker python -m procedure_capture_guide_worker._validate_guide agent-samples/procedure-capture-guide/guides/<slug>.guide.yaml
+uv run --project agent-samples/procedure-capture-guide/worker python -m procedure_capture_guide_worker._validate_guide agent-samples/procedure-capture-guide/guides/<slug>.yaml
 ```
 
 It imports the runtime parser directly; there is no authoring-specific schema.
@@ -331,7 +333,7 @@ A schema-valid guide can still omit an action or accept an incorrect result.
 With this sample's configured model servers running, evaluate a fixed draft:
 
 ```bash
-PYTHONPATH=agent-samples/procedure-capture-guide/worker uv run --project agent-samples/procedure-capture-guide/worker python agent-samples/procedure-capture-guide/eval/guide.py --packet /path/to/packet.json --guide /path/to/draft.guide.yaml --output /path/to/evaluation/run-001
+PYTHONPATH=agent-samples/procedure-capture-guide/worker uv run --project agent-samples/procedure-capture-guide/worker python agent-samples/procedure-capture-guide/eval/guide.py --packet /path/to/packet.json --guide /path/to/draft.yaml --output /path/to/evaluation/run-001
 ```
 
 The existing runtime evaluator supplies each captured frame once at its original

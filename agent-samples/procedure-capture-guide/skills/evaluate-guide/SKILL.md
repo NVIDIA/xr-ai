@@ -20,9 +20,9 @@ make a test pass.
 
 Read the guide, original packet, and
 [shared contract](../recording-to-guide/references/packet-and-guide-schema.md).
-Read the [visual example](../recording-to-guide/references/example.guide.yaml),
-[timer example](../recording-to-guide/references/timer.guide.yaml) for waits,
-and [blocked example](../recording-to-guide/references/review-blocked.guide.yaml)
+Read the [visual example](../recording-to-guide/references/example.yaml),
+[timer example](../recording-to-guide/references/timer.yaml) for waits,
+and [blocked example](../recording-to-guide/references/review-blocked.yaml)
 for unresolved requirements. These links are relative to this skill.
 
 The authoring LLM, including GPT Luna, is the **observer**, not the runtime VLM,

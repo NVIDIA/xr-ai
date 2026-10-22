@@ -85,6 +85,14 @@ stops. If you relied on startup failure to clear the entire model stack, run
 the sample's model command with
 `--stop` explicitly. Refer to {doc}`/guides/customizing-model-servers`.
 
+### Procedure guide authoring filenames
+
+Newly generated procedure guides use `guides/<slug>.yaml`, for example
+`guides/assemble-toy.yaml`, instead of `<slug>.guide.yaml`. Existing guide files
+remain supported without renaming. The generation skills' reference examples
+are now `example.yaml`, `timer.yaml`, and `review-blocked.yaml`. Refresh both
+installed skill directories together so their links use the renamed examples.
+
 ### Nemotron 3 embedding model
 
 The embedding server now defaults to `nvidia/Nemotron-3-Embed-1B-BF16`; the NIM

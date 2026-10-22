@@ -115,7 +115,7 @@ def test_packet_cli_uses_runtime_controls_and_unique_source_evidence(
     guide["task"]["status"] = "draft"
     guide["steps"][1]["trigger"]["arguments"]["duration_s"] = 1
     guide["steps"][1]["finish_on_complete"] = automatic
-    path = tmp_path / "draft.guide.yaml"
+    path = tmp_path / "draft.yaml"
     path.write_text(yaml.safe_dump(guide))
     original = path.read_bytes()
     original_packet = packet.read_bytes()
@@ -166,7 +166,7 @@ def test_packet_cli_rejects_announcements_that_disagree_with_progress(
     guide["steps"] = guide["steps"][:1]
     guide["steps"][0]["next"] = None
     guide["steps"][0]["finish_on_complete"] = fault == "automatic_completion"
-    path = tmp_path / "draft.guide.yaml"
+    path = tmp_path / "draft.yaml"
     path.write_text(yaml.safe_dump(guide))
     guidance = _Guide.guidance
     was_active = False

@@ -27,7 +27,7 @@
 # that no attachment happened between those images. Inspect the interval when
 # narration describes an action that the endpoints do not establish.
 # These checks verify the resulting arrangement, not the history of each motion.
-# For an unresolved required identity, use review-blocked.guide.yaml instead of
+# For an unresolved required identity, use review-blocked.yaml instead of
 # inventing the identity or refusing to draft the demonstrated action.
 # Missing saved images do not make an explicitly instructed outward tab
 # direction unknown. Keep the normal live checks and note the capture gap.

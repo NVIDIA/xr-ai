@@ -44,7 +44,7 @@ def test_validator_accepts_examples_and_shipped_guides_without_a_schema_fork(cap
     from procedure_capture_guide_worker import _validate_guide
 
     assert _validate_guide.load_workflow is load_workflow
-    paths = (sorted(_REFERENCES.glob("*.guide.yaml"))
+    paths = (sorted(_REFERENCES.glob("*.yaml"))
              + sorted((_SAMPLE / "examples").glob("*/guide.yaml"))
              + sorted((_SAMPLE / "eval/fixtures").glob("*.guide.yaml")))
     assert len(paths) >= 5
@@ -57,11 +57,11 @@ def test_validator_accepts_examples_and_shipped_guides_without_a_schema_fork(cap
 
 @pytest.fixture
 def visual():
-    return yaml.safe_load((_REFERENCES / "example.guide.yaml").read_text())
+    return yaml.safe_load((_REFERENCES / "example.yaml").read_text())
 
 
 def test_visual_example_uses_same_writable_boolean_and_closed_answers():
-    workflow = load_workflow(_REFERENCES / "example.guide.yaml")
+    workflow = load_workflow(_REFERENCES / "example.yaml")
     step = workflow.steps[workflow.start_step]
     assert workflow.status == "draft"
     assert not workflow.runnable
@@ -77,7 +77,7 @@ def test_visual_example_uses_same_writable_boolean_and_closed_answers():
 
 
 def test_visual_example_requires_fresh_evidence_for_each_linked_step():
-    workflow = load_workflow(_REFERENCES / "example.guide.yaml")
+    workflow = load_workflow(_REFERENCES / "example.yaml")
     state = workflow.initial_state()
     visited = []
     step_id = workflow.start_step
@@ -97,7 +97,7 @@ def test_visual_example_requires_fresh_evidence_for_each_linked_step():
 
 
 def test_timer_example_requires_live_setup_before_elapsed_only_wait():
-    workflow = load_workflow(_REFERENCES / "timer.guide.yaml")
+    workflow = load_workflow(_REFERENCES / "timer.yaml")
     setup = workflow.steps[workflow.start_step]
     wait = workflow.steps[setup.next_step]
     assert setup.trigger.function == "current_view"
@@ -150,7 +150,7 @@ def test_direct_commit_must_satisfy_completion(visual):
 
 
 def test_unresolved_identity_example_preserves_action_without_false_success():
-    workflow = load_workflow(_REFERENCES / "review-blocked.guide.yaml")
+    workflow = load_workflow(_REFERENCES / "review-blocked.yaml")
     step = workflow.steps[workflow.start_step]
     assert workflow.status == "draft"
     assert not workflow.runnable
@@ -232,7 +232,7 @@ def test_actual_string_regex_and_whitespace_preserve_existing_meaning(visual):
     (lambda source: source.replace("    initial: false", "    initial: false\n    \"initial\": true"), "initial"),
 ])
 def test_duplicate_keys_rejected_at_every_level(edit, key):
-    source = (_REFERENCES / "example.guide.yaml").read_text()
+    source = (_REFERENCES / "example.yaml").read_text()
     changed = edit(source)
     assert changed != source
     with pytest.raises(yaml.constructor.ConstructorError, match=f"duplicate mapping key '{key}'") as error:
@@ -241,7 +241,7 @@ def test_duplicate_keys_rejected_at_every_level(edit, key):
 
 
 def test_safe_aliases_and_non_overlapping_merges_remain_supported():
-    source = (_REFERENCES / "example.guide.yaml").read_text()
+    source = (_REFERENCES / "example.yaml").read_text()
     source = source.replace("    type: boolean\n    description:", "    <<: {type: boolean}\n    description:")
     source = source.replace("    agent:\n", "    agent: &policy\n", 1)
     # Sharing a policy is not a duplicate key in the receiving step.
@@ -255,14 +255,14 @@ def test_safe_aliases_and_non_overlapping_merges_remain_supported():
 
 
 def test_merge_cannot_override_an_existing_requirement():
-    source = (_REFERENCES / "example.guide.yaml").read_text()
+    source = (_REFERENCES / "example.yaml").read_text()
     source = source.replace("    initial: false", "    <<: {initial: false}\n    initial: true")
     with pytest.raises(yaml.constructor.ConstructorError, match="duplicate mapping key 'initial'"):
         parse_workflow(source)
 
 
 def test_repeated_merge_keys_are_rejected_before_expansion():
-    source = (_REFERENCES / "example.guide.yaml").read_text()
+    source = (_REFERENCES / "example.yaml").read_text()
     source = source.replace("    type: boolean", "    <<: {type: boolean}\n    <<: {initial: false}")
     source = source.replace("    initial: false\n", "")
     with pytest.raises(yaml.constructor.ConstructorError, match="duplicate mapping key '<<'"):
@@ -277,7 +277,7 @@ def test_guide_loader_is_local_and_still_safe():
 
 
 def test_duplicate_diagnostic_is_reported_by_read_only_cli(tmp_path, capsys):
-    source = (_REFERENCES / "example.guide.yaml").read_text()
+    source = (_REFERENCES / "example.yaml").read_text()
     source = source.replace("    initial: false", "    initial: false\n    initial: true")
     path = tmp_path / "duplicate.guide.yaml"
     path.write_text(source)
@@ -294,7 +294,7 @@ def test_duplicate_diagnostic_is_reported_by_read_only_cli(tmp_path, capsys):
     ("started_at_us", "$state.undeclared"),
 ])
 def test_timer_request_errors(argument, value):
-    raw = yaml.safe_load((_REFERENCES / "timer.guide.yaml").read_text())
+    raw = yaml.safe_load((_REFERENCES / "timer.yaml").read_text())
     raw["steps"][1]["trigger"]["arguments"][argument] = value
     with pytest.raises(ValueError):
         parse_workflow(yaml.safe_dump(raw))
@@ -323,7 +323,7 @@ def test_snapshot_parsing_and_state_are_independent(visual):
 
 
 def test_validator_checks_all_inputs_without_modifying_any(tmp_path, visual, capsys):
-    good = tmp_path / "draft.guide.yaml"
+    good = tmp_path / "draft.yaml"
     good.write_text(yaml.safe_dump(visual))
     approved = tmp_path / "approved.guide.yaml"
     other = copy.deepcopy(visual)
