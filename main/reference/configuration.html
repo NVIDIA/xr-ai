@@ -2020,55 +2020,6 @@ workflow.</p></li>
 </pre></div>
 </div>
 </section>
-<section id="config-model-server-defaults-llama-nemotron-llm-server-yaml">
-<h3>llama_nemotron_llm_server.yaml<a class="headerlink" href="#config-model-server-defaults-llama-nemotron-llm-server-yaml" title="Link to this heading">#</a></h3>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
-<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
-
-<span class="c1"># llama-nemotron-llm-server — vLLM configuration.</span>
-<span class="c1"># OpenAI-compatible API at http://localhost:8106/v1  (served-model-name: "llm")</span>
-
-<span class="nt">model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nvidia/Llama-3.1-Nemotron-Nano-8B-v1</span>
-
-<span class="nt">host</span><span class="p">:</span><span class="w"> </span><span class="s">"0.0.0.0"</span>
-<span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8106</span>
-<span class="c1"># Optional. HF_TOKEN in the environment takes priority over this value.</span>
-<span class="nt">hf_token</span><span class="p">:</span><span class="w"> </span><span class="s">""</span>
-
-<span class="c1"># Shared weight cache — resolves relative to this YAML.</span>
-<span class="nt">model_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../models</span>
-
-<span class="c1"># Pin to a specific GPU (or comma-separated list for multi-GPU).</span>
-<span class="c1"># Unset to use all GPUs visible to the process.</span>
-<span class="c1"># cuda_visible_devices: "0"</span>
-
-<span class="c1"># vLLM knobs.</span>
-<span class="nt">max_num_seqs</span><span class="p">:</span><span class="w">           </span><span class="l l-Scalar l-Scalar-Plain">8</span>
-<span class="nt">tensor_parallel_size</span><span class="p">:</span><span class="w">   </span><span class="l l-Scalar l-Scalar-Plain">1</span>
-<span class="nt">max_model_len</span><span class="p">:</span><span class="w">          </span><span class="l l-Scalar l-Scalar-Plain">32768</span>
-<span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.85</span>
-<span class="nt">enforce_eager</span><span class="p">:</span><span class="w">          </span><span class="l l-Scalar l-Scalar-Plain">false</span>
-
-<span class="c1"># Tool calling via vLLM's built-in Llama-3 parser.</span>
-<span class="c1"># Set enable_tool_choice: false to disable tool calling entirely.</span>
-<span class="nt">enable_tool_choice</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-<span class="nt">tool_call_parser</span><span class="p">:</span><span class="w">   </span><span class="l l-Scalar l-Scalar-Plain">llama3_json</span>
-
-<span class="c1"># vLLM runtime. If this key is omitted, the wrapper falls back to pip;</span>
-<span class="c1"># the checked-in configuration below selects the NGC Docker container.</span>
-<span class="c1">#   pip     — vllm CLI from this wrapper's venv (today's behavior)</span>
-<span class="c1">#   docker  — `docker run nvcr.io/nvidia/vllm:&lt;tag&gt; vllm serve …`</span>
-<span class="c1"># Both honor the same config keys above; only the runtime hosting vllm differs.</span>
-<span class="c1"># docker mode requires Docker Engine + NVIDIA Container Toolkit and a</span>
-<span class="c1"># `docker login nvcr.io` (or NGC_API_KEY in the environment).</span>
-<span class="nt">vllm_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docker</span>
-
-<span class="c1"># Container image used when vllm_backend: docker.  Override to pin a different</span>
-<span class="c1"># tag, an internal mirror, or a custom build.</span>
-<span class="nt">vllm_image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nvidia/vllm:26.09-py3</span>
-</pre></div>
-</div>
-</section>
 <section id="config-model-server-defaults-magpie-tts-server-yaml">
 <h3>magpie_tts_server.yaml<a class="headerlink" href="#config-model-server-defaults-magpie-tts-server-yaml" title="Link to this heading">#</a></h3>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
@@ -2518,7 +2469,6 @@ workflow.</p></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-server-defaults">Model-server defaults</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-server-defaults-clef-server-yaml">clef_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-server-defaults-embedding-server-yaml">embedding_server.yaml</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-server-defaults-llama-nemotron-llm-server-yaml">llama_nemotron_llm_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-server-defaults-magpie-tts-server-yaml">magpie_tts_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-server-defaults-nemotron-omni-llm-server-yaml">nemotron_omni_llm_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-server-defaults-nemotron3-nano-llm-server-yaml">nemotron3_nano_llm_server.yaml</a></li>
