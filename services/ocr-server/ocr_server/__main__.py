@@ -4,12 +4,11 @@
 """Build and launch the isolated Hugging Face OCR inference container."""
 from __future__ import annotations
 
-import os
 import subprocess
 from pathlib import Path
 
 from xr_ai_logging import setup_logging
-from xr_ai_vllm import _docker, container_label_args, load_config, resolve_model_cache
+from xr_ai_vllm import load_config, resolve_model_cache, serve_container
 
 
 def run() -> None:
@@ -34,30 +33,14 @@ def run() -> None:
     image_id = subprocess.check_output([
         "docker", "image", "inspect", "--format", "{{.Id}}", image,
     ], text=True).strip()
-    cache = resolve_model_cache(cfg, yaml_dir, default="../../models/ocr")
+    cache = resolve_model_cache(cfg, yaml_dir, default="../../models")
     name = str(cfg.get("container_name", "xr-ai-ocr"))
     gpu = str(cfg.get("cuda_visible_devices", "0"))
-    fingerprint = _docker.launch_fingerprint({
-        "image": image_id, "port": port, "cache": str(cache), "gpu": gpu,
-        "infer_length": length,
-        "hf_token_digest": _docker.credential_digest(os.environ.get("HF_TOKEN")),
-    })
-    argv = [
-        "docker", "run", "--name", name,
-        *container_label_args(port),
-        "--label", f"{_docker._CONFIG_LABEL}={fingerprint}",
-        "--runtime", "nvidia", "--ipc", "host",
-        "-e", f"NVIDIA_VISIBLE_DEVICES={gpu}",
-        "-e", "NVIDIA_DRIVER_CAPABILITIES=compute,utility",
-        "-e", "HF_TOKEN", "-e", f"OCR_INFER_LENGTH={length}",
-        "-p", f"{port}:8000", "-v", f"{cache}:/models", image,
-    ]
-    _docker.run_container(
-        argv=argv, image=image, container_name=name, log_prefix="ocr",
-        port=port, health_url=f"http://127.0.0.1:{port}/v1/health/ready",
-        launch_banner=f"Loading multilingual Hugging Face OCR on GPU {gpu}",
-        reuse_banner=f"OCR already serving on :{port}",
-        ready_banner=f"OCR ready on :{port}", ready_file=ready_file,
+    serve_container(
+        image=image, image_id=image_id, container_name=name, port=port,
+        model_cache=cache, cuda_visible_devices=gpu,
+        environment={"OCR_INFER_LENGTH": str(length)}, inherited_env=("HF_TOKEN",),
+        log_prefix="ocr", ready_file=ready_file,
     )
 
 

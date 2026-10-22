@@ -15,6 +15,6 @@ RUN python -c 'import os; from huggingface_hub import snapshot_download; snapsho
 ARG TORCH_CUDA_ARCH_LIST
 ENV TORCH_CUDA_ARCH_LIST=${TORCH_CUDA_ARCH_LIST} MAX_JOBS=4
 RUN test -n "$TORCH_CUDA_ARCH_LIST" && pip install --no-cache-dir --no-build-isolation /opt/upstream/nemotron-ocr
-COPY __init__.py server.py /app/ocr_server/
+COPY __init__.py _server.py /app/ocr_server/
 ENV PYTHONPATH=/app HF_HOME=/models/huggingface TORCH_HOME=/models/torch
-ENTRYPOINT ["python", "-m", "ocr_server.server"]
+ENTRYPOINT ["python", "-m", "ocr_server._server"]

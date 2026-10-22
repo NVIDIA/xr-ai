@@ -62,6 +62,7 @@ from ._config import (
 )
 from ._thinking import ThinkingControl, ThinkingSpec
 from ._factory import make_decision, make_embedding, make_llm, make_ocr, make_stt, make_tts, make_vlm
+from ._ocr import ModelServiceError, OCRRequestError, OCRResponseError
 from ._riva_grpc import RivaSTT, RivaTTS
 
 __all__ = [
@@ -82,6 +83,9 @@ __all__ = [
     "OCRService",
     "OCRSpan",
     "OCRSpec",
+    "ModelServiceError",
+    "OCRRequestError",
+    "OCRResponseError",
     "make_ocr",
     "STTService",
     "TextPart",

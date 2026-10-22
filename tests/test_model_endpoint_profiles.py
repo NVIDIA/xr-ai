@@ -13,7 +13,7 @@ from runpy import run_path
 import httpx
 import pytest
 import yaml
-from xr_ai_models import load_models_config, load_models_config_from_dict, make_embedding
+from xr_ai_models import OCRRequestError, load_models_config, load_models_config_from_dict, make_embedding
 
 ROOT = Path(__file__).resolve().parents[1]
 SMOKE = run_path(str(ROOT / "deployment/nim/smoke_test.py"))
@@ -210,7 +210,7 @@ async def test_smoke_check_accepts_native_embedding_dimensions(endpoint, tmp_pat
     ("none", 200, True, None),
     ("health", 200, False, RuntimeError),
     ("health", 401, True, RuntimeError),
-    ("none", 503, True, httpx.HTTPStatusError),
+    ("none", 503, True, OCRRequestError),
 ])
 async def test_external_ocr_smoke_auth_inference_and_cleanup(
     monkeypatch, tmp_path, readiness, status, with_text, expected_error,

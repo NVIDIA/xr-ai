@@ -479,7 +479,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `ocr-server` — [`services/ocr-server/`](services/ocr-server/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:

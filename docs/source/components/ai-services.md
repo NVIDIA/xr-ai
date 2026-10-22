@@ -121,7 +121,10 @@ not this local server configuration. Neither integration adds experimental
 text-dense cropping or sharpening; preprocessing remains caller-owned.
 
 Local weights and the torchvision backbone are cached beneath the OCR YAML's
-`model_cache`; the compiled CUDA extension stays in the Docker image.
+`model_cache`, which defaults to the repository `models/` directory, using
+`huggingface/` and `torch/` subdirectories. The compiled CUDA extension stays
+in the Docker image. An existing OCR-specific cache can still be selected with
+an explicit `model_cache` override; launching does not relocate or delete it.
 Changes to the local YAML or service source invalidate container reuse as
 needed. Stop the standalone container with `docker stop xr-ai-ocr` (or the
 configured `container_name`) before changing its settings, then repeat the launch

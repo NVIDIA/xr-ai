@@ -389,8 +389,7 @@ def test_model_service_projects_preserve_their_public_contracts() -> None:
         assert metadata["project"]["name"] == package
         assert command in metadata["project"]["scripts"]
         assert config["port"] == port
-        # OCR isolates its Hugging Face and torchvision caches in one mounted directory.
-        expected_cache = _ROOT / ("models/ocr" if directory == "ocr-server" else "models")
+        expected_cache = _ROOT / "models"
         assert Path(os.path.normpath(project / config["model_cache"])) == expected_cache, (
             f"{directory}: model_cache must target {expected_cache}"
         )

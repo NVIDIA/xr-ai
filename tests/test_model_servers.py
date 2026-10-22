@@ -408,7 +408,7 @@ def test_sample_owned_ocr_profile_launches_and_stops(monkeypatch, tmp_path, prof
         assert config["cuda_visible_devices"] == "1"
         assert config["infer_length"] == 640
         assert config["container_name"] == "xr-ai-ocr"
-        expected_cache = base / "cache" if override_cache else _REPO_ROOT / "models/ocr"
+        expected_cache = base / "cache" if override_cache else _REPO_ROOT / "models"
         assert config["model_cache"] == str(expected_cache)
         launched.append(path)
 
@@ -429,7 +429,7 @@ def test_ocr_default_stop_uses_shared_port_without_gpu_or_credentials(monkeypatc
     config = _stack._configs(tmp_path, ("ocr",), None)["ocr"]
     assert config["port"] == 8112
     assert config["infer_length"] == 1024
-    assert config["model_cache"] == str(_REPO_ROOT / "models/ocr")
+    assert config["model_cache"] == str(_REPO_ROOT / "models")
     monkeypatch.setattr(_stack, "detect_gpu_config", lambda: pytest.fail("stop detected GPU"))
     monkeypatch.setattr(_stack, "require_credentials", lambda *_a: pytest.fail("stop required credentials"))
     monkeypatch.setattr(_stack, "run_stack", lambda *_a, **_kw: pytest.fail("stop launched services"))

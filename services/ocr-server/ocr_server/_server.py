@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Single-worker multilingual OCR with the NIM v2 image request/response shape."""
+"""Private inference app for the OCR container; imported only by its tests."""
 from __future__ import annotations
 
 import asyncio

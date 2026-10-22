@@ -22,11 +22,20 @@ import pytest
 import yaml
 from fastapi import HTTPException
 from PIL import Image, ImageDraw, ImageFont
-from xr_ai_models import OCRService, OCRSpec, load_models_config_from_dict, make_ocr
+from xr_ai_models import (
+    ModelServiceError,
+    OCRRequestError,
+    OCRResponseError,
+    OCRService,
+    OCRSpec,
+    load_models_config_from_dict,
+    make_ocr,
+)
 from xr_ai_models._ocr import NemotronOCR
+from xr_ai_vllm import _docker
 
 ROOT = Path(__file__).resolve().parents[1]
-spec = importlib.util.spec_from_file_location("ocr_server_app", ROOT / "services/ocr-server/ocr_server/server.py")
+spec = importlib.util.spec_from_file_location("ocr_server_app", ROOT / "services/ocr-server/ocr_server/_server.py")
 server = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = server
 spec.loader.exec_module(server)
@@ -91,6 +100,132 @@ async def test_sdk_contract_and_lifecycle():
         config().llm("ocr")
 
 
+@pytest.mark.parametrize("status", [401, 413, 422, 500, 503])
+async def test_sdk_http_failure_is_typed_and_not_retried(status):
+    calls = []
+
+    def handle(request):
+        calls.append(request)
+        return httpx.Response(status, json={"detail": "failure"})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+        async with NemotronOCR(config().ocr("ocr"), client=client) as ocr:
+            with pytest.raises(OCRRequestError) as error:
+                await ocr.read_text(image_url())
+        assert not client.is_closed
+    assert isinstance(error.value, ModelServiceError)
+    assert error.value.status_code == status
+    assert isinstance(error.value.__cause__, httpx.HTTPStatusError)
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("failure", [httpx.ConnectError, httpx.ReadTimeout, httpx.RemoteProtocolError])
+async def test_sdk_transport_failure_preserves_cause(failure):
+    original = failure("transport failed")
+
+    def handle(request):
+        raise original
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+        async with NemotronOCR(config().ocr("ocr"), client=client) as ocr:
+            with pytest.raises(OCRRequestError) as error:
+                await ocr.read_text(image_url())
+    assert error.value.__cause__ is original
+    assert error.value.status_code is None
+
+
+@pytest.mark.parametrize("failure", [asyncio.CancelledError, RuntimeError])
+async def test_sdk_does_not_translate_cancellation_or_programming_errors(failure):
+    original = failure("not a service failure")
+
+    def handle(request):
+        raise original
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+        async with NemotronOCR(config().ocr("ocr"), client=client) as ocr:
+            with pytest.raises(failure) as error:
+                await ocr.read_text(image_url())
+    assert error.value is original
+
+
+async def test_sdk_missing_input_file_has_typed_error(tmp_path):
+    async with make_ocr(config(), "ocr") as ocr:
+        with pytest.raises(OCRRequestError) as error:
+            await ocr.read_text(tmp_path / "missing.png")
+    assert isinstance(error.value.__cause__, FileNotFoundError)
+
+
+async def test_sdk_invalid_json_has_typed_error():
+    def handle(request):
+        return httpx.Response(200, content=b"not-json")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+        async with NemotronOCR(config().ocr("ocr"), client=client) as ocr:
+            with pytest.raises(OCRResponseError) as error:
+                await ocr.read_text(image_url())
+    assert isinstance(error.value, ModelServiceError)
+    assert isinstance(error.value, ValueError)
+    assert isinstance(error.value.__cause__, json.JSONDecodeError)
+
+
+@pytest.mark.parametrize(("path", "value"), [
+    ((), []), ((), {}), (("data",), None), (("data",), []),
+    (("data", 0), None), (("data", 0, "index"), 1), (("data", 0, "index"), False),
+    (("data", 0, "text_detections"), {}),
+    (("data", 0, "text_detections", 0), None),
+    (("data", 0, "text_detections", 0, "text_prediction"), {}),
+    (("data", 0, "text_detections", 0, "text_prediction", "text"), 12),
+    (("data", 0, "text_detections", 0, "bounding_box"), {}),
+    (("data", 0, "text_detections", 0, "bounding_box", "points"), []),
+    (("data", 0, "text_detections", 0, "bounding_box", "points", 0), {}),
+])
+async def test_sdk_rejects_malformed_response_structure(path, value):
+    payload = response()
+    if path:
+        parent = payload
+        for part in path[:-1]:
+            parent = parent[part]
+        parent[path[-1]] = value
+    else:
+        payload = value
+
+    def handle(request):
+        return httpx.Response(200, json=payload)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+        async with NemotronOCR(config().ocr("ocr"), client=client) as ocr:
+            with pytest.raises(OCRResponseError):
+                await ocr.read_text(image_url())
+
+
+@pytest.mark.parametrize("field", ["confidence", "coordinate"])
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), -.1, 1.1, None, "0.5", True, {}])
+async def test_sdk_rejects_invalid_response_numbers(field, value):
+    payload = response()
+    item = payload["data"][0]["text_detections"][0]
+    if field == "confidence":
+        item["text_prediction"]["confidence"] = value
+    else:
+        item["bounding_box"]["points"][0]["x"] = value
+
+    def handle(request):
+        return httpx.Response(200, content=json.dumps(payload).encode())
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+        async with NemotronOCR(config().ocr("ocr"), client=client) as ocr:
+            with pytest.raises(OCRResponseError):
+                await ocr.read_text(image_url())
+
+
+async def test_sdk_empty_detections_are_success():
+    def handle(request):
+        return httpx.Response(200, json={"data": [{"index": 0, "text_detections": []}]})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+        async with NemotronOCR(config().ocr("ocr"), client=client) as ocr:
+            assert await ocr.read_text(image_url()) == []
+
+
 @pytest.mark.parametrize("kind,category", [("openai_compat", "ocr"), ("nemotron_ocr", "stt")])
 def test_reject_wrong_adapter_category(kind, category):
     with pytest.raises(ValueError, match="ocr requires"):
@@ -104,7 +239,7 @@ async def test_standalone_service_config():
     assert hf["cuda_visible_devices"] == "0"
     assert hf["infer_length"] == 1024
     assert hf["port"] == 8112
-    assert (local / hf["model_cache"]).resolve() == ROOT / "models/ocr"
+    assert (local / hf["model_cache"]).resolve() == ROOT / "models"
     models = config()
     assert isinstance(models.ocr("ocr"), OCRSpec)
     await make_ocr(models, "ocr").close()
@@ -222,10 +357,11 @@ async def test_server_rejects_nonfinite_model_bounds(monkeypatch, coordinate, va
     async with app.router.lifespan_context(app):
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app)) as client:
             ocr = NemotronOCR(config().ocr("ocr"), client=client)
-            with pytest.raises(httpx.HTTPStatusError) as error:
+            with pytest.raises(OCRRequestError) as error:
                 await ocr.read_text(image_url())
-    assert error.value.response.status_code == 500
-    assert error.value.response.json()["detail"] == "OCR model returned non-finite bounding-box coordinates"
+    assert error.value.status_code == 500
+    assert isinstance(error.value.__cause__, httpx.HTTPStatusError)
+    assert error.value.__cause__.response.json()["detail"] == "OCR model returned non-finite bounding-box coordinates"
 
 
 @pytest.mark.parametrize("endpoint_configured", [False, True])
@@ -345,9 +481,9 @@ def test_local_launcher_uses_shared_lifecycle_and_image_fingerprint(monkeypatch,
     builds, runs = [], []
     monkeypatch.setattr(launcher.subprocess, "run", lambda args, **kw: builds.append(args))
     monkeypatch.setattr(launcher.subprocess, "check_output", lambda *a, **kw: "sha256:first")
-    monkeypatch.setattr(launcher._docker, "run_container", lambda **kw: runs.append(kw))
+    monkeypatch.setattr(_docker, "run_container", lambda **kw: runs.append(kw))
     monkeypatch.setenv("HF_TOKEN", "private-test-token")
-    monkeypatch.delenv(launcher._docker.TEST_SESSION_ENV, raising=False)
+    monkeypatch.delenv(_docker.TEST_SESSION_ENV, raising=False)
     launcher.run()
     assert f"TORCH_CUDA_ARCH_LIST={arch}" in builds[0]
     assert "--provenance=false" in builds[0]
@@ -362,11 +498,11 @@ def test_local_launcher_uses_shared_lifecycle_and_image_fingerprint(monkeypatch,
     assert runs[0]["argv"] != runs[1]["argv"]
     # The same creation-time ownership contract as vLLM, independent of the
     # model fingerprint and absent from ordinary user launches.
-    monkeypatch.setenv(launcher._docker.TEST_SESSION_ENV, "ocr-test-session")
+    monkeypatch.setenv(_docker.TEST_SESSION_ENV, "ocr-test-session")
     launcher.run()
-    label = f"{launcher._docker.TEST_SESSION_LABEL}=ocr-test-session"
+    label = f"{_docker.TEST_SESSION_LABEL}=ocr-test-session"
     plain, tagged = runs[1]["argv"], runs[2]["argv"]
-    assert not any(arg.startswith(f"{launcher._docker.TEST_SESSION_LABEL}=") for arg in plain)
+    assert not any(arg.startswith(f"{_docker.TEST_SESSION_LABEL}=") for arg in plain)
     label_index = tagged.index(label)
     assert tagged[label_index - 1] == "--label"
     assert tagged[:label_index - 1] + tagged[label_index + 1:] == plain

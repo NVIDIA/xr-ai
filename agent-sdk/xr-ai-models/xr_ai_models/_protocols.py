@@ -44,6 +44,11 @@ class OCRService(Protocol):
 
         Remote URLs are not accepted. Regions follow backend reading order.
         This method does not crop, sharpen, parse fields, or change resolution.
+
+        Raises:
+            OCRRequestError: Input-file, transport, timeout, or HTTP failure.
+
+            OCRResponseError: The endpoint returned malformed OCR data.
         """
         ...
 
