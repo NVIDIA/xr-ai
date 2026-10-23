@@ -32,9 +32,14 @@ them from the new `xr-ai-interaction` package under their new names, and add
 | `VoiceParticipantLeft` | `ParticipantLeft` |
 | `VoiceInterrupted` | `Interrupted` |
 
-Fields, validation, and the `voice.output` and `voice.transcript` topics are
+Fields, validation rules, and the `voice.output` and `voice.transcript` topics are
 unchanged; `VOICE_OUTPUT_TOPIC`, `VoiceTranscript`, and `VoiceAgent` stay in
 `xr_ai_voice`.
+
+Two validation error messages now say `response output` instead of `voice
+output`: `non-final response output needs a response_id` and `complete response
+output must contain text`. Update tests or callers that match the previous
+wording.
 
 ```python
 # Before

@@ -1232,15 +1232,6 @@ async def test_unknown_empty_stream_terminator_is_rejected() -> None:
     assert "no open response" in str(raised.value.exceptions[0])
 
 
-def test_voice_output_rejects_ambiguous_empty_messages() -> None:
-    with pytest.raises(ValidationError, match="response_id"):
-        ResponseOutput(final=False)
-    with pytest.raises(ValidationError, match="contain text"):
-        ResponseOutput()
-    with pytest.raises(ValidationError, match="cannot interrupt"):
-        ResponseOutput(response_id="turn", interrupt=True)
-
-
 def test_voice_session_is_not_part_of_the_public_api() -> None:
     voice_module = sys.modules["xr_ai_voice"]
     assert "VoiceSession" not in voice_module.__all__

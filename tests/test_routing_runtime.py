@@ -6,7 +6,9 @@
 from __future__ import annotations
 
 import asyncio
+import builtins
 import logging
+import sys
 from collections import deque
 from contextlib import asynccontextmanager
 
@@ -29,6 +31,39 @@ OUTPUT = Topic("routing-test.output", ResponseOutput, telemetry="none")
 JOINED = Topic("routing-test.joined", ParticipantJoined)
 LEFT = Topic("routing-test.left", ParticipantLeft)
 INTERRUPTED = Topic("routing-test.interrupted", Interrupted)
+
+
+@pytest.mark.parametrize("missing_module", ["xr_ai_interaction", "xr_ai_runtime"])
+def test_runtime_configuration_reports_missing_extra(monkeypatch, missing_module):
+    monkeypatch.delitem(sys.modules, "xr_ai_routing._runtime", raising=False)
+    original_import = builtins.__import__
+
+    def import_without_dependency(name, *args, **kwargs):
+        if name == missing_module:
+            raise ModuleNotFoundError(f"No module named {name!r}", name=name)
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", import_without_dependency)
+    with pytest.raises(ImportError, match=r"xr-ai-routing\[runtime\]") as raised:
+        AgentRouter({"conversation": object()}, None, query_topic=QUERIES, output_topic=OUTPUT)
+    assert isinstance(raised.value.__cause__, ModuleNotFoundError)
+    assert raised.value.__cause__.name == missing_module
+
+
+def test_runtime_configuration_preserves_missing_transitive_dependency(monkeypatch):
+    monkeypatch.delitem(sys.modules, "xr_ai_routing._runtime", raising=False)
+    original_import = builtins.__import__
+    missing_dependency = ModuleNotFoundError("No module named 'zmq'", name="zmq")
+
+    def import_without_transitive_dependency(name, *args, **kwargs):
+        if name == "xr_ai_runtime":
+            raise missing_dependency
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", import_without_transitive_dependency)
+    with pytest.raises(ModuleNotFoundError) as raised:
+        AgentRouter({"conversation": object()}, None, query_topic=QUERIES, output_topic=OUTPUT)
+    assert raised.value is missing_dependency
 
 
 class _Output(Agent):
@@ -903,4 +938,3 @@ async def test_canceled_join_waiter_does_not_interrupt_initializer_cleanup():
         await asyncio.gather(joined, return_exceptions=True)
         assert cleanup_finished.is_set()
         assert router._join_tasks == {}
-

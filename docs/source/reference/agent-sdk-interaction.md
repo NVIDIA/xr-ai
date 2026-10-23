@@ -16,6 +16,12 @@ publishes recognized speech as `UserQuery` and speaks `ResponseOutput` from
 messages. Routing and conversation use them without depending on voice.
 Applications choose topic names; the models define only the payloads.
 
+Consumers assemble incremental messages into one response using the framing
+contract documented on `ResponseOutput` in the Python reference below. Stream
+tracking and duplicate handling belong to the consumer; the payload model does
+not implement them. Refer to {ref}`voice-tuning-and-data-echo` for `VoiceAgent`'s
+output policy.
+
 ## Python API reference
 
 The generated {doc}`Python reference </reference/python/xr_ai_interaction/index>`

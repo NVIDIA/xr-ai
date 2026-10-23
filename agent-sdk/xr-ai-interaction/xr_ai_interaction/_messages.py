@@ -42,6 +42,15 @@ class ResponseOutput(BaseModel):
     """One complete response or one chunk of an incremental response.
 
     The consumer renders it, for example as speech or text.
+
+    Without ``response_id``, this is a complete standalone response. Otherwise,
+    ordered messages with the same participant, producer, and ``response_id``
+    form one response: append each message's text until ``final=True`` closes
+    it. The final message may contain text or be an empty terminator.
+    ``interrupt=True`` applies only to the first message of a response.
+
+    This model validates individual messages, not stream state. Consumers own
+    stream tracking and their duplicate-handling policy.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -50,7 +59,7 @@ class ResponseOutput(BaseModel):
     """Complete response text or one incremental fragment."""
 
     response_id: str | None = Field(default=None, min_length=1)
-    """Identifier shared by incremental chunks; recent reuse is ignored with one warning."""
+    """Response identifier shared by chunks within one participant and producer."""
 
     final: bool = True
     """Whether this message completes the response."""
