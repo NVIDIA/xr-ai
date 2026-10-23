@@ -26,6 +26,17 @@ class _SpeakerConfig(_ConversationConfig):
     followup_grace_s: float = 5.0
     stop_commands_enabled: bool = True
 
+    def _validate(self) -> None:
+        super()._validate()
+        for name in ("activity_threshold", "silence_duration", "max_utterance_s", "timeout_s"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:
+                raise ValueError(f"speaker.{name} must be a positive finite number")
+        if self.activity_threshold >= 1:
+            raise ValueError("speaker.activity_threshold must be less than one")
+        if self.max_utterance_s <= self.silence_duration:
+            raise ValueError("speaker.max_utterance_s must exceed silence_duration")
+
     def _validate_interaction(self) -> None:
         if not isinstance(self.mode, str) or self.mode not in {"always_on", "wake_only", "conversation", "hybrid"}:
             raise ValueError("speaker mode must be always_on, wake_only, conversation, or hybrid")
@@ -75,12 +86,4 @@ class _SpeakerConfig(_ConversationConfig):
         cfg = replace(cfg, magic_phrases=tuple(cfg.magic_phrases))
         if not isinstance(cfg.diagnostics, bool):
             raise ValueError("speaker.diagnostics must be a boolean")
-        for name in ("activity_threshold", "silence_duration", "max_utterance_s", "timeout_s"):
-            value = getattr(cfg, name)
-            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:
-                raise ValueError(f"speaker.{name} must be a positive finite number")
-        if cfg.activity_threshold >= 1:
-            raise ValueError("speaker.activity_threshold must be less than one")
-        if cfg.max_utterance_s <= cfg.silence_duration:
-            raise ValueError("speaker.max_utterance_s must exceed silence_duration")
         return cfg if enabled else None

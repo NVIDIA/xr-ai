@@ -241,13 +241,35 @@ def _streaming_models(monkeypatch):
         cache_allocations.append(batch_size)
         return torch.zeros(1, 1, 2), torch.zeros(1, 1, 2), torch.tensor([0])
 
+    from dataclasses import dataclass, field
+
+    @dataclass
+    class Hypothesis:
+        score: float = 0.0
+        y_sequence: object = field(default_factory=list)
+        dec_state: object = None
+        last_token: object = None
+        biasing_cfg: object = None
+        text: str = ""
+
     def decode(**kwargs):
         asr_calls.append(kwargs)
-        return (None, [SimpleNamespace(text=text[0])], *initial_cache(batch_size=1), [SimpleNamespace()])
+        previous = kwargs["previous_hypotheses"]
+        state = dict(previous[0].dec_state) if previous else {"text": "", "active": False}
+        active = bool(masks[-1][0].any())
+        if active and not state["active"]:
+            state["text"] = ""
+        current = text[0] if active else state["text"]
+        prefix = state["text"]
+        emitted = current[len(prefix) :] if current.startswith(prefix) else current
+        state.update(text=current, active=active)
+        hyp = Hypothesis(y_sequence=torch.tensor([ord(c) for c in emitted]), dec_state=state, text=current)
+        return (None, [hyp], *initial_cache(batch_size=1), [hyp])
 
     for name, symbol, value in [
         ("nemo.collections.asr.parts.utils.multispk_transcribe_utils", "SpeakerTaggedASR", Adapter),
         ("nemo.collections.asr.parts.utils.streaming_utils", "CacheAwareStreamingAudioBuffer", Buffer),
+        ("nemo.collections.asr.parts.utils.rnnt_utils", "Hypothesis", Hypothesis),
     ]:
         module = ModuleType(name)
         setattr(module, symbol, value)
@@ -260,6 +282,8 @@ def _streaming_models(monkeypatch):
         cache_samples=0,
         hop_samples=2560,
         nframes=2,
+        history_hops=35,
+        final_padding_hops=2,
         asr=SimpleNamespace(
             encoder=SimpleNamespace(
                 get_initial_cache_state=initial_cache,
@@ -267,6 +291,7 @@ def _streaming_models(monkeypatch):
             ),
             set_speaker_targets=lambda target, others: masks.append((target.clone(), others.clone())),
             conformer_stream_step=decode,
+            tokenizer=SimpleNamespace(ids_to_text=lambda ids: "".join(chr(i) for i in ids)),
         ),
         diar=SimpleNamespace(sortformer_modules=SimpleNamespace(init_streaming_state=lambda **kwargs: object())),
         encodes=encodes,

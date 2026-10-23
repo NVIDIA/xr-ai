@@ -5,8 +5,10 @@
 
 from __future__ import annotations
 
+from collections import deque
 from contextlib import nullcontext
-from dataclasses import dataclass
+from copy import deepcopy
+from dataclasses import dataclass, field
 from math import ceil
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
@@ -17,6 +19,9 @@ from xr_ai_voicegate._speaker import _SpeakerConfig
 
 from ._selection import _Selection
 
+_FINAL_PADDING_SECONDS = 0.32
+
+
 if TYPE_CHECKING:
     from nemo.collections.asr.parts.utils.rnnt_utils import Hypothesis
     from torch import Tensor
@@ -26,7 +31,9 @@ if TYPE_CHECKING:
 class _AsrState:
     cache: tuple[Tensor, Tensor, Tensor]
     previous_hypotheses: list[Hypothesis] | None = None
-    previous_pred: list[Tensor] | None = None
+    emitted: list[int] = field(default_factory=list)
+    tokens: list[int] = field(default_factory=list)
+    pending: list[int] = field(default_factory=list)
 
 
 @dataclass
@@ -49,6 +56,7 @@ class _Models:
     def __init__(self, cfg: dict) -> None:
         import torch
         from nemo.collections.asr.models import ASRModel, SortformerEncLabelModel
+        from nemo.collections.asr.parts.submodules.rnnt_greedy_decoding import GreedyBatchedRNNTInfer
         from nemo.collections.asr.parts.utils.multispk_transcribe_utils import (
             configure_diar_streaming,
             validate_feature_frame_strides,
@@ -62,8 +70,11 @@ class _Models:
         self.asr = ASRModel.from_pretrained(cfg["asr_model"]).eval().to(self.device)
         if not hasattr(self.asr, "set_speaker_targets"):
             raise ValueError("ASR model must support speaker conditioning")
+        decoder = self.asr.decoding.decoding
+        if not isinstance(decoder, GreedyBatchedRNNTInfer) or not decoder.loop_labels:
+            raise ValueError("speaker ASR requires greedy_batch label-loop decoding")
         self.diar = SortformerEncLabelModel.from_pretrained(cfg["diar_model"]).eval().to(self.device)
-        self.asr.encoder.set_default_att_context_size([70, 13])
+        self.asr.encoder.set_default_att_context_size([70, 1])
         self.cfg = OmegaConf.create(
             {
                 "deploy_mode": True,
@@ -73,7 +84,7 @@ class _Models:
                 "fix_prev_words_count": 5,
                 "update_prev_words_sentence": 5,
                 "ignored_initial_frame_steps": 0,
-                "att_context_size": [70, 13],
+                "att_context_size": [70, 1],
                 "cache_gating": True,
                 "cache_gating_buffer_size": 1,
                 "binary_diar_preds": True,
@@ -100,6 +111,10 @@ class _Models:
         if isinstance(cache_size, (tuple, list)):
             cache_size = cache_size[-1]
         self.cache_samples = round(cache_size * 160)
+        self.history_hops = ceil(streaming.last_channel_cache_size / self.nframes)
+        # Bounded terminal quiet for this model's subword completion; it is
+        # evaluated on a snapshot and never advances accepted capture time.
+        self.final_padding_hops = ceil(_FINAL_PADDING_SECONDS * 16000 / self.hop_samples)
         self._warmup()
 
     def _warmup(self) -> None:
@@ -143,6 +158,10 @@ class _Session:
         self.step = 0
         self.audio_origin_us = audio_origin_us
         self.last_partial = ""
+        self._speaker_states: dict[int, _AsrState] = {}
+        self._history = deque(maxlen=models.history_hops)
+        self._frame = None
+        self._unavailable: set[int] = set()
         self._candidate_streams: dict[int, _DecodedStream] = {}
         self._candidate_completed: list[tuple[int, _CompletedStream]] = []
         self._truncated_episodes: dict[int, float] = {}
@@ -153,42 +172,53 @@ class _Session:
     def _new_asr(self) -> _AsrState:
         return _AsrState(self.models.asr.encoder.get_initial_cache_state(batch_size=1))
 
+    def _speaker_asr(self, speaker: int) -> _AsrState:
+        if speaker not in self._speaker_states:
+            state = self._new_asr()
+            for encoded, lengths, predictions, drop in self._history:
+                self._step_native(encoded, lengths, predictions, speaker, drop, state, False)
+            state.emitted = []
+            self._speaker_states[speaker] = state
+        return self._speaker_states[speaker]
+
     def _reset_asr(self) -> None:
-        self._asr = self._new_asr() if self.selection.owner is not None else None
+        self._asr = self._speaker_asr(self.selection.owner) if self.selection.owner is not None else None
+        if self._asr is not None:
+            self._asr.tokens = []
         self.last_partial = ""
 
     def _decode_streams(
-        self, features, lengths, predictions, drop: int, active: set[int], pts_us: int,
-        streams: dict[int, _DecodedStream], *, required: set[int], encoded_features=None,
+        self,
+        predictions,
+        drop: int,
+        active: set[int],
+        pts_us: int,
+        streams: dict[int, _DecodedStream],
+        *,
+        required: set[int],
     ) -> tuple[dict[int, str], list[tuple[int, _DecodedStream]]]:
-        """Share encoding while retaining independent attributed decoder state."""
-        speakers = active | streams.keys()
+        """Finalize attributed streams from this hop's native decoder output."""
+        speakers = (active | streams.keys()) - self._unavailable
         if not speakers:
-            return {}, []
-        try:
-            encoded, encoded_lengths = (
-                self.adapter.forward_pre_encoded(features, lengths, drop)
-                if encoded_features is None else encoded_features
-            )
-        except Exception:
-            if required:
-                raise
-            streams.clear()
-            logger.exception("optional speaker stream encoding failed")
             return {}, []
         texts, completed = {}, []
         seconds = self.models.hop_samples / 16000
         for speaker in sorted(speakers, key=lambda speaker: (speaker not in required, speaker)):
             try:
                 if speaker not in streams:
-                    streams[speaker] = _DecodedStream(self._new_asr(), pts_us)
+                    state = self._speaker_asr(speaker)
+                    state.tokens = []
+                    streams[speaker] = _DecodedStream(state, pts_us)
                 stream = streams[speaker]
                 stream.duration += seconds
                 stream.silence = 0.0 if speaker in active else stream.silence + seconds
                 finished = stream.silence >= self.selection.cfg.silence_duration or (
                     stream.duration >= self.selection.cfg.max_utterance_s
                 )
-                stream.text = self._decode(encoded, encoded_lengths, predictions, speaker, drop, stream.asr, finished)
+                stream.text = self._decode(
+                    predictions, speaker, drop, stream.asr,
+                    stream.silence >= self.selection.cfg.silence_duration,
+                )
             except Exception:
                 if speaker in required:
                     raise
@@ -201,7 +231,9 @@ class _Session:
                 del streams[speaker]
         return texts, completed
 
-    def _candidate_step(self, features, lengths, predictions, drop: int, active: set[int], pts_us: int) -> list[dict]:
+    def _candidate_step(
+        self, predictions, drop: int, active: set[int], pts_us: int,
+    ) -> list[dict]:
         """Decode attributed candidates before resolving this step's enrollment."""
         self._candidate_completed = []
         cfg = self.selection.cfg
@@ -218,8 +250,12 @@ class _Session:
         # All pre-enrollment streams are required: losing one could turn a
         # simultaneous phrase tie into a false unique nomination.
         _, finished = self._decode_streams(
-            features, lengths, predictions, drop, active - self._truncated_episodes.keys(), pts_us,
-            self._candidate_streams, required=speakers,
+            predictions,
+            drop,
+            active - self._truncated_episodes.keys(),
+            pts_us,
+            self._candidate_streams,
+            required=speakers,
         )
         completed = []
         for speaker, stream in finished:
@@ -229,61 +265,89 @@ class _Session:
             if truncated:
                 self._truncated_episodes[speaker] = 0.0
         events = self.selection._enroll_completed(
-            completed, completed_at_us=pts_us + round(self.models.hop_samples * 1_000_000 / 16000),
+            completed,
+            completed_at_us=pts_us + round(self.models.hop_samples * 1_000_000 / 16000),
         )
         if self.selection.owner is not None:
             self._candidate_streams.clear()
             self._truncated_episodes.clear()
+            if not cfg.diagnostics:
+                self._speaker_states = {self.selection.owner: self._speaker_states[self.selection.owner]}
         return events
 
-    def _decode(
-        self,
-        encoded,
-        encoded_lengths,
-        predictions,
-        selected: int,
-        drop: int,
-        stream: _AsrState,
-        finished: bool,
-    ) -> str:
+    def _step_native(self, encoded, lengths, predictions, selected, drop, state, finished):
+        from nemo.collections.asr.parts.utils.rnnt_utils import Hypothesis
+
         model = self.models.asr
         if encoded.shape[1] != predictions.shape[1]:
             raise ValueError("speaker targets are not aligned with ASR encoder frames")
-        # Cache and hypothesis history belong to one speaker; model weights and
-        # pre-encoded features are shared across serial decoder calls.
-        target = predictions[:, :, selected] > 0.5
         others = [i for i in range(8) if i != selected]
-        interference = (predictions[:, :, others] > 0.5).any(dim=-1)
-        model.set_speaker_targets(target.float(), interference.float())
-        (
-            stream.previous_pred,
-            transcriptions,
-            channel,
-            time,
-            length,
-            stream.previous_hypotheses,
-        ) = model.conformer_stream_step(
+        model.set_speaker_targets(
+            (predictions[:, :, selected] > 0.5).float(), (predictions[:, :, others] > 0.5).any(dim=-1).float()
+        )
+        (_, _, channel, time, length, hypotheses) = model.conformer_stream_step(
             processed_signal=encoded,
-            processed_signal_length=encoded_lengths,
-            cache_last_channel=stream.cache[0],
-            cache_last_time=stream.cache[1],
-            cache_last_channel_len=stream.cache[2],
+            processed_signal_length=lengths,
+            cache_last_channel=state.cache[0],
+            cache_last_time=state.cache[1],
+            cache_last_channel_len=state.cache[2],
             keep_all_outputs=finished,
-            previous_hypotheses=stream.previous_hypotheses,
-            previous_pred_out=stream.previous_pred,
+            previous_hypotheses=state.previous_hypotheses,
+            previous_pred_out=None,
             drop_extra_pre_encoded=drop,
             return_transcription=True,
             bypass_pre_encode=True,
         )
-        stream.cache = (channel, time, length)
-        text = transcriptions[0]
-        if not isinstance(text, str):
-            text = text.text
-        return text or ""
+        state.cache = (channel, time, length)
+        hypothesis = hypotheses[0]
+        tokens = hypothesis.y_sequence.tolist()
+        # Native continuation consumes the opaque predictor state, not the
+        # accumulated transcript. Keep output metadata bounded to this step.
+        state.previous_hypotheses = [
+            Hypothesis(
+                score=0.0,
+                y_sequence=[],
+                dec_state=hypothesis.dec_state,
+                last_token=hypothesis.last_token,
+                biasing_cfg=hypothesis.biasing_cfg,
+            )
+        ]
+        while tokens and state.pending:
+            if tokens.pop(0) != state.pending.pop(0):
+                raise RuntimeError("speaker decoder revised finalized audio; reconnect the stream")
+        state.emitted = tokens
+
+    def _decode(self, predictions, selected, drop, stream, finished) -> str:
+        stream.tokens.extend(stream.emitted)
+        if finished:
+            # Virtual terminal silence must not advance the live audio timeline
+            # or its encoder cache; later real audio reconciles emitted tokens.
+            snapshot = deepcopy(stream)
+            frame = self._frame
+            additional = []
+            for _ in range(self.models.final_padding_hops):
+                frame = np.concatenate(
+                    (
+                        frame[-self.models.cache_samples :] if self.models.cache_samples else frame[:0],
+                        np.zeros(self.models.hop_samples, dtype=np.float32),
+                    )
+                )
+                features, lengths = self.buffer.preprocess_audio(frame, device=self.models.device)
+                features = features[:, :, : int(lengths[0])]
+                padded, padded_lengths = self.adapter.forward_pre_encoded(features, lengths, drop)
+                silence = predictions.new_zeros((padded.shape[0], padded.shape[1], 8))
+                self._step_native(padded, padded_lengths, silence, selected, drop, snapshot, True)
+                additional.extend(snapshot.emitted)
+            stream.pending.extend(additional)
+            stream.tokens.extend(additional)
+        return self.models.asr.tokenizer.ids_to_text(stream.tokens)
 
     def _diagnostic_events(
-        self, active: set[int], completed: list[tuple[int, _DecodedStream | _CompletedStream]],
-        owner_before: int | None, pts_us: int,
+        self,
+        active: set[int],
+        completed: list[tuple[int, _DecodedStream | _CompletedStream]],
+        owner_before: int | None,
+        pts_us: int,
     ) -> list[dict]:
         owner = self.selection.owner
         waiting = "waiting for enrollment" if self.selection.cfg.mode == "conversation" else "listening"
@@ -299,8 +363,9 @@ class _Session:
         # Enrollment completes in a silence tail; display the selected identity
         # even if the new owner is no longer acoustically active.
         if owner is not None and owner != owner_before and owner not in active:
-            events.append({"kind": "diagnostic", "speaker_id": owner, "status": "enrolled",
-                           "pts_us": pts_us, "text": ""})
+            events.append(
+                {"kind": "diagnostic", "speaker_id": owner, "status": "enrolled", "pts_us": pts_us, "text": ""}
+            )
         self._diagnostic_active = statuses
         for speaker, stream in completed:
             if speaker in {owner_before, owner} or not stream.text.strip():
@@ -308,8 +373,15 @@ class _Session:
             status = "ignored" if owner is not None else f"ignored; {waiting}"
             if stream.duration >= self.selection.cfg.max_utterance_s:
                 status += "; truncated"
-            events.append({"kind": "diagnostic", "speaker_id": speaker, "status": status,
-                           "pts_us": stream.pts_us, "text": stream.text.strip()})
+            events.append(
+                {
+                    "kind": "diagnostic",
+                    "speaker_id": speaker,
+                    "status": status,
+                    "pts_us": stream.pts_us,
+                    "text": stream.text.strip(),
+                }
+            )
         return events
 
     def _feed(self, audio: bytes) -> list[dict]:
@@ -350,18 +422,54 @@ class _Session:
                 recent = preds[:, -self.models.asr.encoder.streaming_cfg.valid_out_len :]
                 active_mask = recent.amax(dim=1)[0] >= self.selection.cfg.activity_threshold
                 active = set(active_mask.nonzero().flatten().tolist())
-                chunk_pts = self.audio_origin_us + round(
-                    self.step * self.models.hop_samples * 1_000_000 / 16000
+                chunk_pts = self.audio_origin_us + round(self.step * self.models.hop_samples * 1_000_000 / 16000)
+                self._frame = frame
+                encoded_features = self.adapter.forward_pre_encoded(features, lengths, drop)
+                needed = active if self.selection.owner is None or self.selection.cfg.diagnostics else set()
+                if self.selection.owner is not None:
+                    needed = needed | {self.selection.owner}
+                # A completed candidate's padded suffix remains authoritative
+                # until subsequent real audio reconciles it, even in silence.
+                required = (
+                    (active | self._candidate_streams.keys() | {
+                        speaker for speaker, state in self._speaker_states.items() if state.pending
+                    })
+                    if self.selection.owner is None
+                    else {self.selection.owner}
                 )
+                self._unavailable = set()
+                for speaker in sorted(
+                    needed | self._speaker_states.keys(), key=lambda value: (value not in required, value)
+                ):
+                    try:
+                        state = self._speaker_asr(speaker)
+                        self._step_native(*encoded_features, preds, speaker, drop, state, False)
+                    except Exception:
+                        if speaker in required:
+                            raise
+                        # isolation boundary: display-only inference cannot revoke the owner.
+                        self._unavailable.add(speaker)
+                        self._speaker_states.pop(speaker, None)
+                        self._diagnostic_streams.pop(speaker, None)
+                        logger.exception("optional speaker continuation failed speaker={}", speaker)
                 if self.selection.owner is None:
-                    candidate_events = self._candidate_step(features, lengths, preds, drop, active, chunk_pts)
+                    candidate_events = self._candidate_step(
+                        preds, drop, active, chunk_pts,
+                    )
                     events.extend(candidate_events)
                     if self.selection.cfg.diagnostics:
-                        accepted = {event["speaker_id"] for event in candidate_events
-                                    if event["kind"] in {"one_shot", "wake_ready"}}
-                        completed = [(speaker, stream) for speaker, stream in self._candidate_completed
-                                     if speaker not in accepted]
+                        accepted = {
+                            event["speaker_id"]
+                            for event in candidate_events
+                            if event["kind"] in {"one_shot", "wake_ready"}
+                        }
+                        completed = [
+                            (speaker, stream)
+                            for speaker, stream in self._candidate_completed
+                            if speaker not in accepted
+                        ]
                         events.extend(self._diagnostic_events(active, completed, None, chunk_pts))
+                    self._history.append((*encoded_features, preds.detach().clone(), drop))
                     self.step += 1
                     continue
                 selected, edges, started = self.selection._activity(
@@ -374,11 +482,13 @@ class _Session:
                     self._reset_asr()
                 owner_before = self.selection.owner
                 completed = []
-                encoded_features = None
                 if selected is not None:
-                    encoded_features = self.adapter.forward_pre_encoded(features, lengths, drop)
                     self.selection.text = self._decode(
-                        *encoded_features, preds, selected, drop, self._asr, self.selection._finished,
+                        preds,
+                        selected,
+                        drop,
+                        self._asr,
+                        self.selection._finished and self.selection.silence >= self.selection.cfg.silence_duration,
                     )
                     text = self.selection.text
                     if self.selection.owner is not None and text and text != self.last_partial:
@@ -386,8 +496,12 @@ class _Session:
                         self.last_partial = text
                 if self.selection.cfg.diagnostics:
                     _, completed = self._decode_streams(
-                        features, lengths, preds, drop, active - {owner_before}, chunk_pts,
-                        self._diagnostic_streams, required=set(), encoded_features=encoded_features,
+                        preds,
+                        drop,
+                        active - {owner_before},
+                        chunk_pts,
+                        self._diagnostic_streams,
+                        required=set(),
                     )
                 if self.selection._finished:
                     # Forced truncation cannot enroll a voice from a prefix or
@@ -402,5 +516,7 @@ class _Session:
                 if self.selection.owner is None:
                     # Display-only history cannot seed the next enrollment.
                     self._diagnostic_streams.clear()
+                    self._speaker_states = {owner_before: self._speaker_states[owner_before]}
+                self._history.append((*encoded_features, preds.detach().clone(), drop))
                 self.step += 1
         return events

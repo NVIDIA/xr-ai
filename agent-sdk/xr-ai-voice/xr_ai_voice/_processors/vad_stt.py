@@ -56,10 +56,11 @@ _PARTIAL_PROBE_FINISH_GRACE_S = 0.15
 
 @dataclass(frozen=True)
 class VadConfig:
-    """Tuning knobs for the Silero-VAD utterance detector.
+    """Utterance endpointing and Silero-VAD tuning for :class:`VoiceAgent`.
 
-    Mirrors the constructor of :class:`xr_ai_vad.VadDetector`. Default
-    values match the in-tree samples' current behavior.
+    ``silence_duration`` controls finalization for either batch or speaker ASR.
+    The other fields apply only to the batch-STT Silero path and mirror
+    :class:`xr_ai_vad.VadDetector`.
 
     ``stop_probe_after_s`` — cadence in seconds for up to three STT probes of
     the partial audio buffer. This gives STOP commands a fast interruption path
@@ -69,7 +70,11 @@ class VadConfig:
     or negative to disable probes.
     """
     silence_duration:   float = 0.8
-    """Seconds of silence that finalize an utterance."""
+    """Seconds of silence that finalize an utterance with either ASR backend.
+
+    Speaker ASR measures inactivity of the selected speaker and checks it at
+    model-chunk boundaries; this is a threshold, not a response-latency bound.
+    """
 
     min_speech:         float = 0.15
     """Minimum speech duration accepted as an utterance."""

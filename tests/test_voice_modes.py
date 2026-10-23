@@ -326,12 +326,12 @@ async def test_real_speaker_producer_websocket_hybrid_to_runtime_without_enrollm
     cfg = _config(tmp_path, "hybrid")
     models, activity, _calls, _masks, _allocations, text = _streaming_models
     recognized = {1: "unrelated continuous background speech", 7: "hey agent describe this"}
-    original_decode = _Session._decode
+    original_step = _Session._step_native
 
-    def decode(self, *args):
+    def step(self, *args):
         text[0] = recognized[args[3]]
-        return original_decode(self, *args)
-    monkeypatch.setattr(_Session, "_decode", decode)
+        return original_step(self, *args)
+    monkeypatch.setattr(_Session, "_step_native", step)
     allocated = []
 
     def allocate(config, *, audio_origin_us):
@@ -349,7 +349,7 @@ async def test_real_speaker_producer_websocket_hybrid_to_runtime_without_enrollm
     cfg = _config(tmp_path, "hybrid")
     from dataclasses import replace
     object.__setattr__(cfg, "_speaker", replace(
-        cfg._speaker, base_url=f"http://127.0.0.1:{port}", silence_duration=0.3,
+        cfg._speaker, base_url=f"http://127.0.0.1:{port}",
     ))
     accepted, captions, acknowledgements = [], AsyncMock(), asyncio.Queue()
     processed = asyncio.Queue()
@@ -361,7 +361,7 @@ async def test_real_speaker_producer_websocket_hybrid_to_runtime_without_enrollm
     output.push_frame = AsyncMock()
     pipeline, _worker = _build_voice_pipeline(
         transport=transport, stt=None, tts=SimpleNamespace(), io_processor=output,
-        vad_cfg=VadConfig(stop_probe_after_s=0), voice_gate_cfg=cfg,
+        vad_cfg=VadConfig(silence_duration=0.3, stop_probe_after_s=0), voice_gate_cfg=cfg,
         on_final_transcript=captions, use_speaker_asr=True,
     )
     audio, gate = pipeline.processors[2:4]

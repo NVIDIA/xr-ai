@@ -52,5 +52,6 @@ speaker:
   diagnostics: false
   timeout_s: 10.0                 # Positive finite HTTP timeout, in seconds.
   activity_threshold: 0.7          # Speaker activity threshold, strictly (0, 1).
-  silence_duration: 0.6            # Per-speaker silence before finalization (s).
+  # Direct speaker-session default only; VoiceAgent uses VadConfig.silence_duration.
+  silence_duration: 0.6
   max_utterance_s: 30.0            # Forced segment boundary; must exceed silence.
