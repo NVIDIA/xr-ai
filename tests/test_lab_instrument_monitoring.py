@@ -19,6 +19,7 @@ import cv2
 import numpy as np
 import pytest
 import yaml
+from xr_ai_hub import FrameUnavailable
 from xr_ai_interaction import ParticipantJoined, ParticipantLeft, ResponseOutput, UserQuery
 from xr_ai_models import ChatResponse, ToolCall
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, subscribe
@@ -1566,6 +1567,34 @@ async def test_web_events_adapter_projects_explicit_sample_topics() -> None:
     assert collector.events[0].payload == {"status": "joined"}
     assert collector.events[-1].payload == {"status": "left"}
     assert collector.events[3].payload["device_name"] == "Device1"
+
+
+@pytest.mark.parametrize("error_type", [FrameUnavailable, ValueError, TypeError, RuntimeError])
+async def test_foreground_current_view_recovers_only_camera_unavailability(error_type) -> None:
+    error = error_type("camera failed")
+    published = []
+
+    async def fail(_request: CurrentFrameRequest) -> ImageFrame:
+        raise error
+
+    async def publish(_topic, message):
+        published.append(message)
+
+    frames = Tool("camera_failure", "Select a frame.", CurrentFrameRequest, ImageFrame, fail)
+    foreground = object.__new__(ForegroundAgent)
+    foreground._images = SimpleNamespace(get_current_frame=frames)
+    ctx = SimpleNamespace(metadata=SimpleNamespace(message_id="turn"), publish=publish)
+    call = foreground._stream_current_view("Visible?", "alice", ctx, timestamp_us=1)
+    if error_type is FrameUnavailable:
+        result = await call
+        assert not result.available and result.text == str(error)
+        assert [output.text for output in published] == [str(error), ""]
+        assert [output.final for output in published] == [False, True]
+    else:
+        with pytest.raises(error_type) as raised:
+            await call
+        assert raised.value is error
+        assert not published
 
 
 @pytest.mark.asyncio

@@ -64,6 +64,7 @@ async def test_tea_embedding_startup_and_retrieval(tmp_path):
     # A persistent pip child can outlive the wrapper and evade port-based cleanup.
     config.update(
         host="127.0.0.1", port=port, vllm_backend="docker",
+        served_model_name="embed",
         # Docker-created cache files must stay outside checkout's cleanup path.
         model_cache=str(Path(os.environ.get("HF_HOME", "~/.cache/huggingface")).expanduser()),
     )

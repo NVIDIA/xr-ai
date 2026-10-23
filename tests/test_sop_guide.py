@@ -16,10 +16,12 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 import yaml
+from xr_ai_hub import FrameUnavailable
 from xr_ai_interaction import ParticipantJoined, ParticipantLeft, ResponseOutput, UserQuery
 from xr_ai_models import ChatResponse, ToolCall
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, subscribe
-from xr_ai_tools.current_frame import ImageFrame
+from xr_ai_tools import Tool
+from xr_ai_tools.current_frame import CurrentFrameRequest, ImageFrame
 from xr_ai_tools.image import ImageReference
 from xr_ai_tools.types import EmptyRequest
 from xr_ai_tools.vision import ImageQueryResult
@@ -43,6 +45,7 @@ from procedure_capture_guide_worker.guide.guides import SelectedGuide, select_gu
 from procedure_capture_guide_worker.guide.guiding import (  # noqa: E402
     _AdvanceGuideRequest,
     _CommitRequest,
+    _CurrentViewRequest,
     _FrameIdentity,
     _Guide,
     _Observation,
@@ -736,6 +739,87 @@ async def test_unavailable_frame_breaks_consecutive_evidence(engine):
         await backend._tick(session)
         assert session.evidence_hits == hits
         assert session.state["base"] is (hits == 2)
+
+
+@pytest.mark.parametrize("error_type", [ValueError, TypeError, RuntimeError])
+async def test_failed_observation_breaks_consecutive_evidence(engine, error_type):
+    backend = engine._backend
+    session = backend._sessions["alice"]
+    error = error_type("observation failed")
+    backend._trigger = AsyncMock(side_effect=[
+        observation("YES", 1), error, observation("YES", 2), observation("YES", 3),
+    ])
+    session.next_tick = 0
+    await backend._tick(session)
+    assert session.evidence_hits == 1
+    session.next_tick = 0
+    with pytest.raises(error_type) as raised:
+        await backend._tick(session)
+    assert raised.value is error
+    assert session.evidence_hits == 0
+    for hits in (1, 2):
+        session.next_tick = 0
+        await backend._tick(session)
+        assert session.evidence_hits == hits
+        assert session.state["base"] is (hits == 2)
+
+
+@pytest.mark.parametrize("change", ["step", "revision", "session"])
+async def test_failed_stale_observation_does_not_reset_new_evidence(engine, change):
+    backend = engine._backend
+    session = backend._sessions["alice"]
+    entered, release = asyncio.Event(), asyncio.Event()
+    error = ValueError("old observation failed")
+
+    async def fail(*_args):
+        entered.set()
+        await release.wait()
+        raise error
+
+    backend._trigger = fail
+    tick = asyncio.create_task(backend._tick(session))
+    try:
+        await asyncio.wait_for(entered.wait(), 1)
+        if change == "step":
+            await control(backend, "advance", skip=True)
+            assert session.step_id == "lid"
+        elif change == "revision":
+            session.revision += 1
+        else:
+            backend._start("alice")
+            session = backend._sessions["alice"]
+        session.evidence_hits = 1
+    finally:
+        release.set()
+    with pytest.raises(ValueError) as raised:
+        await tick
+    assert raised.value is error
+    assert session.evidence_hits == 1 and not session.step.is_complete(session.state)
+
+
+@pytest.mark.parametrize("error_type", [FrameUnavailable, TimeoutError, ValueError, TypeError, RuntimeError])
+async def test_current_view_handles_only_expected_frame_failures(engine, error_type):
+    backend = engine._backend
+    error = error_type("camera failed")
+
+    async def fail(_request):
+        raise error
+
+    frames = Tool(
+        "frame_failure", "Fail camera selection.", CurrentFrameRequest, ImageFrame, fail,
+    )
+    backend._current_frame.execute = frames.execute
+    view = backend._current_view_tool("alice")
+    request = _CurrentViewRequest(question="Aligned?")
+    if error_type in (FrameUnavailable, TimeoutError):
+        result = await view.execute(request)
+        assert not result.available
+        assert "unavailable" in result.text or "timed out" in result.text
+    else:
+        with pytest.raises(error_type) as raised:
+            await view.execute(request)
+        assert raised.value is error
+    backend._image_query.execute.assert_not_awaited()
 
 
 async def test_frame_inference_finishing_after_restart_cannot_change_progress(engine):

@@ -62,8 +62,15 @@ async def test_rpc_preserves_remote_error_codes(tmp_path: Path) -> None:
         async with RPCClient(endpoint) as client:
             with pytest.raises(RPCError) as error:
                 await client.call("get_head_pose")
+        tracking = TrackingTools(endpoint)
+        try:
+            with pytest.raises(RPCError) as tool_error:
+                await tracking.get_user_frame.execute(EmptyRequest())
+        finally:
+            await tracking.close()
 
     assert error.value.code == "unavailable"
+    assert tool_error.value.code == "unavailable"
 
 
 @pytest.mark.asyncio

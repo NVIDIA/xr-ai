@@ -26,7 +26,7 @@ qualified lock; the reciprocal-license table records exact resolved versions.
 | Package        | Version  | License       | Upstream |
 |---             |---       |---            |---|
 | `msgpack`      | 1.0.0    | Apache-2.0    | https://github.com/msgpack/msgpack-python |
-| `certifi`      | 2026.7.22 | MPL-2.0      | https://github.com/certifi/python-certifi |
+| `certifi`      | 2026.10.19 | MPL-2.0      | https://github.com/certifi/python-certifi |
 | `pyzmq`        | 27.2.0   | BSD-3-Clause  | https://github.com/zeromq/pyzmq |
 | `uvicorn`      | 0.29.0   | BSD-3-Clause  | https://github.com/encode/uvicorn |
 | `fastapi`      | 0.111.0  | MIT           | https://github.com/fastapi/fastapi |
@@ -34,16 +34,16 @@ qualified lock; the reciprocal-license table records exact resolved versions.
 | `livekit`      | 0.17.0   | Apache-2.0    | https://github.com/livekit/python-sdks |
 | `livekit-api`  | 0.7.0    | Apache-2.0    | https://github.com/livekit/python-sdks |
 | `numpy`        | 1.24.0   | BSD-3-Clause  | https://github.com/numpy/numpy |
-| `nemo-relay`   | >=0.7.2,<0.8 | Apache-2.0  | https://github.com/NVIDIA/NeMo-Relay |
+| `nemo-relay`   | >=0.10.0,<0.11 | Apache-2.0  | https://github.com/NVIDIA/NeMo-Relay |
 | `Pillow`       | 10.0.0   | HPND          | https://github.com/python-pillow/Pillow |
 | `pipecat-ai`   | >=1.6    | BSD-2-Clause  | https://github.com/pipecat-ai/pipecat |
 | `pocket-tts`   | 3.0.2    | MIT           | https://github.com/kyutai-labs/pocket-tts |
 | `num2words`    | 0.5.14   | LGPL-2.1-or-later | https://github.com/savoirfairelinux/num2words |
 | `pycountry`    | 26.2.16  | LGPL-2.1-only | https://github.com/pycountry/pycountry |
 | `soxr`         | 1.0.0    | LGPL-2.1-or-later | https://github.com/dofuuz/python-soxr |
-| `soundfile`    | 0.14.0   | BSD-3-Clause  | https://github.com/bastibe/python-soundfile |
+| `soundfile`    | 0.13.1   | BSD-3-Clause  | https://github.com/bastibe/python-soundfile |
 | `text-unidecode` | 1.3    | Artistic-1.0-Perl (elected) | https://github.com/kmike/text-unidecode |
-| `tqdm`         | 4.70.0   | MPL-2.0 AND MIT | https://github.com/tqdm/tqdm |
+| `tqdm`         | 4.70.1   | MPL-2.0 AND MIT | https://github.com/tqdm/tqdm |
 | `opencv-python-headless` | 5.0.0.93 | Apache-2.0 and MIT packaging terms (wheel includes other licenses) | https://github.com/opencv/opencv-python |
 | `pydantic`     | >=2.10   | MIT           | https://github.com/pydantic/pydantic |
 | `python-multipart` | >=0.0.9 | Apache-2.0 | https://github.com/Kludex/python-multipart |
@@ -80,11 +80,11 @@ artifacts; each directory records the artifact URL and hashes.
 | Component | Resolved version | License and notices |
 |---|---|---|
 | `vllm` | 0.30.0 | Apache-2.0; [upstream license](third_party_licenses/vllm-0.30.0/) |
-| `huggingface-hub` | 1.32.0 | Apache-2.0; [upstream license](third_party_licenses/huggingface-hub-1.32.0/) |
+| `huggingface-hub` | 2.2.0 | Apache-2.0; [upstream license](third_party_licenses/huggingface-hub-2.2.0/) |
 | `flashinfer-python` | 0.6.18.post1 | Apache-2.0; [upstream license](third_party_licenses/flashinfer-python-0.6.18.post1/) |
-| `instanttensor` | 0.2.0 | Apache-2.0; [upstream license](third_party_licenses/instanttensor-0.2.0/) |
+| `instanttensor` | 0.2.2 | Apache-2.0; [upstream license](third_party_licenses/instanttensor-0.2.2/) |
 | `quack-kernels` | 0.6.5 | Apache-2.0; [upstream license](third_party_licenses/quack-kernels-0.6.5/) |
-| `protobuf` | 7.36.0 | BSD-3-Clause; [upstream license](third_party_licenses/protobuf-7.36.0/) |
+| `protobuf` | 7.36.2 | BSD-3-Clause; [upstream license](third_party_licenses/protobuf-7.36.2/) |
 | `nvidia-cutlass-dsl` | 4.7.1 | NVIDIA Software License Agreement; [upstream EULA](third_party_licenses/nvidia-cutlass-dsl-4.7.1/) |
 
 `instanttensor` is a new transitive dependency of vLLM. CUTLASS DSL is
@@ -163,11 +163,11 @@ this repository.
 |---|---|---|---|
 | `num2words` 0.5.14 | Python dependency of `pipecat-ai` | LGPL-2.1-or-later; [`COPYING`](third_party_licenses/num2words-0.5.14/COPYING) | [0.5.14 source distribution](https://pypi.org/project/num2words/0.5.14/#files) |
 | `pycountry` 26.2.16 | Transitive dependency through `vllm` → `mistral-common` → `pydantic-extra-types[pycountry]` | LGPL-2.1-only; [`LICENSE.txt` and data attributions](third_party_licenses/pycountry-26.2.16/) | [26.2.16 source distribution](https://pypi.org/project/pycountry/26.2.16/#files) |
-| `tqdm` 4.70.0 | Progress reporting used by AI dependencies | MPL-2.0 AND MIT; [`LICENCE`](third_party_licenses/tqdm-4.70.0/LICENCE) | [4.70.0 source distribution](https://pypi.org/project/tqdm/4.70.0/#files) |
+| `tqdm` 4.70.1 | Progress reporting used by AI dependencies | MPL-2.0 AND MIT; [`LICENCE`](third_party_licenses/tqdm-4.70.1/LICENCE) | [4.70.1 source distribution](https://pypi.org/project/tqdm/4.70.1/#files) |
 | `soxr` 1.0.0 / libsoxr 0.1.3 / PFFFT | Python extension used through `pipecat-ai` and `librosa`; its wheel includes PFFFT and Python-SoXR's modified libsoxr fork | LGPL-2.1-or-later for libsoxr and permissive PFFFT terms; [`license files`](third_party_licenses/soxr-1.0.0/) | [`soxr` 1.0.0 source distribution](https://pypi.org/project/soxr/1.0.0/#files); its `libsoxr/` directory is the applicable fork source |
-| `soundfile` 0.14.0 / libsndfile 1.2.2 | Platform wheels include libsndfile, which statically includes libmp3lame 3.100 and libmpg123 | LGPL-2.1-or-later for libsndfile, LGPL-2.0-or-later for libmp3lame, and LGPL-2.1 for libmpg123; [`COPYING`](third_party_licenses/libsndfile-1.2.2/COPYING), [wrapper license and native-library source notes](third_party_licenses/soundfile-0.14.0/) | [libsndfile 1.2.2 source](https://github.com/libsndfile/libsndfile/releases/tag/1.2.2) and [SoundFile 0.14.0 source distribution](https://pypi.org/project/soundfile/0.14.0/#files) |
+| `soundfile` 0.13.1 / libsndfile 1.2.2 | Platform wheels include libsndfile, which statically includes libmp3lame 3.100 and libmpg123 | LGPL-2.1-or-later for libsndfile, LGPL-2.0-or-later for libmp3lame, and LGPL-2.1 for libmpg123; [`COPYING`](third_party_licenses/libsndfile-1.2.2/COPYING), [wrapper license and native-library source notes](third_party_licenses/soundfile-0.13.1/) | [libsndfile 1.2.2 source](https://github.com/libsndfile/libsndfile/releases/tag/1.2.2) and [SoundFile 0.13.1 source distribution](https://pypi.org/project/soundfile/0.13.1/#files) |
 | `opencv-python-headless` 5.0.0.93 / FFmpeg | Platform wheels include FFmpeg shared libraries | LGPL-2.1-or-later; [`OpenCV wheel and bundled-library notices`](third_party_licenses/opencv-python-headless-5.0.0.93/) | [5.0.0.93 source distribution](https://pypi.org/project/opencv-python-headless/5.0.0.93/#files) and [FFmpeg source](https://ffmpeg.org/download.html) |
-| `certifi` 2026.7.22 | CA certificate bundle used by HTTP clients | MPL-2.0; [`LICENSE`](third_party_licenses/certifi-2026.7.22/LICENSE) | [2026.7.22 source distribution](https://pypi.org/project/certifi/2026.7.22/#files) |
+| `certifi` 2026.10.19 | CA certificate bundle used by HTTP clients | MPL-2.0; [`LICENSE`](third_party_licenses/certifi-2026.10.19/LICENSE) | [2026.10.19 source distribution](https://pypi.org/project/certifi/2026.10.19/#files) |
 | `pyzmq` 27.2.0 / libzmq 4.3.5 / libsodium 1.0.22 | Platform wheels include libzmq and libsodium shared libraries | MPL-2.0 for libzmq and ISC for libsodium; [`PyZMQ and bundled-library notices`](third_party_licenses/pyzmq-27.2.0/) | [libzmq 4.3.5 source](https://github.com/zeromq/libzmq/releases/tag/v4.3.5), [libsodium 1.0.22 source](https://github.com/jedisct1/libsodium/releases/tag/1.0.22-RELEASE), and [PyZMQ 27.2.0 source distribution](https://pypi.org/project/pyzmq/27.2.0/#files) |
 
 These obligations apply to downstream redistributors of installed environments,
@@ -195,12 +195,12 @@ artifact and SHA-256 hashes for the copied texts.
 |---|---|---|---|
 | `llvmlite` | 0.47.0 | BSD-2-Clause AND Apache-2.0 WITH LLVM-exception; [license texts](third_party_licenses/llvmlite-0.47.0/) | AI and audio dependencies → `numba` → `llvmlite` |
 | `nvtx` | 0.2.15 | Apache-2.0 WITH LLVM-exception; [license text](third_party_licenses/nvtx-0.2.15/) | Model services → `vllm` → `nvtx` |
-| `matplotlib` | 3.11.1 | Matplotlib License 1.3+ and additional font/library terms; [license texts](third_party_licenses/matplotlib-3.11.1/) | Magpie TTS → `nemo-toolkit[tts]` → `matplotlib` |
-| `regex` | 2026.7.19 | Apache-2.0 AND CNRI-Python; [license text](third_party_licenses/regex-2026.7.19/) | Voice SDK → `nltk`; model dependencies → `transformers` / `nemo-text-processing` |
+| `matplotlib` | 3.11.2 | Matplotlib License 1.3+ and additional font/library terms; [license texts](third_party_licenses/matplotlib-3.11.2/) | Magpie TTS → `nemo-toolkit[tts]` → `matplotlib` |
+| `regex` | 2026.9.29 | Apache-2.0 AND CNRI-Python; [license text](third_party_licenses/regex-2026.9.29/) | Voice SDK → `nltk`; model dependencies → `transformers` / `nemo-text-processing` |
 | `supervisor` | 4.3.0 | BSD-derived Repoze license, including its modification notice clause; [license text](third_party_licenses/supervisor-4.3.0/) | Model services → `vllm` → `model-hosting-container-standards` → `supervisor` |
 | `humming-kernels` | 0.1.12 | Apache-2.0; [license text](third_party_licenses/humming-kernels-0.1.12/) | Model services → `vllm` → `humming-kernels` |
 | `quack-kernels` | 0.6.5 | Apache-2.0; [license text](third_party_licenses/quack-kernels-0.6.5/) | Model services → `vllm` → `quack-kernels` |
-| `torchcodec` | 0.16.0 | BSD-3-Clause and platform-specific bundled-library terms, including NVIDIA CUDA EULA for Linux nvJPEG; [license texts and platform scope](third_party_licenses/torchcodec-0.16.0/) | Model services → `vllm` → `torchcodec` |
+| `torchcodec` | 0.17.0 | BSD-3-Clause and platform-specific bundled-library terms, including NVIDIA CUDA EULA for Linux nvJPEG; [license texts and platform scope](third_party_licenses/torchcodec-0.17.0/) | Model services → `vllm` → `torchcodec` |
 
 `AND` license expressions retain all listed terms; they are not alternative
 license elections. XR AI elects the permissive FreeType License (FTL) option
@@ -317,39 +317,39 @@ refer to the component disclosures above for applicable license elections.
 
 | Component | Preserved license file |
 |---|---|
-| `certifi-2026.7.22` | [`LICENSE`](third_party_licenses/certifi-2026.7.22/LICENSE) |
+| `certifi-2026.10.19` | [`LICENSE`](third_party_licenses/certifi-2026.10.19/LICENSE) |
 | `flashinfer-python-0.6.18.post1` | [`LICENSE`](third_party_licenses/flashinfer-python-0.6.18.post1/LICENSE) |
-| `huggingface-hub-1.32.0` | [`LICENSE`](third_party_licenses/huggingface-hub-1.32.0/LICENSE) |
+| `huggingface-hub-2.2.0` | [`LICENSE`](third_party_licenses/huggingface-hub-2.2.0/LICENSE) |
 | `humming-kernels-0.1.12` | [`LICENSE`](third_party_licenses/humming-kernels-0.1.12/LICENSE) |
-| `instanttensor-0.2.0` | [`LICENSE`](third_party_licenses/instanttensor-0.2.0/LICENSE) |
+| `instanttensor-0.2.2` | [`LICENSE`](third_party_licenses/instanttensor-0.2.2/LICENSE) |
 | `libsndfile-1.2.2` | [`COPYING`](third_party_licenses/libsndfile-1.2.2/COPYING) |
 | `llvmlite-0.47.0` | [`LICENSE`](third_party_licenses/llvmlite-0.47.0/LICENSE) |
 | `llvmlite-0.47.0` | [`LICENSE.thirdparty`](third_party_licenses/llvmlite-0.47.0/LICENSE.thirdparty) |
-| `matplotlib-3.11.1` | [`FTL.TXT`](third_party_licenses/matplotlib-3.11.1/FTL.TXT) |
-| `matplotlib-3.11.1` | [`LICENSE`](third_party_licenses/matplotlib-3.11.1/LICENSE) |
-| `matplotlib-3.11.1` | [`LICENSE_AMSFONTS`](third_party_licenses/matplotlib-3.11.1/LICENSE_AMSFONTS) |
-| `matplotlib-3.11.1` | [`LICENSE_BAKOMA`](third_party_licenses/matplotlib-3.11.1/LICENSE_BAKOMA) |
-| `matplotlib-3.11.1` | [`LICENSE_COLORBREWER`](third_party_licenses/matplotlib-3.11.1/LICENSE_COLORBREWER) |
-| `matplotlib-3.11.1` | [`LICENSE_COURIERTEN`](third_party_licenses/matplotlib-3.11.1/LICENSE_COURIERTEN) |
-| `matplotlib-3.11.1` | [`LICENSE_DEJAVU`](third_party_licenses/matplotlib-3.11.1/LICENSE_DEJAVU) |
-| `matplotlib-3.11.1` | [`LICENSE_FONT_AWESOME`](third_party_licenses/matplotlib-3.11.1/LICENSE_FONT_AWESOME) |
-| `matplotlib-3.11.1` | [`LICENSE_FREETYPE`](third_party_licenses/matplotlib-3.11.1/LICENSE_FREETYPE) |
-| `matplotlib-3.11.1` | [`LICENSE_HARFBUZZ`](third_party_licenses/matplotlib-3.11.1/LICENSE_HARFBUZZ) |
-| `matplotlib-3.11.1` | [`LICENSE_JSXTOOLS_RESIZE_OBSERVER`](third_party_licenses/matplotlib-3.11.1/LICENSE_JSXTOOLS_RESIZE_OBSERVER) |
-| `matplotlib-3.11.1` | [`LICENSE_LAST_RESORT_FONT`](third_party_licenses/matplotlib-3.11.1/LICENSE_LAST_RESORT_FONT) |
-| `matplotlib-3.11.1` | [`LICENSE_LIBRAQM`](third_party_licenses/matplotlib-3.11.1/LICENSE_LIBRAQM) |
-| `matplotlib-3.11.1` | [`LICENSE_QT4_EDITOR`](third_party_licenses/matplotlib-3.11.1/LICENSE_QT4_EDITOR) |
-| `matplotlib-3.11.1` | [`LICENSE_SHEENBIDI`](third_party_licenses/matplotlib-3.11.1/LICENSE_SHEENBIDI) |
-| `matplotlib-3.11.1` | [`LICENSE_SOLARIZED`](third_party_licenses/matplotlib-3.11.1/LICENSE_SOLARIZED) |
-| `matplotlib-3.11.1` | [`LICENSE_STIX`](third_party_licenses/matplotlib-3.11.1/LICENSE_STIX) |
-| `matplotlib-3.11.1` | [`LICENSE_YORICK`](third_party_licenses/matplotlib-3.11.1/LICENSE_YORICK) |
-| `matplotlib-3.11.1` | [`copying`](third_party_licenses/matplotlib-3.11.1/copying) |
+| `matplotlib-3.11.2` | [`FTL.TXT`](third_party_licenses/matplotlib-3.11.2/FTL.TXT) |
+| `matplotlib-3.11.2` | [`LICENSE`](third_party_licenses/matplotlib-3.11.2/LICENSE) |
+| `matplotlib-3.11.2` | [`LICENSE_AMSFONTS`](third_party_licenses/matplotlib-3.11.2/LICENSE_AMSFONTS) |
+| `matplotlib-3.11.2` | [`LICENSE_BAKOMA`](third_party_licenses/matplotlib-3.11.2/LICENSE_BAKOMA) |
+| `matplotlib-3.11.2` | [`LICENSE_COLORBREWER`](third_party_licenses/matplotlib-3.11.2/LICENSE_COLORBREWER) |
+| `matplotlib-3.11.2` | [`LICENSE_COURIERTEN`](third_party_licenses/matplotlib-3.11.2/LICENSE_COURIERTEN) |
+| `matplotlib-3.11.2` | [`LICENSE_DEJAVU`](third_party_licenses/matplotlib-3.11.2/LICENSE_DEJAVU) |
+| `matplotlib-3.11.2` | [`LICENSE_FONT_AWESOME`](third_party_licenses/matplotlib-3.11.2/LICENSE_FONT_AWESOME) |
+| `matplotlib-3.11.2` | [`LICENSE_FREETYPE`](third_party_licenses/matplotlib-3.11.2/LICENSE_FREETYPE) |
+| `matplotlib-3.11.2` | [`LICENSE_HARFBUZZ`](third_party_licenses/matplotlib-3.11.2/LICENSE_HARFBUZZ) |
+| `matplotlib-3.11.2` | [`LICENSE_JSXTOOLS_RESIZE_OBSERVER`](third_party_licenses/matplotlib-3.11.2/LICENSE_JSXTOOLS_RESIZE_OBSERVER) |
+| `matplotlib-3.11.2` | [`LICENSE_LAST_RESORT_FONT`](third_party_licenses/matplotlib-3.11.2/LICENSE_LAST_RESORT_FONT) |
+| `matplotlib-3.11.2` | [`LICENSE_LIBRAQM`](third_party_licenses/matplotlib-3.11.2/LICENSE_LIBRAQM) |
+| `matplotlib-3.11.2` | [`LICENSE_QT4_EDITOR`](third_party_licenses/matplotlib-3.11.2/LICENSE_QT4_EDITOR) |
+| `matplotlib-3.11.2` | [`LICENSE_SHEENBIDI`](third_party_licenses/matplotlib-3.11.2/LICENSE_SHEENBIDI) |
+| `matplotlib-3.11.2` | [`LICENSE_SOLARIZED`](third_party_licenses/matplotlib-3.11.2/LICENSE_SOLARIZED) |
+| `matplotlib-3.11.2` | [`LICENSE_STIX`](third_party_licenses/matplotlib-3.11.2/LICENSE_STIX) |
+| `matplotlib-3.11.2` | [`LICENSE_YORICK`](third_party_licenses/matplotlib-3.11.2/LICENSE_YORICK) |
+| `matplotlib-3.11.2` | [`copying`](third_party_licenses/matplotlib-3.11.2/copying) |
 | `num2words-0.5.14` | [`COPYING`](third_party_licenses/num2words-0.5.14/COPYING) |
 | `nvidia-cutlass-dsl-4.7.1` | [`LICENSE`](third_party_licenses/nvidia-cutlass-dsl-4.7.1/LICENSE) |
 | `nvtx-0.2.15` | [`LICENSE.txt`](third_party_licenses/nvtx-0.2.15/LICENSE.txt) |
 | `opencv-python-headless-5.0.0.93` | [`LICENSE-3RD-PARTY.txt`](third_party_licenses/opencv-python-headless-5.0.0.93/LICENSE-3RD-PARTY.txt) |
 | `opencv-python-headless-5.0.0.93` | [`LICENSE.txt`](third_party_licenses/opencv-python-headless-5.0.0.93/LICENSE.txt) |
-| `protobuf-7.36.0` | [`LICENSE`](third_party_licenses/protobuf-7.36.0/LICENSE) |
+| `protobuf-7.36.2` | [`LICENSE`](third_party_licenses/protobuf-7.36.2/LICENSE) |
 | `pycountry-26.2.16` | [`LICENSE.txt`](third_party_licenses/pycountry-26.2.16/LICENSE.txt) |
 | `pyjwt-2.15.1` | [`LICENSE`](third_party_licenses/pyjwt-2.15.1/LICENSE) |
 | `pyzmq-27.2.0` | [`LICENSE`](third_party_licenses/pyzmq-27.2.0/LICENSE) |
@@ -357,31 +357,27 @@ refer to the component disclosures above for applicable license elections.
 | `pyzmq-27.2.0` | [`LICENSE.tornado`](third_party_licenses/pyzmq-27.2.0/LICENSE.tornado) |
 | `pyzmq-27.2.0` | [`LICENSE.zeromq`](third_party_licenses/pyzmq-27.2.0/LICENSE.zeromq) |
 | `quack-kernels-0.6.5` | [`LICENSE`](third_party_licenses/quack-kernels-0.6.5/LICENSE) |
-| `regex-2026.7.19` | [`LICENSE.txt`](third_party_licenses/regex-2026.7.19/LICENSE.txt) |
-| `soundfile-0.14.0` | [`LICENSE`](third_party_licenses/soundfile-0.14.0/LICENSE) |
+| `regex-2026.9.29` | [`LICENSE.txt`](third_party_licenses/regex-2026.9.29/LICENSE.txt) |
+| `soundfile-0.13.1` | [`COPYING.libsndfile`](third_party_licenses/soundfile-0.13.1/COPYING.libsndfile) |
+| `soundfile-0.13.1` | [`LICENSE`](third_party_licenses/soundfile-0.13.1/LICENSE) |
 | `soxr-1.0.0` | [`COPYING.LGPL`](third_party_licenses/soxr-1.0.0/COPYING.LGPL) |
 | `soxr-1.0.0` | [`LICENSE`](third_party_licenses/soxr-1.0.0/LICENSE) |
 | `soxr-1.0.0` | [`LICENSE-PFFFT`](third_party_licenses/soxr-1.0.0/LICENSE-PFFFT) |
 | `soxr-1.0.0` | [`LICENSE-libsoxr`](third_party_licenses/soxr-1.0.0/LICENSE-libsoxr) |
 | `supervisor-4.3.0` | [`LICENSES.txt`](third_party_licenses/supervisor-4.3.0/LICENSES.txt) |
 | `text-unidecode-1.3` | [`LICENSE`](third_party_licenses/text-unidecode-1.3/LICENSE) |
-| `torchcodec-0.16.0` | [`COPYING.dav1d`](third_party_licenses/torchcodec-0.16.0/COPYING.dav1d) |
-| `torchcodec-0.16.0` | [`LICENSE`](third_party_licenses/torchcodec-0.16.0/LICENSE) |
-| `torchcodec-0.16.0` | [`LICENSE.libavif`](third_party_licenses/torchcodec-0.16.0/LICENSE.libavif) |
-| `torchcodec-0.16.0` | [`LICENSE.libjpeg-turbo`](third_party_licenses/torchcodec-0.16.0/LICENSE.libjpeg-turbo) |
-| `torchcodec-0.16.0` | [`LICENSE.libnvjpeg-NVIDIA-CUDA-EULA.txt`](third_party_licenses/torchcodec-0.16.0/LICENSE.libnvjpeg-NVIDIA-CUDA-EULA.txt) |
-| `torchcodec-0.16.0` | [`LICENSE.libpng`](third_party_licenses/torchcodec-0.16.0/LICENSE.libpng) |
-| `torchcodec-0.16.0` | [`LICENSE.libwebp`](third_party_licenses/torchcodec-0.16.0/LICENSE.libwebp) |
-| `torchcodec-0.16.0` | [`LICENSE.libyuv`](third_party_licenses/torchcodec-0.16.0/LICENSE.libyuv) |
-| `torchcodec-0.16.0` | [`LICENSE.zlib`](third_party_licenses/torchcodec-0.16.0/LICENSE.zlib) |
-| `tqdm-4.70.0` | [`LICENCE`](third_party_licenses/tqdm-4.70.0/LICENCE) |
+| `torchcodec-0.17.0` | [`COPYING.dav1d`](third_party_licenses/torchcodec-0.17.0/COPYING.dav1d) |
+| `torchcodec-0.17.0` | [`LICENSE`](third_party_licenses/torchcodec-0.17.0/LICENSE) |
+| `torchcodec-0.17.0` | [`LICENSE.libavif`](third_party_licenses/torchcodec-0.17.0/LICENSE.libavif) |
+| `torchcodec-0.17.0` | [`LICENSE.libjpeg-turbo`](third_party_licenses/torchcodec-0.17.0/LICENSE.libjpeg-turbo) |
+| `torchcodec-0.17.0` | [`LICENSE.libnvjpeg-NVIDIA-CUDA-EULA.txt`](third_party_licenses/torchcodec-0.17.0/LICENSE.libnvjpeg-NVIDIA-CUDA-EULA.txt) |
+| `torchcodec-0.17.0` | [`LICENSE.libpng`](third_party_licenses/torchcodec-0.17.0/LICENSE.libpng) |
+| `torchcodec-0.17.0` | [`LICENSE.libwebp`](third_party_licenses/torchcodec-0.17.0/LICENSE.libwebp) |
+| `torchcodec-0.17.0` | [`LICENSE.libyuv`](third_party_licenses/torchcodec-0.17.0/LICENSE.libyuv) |
+| `torchcodec-0.17.0` | [`LICENSE.zlib`](third_party_licenses/torchcodec-0.17.0/LICENSE.zlib) |
+| `tqdm-4.70.1` | [`LICENCE`](third_party_licenses/tqdm-4.70.1/LICENCE) |
 | `urllib3-2.8.0` | [`LICENSE.txt`](third_party_licenses/urllib3-2.8.0/LICENSE.txt) |
 | `vllm-0.30.0` | [`LICENSE`](third_party_licenses/vllm-0.30.0/LICENSE) |
-
-Additional attribution and native-library notices are preserved in
-[`pycountry COPYRIGHT.txt`](third_party_licenses/pycountry-26.2.16/COPYRIGHT.txt),
-[`PyJWT AUTHORS.rst`](third_party_licenses/pyjwt-2.15.1/AUTHORS.rst), and
-[`SoundFile license notes`](third_party_licenses/soundfile-0.14.0/license_notes.md).
 
 ## Updating this file
 
