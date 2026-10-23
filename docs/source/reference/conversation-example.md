@@ -68,23 +68,34 @@ text questions and recall. Direct observation sends one fresh image and the
 current question to Cosmos, without dialogue history.
 
 An alert starts only when the participant explicitly asks to be notified when a
-specific visible condition occurs. For example, “Alert me when the left
-indicator is green.” Each job runs two independent observation loops. The fast
-loop sends a fresh frame and the condition directly to Clef for the existing
-yes/no decision. In parallel, the backup loop asks Cosmos for visible evidence
-relevant to the condition, then asks Clef whether that written observation
-establishes it. Either loop can claim the alert; the first yes result owns the
-triggering frame and only one complete “Alert” voice update is published as urgent.
-The agent then asks Cosmos for a short description of relevant evidence from
-that same frame and publishes it as one non-urgent update once the model has
-finished, then stops. The description does not cut the announcement.
-Each loop selects its next frame after its previous model work completes; there
-is no sampling interval or observation history. A failure in one loop leaves
-the other available; if both stop without a match, the job retires with a
-concise failure message. Only an explicit new alert request replaces an
-existing job. “Cancel the visual alert” cancels it. Ordinary questions and
-fragments are not alert controls. Each participant owns an independent job;
-departure and worker shutdown cancel and drain both loops.
+specific visible condition occurs, stated directly (“Alert me when the left
+indicator is green.”) or referring to one given earlier (“Alert me when you see
+what I mentioned in my notes.”). Before a job starts, the agent compiles the
+request with one LLM call that sees the request, the turn's recent exchanges, and
+the general conversation's saved context, including shared notes. The result is
+a standalone condition and a short relevance phrase naming what the condition is
+about. The spoken confirmation states the compiled condition. When no specific
+visible condition can be resolved, the agent says so, starts nothing, and leaves
+any running alert in place.
+
+Each job then checks frames in a paced loop. A cheap Clef image call screens every
+frame for whether the relevance subject may be visible, and a frame it rejects
+costs nothing more. Only a screened frame runs the two condition checks in
+parallel: a direct Clef image decision and a Cosmos observation that Clef judges
+as text. The first yes owns the triggering frame, and only one complete “Alert”
+voice update is published as urgent. The agent then asks Cosmos for a short
+description of relevant evidence from that same frame and publishes it as one
+non-urgent update once the model has finished, then stops. The description does
+not cut the announcement.
+
+Checks are paced: the next frame waits at least `alert_check_interval_secs`
+(default 1) after a screen, and `alert_confirm_interval_secs` (default 3) after a
+screened frame, which ran Cosmos. A failure in one condition check leaves the
+other available; if both fail, or the screen or frame capture fails, the job
+retires with a concise failure message. Only an explicit new alert request
+replaces an existing job. “Cancel the visual alert” cancels it. Ordinary
+questions and fragments are not alert controls. Each participant owns an
+independent job; departure and worker shutdown cancel and drain its work.
 
 The backup judge sees Cosmos's text description rather than the image, so it
 can miss evidence or repeat a description error. Neither path guarantees visual
@@ -122,8 +133,9 @@ participant. When video is off, the same tool asks StreamKit to capture one
 image and return it through a targeted LiveKit byte stream. The fallback is
 invisible to the agent: it receives the same opaque image-reference shape and
 passes it to the configured visual model. Direct visual answers use Cosmos;
-alerts use direct Clef decisions and a concurrent Cosmos-observation-to-Clef-text
-path, followed by one Cosmos description only after a match.
+alerts screen each frame with Clef, run direct Clef decisions and a concurrent
+Cosmos-observation-to-Clef-text path only on screened frames, and add one Cosmos
+description only after a match.
 Camera bytes remain on the hub path, image locations are redacted from VLM
 telemetry, and the sample has no MCP path.
 
@@ -181,10 +193,11 @@ The worker package is under
 | `_config.py` | Resolves worker, model, voice-gate, and prompt settings |
 | `prompts/note_control.txt` | Note action instructions for dictation, question handoff, readback, and finish |
 | `_note_taking.py` | Implements the sample-owned focused note-taking destination |
-| `_alert_agent.py` | Owns one-shot background visual alerts |
+| `_alert_agent.py` | Owns one-shot background visual alerts: screening, confirmation, and pacing |
+| `_alert_compile.py` | Compiles an alert request and the participant's context into a watch |
 | `_visual_agents.py` | Implements direct current-image observation |
 | `prompts/system.txt` | Defines the default VLM instruction |
-| `prompts/alert_control.txt`, `prompts/alert_condition.txt`, `prompts/alert_description.txt` | Explicit start/cancel admission and evidence matching |
+| `prompts/alert_control.txt`, `prompts/alert_compile.txt`, `prompts/alert_relevance.txt`, `prompts/alert_condition.txt`, `prompts/alert_description.txt` | Start/cancel admission, request compilation, frame screening, and evidence matching |
 | `prompts/conversation.txt` | Application instructions for the conversation destination |
 | `prompts/note_taking.txt` | Note role description; the note agent owns control responses and save acknowledgments |
 | `eval/conversation-cases.yaml` | Single-turn Clef routing and direct-answer evaluation inputs |
@@ -284,7 +297,7 @@ layout works without command-line configuration arguments.
 
 | File | Owns |
 |---|---|
-| `yaml/conversation_example_worker.yaml` | Frame freshness and wait limits, VAD, idle timeout, optional context topics (including note sharing) and byte budgets, route-aware acknowledgment delay, and prompt overrides |
+| `yaml/conversation_example_worker.yaml` | Frame freshness and wait limits, VAD, idle timeout, optional context topics (including note sharing) and byte budgets, route-aware acknowledgment delay, alert check and confirm intervals, and prompt overrides |
 | `yaml/voice_gate.yaml` | Conversation controls, optional wake phrases, listening chime, and follow-up window |
 | `yaml/models.json` | LLM/VLM/STT/TTS/Clef adapters, endpoints, and conversation generation defaults |
 | `yaml/device_io_hub.yaml` | LiveKit room and ports, web and token servers, and network behavior |

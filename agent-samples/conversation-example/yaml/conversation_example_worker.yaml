@@ -48,3 +48,11 @@ compaction_input_budget_bytes: 12000
 # The selected destination starts immediately; a confident slow prediction can
 # speak an acknowledgment early, otherwise the delay is the fallback threshold.
 # acknowledgment_delay_secs: 2.0
+
+# Background visual alerts pace their frame checks. Every frame is first screened
+# by a cheap Clef image call; only a frame that may show the alert's subject also
+# runs Cosmos and the condition check. A screened frame waits at least
+# alert_confirm_interval_secs before the next check, otherwise
+# alert_check_interval_secs (0 <= check <= confirm).
+# alert_check_interval_secs: 1.0
+# alert_confirm_interval_secs: 3.0

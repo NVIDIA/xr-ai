@@ -70,7 +70,7 @@ class _FixtureDecisionService:
 def test_decision_evaluator_preflights_and_runs_every_fixture_without_answer_calls(ambiguous_choice):
     flows, cases = evaluator.load_fixtures()
     plan = evaluator.preflight(flows, cases)
-    assert plan["total_turns"] == 56
+    assert plan["total_turns"] == 59
     assert plan["planned_decision_calls"] <= plan["max_decision_calls"]
 
     recorder = evaluator._DecisionRecorder(None, max_calls=plan["max_decision_calls"])

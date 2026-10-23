@@ -8,24 +8,27 @@ from __future__ import annotations
 import asyncio
 import time
 from collections.abc import Awaitable, Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import nemo_relay
 from loguru import logger
-from xr_ai_conversation import ConversationContextUpdate
+from xr_ai_conversation import ContextManager, ConversationContextUpdate
 from xr_ai_interaction import ResponseOutput, ResponseOutputs
-from xr_ai_models import DecisionQuestion, DecisionService, ImageInput, VLMService
+from xr_ai_models import DecisionQuestion, DecisionService, ImageInput, LLMService, VLMService
 from xr_ai_routing import Admission, AgentTurn, DestinationResult, RoutableAgent, RoutingAid
 from xr_ai_runtime import AgentRuntime, RuntimeClosedError, Topic
 from xr_ai_tools.current_frame import CurrentFrameRequest, CurrentFrameTool
 from xr_ai_tools.image import ImageRegistry
 from xr_ai_tools.vision import ImageQueryRequest, ImageQueryTool, StreamingImageQueryTool
 
+from ._alert_compile import CompiledAlert, compile_alert
+
 ALERT_CAPABILITY_TOPIC = Topic("conversation-example.alert-capability", ConversationContextUpdate)
 _CAPABILITY = "Capability: alert you once when a requested visual condition is seen, or cancel a pending visual alert."
 _PROMPTS = Path(__file__).parent / "prompts"
 _CONTROL = (_PROMPTS / "alert_control.txt").read_text(encoding="utf-8").strip()
+_RELEVANCE = (_PROMPTS / "alert_relevance.txt").read_text(encoding="utf-8").strip()
 _CONDITION = (_PROMPTS / "alert_condition.txt").read_text(encoding="utf-8").strip()
 _DESCRIPTION = (_PROMPTS / "alert_description.txt").read_text(encoding="utf-8").strip()
 _BACKUP_PROMPT = (
@@ -46,13 +49,20 @@ class _Trigger:
 @dataclass
 class _Job:
     condition: str
+    relevance: str
     response_id: str
     task: asyncio.Task[None] | None = None
-    winner: asyncio.Future[_Trigger] | None = None
+    checks: set[asyncio.Task[_Trigger | None]] = field(default_factory=set)
 
 
 class VisualAlertAgent(RoutableAgent):
     """Watch one condition per participant; announce and describe its triggering frame.
+
+    A request is first compiled with the participant's recent exchanges and saved context into a
+    standalone condition, so an alert can refer to something said or noted earlier. Each watched
+    frame passes a cheap Clef relevance screen before the costly check: only a relevant frame is
+    judged against the condition, by a direct Clef image decision and by a Cosmos observation
+    judged by Clef, whichever confirms first. Checks are paced by interval.
 
     Only an explicit new alert replaces a job. Rerouting does not cancel it.
     Participant departure and worker shutdown cancel and drain owned work.
@@ -67,10 +77,32 @@ class VisualAlertAgent(RoutableAgent):
         publish_capability: Callable[[str, ConversationContextUpdate], Awaitable[None]],
         *,
         vlm: VLMService,
+        llm: LLMService,
+        context: ContextManager,
         runtime: AgentRuntime,
         output_topic: Topic[ResponseOutput],
+        check_interval_secs: float = 1.0,
+        confirm_interval_secs: float = 3.0,
+        sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     ) -> None:
+        """Create the agent.
+
+        :param llm: Model that compiles an alert request into a watch.
+        :param context: Participant context read, never written, when compiling.
+        :param check_interval_secs: Minimum time between screening checks of consecutive frames.
+        :param confirm_interval_secs: Minimum time between checks of a frame the screen passed,
+            which run Cosmos, so repeated near-misses are paced more slowly.
+        :param sleep: Pacing delay; tests replace it.
+        """
+
+        if check_interval_secs < 0 or confirm_interval_secs < check_interval_secs:
+            raise ValueError("alert intervals must satisfy 0 <= check_interval_secs <= confirm_interval_secs")
         self._vlm = vlm
+        self._llm = llm
+        self._context = context
+        self._check_interval_secs = check_interval_secs
+        self._confirm_interval_secs = confirm_interval_secs
+        self._sleep = sleep
         self._frames = frames
         self._images = images
         self._decisions = decisions
@@ -87,7 +119,8 @@ class VisualAlertAgent(RoutableAgent):
             "alerts",
             (
                 "Set a one-shot background visual alert ONLY when explicitly asked to notify the user "
-                "when a specific visible condition occurs; cancel an existing alert on an explicit "
+                "when a specific visible condition occurs, including a condition they gave earlier or "
+                "noted; cancel an existing alert on an explicit "
                 "request. Visual questions, observations, recall, and fragments are not alert "
                 "controls."
             ),
@@ -107,12 +140,13 @@ class VisualAlertAgent(RoutableAgent):
             instructions=_CONTROL,
             criteria={
                 "start": (
-                    "An explicit request to be alerted later when a specific visually observable condition is seen."
+                    "An explicit request to be alerted later when a specific visually observable condition is "
+                    "seen, stated directly or clearly referring to one the participant gave earlier."
                 ),
                 "cancel": "An explicit request to cancel or stop a visual alert.",
                 "decline": (
                     "Anything else, including current visual questions, observations, ambiguous fragments, "
-                    "capability questions, or an unspecified alert condition."
+                    "capability questions, or an alert with neither a stated nor a referenced condition."
                 ),
             },
         )
@@ -146,18 +180,30 @@ class VisualAlertAgent(RoutableAgent):
         async with self._locks.setdefault(turn.participant_id, asyncio.Lock()):
             if self._closing:
                 return DestinationResult("answer", "")
+            # Compile under the lock so a departure or shutdown waits for it and then cancels the new job.
+            compiled = await self._compile(turn) if action == "start" else None
+            if self._closing:
+                return DestinationResult("answer", "")
+            if action == "start" and compiled is None:
+                # An unresolvable request leaves any running alert alone.
+                text = "I couldn't tell what to watch for. Please say what should trigger the alert."
+                async with self._outputs.reply(
+                    turn.participant_id, request_id=turn.turn_id, timestamp_us=turn.timestamp_us, started=started
+                ) as reply:
+                    await reply.send(text)
+                return DestinationResult("answer", text)
             await self._cancel(turn.participant_id)
             text = (
                 "The visual alert is cancelled."
-                if action == "cancel"
-                else "I'll alert you once when that condition is visible."
+                if compiled is None
+                else f"I'll alert you once when {compiled.condition}."
             )
             async with self._outputs.reply(
                 turn.participant_id, request_id=turn.turn_id, timestamp_us=turn.timestamp_us, started=started
             ) as reply:
                 await reply.send(text)
-            if action == "start" and not self._closing:
-                job = _Job(turn.query, f"alert:{turn.turn_id}")
+            if compiled is not None and not self._closing:
+                job = _Job(compiled.condition, compiled.relevance, f"alert:{turn.turn_id}")
                 self._jobs[turn.participant_id] = job
                 job.task = asyncio.create_task(
                     self._watch(turn.participant_id, job),
@@ -186,83 +232,137 @@ class VisualAlertAgent(RoutableAgent):
             job.task.cancel()
             await asyncio.gather(job.task, return_exceptions=True)
 
+    async def _compile(self, turn: AgentTurn) -> CompiledAlert | None:
+        context = "\n\n".join(block.text for block in self._context.blocks(turn.participant_id))
+        with nemo_relay.scope.scope(
+            "conversation-example.alert-compile",
+            nemo_relay.ScopeType.Agent,
+            input={"request": turn.query},
+            metadata={"participant_id": turn.participant_id, "turn_id": turn.turn_id},
+        ) as scope:
+            compiled = await compile_alert(self._llm, turn.query, history=turn.history, context=context)
+            nemo_relay.scope.event(
+                "conversation-example.alert-compile-result",
+                handle=scope,
+                data={"ready": compiled is not None},
+            )
+        return compiled
+
     async def _watch(self, participant_id: str, job: _Job) -> None:
-        winner: asyncio.Future[_Trigger] = asyncio.get_running_loop().create_future()
-        job.winner = winner
-        lanes = {
-            asyncio.create_task(
-                self._watch_fast(participant_id, job, winner),
-                name="alert-fast-clef",
-                context=nemo_relay.fork_asyncio_context(),
-            ),
-            asyncio.create_task(
-                self._watch_backup(participant_id, job, winner),
-                name="alert-cosmos-clef",
-                context=nemo_relay.fork_asyncio_context(),
-            ),
-        }
-        winner_wait: asyncio.Future[_Trigger] | None = None
         try:
-            pending = set(lanes)
-            winner_wait = asyncio.ensure_future(asyncio.shield(winner))
-            while pending and not winner.done():
-                done, _ = await asyncio.wait((*pending, winner_wait), return_when=asyncio.FIRST_COMPLETED)
-                if winner.done():
-                    break
-                for lane in done:
-                    if lane is winner_wait:
-                        continue
-                    pending.remove(lane)
-                    error = asyncio.CancelledError() if lane.cancelled() else lane.exception()
-                    if error is not None:
-                        logger.warning(
-                            "visual alert detector failed participant={!r} path={!r}: {}",
-                            participant_id,
-                            lane.get_name(),
-                            error,
+            while self._jobs.get(participant_id) is job:
+                started = time.monotonic()
+                frame = await self._frames.execute(CurrentFrameRequest(participant_id=participant_id))
+                if self._jobs.get(participant_id) is not job:
+                    return
+                image = self._images.resolve(frame.image)
+                # Only a frame that may show the subject pays for the Cosmos and condition checks.
+                screened = await self._screen(participant_id, job, image)
+                trigger = await self._confirm(participant_id, job, image) if screened else None
+                if self._jobs.get(participant_id) is not job:
+                    return
+                if trigger is not None:
+                    with nemo_relay.scope.scope(
+                        "conversation-example.alert-triggered",
+                        nemo_relay.ScopeType.Agent,
+                        input={
+                            "path": trigger.path,
+                            "confidence": trigger.confidence,
+                            "evidence": trigger.evidence,
+                        },
+                        metadata={"participant_id": participant_id},
+                    ) as scope:
+                        nemo_relay.scope.event(
+                            "conversation-example.alert-triggered-result",
+                            handle=scope,
+                            data={"path": trigger.path, "confidence": trigger.confidence},
                         )
-            if winner.done() and self._jobs.get(participant_id) is job:
-                trigger = winner.result()
-                for lane in lanes:
-                    if not lane.done() and not lane.cancelling():
-                        lane.cancel()
-                with nemo_relay.scope.scope(
-                    "conversation-example.alert-triggered",
-                    nemo_relay.ScopeType.Agent,
-                    input={
-                        "path": trigger.path,
-                        "confidence": trigger.confidence,
-                        "evidence": trigger.evidence,
-                    },
-                    metadata={"participant_id": participant_id},
-                ) as scope:
-                    nemo_relay.scope.event(
-                        "conversation-example.alert-triggered-result",
-                        handle=scope,
-                        data={"path": trigger.path, "confidence": trigger.confidence},
-                    )
-                if await self._publish_notice(participant_id, job, "Alert"):
-                    await self._describe(participant_id, job, trigger.image)
-            elif self._jobs.get(participant_id) is job:
-                logger.error("all visual alert detectors stopped participant={!r}", participant_id)
-                await self._publish_notice(participant_id, job, "I couldn't check the visual alert. It has stopped.")
+                    if await self._publish_notice(participant_id, job, "Alert"):
+                        await self._describe(participant_id, job, trigger.image)
+                    return
+                interval = self._confirm_interval_secs if screened else self._check_interval_secs
+                await self._sleep(max(0.0, interval - (time.monotonic() - started)))
         except asyncio.CancelledError:
             raise
         except Exception:  # noqa: BLE001 -- isolate a failed background job and report its retirement.
             logger.exception("visual alert stopped participant={!r}", participant_id)
             await self._publish_notice(participant_id, job, "I couldn't check the visual alert. It has stopped.")
         finally:
-            if winner_wait is not None and not winner_wait.done():
-                winner_wait.cancel()
-            for lane in lanes:
-                if not lane.done() and not lane.cancelling():
-                    lane.cancel()
-            await asyncio.gather(*lanes, return_exceptions=True)
+            await asyncio.gather(*job.checks, return_exceptions=True)
             # Identity prevents retired work from removing a replacement job; no await during cleanup.
             if self._jobs.get(participant_id) is job:
                 self._jobs.pop(participant_id, None)
 
-    async def _watch_fast(self, participant_id: str, job: _Job, winner: asyncio.Future[_Trigger]) -> None:
+    async def _screen(self, participant_id: str, job: _Job, image: ImageInput) -> bool:
+        question = DecisionQuestion(
+            instructions=_RELEVANCE,
+            criteria={
+                "yes": "The subject of the alert may be visible in the image, even partly or uncertainly.",
+                "no": "The subject of the alert is clearly absent from the image.",
+            },
+        )
+        state = {"condition": job.condition, "relevance": job.relevance}
+        with nemo_relay.scope.scope(
+            "conversation-example.alert-relevance",
+            nemo_relay.ScopeType.Agent,
+            input=state,
+            metadata={"participant_id": participant_id},
+        ) as scope:
+            response = await self._decisions.decide(
+                {"decision_path": "relevance", **state}, {"relevant": question}, images=[image]
+            )
+            answer = response.answers["relevant"]
+            if answer.choice not in question.criteria:
+                raise ValueError(f"Clef returned invalid alert relevance result {answer.choice!r}")
+            nemo_relay.scope.event(
+                "conversation-example.alert-relevance-result",
+                handle=scope,
+                data={"choice": answer.choice, "confidence": answer.confidence},
+            )
+        return answer.choice == "yes"
+
+    async def _confirm(self, participant_id: str, job: _Job, image: ImageInput) -> _Trigger | None:
+        """Judge one screened frame; the first path to confirm the condition wins."""
+
+        # The job owns the checks so a confirmed alert is announced without waiting for the other
+        # check to finish cancelling; the watch drains them before it retires.
+        checks = job.checks = {
+            asyncio.create_task(
+                check(participant_id, job, image),
+                name=name,
+                context=nemo_relay.fork_asyncio_context(),
+            )
+            for name, check in (
+                ("alert-fast-clef", self._confirm_direct),
+                ("alert-cosmos-clef", self._confirm_observed),
+            )
+        }
+        failures = 0
+        try:
+            while checks:
+                done, _ = await asyncio.wait(checks, return_when=asyncio.FIRST_COMPLETED)
+                for check in done:
+                    checks.discard(check)
+                    error = asyncio.CancelledError() if check.cancelled() else check.exception()
+                    if error is not None:
+                        failures += 1
+                        logger.warning(
+                            "visual alert check failed participant={!r} path={!r}: {}",
+                            participant_id,
+                            check.get_name(),
+                            error,
+                        )
+                    elif (trigger := check.result()) is not None:
+                        return trigger
+            # One failed path leaves the other usable for later frames; both failing retires the job.
+            if failures == 2:
+                raise RuntimeError("all visual alert checks failed")
+            return None
+        finally:
+            for check in checks:
+                check.cancel()
+
+    async def _confirm_direct(self, participant_id: str, job: _Job, image: ImageInput) -> _Trigger | None:
         question = DecisionQuestion(
             instructions=_CONDITION,
             criteria={
@@ -270,23 +370,16 @@ class VisualAlertAgent(RoutableAgent):
                 "no": "The condition is absent, uncertain, obscured, or cannot be established from this single image.",
             },
         )
-        while self._jobs.get(participant_id) is job and not winner.done():
-            frame = await self._frames.execute(CurrentFrameRequest(participant_id=participant_id))
-            if self._jobs.get(participant_id) is not job:
-                return
-            image = self._images.resolve(frame.image)
-            await self._judge(
-                participant_id,
-                job,
-                winner,
-                path="fast-clef",
-                state={"condition": job.condition},
-                questions={"condition_met": question},
-                images=[image],
-                trigger=_Trigger(image, "direct image decision", "fast-clef", 0.0),
-            )
+        return await self._judge(
+            participant_id,
+            path="fast-clef",
+            state={"condition": job.condition},
+            question=question,
+            images=[image],
+            trigger=_Trigger(image, "direct image decision", "fast-clef", 0.0),
+        )
 
-    async def _watch_backup(self, participant_id: str, job: _Job, winner: asyncio.Future[_Trigger]) -> None:
+    async def _confirm_observed(self, participant_id: str, job: _Job, image: ImageInput) -> _Trigger | None:
         question = DecisionQuestion(
             instructions=(
                 "Judge only whether the written observation establishes the requested visible condition. "
@@ -299,80 +392,65 @@ class VisualAlertAgent(RoutableAgent):
                 "no": "The observation is absent, uncertain, obscured, or does not establish the condition.",
             },
         )
-        while self._jobs.get(participant_id) is job and not winner.done():
-            frame = await self._frames.execute(CurrentFrameRequest(participant_id=participant_id))
-            if self._jobs.get(participant_id) is not job:
-                return
-            image = self._images.resolve(frame.image)
-            held_images = ImageRegistry(capacity=1)
-            reference = held_images.put(image)
-            with nemo_relay.scope.scope(
-                "conversation-example.alert-observation",
-                nemo_relay.ScopeType.Agent,
-                input={"condition": job.condition, "image_role": "current still frame"},
-                metadata={"participant_id": participant_id},
-            ) as scope:
-                observation = await ImageQueryTool(
-                    images=held_images,
-                    vlm=self._vlm,
-                    system_prompt=_BACKUP_PROMPT,
-                ).execute(ImageQueryRequest(image=reference, query=job.condition))
-                nemo_relay.scope.event(
-                    "conversation-example.alert-observation-result",
-                    handle=scope,
-                    data={"available": observation.available},
-                )
-            if not observation.available:
-                raise RuntimeError("Cosmos could not inspect the alert frame")
-            if self._jobs.get(participant_id) is not job:
-                return
-            await self._judge(
-                participant_id,
-                job,
-                winner,
-                path="cosmos-clef",
-                state={"condition": job.condition, "current_observation": observation.text},
-                questions={"condition_met": question},
-                images=(),
-                trigger=_Trigger(image, observation.text, "cosmos-clef", 0.0),
+        held_images = ImageRegistry(capacity=1)
+        reference = held_images.put(image)
+        with nemo_relay.scope.scope(
+            "conversation-example.alert-observation",
+            nemo_relay.ScopeType.Agent,
+            input={"condition": job.condition, "image_role": "current still frame"},
+            metadata={"participant_id": participant_id},
+        ) as scope:
+            observation = await ImageQueryTool(
+                images=held_images,
+                vlm=self._vlm,
+                system_prompt=_BACKUP_PROMPT,
+            ).execute(ImageQueryRequest(image=reference, query=job.condition))
+            nemo_relay.scope.event(
+                "conversation-example.alert-observation-result",
+                handle=scope,
+                data={"available": observation.available},
             )
+        if not observation.available:
+            raise RuntimeError("Cosmos could not inspect the alert frame")
+        return await self._judge(
+            participant_id,
+            path="cosmos-clef",
+            state={"condition": job.condition, "current_observation": observation.text},
+            question=question,
+            images=(),
+            trigger=_Trigger(image, observation.text, "cosmos-clef", 0.0),
+        )
 
     async def _judge(
         self,
         participant_id: str,
-        job: _Job,
-        winner: asyncio.Future[_Trigger],
         *,
         path: str,
         state: dict[str, str],
-        questions: dict[str, DecisionQuestion],
+        question: DecisionQuestion,
         images: Sequence[ImageInput],
         trigger: _Trigger,
-    ) -> None:
+    ) -> _Trigger | None:
         with nemo_relay.scope.scope(
             "conversation-example.alert-condition",
             nemo_relay.ScopeType.Agent,
             input={"path": path, **state},
             metadata={"participant_id": participant_id},
         ) as scope:
-            response = await self._decisions.decide({"decision_path": path, **state}, questions, images=images)
+            response = await self._decisions.decide(
+                {"decision_path": path, **state}, {"condition_met": question}, images=images
+            )
             answer = response.answers["condition_met"]
-            if answer.choice not in questions["condition_met"].criteria:
+            if answer.choice not in question.criteria:
                 raise ValueError(f"Clef returned invalid alert condition result {answer.choice!r}")
-            confidence = answer.confidence
             nemo_relay.scope.event(
                 "conversation-example.alert-condition-result",
                 handle=scope,
-                data={"path": path, "choice": answer.choice, "confidence": confidence},
+                data={"path": path, "choice": answer.choice, "confidence": answer.confidence},
             )
-        if (
-            answer.choice == "yes"
-            and self._jobs.get(participant_id) is job
-            and job.winner is winner
-            and not winner.done()
-        ):
-            # Event-loop atomic claim: no await may separate the check from set_result.
-            winner.set_result(_Trigger(trigger.image, trigger.evidence, path, confidence))
+        if answer.choice != "yes":
+            return None
+        return _Trigger(trigger.image, trigger.evidence, path, answer.confidence)
 
     async def _publish_notice(self, participant_id: str, job: _Job, text: str) -> bool:
         if self._jobs.get(participant_id) is not job:

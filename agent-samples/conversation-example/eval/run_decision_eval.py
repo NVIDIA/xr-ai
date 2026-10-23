@@ -3,9 +3,9 @@
 
 """Run one bounded, teacher-forced Clef routing/control pass over sample fixtures.
 
-This evaluator does not call answer, VLM, voice, or compaction services. Prior
-turns use explicitly authored fixture completions; they are inputs, never scored
-as generated answers.
+This evaluator does not call answer, VLM, voice, or compaction services; alert
+compilation returns a fixed fixture watch. Prior turns use explicitly authored
+fixture completions; they are inputs, never scored as generated answers.
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ from xr_ai_conversation import (  # noqa: E402
     ContextManager,
     Conversation,
 )
-from xr_ai_models import DecisionResponse, load_models_config, make_decision  # noqa: E402
+from xr_ai_models import ChatResponse, DecisionResponse, load_models_config, make_decision  # noqa: E402
 from xr_ai_routing import (  # noqa: E402
     AgentExchange,
     AgentRouter,
@@ -146,6 +146,14 @@ class _DecisionRecorder:
 class _NoAnswerModel:
     async def stream(self, *_args, **_kwargs):
         raise AssertionError("decision-only evaluation must not generate answers")
+
+
+class _FixtureAlertCompiler:
+    """Teacher-force alert compilation: routing fixtures score control decisions, not compiled watches."""
+
+    async def chat(self, *_args, **_kwargs) -> ChatResponse:
+        watch = {"status": "ready", "condition": "the fixture condition is visible", "relevance": "the fixture subject"}
+        return ChatResponse(content=json.dumps(watch), reasoning=None, tool_calls=None, finish_reason="stop", raw={})
 
 
 class _Frames:
@@ -289,6 +297,8 @@ def _destinations(recorder: _DecisionRecorder, context_budget: int):
         recorder,
         publish_alerts,
         vlm=None,
+        llm=_FixtureAlertCompiler(),
+        context=manager,
         runtime=output_runtime,
         output_topic=VOICE_OUTPUT_TOPIC,
     )

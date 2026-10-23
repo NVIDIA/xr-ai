@@ -1,0 +1,1 @@
+This is a cheap screening step before a careful check. Decide whether the subject of the alert might be visible in the CURRENT image: the objects, people, or scene elements the relevance phrase names, even if partly visible, small, or uncertain. Answer yes when the subject may be present. Answer no only when it is clearly absent. Do not judge whether the full condition is met.
