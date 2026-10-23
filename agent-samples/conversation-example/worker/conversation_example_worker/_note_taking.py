@@ -38,7 +38,8 @@ class NoteTakingAgent(RoutableAgent):
         self._conversation = conversation
         self._static_description = (
             "A participant-scoped note-taking destination. It starts only when explicitly requested, captures "
-            "user-authored notes, and stays focused until the participant finishes or hands off. It does not "
+            "user-authored notes, and stays focused until the participant finishes, including across a question "
+            "answered by another destination. It does not "
             "provide general knowledge or inspect the current camera."
         )
         self._context_budget_bytes = context_budget_bytes
@@ -120,7 +121,7 @@ class NoteTakingAgent(RoutableAgent):
             action = "other"
         self._pending[turn.participant_id] = (turn.turn_id, action, focused)
         if action == "handoff":
-            return Admission("release")
+            return Admission("decline")
         try:
             return await self._conversation.admit(turn, focused=focused)
         except BaseException:

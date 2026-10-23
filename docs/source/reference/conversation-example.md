@@ -95,9 +95,10 @@ Retarget replaces the active task and rolling window; handoff declines so anothe
 destination can answer the same request. It does not take
 router focus. A distinct note-taking destination acquires focus
 on request. It stores user-authored notes verbatim, supports readback, and keeps
-focus through topic changes until a semantic finish or handoff. Finishing notes
-consumes that request and releases focus; an explicit handoff releases focus and
-runs the same request through normal routing. Captured notes remain available to
+focus through topic changes until a semantic finish. Finishing notes consumes
+that request and releases focus. A question handoff declines only that query,
+so another destination can answer and the next turn returns to note capture.
+Captured notes remain available to
 general conversation afterward. Observation records are never converted into
 notes. Scope admission is based on the request,
 not whether the camera will return a usable frame. Direct visual requests must

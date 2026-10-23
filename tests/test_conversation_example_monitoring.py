@@ -969,7 +969,7 @@ async def test_monitor_leave_is_participant_scoped_and_worker_stop_drains_remain
 
 
 @pytest.mark.asyncio
-async def test_note_handoff_releases_focus_and_routes_same_query_to_conversation():
+async def test_note_question_handoff_preserves_focus_until_explicit_finish():
     note_conversation = _Conversation("notes")
     conversation = _Conversation("conversation")
     published = []
@@ -979,7 +979,7 @@ async def test_note_handoff_releases_focus_and_routes_same_query_to_conversation
 
     notes = NoteTakingAgent(
         note_conversation,
-        _Decisions("start", "capture", "handoff"),
+        _Decisions("start", "capture", "handoff", "capture", "finish"),
         context_budget_bytes=4096,
         publish_context=publish_note,
         runtime=CaptureRuntime(),
@@ -1003,10 +1003,19 @@ async def test_note_handoff_releases_focus_and_routes_same_query_to_conversation
     assert len(decisions.calls) == 1
     assert output == [("conversation", "Answered by conversation.")]
     assert "headset text should stay legible" in notes.routing_aid("alice").description
-    assert len(published) == 3
+    assert len(published) == 2
     assert "Session status: active" in published[0][1].text
     assert "headset text should stay legible" in published[1][1].text
-    assert "Session status: not active" in published[2][1].text
+    assert "Session status: active" in published[-1][1].text
+    resumed, _ = await _turn(router, "Record that the controls need larger targets.")
+    assert resumed.disposition == "focus"
+    assert "controls need larger targets" in notes.routing_aid("alice").description
+    assert len(conversation.answers) == 1
+    finished, _ = await _turn(router, "Finish taking notes.")
+    assert finished.disposition == "release"
+    assert "Session status: not active" in published[-1][1].text
+    await _turn(router, "What is a rainbow?")
+    assert conversation.answers[-1].query == "What is a rainbow?"
     await router.stop()
 
 
