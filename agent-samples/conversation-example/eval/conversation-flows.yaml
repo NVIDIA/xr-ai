@@ -494,24 +494,25 @@
       authored_completion: "For an AR/VR tutorial, let people complete the main steps with one hand and check that the controls remain reachable."
       query: How should I validate one-handed use in an AR/VR tutorial?
       acceptable_destinations: [conversation]
-      admission_expectations: {notes: release, conversation: accept}
+      admission_expectations: {notes: decline, conversation: accept}
       evidence_expectation: none
       router_invoked: true
       destination_disposition: answer
       focus_before: notes
-      focus_after: null
+      focus_after: notes
       destination_actions: {notes: handoff}
       answer_expectation: nonempty
-    - name: general_conversation_recalls_note_after_handoff
+    - name: focused_notes_read_back_after_handoff
       authored_completion: "You wrote down that the onboarding should be usable with one hand."
       query: What did I write down about one-handed use?
-      acceptable_destinations: [conversation]
-      admission_expectations: {conversation: accept}
+      acceptable_destinations: [notes]
+      admission_expectations: {notes: accept}
+      destination_actions: {notes: readback}
       evidence_expectation: completed_history_only
-      router_invoked: true
-      destination_disposition: answer
-      focus_before: null
-      focus_after: null
+      router_invoked: false
+      destination_disposition: focus
+      focus_before: notes
+      focus_after: notes
       context_sources_before: [conversation-example.foreground-notes]
       answer_any_of: [one hand, one-handed]
 
