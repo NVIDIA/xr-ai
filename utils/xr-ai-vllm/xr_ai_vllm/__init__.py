@@ -46,7 +46,6 @@ import os
 from pathlib import Path
 
 from . import _docker, _pip
-from ._identity import persistent_server_identity
 from ._config import (
     gpu_compute_major,
     gpu_is_dgx_spark,
@@ -55,6 +54,7 @@ from ._config import (
     resolve_model_cache,
     setup_hf_env,
 )
+from ._identity import persistent_server_identity
 
 log = logging.getLogger(__name__)
 
