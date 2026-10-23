@@ -3,9 +3,9 @@
 
 """Control procedure capture from spoken commands and participant connections.
 
-CaptureAgent receives accepted speech from VoiceAgent, handles "start capture"
-and "stop capture", and sends spoken acknowledgements. It passes narration to
-the capture backend in capturing.py and finalizes active capture on disconnect.
+CaptureAgent welcomes idle participants, handles "start capture" and "stop
+capture", and sends spoken acknowledgements. It passes narration to the capture
+backend in capturing.py and finalizes active capture on disconnect.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 
 from loguru import logger
 from xr_ai_hub import ParticipantEvent
-from xr_ai_interaction import ResponseOutputs, UserQuery
+from xr_ai_interaction import ParticipantJoined, ResponseOutputs, UserQuery
 from xr_ai_runtime import Agent, RuntimeContext, Topic, subscribe
 from xr_ai_voice import VOICE_OUTPUT_TOPIC
 
@@ -25,6 +25,11 @@ from .capturing import _Capture
 
 _COMMAND = re.compile(r"\s*(start|stop)\s+capture[.!?]*\s*", re.IGNORECASE)
 CAPTURE_INPUT_TOPIC = Topic("task.capture.input", UserQuery)
+CAPTURE_JOINED_TOPIC = Topic("task.capture.joined", ParticipantJoined)
+_WELCOME = (
+    "Say start capture to start the recording and demonstrate your procedure. "
+    "To finish recording, say stop capture."
+)
 
 
 @dataclass
@@ -35,6 +40,8 @@ class _Connection:
     # Accepted input identity, including a start still queued behind finalization.
     # It can differ from CaptureAgent._sessions, which tracks backend ownership.
     recording: _Recording | None = None
+    # A stop restores idle state but must not revive reminders from before a start.
+    capture_generation: int = 0
 
 
 @dataclass
@@ -79,7 +86,11 @@ class CaptureAgent(Agent):
             return
         try:
             # Preserve the order of start and stop acknowledgements.
-            reply = ResponseOutputs(ctx, VOICE_OUTPUT_TOPIC).reply(pid, request_id=ctx.metadata.message_id)
+            outputs = ResponseOutputs(ctx, VOICE_OUTPUT_TOPIC)
+            # A connection greeting still queued behind speech must not play
+            # after a command has started a silent capture.
+            await outputs.withdraw(pid)
+            reply = outputs.reply(pid, request_id=ctx.metadata.message_id)
             async with reply:
                 await reply.send(text)
         except (Exception, BaseExceptionGroup):
@@ -130,6 +141,16 @@ class CaptureAgent(Agent):
 
         return wait()
 
+    @subscribe(CAPTURE_JOINED_TOPIC)
+    async def participant_joined(self, _event: ParticipantJoined, ctx: RuntimeContext) -> None:
+        # The voice event arrives when speech output is ready. Raw hub events
+        # still own capture lifecycle and may arrive through a different endpoint.
+        pid = ctx.metadata.participant_id
+        connection = self._connections.get(pid)
+        if self._closed or (connection is not None and connection.recording is not None):
+            return
+        await ResponseOutputs(ctx, VOICE_OUTPUT_TOPIC).update(pid, _WELCOME)
+
     @subscribe(CAPTURE_INPUT_TOPIC)
     async def on_input(self, transcript: UserQuery, ctx: RuntimeContext) -> None:
         # VoiceAgent dispatches accepted input after cancelling prior output.
@@ -151,6 +172,7 @@ class CaptureAgent(Agent):
                 return
             recording = _Recording(connection)
             connection.recording = recording
+            connection.capture_generation += 1
 
             async def start() -> None:
                 if self._closed or connection.cancelled.is_set():
@@ -168,7 +190,7 @@ class CaptureAgent(Agent):
                         self._forget(pid, recording)
 
             self._enqueue(pid, start)
-        elif command:
+        elif command and recording is not None:
             connection.recording = None
 
             async def finish() -> None:
@@ -189,6 +211,14 @@ class CaptureAgent(Agent):
                     await self._capture_backend.capture_transcript(pid, transcript.text, transcript.timestamp_us)
 
             self._enqueue(pid, narrate)
+        else:
+            generation = connection.capture_generation
+
+            async def remind() -> None:
+                if connection.recording is None and connection.capture_generation == generation:
+                    await self._say(pid, connection, ctx, _WELCOME)
+
+            self._enqueue(pid, remind)
         # Return promptly; this owner drains per-participant writes and boundaries.
 
     async def close(self) -> None:

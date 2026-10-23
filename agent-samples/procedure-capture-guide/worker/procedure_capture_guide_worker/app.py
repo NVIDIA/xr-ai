@@ -27,7 +27,7 @@ from xr_ai_tools.vision import ImageQueryTool, MultiImageQueryTool
 from xr_ai_voice import VadConfig, VoiceAgent, llm_update_combiner
 from xr_ai_voicegate import load_voice_gate_config
 
-from .capture.agent import CAPTURE_INPUT_TOPIC, CaptureAgent
+from .capture.agent import CAPTURE_INPUT_TOPIC, CAPTURE_JOINED_TOPIC, CaptureAgent
 from .capture.capturing import _Capture
 from .config import WorkerConfig
 from .guide.agent import GuideAgent
@@ -75,6 +75,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
         # repeated captures on the same participant connection.
         capture = runtime.register("capture", CaptureAgent(capture_backend))
         endpoint.on_participant(capture.receive)
+        voice_options["participant_joined_topic"] = CAPTURE_JOINED_TOPIC
     else:
         guide = runtime.register("guide", GuideAgent(
             guide=selected_guide, llm=llm, current_frame=frames,
