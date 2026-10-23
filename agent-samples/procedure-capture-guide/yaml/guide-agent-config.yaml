@@ -1,6 +1,5 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Guide-only settings; paths are relative to this file. Models are shared with capture.
-guides_dir: ../guides
+# Guide-only verification settings. The CLI selects the guide file; models are shared with capture.
 vision_timeout_s: 15.0

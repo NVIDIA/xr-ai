@@ -11,7 +11,7 @@ runs inside its own process and launches procedure_capture_guide_worker/app.py.
 This launcher supervises the hub and worker; model services must already be available.
 Choose --mode capture or --mode guide. In capture mode, say "start capture"
 to begin and "stop capture" to finish; --output-root selects the packet directory.
-Guide mode requires a guide name after --mode guide. Say "start guide" to begin
+Guide mode requires a guide file or directory path after --mode guide. Say "start guide" to begin
 that guide and "stop guide" to cancel; connecting alone does not start it.
 In either mode, --session-recording independently records the whole participant
 connection; it does not start or stop procedure capture or guided execution.
@@ -60,7 +60,9 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--mode", choices=("capture", "guide"), default="capture", help="worker capability to run")
     parser.add_argument(
-        "guide_name", nargs="?", metavar="GUIDE_NAME", help="exact approved guide name or ID (guide mode only)",
+        "guide_path", nargs="?", metavar="GUIDE_PATH",
+        help=("approved guide YAML file or directory containing exactly one top-level YAML file; "
+              "absolute or relative to the sample directory (guide mode only)"),
     )
     parser.add_argument(
         "--output-root", type=Path, metavar="PATH",
@@ -85,12 +87,16 @@ def run(argv: Sequence[str] | None = None) -> None:
     parser = _parser()
     args = parser.parse_args(argv)
     hub_config = args.hub_config.expanduser().resolve() if args.hub_config is not None else None
-    if args.mode == "capture" and args.guide_name is not None:
-        parser.error("GUIDE_NAME requires --mode guide")
+    if args.mode == "capture" and args.guide_path is not None:
+        parser.error("GUIDE_PATH requires --mode guide")
     if args.mode == "guide" and args.output_root is not None:
         parser.error("--output-root requires --mode capture")
-    if args.mode == "guide" and (args.guide_name is None or not args.guide_name.strip()):
-        parser.error("--mode guide requires a non-empty GUIDE_NAME")
+    if args.mode == "guide" and (args.guide_path is None or not args.guide_path.strip()):
+        parser.error("--mode guide requires a non-empty GUIDE_PATH")
+    guide_path = None
+    if args.mode == "guide":
+        # Preserve sample-relative CLI paths without coupling the worker to this tree.
+        guide_path = str((_BASE / Path(args.guide_path).expanduser()).resolve())
     setup_logging("orchestrator", namespace="procedure-capture-guide")
     if args.mode == "capture" and args.output_root is None:
         run_stack(_build_processes(capture=args.session_recording, hub_config=hub_config), _BASE,
@@ -103,7 +109,7 @@ def run(argv: Sequence[str] | None = None) -> None:
         request.write_text(json.dumps({
             "worker_config": str(_BASE / "yaml/worker.yaml"),
             "mode": args.mode,
-            "guide_name": args.guide_name,
+            "guide_path": guide_path,
             "output_root": str(args.output_root.expanduser().resolve()) if args.output_root is not None else None,
         }), encoding="utf-8")
         run_stack(_build_processes(worker_config=request, capture=args.session_recording, hub_config=hub_config), _BASE,

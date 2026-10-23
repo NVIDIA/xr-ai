@@ -3,10 +3,9 @@
 
 """Select an approved local procedure guide for the guide worker.
 
-Find the guide named on the command line, validate it through _workflow_spec.py,
-and require an unambiguous match with approved status. Retain the loaded guide
-and its content hash so editing the source file does not change a running
-worker's instructions.
+Select a file directly or from a directory containing one YAML file. Validate it
+through _workflow_spec.py and require approved status. Retain its content hash so
+editing the source file does not change a running worker's instructions.
 """
 
 from __future__ import annotations
@@ -27,38 +26,36 @@ class SelectedGuide:
     workflow: Workflow
 
 
-def select_guide(directory: Path, name: str) -> SelectedGuide:
-    """Match an exact case-insensitive task name or ID; never approve implicitly."""
-    selector = name.strip().casefold()
-    if not selector:
-        raise ValueError("guide name must not be empty")
-    directory = directory.resolve()
-    matches: list[SelectedGuide] = []
-    invalid: list[str] = []
-    for path in sorted(directory.rglob("*")):
-        if not path.name.endswith((".guide.yaml", ".guide.yml")):
-            continue
-        try:
-            if path.is_symlink() or not path.resolve().is_relative_to(directory):
-                raise ValueError("symbolic-link guides are not allowed")
-            with path.open("rb") as stream:
-                content = stream.read(1_000_001)
-            if len(content) > 1_000_000:
-                raise ValueError("guide exceeds 1000000 bytes")
-            workflow = parse_workflow(content)
-        except (OSError, ValueError, yaml.YAMLError) as exc:
-            invalid.append(f"{path.name}: {exc}")
-            continue
-        if selector in {workflow.name.casefold(), workflow.id.casefold()}:
-            matches.append(SelectedGuide(path, hashlib.sha256(content).hexdigest(), workflow))
-    if not matches:
-        detail = f" Invalid guides: {'; '.join(invalid)}" if invalid else ""
-        raise ValueError(f"No guide named {name!r} in {directory}.{detail}")
-    if len(matches) != 1:
-        raise ValueError(f"Ambiguous guide name {name!r}: {[str(item.path) for item in matches]}")
-    guide = matches[0]
+def load_guide(path: Path) -> SelectedGuide:
+    """Resolve an unambiguous guide; pin validation and hashing to the same bytes."""
+    try:
+        if path.is_dir():
+            candidates = sorted(
+                child for child in path.iterdir()
+                if child.suffix.lower() in {".yaml", ".yml"} and child.is_file()
+            )
+            if not candidates:
+                raise ValueError(
+                    "no YAML files at this directory level; provide the path to a specific guide YAML file"
+                )
+            if len(candidates) > 1:
+                listing = "\n".join(f"  {candidate.name}" for candidate in candidates)
+                raise ValueError(
+                    f"multiple YAML files at this directory level:\n{listing}\n"
+                    "Provide the path to a specific guide YAML file."
+                )
+            path = candidates[0]
+        path = path.resolve()
+        with path.open("rb") as stream:
+            content = stream.read(1_000_001)
+        if len(content) > 1_000_000:
+            raise ValueError("guide exceeds 1000000 bytes")
+        workflow = parse_workflow(content)
+    except (OSError, ValueError, yaml.YAMLError) as exc:
+        raise ValueError(f"Cannot load guide {path}: {exc}") from exc
+    guide = SelectedGuide(path, hashlib.sha256(content).hexdigest(), workflow)
     if not guide.workflow.runnable:
         raise ValueError(
-            f"Guide {name!r} is a draft; review it and set task.status to approved before using guide mode."
+            f"Guide {path} is a draft; review it and set task.status to approved before using guide mode."
         )
     return guide

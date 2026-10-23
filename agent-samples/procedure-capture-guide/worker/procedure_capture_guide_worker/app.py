@@ -32,7 +32,7 @@ from .capture.capturing import _Capture
 from .config import WorkerConfig
 from .guide.agent import GuideAgent
 from .guide.events import INTERRUPTED_TOPIC, PARTICIPANT_JOINED_TOPIC, PARTICIPANT_LEFT_TOPIC, USER_QUERY_TOPIC
-from .guide.guides import select_guide
+from .guide.guides import load_guide
 
 _HUB_PUB = "ipc:///tmp/xr_hub_pub"
 _HUB_PUSH = "ipc:///tmp/xr_hub_in"
@@ -45,7 +45,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
     if config.mode == "guide":
         if config.guide is None:
             raise ValueError("guide mode requires guide configuration")
-        selected_guide = select_guide(config.guide.guides_dir, config.guide.guide_name)
+        selected_guide = load_guide(config.guide.guide_path)
     elif config.capture is None:
         raise ValueError("capture mode requires capture configuration")
     models = load_models_config(config.models_config)
