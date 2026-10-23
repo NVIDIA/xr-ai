@@ -189,7 +189,7 @@ def test_ignored_diagnostic_failure_preserves_owner_transcription(_streaming_mod
         original = session._decode
 
         def decode(*args):
-            if args[3] == 1:
+            if args[1] == 1:
                 raise RuntimeError("background decoder failed")
             return original(*args)
 
@@ -318,9 +318,9 @@ def _attributed_session(streaming_models, cfg):
     original_step = session._step_native
     phrases = {}
 
-    def decode(encoded, lengths, predictions, selected, drop, stream, finished):
+    def decode(predictions, selected, drop, stream, finished):
         decoded.append(selected)
-        return original(encoded, lengths, predictions, selected, drop, stream, finished)
+        return original(predictions, selected, drop, stream, finished)
 
     def step(encoded, lengths, predictions, selected, *args):
         text[0] = phrases.get(selected, "")
@@ -398,10 +398,10 @@ def test_candidate_failure_is_not_silently_dropped_from_arbitration(_streaming_m
     session, feed, _decoded = _attributed_session(_streaming_models, cfg)
     original = session._decode
 
-    def fail_one(encoded, lengths, predictions, selected, *args):
+    def fail_one(predictions, selected, *args):
         if selected == 2:
             raise RuntimeError("candidate failed")
-        return original(encoded, lengths, predictions, selected, *args)
+        return original(predictions, selected, *args)
 
     session._decode = fail_one
     with pytest.raises(RuntimeError, match="candidate failed"):
@@ -623,3 +623,41 @@ def test_next_turn_does_not_inherit_late_finalized_tokens(_streaming_models, mon
         outputs.extend(e["text"] for e in session._feed(bytes(5120)) if e["kind"] == "one_shot")
     assert [value.strip() for value in outputs] == ["alpha beta", "gamma"]
     assert not session._speaker_states[3].pending
+
+
+@pytest.mark.parametrize("mode", ["conversation", "always_on", "wake_only", "hybrid"])
+@pytest.mark.parametrize("diagnostics", [False, True])
+def test_finalized_candidate_reconciliation_remains_required_during_silence(
+    _streaming_models, monkeypatch, mode, diagnostics,
+):
+    import torch
+    from nemo.collections.asr.parts.utils.rnnt_utils import Hypothesis
+    from speaker_stt._inference import _Session
+
+    models, activity, _calls, _masks, _allocations, _text = _streaming_models
+
+    def decode(**kwargs):
+        previous = kwargs["previous_hypotheses"]
+        step = previous[0].dec_state + 1 if previous else 1
+        value = "alpha" if step == 1 else ""
+        if step == 3:
+            value = " beta" if kwargs["keep_all_outputs"] else " delta"
+        hyp = Hypothesis(y_sequence=torch.tensor([ord(c) for c in value]), dec_state=step)
+        return None, [hyp], *models.asr.encoder.get_initial_cache_state(batch_size=1), [hyp]
+
+    monkeypatch.setattr(models.asr, "conformer_stream_step", decode)
+    session = _Session(
+        models, _SpeakerConfig(mode=mode, diagnostics=diagnostics, silence_duration=0.16), audio_origin_us=0,
+    )
+    activity[:] = [3]
+    session._feed(bytes(5120))
+    activity[:] = []
+    events = session._feed(bytes(5120))
+    if mode == "always_on":
+        assert [e["text"] for e in events if e["kind"] == "one_shot"] == ["alpha beta"]
+    assert session.selection.owner is None
+    assert session._speaker_states[3].pending
+    # No active candidate remains, but real quiet must still reconcile the
+    # suffix already consumed by the finalized utterance.
+    with pytest.raises(RuntimeError, match="revised finalized audio"):
+        session._feed(bytes(5120))

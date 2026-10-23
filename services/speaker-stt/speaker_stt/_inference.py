@@ -189,8 +189,6 @@ class _Session:
 
     def _decode_streams(
         self,
-        features,
-        lengths,
         predictions,
         drop: int,
         active: set[int],
@@ -198,23 +196,10 @@ class _Session:
         streams: dict[int, _DecodedStream],
         *,
         required: set[int],
-        encoded_features=None,
     ) -> tuple[dict[int, str], list[tuple[int, _DecodedStream]]]:
-        """Share encoding while retaining independent attributed decoder state."""
+        """Finalize attributed streams from this hop's native decoder output."""
         speakers = (active | streams.keys()) - self._unavailable
         if not speakers:
-            return {}, []
-        try:
-            encoded, encoded_lengths = (
-                self.adapter.forward_pre_encoded(features, lengths, drop)
-                if encoded_features is None
-                else encoded_features
-            )
-        except Exception:
-            if required:
-                raise
-            streams.clear()
-            logger.exception("optional speaker stream encoding failed")
             return {}, []
         texts, completed = {}, []
         seconds = self.models.hop_samples / 16000
@@ -231,7 +216,7 @@ class _Session:
                     stream.duration >= self.selection.cfg.max_utterance_s
                 )
                 stream.text = self._decode(
-                    encoded, encoded_lengths, predictions, speaker, drop, stream.asr,
+                    predictions, speaker, drop, stream.asr,
                     stream.silence >= self.selection.cfg.silence_duration,
                 )
             except Exception:
@@ -247,7 +232,7 @@ class _Session:
         return texts, completed
 
     def _candidate_step(
-        self, features, lengths, predictions, drop: int, active: set[int], pts_us: int, encoded_features=None,
+        self, predictions, drop: int, active: set[int], pts_us: int,
     ) -> list[dict]:
         """Decode attributed candidates before resolving this step's enrollment."""
         self._candidate_completed = []
@@ -265,15 +250,12 @@ class _Session:
         # All pre-enrollment streams are required: losing one could turn a
         # simultaneous phrase tie into a false unique nomination.
         _, finished = self._decode_streams(
-            features,
-            lengths,
             predictions,
             drop,
             active - self._truncated_episodes.keys(),
             pts_us,
             self._candidate_streams,
             required=speakers,
-            encoded_features=encoded_features,
         )
         completed = []
         for speaker, stream in finished:
@@ -335,7 +317,7 @@ class _Session:
                 raise RuntimeError("speaker decoder revised finalized audio; reconnect the stream")
         state.emitted = tokens
 
-    def _decode(self, encoded, encoded_lengths, predictions, selected, drop, stream, finished) -> str:
+    def _decode(self, predictions, selected, drop, stream, finished) -> str:
         stream.tokens.extend(stream.emitted)
         if finished:
             # Virtual terminal silence must not advance the live audio timeline
@@ -446,8 +428,12 @@ class _Session:
                 needed = active if self.selection.owner is None or self.selection.cfg.diagnostics else set()
                 if self.selection.owner is not None:
                     needed = needed | {self.selection.owner}
+                # A completed candidate's padded suffix remains authoritative
+                # until subsequent real audio reconciles it, even in silence.
                 required = (
-                    (active | self._candidate_streams.keys())
+                    (active | self._candidate_streams.keys() | {
+                        speaker for speaker, state in self._speaker_states.items() if state.pending
+                    })
                     if self.selection.owner is None
                     else {self.selection.owner}
                 )
@@ -468,7 +454,7 @@ class _Session:
                         logger.exception("optional speaker continuation failed speaker={}", speaker)
                 if self.selection.owner is None:
                     candidate_events = self._candidate_step(
-                        features, lengths, preds, drop, active, chunk_pts, encoded_features,
+                        preds, drop, active, chunk_pts,
                     )
                     events.extend(candidate_events)
                     if self.selection.cfg.diagnostics:
@@ -498,7 +484,6 @@ class _Session:
                 completed = []
                 if selected is not None:
                     self.selection.text = self._decode(
-                        *encoded_features,
                         preds,
                         selected,
                         drop,
@@ -511,15 +496,12 @@ class _Session:
                         self.last_partial = text
                 if self.selection.cfg.diagnostics:
                     _, completed = self._decode_streams(
-                        features,
-                        lengths,
                         preds,
                         drop,
                         active - {owner_before},
                         chunk_pts,
                         self._diagnostic_streams,
                         required=set(),
-                        encoded_features=encoded_features,
                     )
                 if self.selection._finished:
                     # Forced truncation cannot enroll a voice from a prefix or
