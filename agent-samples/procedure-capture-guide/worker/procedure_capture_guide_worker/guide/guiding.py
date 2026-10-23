@@ -505,7 +505,15 @@ class _Guide:
             revision = session.revision
             state = dict(session.state)
             session.next_tick = now + step.trigger.interval_s
-        observation = await self._trigger(session, step, state)
+        try:
+            observation = await self._trigger(session, step, state)
+        except Exception:
+            # A failed observation breaks consecutive evidence, but an old
+            # observation must not clear progress after a step transition.
+            async with session.lock:
+                if self._current(session, step, revision):
+                    session.evidence_hits = 0
+            raise
         run_model = True
         async with session.lock:
             if not self._current(session, step, revision):
@@ -680,7 +688,7 @@ class _Guide:
                             timestamp_us=frame.timestamp_us, sequence=frame.sequence,
                         ),
                     )
-            except (FrameUnavailable, RuntimeError) as exc:
+            except FrameUnavailable as exc:
                 return _ViewResult(text=f"Current frame unavailable: {exc}", available=False)
             except TimeoutError:
                 return _ViewResult(text="Current-frame inspection timed out.", available=False)

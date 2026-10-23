@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from xr_ai_hub import FrameUnavailable
 from xr_ai_tools import Tool
 from xr_render_demo_worker._tolerant import as_unavailable, tolerant_toolset
@@ -36,16 +36,12 @@ def test_cause_cycle_terminates() -> None:
     assert as_unavailable(first, "the feed") is None
 
 
-def test_relay_wrapped_type_name_classifies_from_text() -> None:
-    # Relay re-raises with the cause chain erased; only the message keeps
-    # the original class name.
-    wrapped = RuntimeError(
-        "internal error: FrameUnavailable: No camera frame available, please try again."
-    )
-    assert as_unavailable(wrapped, "the camera") is not None
-    assert as_unavailable(RuntimeError("RPCError: no feed"), "the camera") is not None
-    assert as_unavailable(RuntimeError("connection refused by peer"), "the camera") is not None
-    assert as_unavailable(RuntimeError("StatusCode.UNAVAILABLE"), "the camera") is not None
+@pytest.mark.parametrize("message", [
+    "internal error: FrameUnavailable: no camera", "RPCError: no feed",
+    "connection refused by peer", "StatusCode.UNAVAILABLE",
+])
+def test_exception_text_does_not_establish_unavailability(message: str) -> None:
+    assert as_unavailable(RuntimeError(message), "the camera") is None
 
 
 def test_ordinary_english_does_not_classify() -> None:
@@ -81,3 +77,40 @@ async def test_tolerant_tool_converts_value_error_and_propagates_bugs() -> None:
     assert json.loads(result.content)["detail"] == "no such object"
     with pytest.raises(TypeError, match="wiring bug"):
         await toolset.get("explode").invoke("{}")
+
+
+@pytest.mark.parametrize("chaining", ["cause", "context", "text", "validation"])
+async def test_tolerant_tool_does_not_recover_internal_failures(chaining: str) -> None:
+    if chaining == "validation":
+        class InternalResult(BaseModel):
+            total: int
+
+        with pytest.raises(ValidationError) as raised:
+            InternalResult.model_validate({"total": "not a number"})
+        error = raised.value
+    else:
+        error = TypeError("ValueError: old rejection" if chaining == "text" else "internal bug")
+        if chaining == "cause":
+            error.__cause__ = ValueError("old rejection")
+        elif chaining == "context":
+            error.__context__ = ValueError("old rejection")
+
+    async def fail(_request: _Empty) -> None:
+        raise error
+
+    toolset = tolerant_toolset([Tool("fail", "Fail internally.", _Empty, None, fail)])
+    with pytest.raises(type(error)) as raised:
+        await toolset.get("fail").invoke("{}")
+    assert raised.value is error
+
+
+async def test_tolerant_tool_preserves_model_argument_validation() -> None:
+    class Request(BaseModel):
+        count: int
+
+    async def apply(_request: Request) -> None:
+        pytest.fail("invalid model arguments must not reach the handler")
+
+    toolset = tolerant_toolset([Tool("apply", "Validate model input.", Request, None, apply)])
+    result = await toolset.get("apply").invoke('{"count":"not a number"}')
+    assert json.loads(result.content)["error"] == "invalid_tool_arguments"

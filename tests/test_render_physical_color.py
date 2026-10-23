@@ -7,6 +7,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
+from xr_ai_hub import FrameUnavailable
 from xr_ai_tools.image import ImageReference
 from xr_render_demo_worker._physical_color import (
     ResolvePhysicalColorRequest,
@@ -109,7 +110,7 @@ async def test_resolver_unknown_and_malformed_cannot_mutate() -> None:
 
 async def test_resolver_frame_transport_failure_degrades() -> None:
     tool = make_physical_color_tool(
-        _frame_tool(error=RuntimeError("RPCError: no feed")), _query_tool("x"))
+        _frame_tool(error=FrameUnavailable("no feed")), _query_tool("x"))
     await _expect_rejection(tool, "the lid", "unavailable")
 
 

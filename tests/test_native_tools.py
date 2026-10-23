@@ -440,7 +440,7 @@ async def test_tool_cancellation_propagates_and_closes_handler() -> None:
     await asyncio.wait_for(closed.wait(), timeout=1.0)
 
 
-async def test_tool_result_codec_failure_retains_relay_error() -> None:
+async def test_side_effect_tool_rejects_non_none_result() -> None:
     def invalid_result(_request: AddRequest) -> None:
         return "invalid"  # type: ignore[return-value]
 

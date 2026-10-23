@@ -540,10 +540,8 @@ class ForegroundAgent(Agent):
         try:
             try:
                 frame = await self._images.get_current_frame.execute(CurrentFrameRequest(participant_id=participant_id))
-            except (FrameUnavailable, RuntimeError) as exc:
-                unavailable = _frame_unavailable_message(exc)
-                if unavailable is None:
-                    raise
+            except FrameUnavailable as exc:
+                unavailable = str(exc)
                 await ctx.publish(
                     VOICE_CONTRIBUTION_TOPIC,
                     ResponseOutput(
@@ -638,24 +636,6 @@ class ForegroundAgent(Agent):
         if participant_id is None:
             raise ValueError("foreground queries require a participant")
         return participant_id
-
-
-def _frame_unavailable_message(error: BaseException) -> str | None:
-    """Recover a camera error from native or Relay-scrubbed exceptions."""
-
-    relay_prefix = "internal error: FrameUnavailable:"
-    seen: set[int] = set()
-    current: BaseException | None = error
-    while current is not None and id(current) not in seen:
-        if isinstance(current, FrameUnavailable):
-            return str(current)
-        if isinstance(current, RuntimeError):
-            message = str(current)
-            if message.startswith(relay_prefix):
-                return message.removeprefix(relay_prefix).strip()
-        seen.add(id(current))
-        current = current.__cause__ or current.__context__
-    return None
 
 
 __all__ = [

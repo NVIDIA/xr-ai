@@ -129,10 +129,8 @@ class SimpleVlmAgent(Agent):
                 frame = await self._frames.execute(
                     CurrentFrameRequest(participant_id=participant_id)
                 )
-            except (FrameUnavailable, RuntimeError) as exc:
-                unavailable = _frame_unavailable_message(exc)
-                if unavailable is None:
-                    raise
+            except FrameUnavailable as exc:
+                unavailable = str(exc)
                 await ctx.publish(
                     VOICE_OUTPUT_TOPIC,
                     ResponseOutput(
@@ -205,24 +203,6 @@ class SimpleVlmAgent(Agent):
     def _discard(self, participant_id: str, task: asyncio.Task[None]) -> None:
         if self._tasks.get(participant_id) is task:
             self._tasks.pop(participant_id, None)
-
-
-def _frame_unavailable_message(error: BaseException) -> str | None:
-    """Recover a camera error from native or Relay-scrubbed exceptions."""
-
-    relay_prefix = "internal error: FrameUnavailable:"
-    seen: set[int] = set()
-    current: BaseException | None = error
-    while current is not None and id(current) not in seen:
-        if isinstance(current, FrameUnavailable):
-            return str(current)
-        if isinstance(current, RuntimeError):
-            message = str(current)
-            if message.startswith(relay_prefix):
-                return message.removeprefix(relay_prefix).strip()
-        seen.add(id(current))
-        current = current.__cause__ or current.__context__
-    return None
 
 
 __all__ = [

@@ -467,6 +467,28 @@ async def test_simple_vlm_agent_reports_typed_missing_camera_frame() -> None:
     assert [output.final for output in published] == [False, True]
 
 
+@pytest.mark.parametrize("error_type", [ValueError, TypeError, RuntimeError])
+async def test_simple_vlm_agent_propagates_camera_programming_errors(error_type) -> None:
+    error = error_type("internal error: FrameUnavailable: misleading exception text")
+    published = []
+
+    async def fail(_request: CurrentFrameRequest) -> ImageFrame:
+        raise error
+
+    async def publish(_topic, output):
+        published.append(output)
+
+    frames = Tool("camera_failure", "Select a frame.", CurrentFrameRequest, ImageFrame, fail)
+    agent = SimpleVlmAgent(lambda: (frames, _StreamingImageQueryTool()), _ignore_status)
+    ctx = SimpleNamespace(
+        metadata=SimpleNamespace(message_id="turn", participant_id="alice"), publish=publish,
+    )
+    with pytest.raises(error_type) as raised:
+        await agent._stream_response(UserQuery(text="Visible?", timestamp_us=1), ctx)
+    assert raised.value is error
+    assert not published
+
+
 async def test_cancelled_vlm_turn_does_not_publish_stream_terminator() -> None:
     waiting = asyncio.Event()
     closed = asyncio.Event()
