@@ -36,6 +36,8 @@ class WorkerConfig:
     context_budget_bytes: int
     compaction_input_budget_bytes: int
     acknowledgment_delay_secs: float | None = None
+    alert_check_interval_secs: float = 1.0
+    alert_confirm_interval_secs: float = 3.0
 
 
 def _resolve(config_path: Path | None, raw: str) -> Path:
@@ -74,6 +76,16 @@ def load_config(path: Path | None) -> WorkerConfig:
         not math.isfinite(acknowledgment_delay_secs) or acknowledgment_delay_secs <= 0
     ):
         raise ValueError("acknowledgment_delay_secs must be finite and positive")
+    alert_check_interval_secs = float(data.get("alert_check_interval_secs", 1.0))
+    alert_confirm_interval_secs = float(data.get("alert_confirm_interval_secs", 3.0))
+    if not (
+        math.isfinite(alert_check_interval_secs)
+        and math.isfinite(alert_confirm_interval_secs)
+        and 0 <= alert_check_interval_secs <= alert_confirm_interval_secs
+    ):
+        raise ValueError(
+            "alert intervals must be finite and satisfy 0 <= alert_check_interval_secs <= alert_confirm_interval_secs"
+        )
     return WorkerConfig(
         models_config=_resolve(path, "models.json"),
         voice_gate_yaml=_resolve(
@@ -92,4 +104,6 @@ def load_config(path: Path | None) -> WorkerConfig:
         context_budget_bytes=int(data.get("context_budget_bytes", 12_000)),
         compaction_input_budget_bytes=int(data.get("compaction_input_budget_bytes", 12_000)),
         acknowledgment_delay_secs=acknowledgment_delay_secs,
+        alert_check_interval_secs=alert_check_interval_secs,
+        alert_confirm_interval_secs=alert_confirm_interval_secs,
     )

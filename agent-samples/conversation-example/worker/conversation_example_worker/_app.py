@@ -264,8 +264,12 @@ async def run_app(
         decisions,
         publish_alert_capability,
         vlm=vlm,
+        llm=llm,
+        context=context,
         runtime=runtime,
         output_topic=VOICE_OUTPUT_TOPIC,
+        check_interval_secs=config.alert_check_interval_secs,
+        confirm_interval_secs=config.alert_confirm_interval_secs,
     )
 
     async def initialize_participant(participant_id: str) -> None:

@@ -235,6 +235,8 @@ async def test_alert_cancel_publishes_one_finite_attributed_response():
         decisions,
         publish_capability,
         vlm=None,
+        llm=_Model("done"),
+        context=manager,
         runtime=runtime,
         output_topic=_OUTPUT,
     )

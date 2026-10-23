@@ -392,6 +392,43 @@
       destination_disposition: answer
       answer_any_of: [not readable]
 
+- name: alert_refers_to_an_earlier_note
+  image: red_left_blue_right
+  turns:
+    - name: start_notes
+      query: Take some notes.
+      authored_completion: "I'm ready. Tell me what you'd like to save."
+      acceptable_destinations: [notes]
+      admission_expectations: {notes: accept}
+      evidence_expectation: none
+      router_invoked: true
+      destination_disposition: focus
+      focus_after: notes
+      destination_actions: {notes: start}
+      answer_expectation: nonempty
+    - name: save_what_to_watch_for
+      query: "Save this note: watch for a yellow triangle."
+      authored_completion: Noted.
+      acceptable_destinations: [notes]
+      admission_expectations: {notes: accept}
+      destination_actions: {notes: capture}
+      focus_before: notes
+      focus_after: notes
+      router_invoked: false
+      context_update_expectations: [{source: conversation-example.foreground-notes, mode: summary}]
+      evidence_expectation: none
+      answer_expectation: nonempty
+    - name: alert_for_what_the_note_mentions
+      query: Alert me once when you see what I mentioned in my notes.
+      authored_completion: I'll alert you once when a yellow triangle is visible.
+      acceptable_destinations: [alerts]
+      admission_expectations: {notes: decline, alerts: accept}
+      destination_actions: {notes: handoff, alerts: start}
+      focus_before: notes
+      evidence_expectation: none
+      destination_disposition: answer
+      answer_expectation: nonempty
+
 - name: one_shot_alert_controls_stay_separate
   image: red_left_blue_right
   turns:

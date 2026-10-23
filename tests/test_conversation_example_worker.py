@@ -1378,6 +1378,33 @@ def test_config_accepts_positive_acknowledgment_delay(tmp_path) -> None:
     assert load_config(config_path).acknowledgment_delay_secs == 2.5
 
 
+def test_alert_intervals_default_and_can_be_configured(tmp_path) -> None:
+    default = load_config(None)
+    assert (default.alert_check_interval_secs, default.alert_confirm_interval_secs) == (1.0, 3.0)
+
+    config_path = tmp_path / "worker.yaml"
+    config_path.write_text("alert_check_interval_secs: 0\nalert_confirm_interval_secs: 10\n")
+    config = load_config(config_path)
+    assert (config.alert_check_interval_secs, config.alert_confirm_interval_secs) == (0.0, 10.0)
+
+
+@pytest.mark.parametrize(
+    "settings",
+    [
+        "alert_check_interval_secs: -1",
+        "alert_check_interval_secs: 5\nalert_confirm_interval_secs: 2",
+        "alert_confirm_interval_secs: .inf",
+        "alert_check_interval_secs: nan",
+    ],
+)
+def test_config_rejects_invalid_alert_intervals(tmp_path, settings) -> None:
+    config_path = tmp_path / "worker.yaml"
+    config_path.write_text(settings + "\n")
+
+    with pytest.raises(ValueError, match="alert intervals"):
+        load_config(config_path)
+
+
 def test_config_rejects_a_non_mapping_yaml_document(tmp_path) -> None:
     config_path = tmp_path / "worker.yaml"
     config_path.write_text("- not\n- a\n- mapping\n")
