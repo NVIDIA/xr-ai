@@ -71,7 +71,7 @@ async def run_session(llm: LLMService, name: str, sample_override: int | None) -
                     )
                     answered = time.perf_counter() - started
                     await settle(conversation, participant)
-                    summary, recent = conversation._context.dialogue_snapshot(participant)
+                    summary, recent = conversation._store._context.dialogue_snapshot(participant)
                     print(
                         f"turn {index:2d}: answer {answered:4.1f}s | dialogue summary "
                         f"{len(summary.text.encode()):4d} B, {len(recent)} verbatim"

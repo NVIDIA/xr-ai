@@ -91,11 +91,11 @@ async def _seed(
 def _seeding_errors(conversation: Conversation, expect: dict[str, Any]) -> list[str]:
     """Check the seeded context has the shape the case is about."""
 
-    summary, exchanges = conversation._context.dialogue_snapshot(_PARTICIPANT)
+    summary, exchanges = conversation._store._context.dialogue_snapshot(_PARTICIPANT)
     summarized = {"dialogue"} if summary.text else set()
     verbatim = [f"{entry.user}\n{entry.assistant}" for entry in exchanges]
-    summary_topics = {topic.name for topic in conversation._summary_context_topics}
-    for source, background, records in conversation._context.source_snapshots(_PARTICIPANT):
+    summary_topics = {topic.name for topic in conversation._store._summary_context_topics}
+    for source, background, records in conversation._store._context.source_snapshots(_PARTICIPANT):
         if background is not None and source in summary_topics:
             verbatim.append(background.text)
         elif background is not None:

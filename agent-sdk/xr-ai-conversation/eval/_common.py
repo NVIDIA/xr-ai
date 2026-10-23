@@ -142,7 +142,7 @@ async def standalone_started() -> None:
 async def settle(conversation: Any, participant: str) -> None:
     """Wait until no compaction job is pending for the participant."""
 
-    memory = conversation._context._participants.get(participant)
+    memory = conversation._store._context._participants.get(participant)
     while memory is not None and (
         jobs := [job for job in (memory.dialogue_job, *memory.context_jobs.values()) if job is not None]
     ):

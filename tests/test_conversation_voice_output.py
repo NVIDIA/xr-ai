@@ -239,7 +239,7 @@ async def test_conversation_does_not_retry_or_finalize_failed_typed_publication(
             assert len(output.items) == failed_frame
             assert not any(value.final for value, _ in output.items)
             assert closed.is_set()
-            assert conversation._context.transcript("alice") == ()
+            assert conversation._store._context.transcript("alice") == ()
         finally:
             await conversation.close()
 
@@ -267,7 +267,7 @@ async def test_failed_final_frame_does_not_commit_the_exchange():
         try:
             with pytest.raises(ExceptionGroup):
                 await conversation.answer(AgentTurn("alice", "turn", "request"), started=_standalone_started)
-            assert conversation._context.transcript("alice") == ()
+            assert conversation._store._context.transcript("alice") == ()
         finally:
             await conversation.close()
 
@@ -302,7 +302,7 @@ async def test_interrupted_final_frame_does_not_commit_the_exchange():
             answering.cancel()
             with pytest.raises(asyncio.CancelledError):
                 await answering
-            assert conversation._context.transcript("alice") == ()
+            assert conversation._store._context.transcript("alice") == ()
         finally:
             await conversation.close()
 
@@ -386,7 +386,7 @@ async def test_model_failure_is_reported_once_and_partial_stream_is_finalized(pa
             assert closed.is_set()
             assert notifications == (["started"] if partial else [])
             assert router._history["alice"] == []
-            assert conversation._context.transcript("alice") == ()
+            assert conversation._store._context.transcript("alice") == ()
             assert all(meta.source == "conversation" for _, meta in output.items)
             if partial:
                 assert [value.text for value, _ in output.items] == ["Partial answer", ""]
@@ -550,7 +550,7 @@ async def test_conversation_drops_late_model_output_after_interruption(after_can
                 [("partial", False), ("", True)] if partial else []
             )
             assert router._history["alice"] == []
-            assert conversation._context.transcript("alice") == ()
+            assert conversation._store._context.transcript("alice") == ()
         finally:
             await router.stop()
             await conversation.close()

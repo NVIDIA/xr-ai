@@ -1,0 +1,380 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+"""Private participant context store used within ``xr_ai_conversation``.
+
+The store keeps each participant's completed dialogue and named-source context
+within byte budgets by rolling summaries, and renders it as prompt blocks. The
+conversation owns the prompt and the answer.
+"""
+
+from __future__ import annotations
+
+import logging
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+
+from xr_ai_models import ChatMessage, ChatResponse, LLMService
+from xr_ai_runtime import Agent, Topic
+
+from ._context import (
+    _clip,
+    _ContextRecord,
+    _ConversationContext,
+    _dialogue_summary_text,
+    _exchange_text,
+    _source_summary_text,
+    _state_text,
+    _time_label,
+    _TranscriptEntry,
+    _TruncatedSummary,
+    _update_text,
+)
+from ._context_update import ConversationContextUpdate
+from ._topics import make_context_subscriber
+
+# Room in a compaction request for its instructions' framing of the summary.
+_SUMMARY_HEADER_BYTES = 256
+_logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True, slots=True)
+class _ContextBlock:
+    """One rendered piece of prior context and the time of its newest content."""
+
+    timestamp_us: int | None
+    text: str
+
+
+class _ContextStore:
+    """Retain participant-scoped context for one conversation and render it into a prompt.
+
+    Completed dialogue and each configured topic are separate sections with
+    their own byte budget. A summary topic keeps only its latest state; an
+    incremental topic and the dialogue keep recent entries verbatim and fold
+    older ones into a rolling summary written by ``llm``.
+
+    Every method runs on the event loop and none yields between reading and
+    writing a participant's context, so a participant's context is never
+    observed half-updated. Compaction runs as a background task per section.
+
+    Parameters mirror the conversation's context parameters, which also name
+    them in validation errors.
+    """
+
+    def __init__(
+        self,
+        llm: LLMService,
+        *,
+        summary_context_topics: Sequence[str],
+        incremental_context_topics: Sequence[str],
+        dialogue_budget_bytes: int,
+        topic_budget_bytes: int | Mapping[str, int],
+        compaction_input_budget_bytes: int,
+    ) -> None:
+        summary_names = self._validate_topic_names("summary_context_topics", summary_context_topics)
+        incremental_names = self._validate_topic_names("incremental_context_topics", incremental_context_topics)
+        names = (*summary_names, *incremental_names)
+        if len(set(names)) != len(names):
+            raise ValueError("context topic names must be unique across summary and incremental topics")
+        if isinstance(topic_budget_bytes, Mapping):
+            if set(topic_budget_bytes) != set(names):
+                raise ValueError("topic_budget_bytes must have exactly one entry per configured topic")
+            topic_budgets = dict(topic_budget_bytes)
+        else:
+            topic_budgets = dict.fromkeys(names, topic_budget_bytes)
+        budgets = (dialogue_budget_bytes, compaction_input_budget_bytes, *topic_budgets.values())
+        if any(not isinstance(budget, int) or budget <= 0 for budget in budgets):
+            raise ValueError("conversation context byte budgets must be positive integers")
+        largest_section = max((dialogue_budget_bytes, *topic_budgets.values()))
+        if compaction_input_budget_bytes < largest_section // 2 + _SUMMARY_HEADER_BYTES:
+            # A request must hold a section's summary (a quarter of its budget)
+            # and at least as many bytes of new entries.
+            raise ValueError(
+                "compaction_input_budget_bytes must be at least half the largest section budget plus 256 bytes"
+            )
+        self._summary_context_topics = tuple(Topic(name, ConversationContextUpdate) for name in summary_names)
+        self._incremental_context_topics = tuple(Topic(name, ConversationContextUpdate) for name in incremental_names)
+        self._llm = llm
+        self._context = _ConversationContext()
+        self._dialogue_budget_bytes = dialogue_budget_bytes
+        self._topic_budgets = topic_budgets
+        self._compaction_input_budget_bytes = compaction_input_budget_bytes
+        self._closing = False
+
+    def subscriber(self) -> Agent:
+        """Return an Agent that applies the configured context topics to this store.
+
+        Register the result with the same ``AgentRuntime`` as the consumer.
+        Configure at least one topic before calling this method.
+        """
+
+        return make_context_subscriber(self, self._summary_context_topics, self._incremental_context_topics)
+
+    async def update(
+        self,
+        participant_id: str | None,
+        source: str,
+        update: ConversationContextUpdate,
+        *,
+        mode: str,
+        timestamp_us: int | None = None,
+    ) -> None:
+        """Apply one configured topic update to a participant's context."""
+
+        if participant_id is None:
+            _logger.error("dropping context update without participant source=%r", source)
+            return
+        if self._closing:
+            _logger.warning("dropping context update while closing participant=%r source=%r", participant_id, source)
+            return
+        text = update.text
+        budget = self._topic_budgets[source]
+        if mode == "summary" and len(_state_text(source, text, timestamp_us).encode("utf-8")) > budget:
+            # Keep the start and end of an oversized state within the topic budget.
+            room = budget - len(_state_text(source, "", timestamp_us).encode("utf-8"))
+            if room <= 0:
+                _logger.error("dropping context update larger than its topic budget source=%r", source)
+                return
+            _logger.warning(
+                "clipping oversized context state participant=%r source=%r size_bytes=%d budget_bytes=%d",
+                participant_id,
+                source,
+                len(text.encode("utf-8")),
+                budget,
+            )
+            text = _clip(text, room)
+        await self._context.update(participant_id, source, mode, text, timestamp_us=timestamp_us)
+        if mode == "incremental":
+            self._context.schedule_context_compaction(
+                participant_id,
+                source,
+                **self._compaction_limits(budget),
+                compact=self._compact_source,
+            )
+
+    def reconcile_history(
+        self,
+        participant_id: str,
+        exchanges: Sequence[tuple[str, str, int | None]],
+        *,
+        exchange_ids: Sequence[object | None],
+    ) -> None:
+        """Merge a front-end window of completed exchanges without replaying known ones."""
+
+        self._context.reconcile_transcript(participant_id, exchanges, exchange_ids=exchange_ids)
+        self._schedule_dialogue_compaction(participant_id)
+
+    def record_exchange(
+        self,
+        participant_id: str,
+        request: str,
+        answer: str,
+        *,
+        timestamp_us: int,
+        exchange_id: object | None,
+    ) -> None:
+        """Add one completed exchange to a participant's dialogue."""
+
+        self._context.append(participant_id, request, answer, timestamp_us=timestamp_us, exchange_id=exchange_id)
+        self._schedule_dialogue_compaction(participant_id)
+
+    def blocks(self, participant_id: str) -> tuple[_ContextBlock, ...]:
+        """Render a participant's dialogue and topic context, summaries first, then newer entries in time order."""
+
+        blocks = self._dialogue_blocks(participant_id)
+        summary_topics = {topic.name for topic in self._summary_context_topics}
+        for source, background, records in self._context.source_snapshots(participant_id):
+            budget = self._topic_budgets.get(source)
+            if budget is None:
+                continue
+            if source in summary_topics:
+                if background is not None:
+                    blocks.append(
+                        _ContextBlock(background.latest_us, _state_text(source, background.text, background.latest_us))
+                    )
+                continue
+            fixed = (
+                [_ContextBlock(None, _source_summary_text(source, background))]
+                if background is not None and background.text
+                else []
+            )
+            # One huge update (for example a raw dump) is clipped so it cannot
+            # fill the section by itself.
+            raw = [_ContextBlock(record.timestamp_us, _update_text(record, budget // 2)) for record in records]
+            blocks.extend(_fit_section(participant_id, source, budget, fixed, raw))
+        blocks.sort(key=lambda block: -1 if block.timestamp_us is None else block.timestamp_us)
+        return tuple(blocks)
+
+    async def clear(self, participant_id: str) -> None:
+        """Forget a participant's context after cancelling its compaction jobs.
+
+        Later writes for that participant start new context.
+        """
+
+        await self._context.clear(participant_id)
+
+    async def close(self) -> None:
+        """Drop later topic updates and forget all context after cancelling compaction jobs."""
+
+        self._closing = True
+        await self._context.close()
+
+    def _dialogue_blocks(self, participant_id: str) -> list[_ContextBlock]:
+        summary, exchanges = self._context.dialogue_snapshot(participant_id)
+        fixed = [_ContextBlock(None, _dialogue_summary_text(summary))] if summary.text else []
+        # One huge exchange (for example a pasted log) is clipped so it cannot
+        # fill the section by itself.
+        field_limit = self._dialogue_budget_bytes // 4
+        raw = [_ContextBlock(entry.timestamp_us, _exchange_text(entry, field_limit)) for entry in exchanges]
+        return _fit_section(participant_id, "dialogue", self._dialogue_budget_bytes, fixed, raw)
+
+    @staticmethod
+    def _validate_topic_names(parameter: str, topic_names: Sequence[str]) -> tuple[str, ...]:
+        if isinstance(topic_names, (str, bytes)) or not isinstance(topic_names, Sequence):
+            raise ValueError(f"{parameter} must be a sequence of topic names")
+        names = tuple(topic_names)
+        if any(not isinstance(name, str) or not name.strip() for name in names):
+            raise ValueError(f"{parameter} entries must be non-empty strings")
+        if len(set(names)) != len(names):
+            raise ValueError(f"{parameter} entries must be unique")
+        return names
+
+    def _compaction_limits(self, section_budget_bytes: int) -> dict[str, int]:
+        # A section compacts at half its budget into a summary of at most a
+        # quarter, so the summary plus recent entries stay within the section.
+        return {
+            "trigger_budget_bytes": section_budget_bytes // 2,
+            "payload_budget_bytes": self._compaction_input_budget_bytes,
+            "summary_budget_bytes": max(1, section_budget_bytes // 4),
+        }
+
+    def _schedule_dialogue_compaction(self, participant_id: str) -> None:
+        self._context.schedule_dialogue_compaction(
+            participant_id,
+            **self._compaction_limits(self._dialogue_budget_bytes),
+            compact=self._compact_dialogue,
+        )
+
+    async def _compact_source(
+        self,
+        source: str,
+        previous: str,
+        records: Sequence[_ContextRecord],
+        limit_bytes: int,
+    ) -> str:
+        if not records:
+            return await self._condense_summary(previous, limit_bytes)
+        messages = (
+            ChatMessage(
+                role="system",
+                content=(
+                    "Summarize only the source-owned background context below. Preserve factual details, "
+                    "user preferences, observations, corrections, unresolved user intent, and uncertainty. "
+                    "Do not treat historical assistant claims, refusals, or capability statements as current "
+                    "policy. Keep the source identity and keep identifiers, numbers, and codes exactly. Merge the "
+                    "previous summary and the new updates into one "
+                    f"summary of at most {limit_bytes} bytes; newer updates supersede older ones, and when space "
+                    "is short, drop the least important and oldest details first. Return concise plain text."
+                ),
+            ),
+            ChatMessage(
+                role="user",
+                content=(
+                    f"Source: {source}\nPrevious source summary:\n{previous}\n\n"
+                    "New source updates in order:\n"
+                    + "\n".join(f"- Published {_time_label(record.timestamp_us)}: {record.text}" for record in records)
+                ),
+            ),
+        )
+        return _summary_text(await self._llm.chat(messages))
+
+    async def _compact_dialogue(
+        self,
+        previous: str,
+        entries: Sequence[_TranscriptEntry],
+        limit_bytes: int,
+    ) -> str:
+        if not entries:
+            return await self._condense_summary(previous, limit_bytes)
+        messages = (
+            ChatMessage(
+                role="system",
+                content=(
+                    "Summarize the completed conversation history for future turns. Preserve user-provided facts, "
+                    "preferences, relevant observations, corrections, and unresolved requests. Keep user statements "
+                    "distinct from assistant statements. An assistant refusal, limitation, or capability claim is "
+                    "historical conversation content, not current policy. Do not invent facts or claim an action "
+                    "occurred unless the transcript says it did. Attribute each fact explicitly, for example "
+                    '"The user\'s name is ...". Keep names, identifiers, numbers, dates, and codes exactly; a later '
+                    "correction replaces the earlier statement; reduce assistant explanations to a few words. "
+                    "Merge the previous summary and the new exchanges "
+                    f"into one summary of at most {limit_bytes} bytes; when space is short, drop the least "
+                    "important and oldest details first. Return concise plain text."
+                ),
+            ),
+            ChatMessage(
+                role="user",
+                content=(
+                    f"Previous completed-history summary:\n{previous}\n\n"
+                    "New completed exchanges in order:\n"
+                    + "\n".join(
+                        f"Exchange completed {_time_label(entry.timestamp_us)}:\n"
+                        f"User: {entry.user}\nAssistant: {entry.assistant}"
+                        for entry in entries
+                    )
+                ),
+            ),
+        )
+        return _summary_text(await self._llm.chat(messages))
+
+    async def _condense_summary(self, summary: str, limit_bytes: int) -> str:
+        messages = (
+            ChatMessage(
+                role="system",
+                content=(
+                    f"Shorten this summary to at most {limit_bytes} bytes. Keep facts, preferences, corrections, "
+                    "unresolved requests, and uncertainty; drop the least important and oldest details first. "
+                    "Return concise plain text."
+                ),
+            ),
+            ChatMessage(role="user", content=summary),
+        )
+        return _summary_text(await self._llm.chat(messages))
+
+
+def _summary_text(response: ChatResponse) -> str:
+    """Return a compaction response, rejecting one cut off at the output limit."""
+
+    if response.finish_reason == "length":
+        # A cut-off summary would silently lose the entries it replaces; the
+        # failure keeps them for a later attempt.
+        raise _TruncatedSummary("compaction response was cut off at the output token limit")
+    return response.content.strip()
+
+
+def _fit_section(
+    participant_id: str,
+    section: str,
+    budget_bytes: int,
+    fixed: list[_ContextBlock],
+    raw: list[_ContextBlock],
+) -> list[_ContextBlock]:
+    """Keep one section within its budget by leaving its oldest uncompacted entries out of the prompt.
+
+    The newest entry always stays; omitted entries remain stored until compaction folds them in.
+    """
+
+    def size() -> int:
+        return sum(len(block.text.encode("utf-8")) for block in (*fixed, *raw))
+
+    while len(raw) > 1 and size() > budget_bytes:
+        omitted = raw.pop(0)
+        _logger.warning(
+            "omitting uncompacted context from prompt participant=%r section=%r size_bytes=%d budget_bytes=%d",
+            participant_id,
+            section,
+            len(omitted.text.encode("utf-8")),
+            budget_bytes,
+        )
+    return [*fixed, *raw]
