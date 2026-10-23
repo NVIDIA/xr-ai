@@ -54,7 +54,7 @@ class _FixtureDecisionService:
                 choice = next((item for item in choices if item in criteria), None)
                 choice = self.router_choices.get(self.recorder.case_name, choice)
             else:
-                choice = (fixture.get("destination_actions") or {}).get("notes" if key == "note_action" else "monitor")
+                choice = (fixture.get("destination_actions") or {}).get("notes" if key == "note_action" else "alerts")
             if choice not in criteria:
                 choice = next(iter(criteria))
             if key == "destination" and choice == "clarify":
@@ -70,7 +70,7 @@ class _FixtureDecisionService:
 def test_decision_evaluator_preflights_and_runs_every_fixture_without_answer_calls(ambiguous_choice):
     flows, cases = evaluator.load_fixtures()
     plan = evaluator.preflight(flows, cases)
-    assert plan["total_turns"] == 67
+    assert plan["total_turns"] == 56
     assert plan["planned_decision_calls"] <= plan["max_decision_calls"]
 
     recorder = evaluator._DecisionRecorder(None, max_calls=plan["max_decision_calls"])
@@ -102,16 +102,14 @@ def test_decision_evaluator_preflights_and_runs_every_fixture_without_answer_cal
     assert ambiguous["route_outcome"] == "selected"
     assert ambiguous["attempts"][0]["admission"] == "accept"
     assert ambiguous["route_outcome_match"] is True
-    note_capture = next(turn for turn in turns if turn["fixture"].endswith("alice_dictates_ar_vr_note_verbatim"))
+    note_capture = next(turn for turn in turns if turn["fixture"].endswith("save_accessibility_note"))
     assert note_capture["published_context_update_match"] is True
     assert note_capture["published_context_updates"][-1]["source"] == "conversation-example.foreground-notes"
     assert note_capture["published_context_updates"][-1]["mode"] == "summary"
     assert note_capture["focus_before"] == "notes"
     assert note_capture["focus_before_match"] is True
-    note_recall = next(
-        turn for turn in turns if turn["fixture"].endswith("alice_general_conversation_uses_saved_note_context")
-    )
-    assert note_recall["focus_before"] is None
+    note_recall = next(turn for turn in turns if turn["fixture"].endswith("focused_notes_read_back_after_handoff"))
+    assert note_recall["focus_before"] == "notes"
     assert note_recall["focus_before_match"] is True
     assert summary["answer_scoring"] == "not_run"
     assert summary["evidence_scoring"] == "not_run"
@@ -140,16 +138,6 @@ def test_decision_evaluator_preflights_and_runs_every_fixture_without_answer_cal
     assert "Completed conversation exchange (context only)" not in json.dumps(continuation_call["request_state"])
     assert "Start by checking how much sunlight" in json.dumps(continuation_call["request_state"])
     assert "18 percent of 250 is 45" not in json.dumps(continuation_call["request_state"])
-
-    monitor_status_case = "monitor_aid_keeps_control_and_coverage_separate/ask_control_status_during_task"
-    monitor_status_call = next(call for call in recorder.calls if call["case"] == monitor_status_case)
-    monitor_aid = next(
-        item for item in monitor_status_call["request_state"]["destinations"] if item["name"] == "monitor"
-    )
-    assert "Track whether the workbench is left clear." in monitor_aid["description"]
-    assert "start, stop, or check the status" in monitor_aid["description"].casefold()
-    assert "not by this control destination" in monitor_aid["description"]
-    assert "Use only if the current request falls within" not in monitor_aid["description"]
 
     incomplete = {"answer": None, "completed": False}
     history = completed_history([], [{"query": "test"}], [incomplete])
@@ -403,32 +391,3 @@ def test_preflight_fingerprints_general_conversation_prompt():
     source = "agent-samples/conversation-example/worker/conversation_example_worker/prompts/conversation.txt"
 
     assert source in evaluator.preflight(flows, cases)["sha256"]
-
-
-def test_missing_monitor_record_skips_dependent_flow_but_runs_independent_flows():
-    import asyncio
-    from copy import deepcopy
-
-    flows, cases = evaluator.load_fixtures()
-    monitor_flow = deepcopy(
-        next(
-            flow for flow in flows if flow["name"] == "active_monitor_routes_task_coverage_separately_from_current_view"
-        )
-    )
-    monitor_flow["turns"][0]["acceptable_destinations"] = ["notes"]
-    monitor_flow["turns"][0]["admission_expectations"] = {"notes": "accept"}
-    monitor_flow["turns"][0]["destination_actions"] = {"notes": "other"}
-    independent_flow = next(flow for flow in flows if flow["name"] == "notes_handoff_releases_to_general_conversation")
-    selected_cases = []
-
-    recorder = evaluator._DecisionRecorder(None, max_calls=100)
-    recorder.service = _FixtureDecisionService(recorder, [monitor_flow, independent_flow], selected_cases)
-    turns, _summary = asyncio.run(
-        evaluator.run_decisions([monitor_flow, independent_flow], selected_cases, recorder, context_budget=12_000)
-    )
-
-    missing = next(turn for turn in turns if turn["fixture"].endswith("active_task_question_uses_monitor_context"))
-    assert missing["run_status"] == "not_scored_missing_precondition"
-    dependent = next(turn for turn in turns if turn["fixture"].endswith("monitor_status_is_a_control"))
-    assert dependent["run_status"] == "not_scored_upstream_precondition_missing"
-    assert any("notes_handoff_releases_to_general_conversation/start_notes" == call["case"] for call in recorder.calls)

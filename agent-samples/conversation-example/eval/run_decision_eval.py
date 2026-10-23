@@ -20,7 +20,6 @@ from collections import defaultdict
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote
 
 import yaml
 
@@ -28,8 +27,8 @@ _ROOT = Path(__file__).resolve().parents[3]
 _SAMPLE = _ROOT / "agent-samples/conversation-example"
 sys.path.insert(0, str(_SAMPLE / "worker"))
 
+from conversation_example_worker._alert_agent import VisualAlertAgent  # noqa: E402
 from conversation_example_worker._app import _CONVERSATION_SCOPE  # noqa: E402
-from conversation_example_worker._monitoring import VisualMonitorAgent  # noqa: E402
 from conversation_example_worker._note_taking import NoteTakingAgent  # noqa: E402
 from conversation_example_worker._visual_agents import VisualObservationAgent  # noqa: E402
 from xr_ai_conversation import (  # noqa: E402
@@ -43,8 +42,6 @@ from xr_ai_routing import (  # noqa: E402
     RoutingAid,
 )
 from xr_ai_tools.current_frame import ImageFrame  # noqa: E402
-from xr_ai_tools.image import ImageReference  # noqa: E402
-from xr_ai_tools.vision import ImageQueryResult  # noqa: E402
 from xr_ai_voice import VOICE_OUTPUT_TOPIC  # noqa: E402
 
 _FLOW_FILE = _SAMPLE / "eval/conversation-flows.yaml"
@@ -54,13 +51,17 @@ _MAX_CALLS = 100
 _TRACE_SOURCES = (
     _SAMPLE / "worker/conversation_example_worker/_app.py",
     _SAMPLE / "worker/conversation_example_worker/_note_taking.py",
-    _SAMPLE / "worker/conversation_example_worker/_monitoring.py",
+    _SAMPLE / "worker/conversation_example_worker/_alert_agent.py",
     _SAMPLE / "worker/conversation_example_worker/_visual_agents.py",
     _SAMPLE / "worker/conversation_example_worker/prompts/conversation.txt",
+    _SAMPLE / "worker/conversation_example_worker/prompts/note_control.txt",
+    _SAMPLE / "worker/conversation_example_worker/prompts/alert_control.txt",
+    _SAMPLE / "worker/conversation_example_worker/prompts/alert_condition.txt",
+    _SAMPLE / "worker/conversation_example_worker/prompts/alert_description.txt",
     _ROOT / "agent-sdk/xr-ai-routing/xr_ai_routing/_router.py",
     _ROOT / "agent-sdk/xr-ai-routing/xr_ai_routing/_history.py",
 )
-_MONITOR_SOURCE = "conversation-example.monitor-window"
+_ALERT_SOURCE = "conversation-example.alert-capability"
 _NOTES_SOURCE = "conversation-example.foreground-notes"
 _OBSERVATION_SOURCE = "conversation-example.observation-capability"
 
@@ -148,38 +149,12 @@ class _NoAnswerModel:
 
 class _Frames:
     def __init__(self) -> None:
-        self.sampled: dict[str, asyncio.Event] = {}
         self.block = asyncio.Event()
-        self.sequence: dict[str, int] = defaultdict(int)
 
-    async def execute(self, request: Any) -> ImageFrame:
-        participant_id = request.participant_id
-        self.sequence[participant_id] += 1
-        sequence = self.sequence[participant_id]
-        if sequence > 1:
-            await self.block.wait()
-        return ImageFrame(
-            image=ImageReference(uri=f"xr-image://decision-eval/{quote(participant_id, safe='')}/frame-{sequence}"),
-            timestamp_us=int(time.time() * 1_000_000),
-            width=640,
-            height=480,
-            sequence=sequence,
-            participant_id=participant_id,
-            track_id="decision-eval",
-        )
-
-    async def wait_for_sample(self, participant_id: str) -> None:
-        await self.sampled.setdefault(participant_id, asyncio.Event()).wait()
-
-    def reset_sample(self, participant_id: str) -> None:
-        self.sequence[participant_id] = 0
-        self.sampled.setdefault(participant_id, asyncio.Event()).clear()
-
-
-class _ImageQuery:
-    async def execute(self, request: Any) -> ImageQueryResult:
-        del request
-        return ImageQueryResult(text="Synthetic evaluator observation; not model output.")
+    async def execute(self, _request: Any) -> ImageFrame:
+        # Routing-only evaluation starts jobs but never supplies camera observations.
+        await self.block.wait()
+        raise AssertionError("decision-only evaluation must not acquire an image")
 
 
 class _NoVoiceRuntime:
@@ -270,17 +245,15 @@ def preflight(flows: list[dict[str, Any]], cases: list[dict[str, Any]]) -> dict[
 def _destinations(recorder: _DecisionRecorder, context_budget: int):
     frames = _Frames()
     output_runtime = _NoVoiceRuntime()
-    context_sources = (_MONITOR_SOURCE, _NOTES_SOURCE, _OBSERVATION_SOURCE)
+    context_sources = (_ALERT_SOURCE, _NOTES_SOURCE, _OBSERVATION_SOURCE)
     section_budget = context_budget // (len(context_sources) + 1)
     if section_budget <= 0:
         raise ValueError("context budget must provide a positive budget for dialogue and each context source")
     topic_budgets = {name: section_budget for name in context_sources}
     context_updates: dict[str, list[dict[str, str]]] = defaultdict(list)
 
-    async def publish_monitor(participant: str, update: Any) -> None:
-        context_updates[participant].append({"source": _MONITOR_SOURCE, "mode": "summary", "text": update.text})
-        if "Synthetic evaluator observation; not model output." in update.text:
-            frames.sampled.setdefault(participant, asyncio.Event()).set()
+    async def publish_alerts(participant: str, update: Any) -> None:
+        context_updates[participant].append({"source": _ALERT_SOURCE, "mode": "summary", "text": update.text})
 
     async def publish_notes(participant: str, update: Any) -> None:
         context_updates[participant].append({"source": _NOTES_SOURCE, "mode": "summary", "text": update.text})
@@ -302,20 +275,19 @@ def _destinations(recorder: _DecisionRecorder, context_budget: int):
         runtime=output_runtime,
         output_topic=VOICE_OUTPUT_TOPIC,
     )
-    monitor = VisualMonitorAgent(
+    alerts = VisualAlertAgent(
         frames,
-        _ImageQuery(),
+        None,
         recorder,
-        publish_monitor,
+        publish_alerts,
+        vlm=None,
         runtime=output_runtime,
         output_topic=VOICE_OUTPUT_TOPIC,
-        window_size=20,
-        context_budget_bytes=context_budget,
     )
     destinations = {
         "conversation": conversation,
         "observation": VisualObservationAgent(None, None, runtime=output_runtime, output_topic=VOICE_OUTPUT_TOPIC),
-        "monitor": monitor,
+        "alerts": alerts,
         "notes": NoteTakingAgent(
             notes_conversation,
             recorder,
@@ -339,7 +311,7 @@ def _destinations(recorder: _DecisionRecorder, context_budget: int):
             context_budget_bytes=context_budget,
         ),
         destinations,
-        monitor,
+        alerts,
         notes_conversation,
         frames,
         context_updates,
@@ -353,7 +325,7 @@ async def _started() -> bool:
 
 
 async def run_decisions(flows, cases, recorder, *, context_budget: int):
-    router, destinations, monitor, notes_conversation, frames, context_updates = _destinations(recorder, context_budget)
+    router, destinations, alerts, notes_conversation, frames, context_updates = _destinations(recorder, context_budget)
     turns_out: list[dict[str, Any]] = []
     metrics: dict[str, list[bool]] = defaultdict(list)
     attempted_cases = {call.get("case") for call in recorder.calls}
@@ -451,7 +423,7 @@ async def run_decisions(flows, cases, recorder, *, context_budget: int):
                 )
             )
     finally:
-        await monitor.stop()
+        await alerts.stop()
         await router.stop()
         await notes_conversation.close()
     statuses = [item.get("run_status", "unknown") for item in turns_out]
@@ -500,12 +472,6 @@ async def _evaluate_turn(
     context_updates,
 ):
     turn = AgentTurn(participant, name, fixture["query"], history)
-    record_requirement = fixture.get("context_record_required_before")
-    if record_requirement is not None:
-        records = destinations["monitor"]._records.get(participant, ())
-        marker = str(record_requirement["contains"])
-        if not any(marker in record for record in records):
-            return _not_run_turn(name, fixture, participant, "not_scored_missing_precondition")
     updates_before = len(context_updates[participant])
     context_before = {}
     for update in context_updates[participant]:
@@ -555,7 +521,7 @@ async def _evaluate_turn(
         entry["admission"] = admission.disposition
         if len(recorder.calls) > admission_call_count:
             entry["admission_decision_call_index"] = admission_call_count
-            native_key = "monitor_action" if selected == "monitor" else "note_action" if selected == "notes" else None
+            native_key = "alert_action" if selected == "alerts" else "note_action" if selected == "notes" else None
             if native_key is not None:
                 native_response = recorder.calls[admission_call_count]["response"].get(native_key, {})
                 if native_response:
@@ -579,18 +545,14 @@ async def _evaluate_turn(
             final_disposition = "clarify"
             break
         final_disposition = "accept"
-        if selected == "monitor":
+        if selected == "alerts":
             pending = destinations[selected]._pending.get(participant)
             action = pending[1] if pending and pending[0] == turn.turn_id else None
             if action:
                 action_call_index = len(recorder.calls) - 1
-                if action in {"start", "retarget"}:
-                    frames.reset_sample(participant)
                 await destinations[selected].answer(turn, started=_started)
                 entry["action"] = action
                 entry["action_decision_call_index"] = action_call_index
-                if action in {"start", "retarget"}:
-                    await frames.wait_for_sample(participant)
         elif selected == "notes":
             pending = destinations[selected]._pending.get(participant)
             action = pending[1] if pending and pending[0] == turn.turn_id else None

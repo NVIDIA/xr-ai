@@ -32,9 +32,7 @@ _NO_VISUAL_EVIDENCE = "I couldn't inspect the current view right now. Please try
 ContextPublisher = Callable[[str, ConversationContextUpdate], Awaitable[None]]
 OBSERVATION_CONTEXT_TOPIC = Topic("conversation-example.observation-capability", ConversationContextUpdate)
 _OBSERVATION_CAPABILITY = (
-    "Capability: answer questions about objects, visible text, colors, counts, and spatial relations by "
-    "requesting a fresh camera frame for each visual question. This route does not monitor continuously "
-    "or control applications."
+    "Capability: answer questions about objects, text, colors, counts, and positions in the current view."
 )
 
 
@@ -133,11 +131,9 @@ class VisualObservationAgent(RoutableAgent):
     async def _answer(self, turn: AgentTurn, emit: Callable[[str], Awaitable[None]]) -> DestinationResult:
         try:
             frame = await self._frames.execute(CurrentFrameRequest(participant_id=turn.participant_id))
-        except (FrameUnavailable, RuntimeError) as error:
-            if _frame_unavailable(error):
-                await emit(_NO_CAMERA)
-                return DestinationResult("answer", _NO_CAMERA)
-            raise
+        except FrameUnavailable:
+            await emit(_NO_CAMERA)
+            return DestinationResult("answer", _NO_CAMERA)
 
         query = turn.query
         if frame.timestamp_us is not None:
@@ -166,24 +162,11 @@ class VisualObservationAgent(RoutableAgent):
         """The application releases shared frame state on participant departure."""
 
 
-# Private timestamp and unavailable-frame classifiers support the public route above.
+# Timestamp labels accompany the selected frame, not the decision clock.
 def _frame_time_label(timestamp_us: int) -> str:
     timestamp = datetime.fromtimestamp(timestamp_us / 1_000_000, UTC).replace(second=0, microsecond=0)
     return timestamp.strftime("%Y-%m-%d %H:%M UTC")
 
-
-def _frame_unavailable(error: BaseException) -> bool:
-    relay_prefix = "internal error: FrameUnavailable:"
-    seen: set[int] = set()
-    current: BaseException | None = error
-    while current is not None and id(current) not in seen:
-        if isinstance(current, FrameUnavailable):
-            return True
-        if isinstance(current, RuntimeError) and str(current).startswith(relay_prefix):
-            return True
-        seen.add(id(current))
-        current = current.__cause__ or current.__context__
-    return False
 
 
 __all__ = ["VisualObservationAgent"]

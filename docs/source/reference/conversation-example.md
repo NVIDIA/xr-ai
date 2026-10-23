@@ -5,23 +5,18 @@
 
 # Conversation example
 
-The conversation example is a runnable voice-and-vision application in the
-repository. It uses Clef to route ordinary spoken or typed questions among
-general conversation, direct visual observation, and an explicitly started
-background visual monitor. General conversation answers text questions across
-subjects, including AR/VR knowledge and shared-context recall. A separate
-foreground note-taking session captures and reads back participant-authored
-notes, then shares them with general conversation. The background monitor
-continuously records a bounded window of timestamped visual observations and
-publishes its text summary to configured conversation context. Conversation
-destinations use the reusable
-`xr_ai_conversation.Conversation` component for answer/context behavior. The
-sample composes it with `xr_ai_routing.AgentRouter`, then
-streams through the same voice output path to Pocket TTS and the `vlm.response`
-data topic. Refer to the {doc}`quickstart
-</getting_started/quickstart>` for client setup. The sample README contains the
-exact run commands. This reference owns the sample's design and operational
-details.
+The conversation example combines four distinct roles: general conversation,
+direct questions about the current view, one-shot background visual alerts, and
+foreground note-taking. An alert watches for a requested visible condition,
+notifies the participant once, then stops. Its observations stay private to the
+alert job. Notes capture participant-authored text and can share saved notes
+with conversation.
+
+The sample composes these roles with `xr_ai_routing.AgentRouter` and
+`xr_ai_conversation.Conversation`. Responses use the same voice output path to
+Pocket TTS and the `vlm.response` data topic. Refer to the {doc}`quickstart
+</getting_started/quickstart>` for client setup and the sample README for run
+commands.
 
 ## Runtime boundary
 
@@ -30,7 +25,7 @@ details.
 interruption, and voice output topics. The router owns routing tasks, focus,
 shared turn history, acknowledgments, and route-error responses. Each destination
 publishes its own attributed `ResponseOutput` messages. Conversation and direct
-observation stream chunks; note-taking and monitor controls publish complete
+observation stream chunks; note-taking and alert controls publish complete
 responses.
 
 ```text
@@ -45,7 +40,7 @@ VoiceAgent
 
 `_app.py` constructs and registers the router, voice agent, and configured
 conversation context subscriber. It supplies participant initialization and
-cleanup hooks for the sample's capability snapshots, notes, monitor, and frame
+cleanup hooks for the sample's capability snapshots, notes, alerts, and frame
 resources. The router initializes those resources before a participant's first
 query, even when that query arrives before the participant-joined event.
 
@@ -67,56 +62,67 @@ request through the VLM.
 `VoiceAgent` owns application readiness, hub transport, voice gating, TTS, signals,
 and cleanup. It publishes accepted speech and typed text as a participant-scoped
 `UserQuery`. `xr_ai_routing.AgentRouter` subscribes directly to the configured
-query topic. Clef selects general conversation,
-direct visual observation, background monitoring, or foreground note-taking
-from routing aids and the current request/history. Acknowledgments are optional
-router output after a destination accepts; clarification can come from the
-router or a route agent's admission. Admission stays with each route agent:
-general conversation
-uses `Conversation.admit()`, direct observation accepts its current-frame
-requests, and monitoring and note-taking use their own typed control decisions.
-A decline produces no spoken output and gives the
-router one bounded reroute. A selected destination can ask a
-task-specific question through its normal answer path; unresolved routing uses
-the router's clarification. Exhausted declines fall back to general conversation
-when it remains eligible, otherwise the router clarifies. General conversation
-answers text questions across subjects and has no frame or VLM tools. Direct
-observation sends the fresh image and current user question only to Cosmos; it
-does not include completed conversation history in that request. The
-background monitor is explicitly started and stopped through ordinary routed
-turns; it samples sequentially without a cadence delay, keeps a bounded rolling
-window, and shares timestamped text through the configured context topic. Its
-routing aid exposes only active task scope, status, observation availability,
-and newest source time. When that task covers a request, general conversation
-can use the separate timestamped window context; a fresh-camera request goes to
-direct observation. The monitor destination handles start, retarget, stop,
-status, and handoff controls only and does not answer recorded-content questions.
-Retarget replaces the active task and rolling window; handoff declines so another
-destination can answer the same request. It does not take
-router focus. A distinct note-taking destination acquires focus
-on request. It stores user-authored notes verbatim, supports readback, and keeps
-focus through topic changes until a semantic finish. Finishing notes consumes
-that request and releases focus. A question handoff declines only that query,
-so another destination can answer and the next turn returns to note capture.
-Captured notes remain available to
-general conversation afterward. Observation records are never converted into
-notes. Scope admission is based on the request,
-not whether the camera will return a usable frame. Direct visual requests must
-identify their target in the current request because prior conversation is not
-sent to Cosmos. The
+query topic. Clef routes among general conversation, direct visual observation,
+visual alert controls, and foreground note-taking. General conversation answers
+text questions and recall. Direct observation sends one fresh image and the
+current question to Cosmos, without dialogue history.
+
+A visual alert starts only when the participant explicitly asks to be notified
+when a specific visible condition occurs. For example, “Alert me when the left
+indicator is green.” Each iteration selects a frame and passes the resolved image and condition
+directly to Clef for a yes/no decision. Missing or uncertain evidence means no
+alert. Once
+matched, the alert agent immediately publishes a complete “Alert” voice response.
+It then streams a short Cosmos description of relevant evidence from that exact
+triggering frame and stops. The description does not interrupt the announcement.
+The next observation begins after the previous iteration completes; there is
+no sampling interval or observation history. Only an explicit new alert request
+replaces an existing job. “Cancel the visual alert” cancels it. Ordinary questions
+and fragments are not alert controls. Each participant owns an independent job;
+departure and worker shutdown cancel and drain it. Camera or inference failure
+stops the job with a concise failure message, without sending an alert.
+
+Conversation receives a static description of alert capability, never the
+job's observations or matching state. The alert condition and current image
+stay inside the background job. This separation does not guarantee visual
+recognition accuracy: a confident but wrong visual classification can still produce a false alert. A
+single image cannot establish motion, a change over time, or a previous state;
+conditions requiring that evidence do not trigger.
+
+Foreground notes start explicitly, capture dictated text, and retain focus until
+a finish. A question handoff declines only that query so another destination can
+answer; the next turn returns to note capture. Saved notes remain available to
+general conversation afterward.
+A decline gives the router one bounded reroute; unresolved routing clarifies or
+uses the eligible default conversation destination. Alerts do not take focus
+and can run while a participant is taking notes or asking another agent a
+question.
+
+Notes admission classifies the current utterance and whether notes have focus.
+Saved content stays available for readback and shared context; completed dialogue
+is not input to this action decision. Ordinary statements are dictation while
+notes are focused. Questions seeking an answer go to another agent, while an
+explicitly dictated question is saved verbatim. The note agent acknowledges a
+save only after storing it; it does not generate general replies that could
+claim an unsaved note was recorded.
+
+Direct visual requests must identify their target in the current question,
+because dialogue history is not sent to Cosmos. Admission does not establish
+that a camera frame will be available. The
 `CurrentFrameTool` uses
 the hub's fresh frame when DeviceIOHub is already observing video for that
 participant. When video is off, the same tool asks StreamKit to capture one
 image and return it through a targeted LiveKit byte stream. The fallback is
 invisible to the agent: it receives the same opaque image-reference shape and
-passes it to the appropriate Cosmos query path before publishing response
-chunks to voice output.
+passes it to the configured visual model. Direct visual answers use Cosmos;
+alerts use Clef image decisions followed by a Cosmos description only after a match.
 Camera bytes remain on the hub path, image locations are redacted from VLM
 telemetry, and the sample has no MCP path.
 
-For direct observation, the current voice or text query determines when a still
-is needed. The separately started monitor captures continuously while its task
-is active; it does not imply that ordinary queries need always-on video.
+Direct observation captures only when a question needs an image. A separately
+requested alert samples until its condition matches, it is cancelled, or an
+observation fails. Neither requires the participant to publish continuous video;
+the frame tool can request a still when needed.
 
 A newer participant turn cancels superseded routing, answer, and vision work and
 interrupts its voice response. Participant departure releases cached frames,
@@ -125,9 +131,8 @@ tasks. This is the reference composition for streamed conversation and
 current-view visual questions.
 
 Conversation destinations can subscribe to named runtime context topics
-configured in `yaml/conversation_example_worker.yaml`. The background monitor
-publishes its rolling observation window as a replaceable summary, and the
-notes destination publishes its bounded note list as a replaceable summary.
+configured in `yaml/conversation_example_worker.yaml`. The alert agent publishes only a static capability summary. The notes
+destination publishes its bounded note list as a replaceable summary.
 Publishers send text-only `ConversationContextUpdate` values. Only the general
 conversation subscribes to the note topic. Incremental sources are compacted in
 the background per participant and source; the resulting summary replaces the
@@ -141,7 +146,7 @@ The sample maps `context_budget_bytes` across the general conversation's
 dialogue and each configured context topic. With the three default topics, a
 12,000-byte setting gives 3,000 bytes to dialogue and each topic, preserving
 the sample's total context allowance. The same setting also bounds
-sample-owned routing cues, notes, and monitor windows before publication.
+sample-owned notes and shared context before publication.
 `compaction_input_budget_bytes` separately limits one summary request; its
 default is 12,000 bytes. The notes conversation has no context topics and uses
 the full configured context budget for dialogue.
@@ -164,13 +169,14 @@ The worker package is under
 | `_app.py` | Composition root for `VoiceAgent`, `AgentRouter`, route agents, services, and readiness |
 | `_topics.py` | Names the sample-owned voice input and lifecycle topics |
 | `_config.py` | Resolves worker, model, voice-gate, and prompt settings |
+| `prompts/note_control.txt` | Note action instructions for dictation, question handoff, readback, and finish |
 | `_note_taking.py` | Implements the sample-owned focused note-taking destination |
-| `_monitoring.py` | Owns the explicitly started background monitor and rolling text window |
+| `_alert_agent.py` | Owns one-shot background visual alerts |
 | `_visual_agents.py` | Implements direct current-image observation |
 | `prompts/system.txt` | Defines the default VLM instruction |
+| `prompts/alert_control.txt`, `prompts/alert_condition.txt`, `prompts/alert_description.txt` | Explicit start/cancel admission and evidence matching |
 | `prompts/conversation.txt` | Application instructions for the conversation destination |
-| `prompts/note_taking.txt` | Instructions for the focused note-taking destination |
-| `prompts/monitor_observation.txt` | Produces concise observations for the rolling monitor window |
+| `prompts/note_taking.txt` | Note role description; the note agent owns control responses and save acknowledgments |
 | `eval/conversation-cases.yaml` | Single-turn Clef routing and direct-answer evaluation inputs |
 | `eval/conversation-flows.yaml` | Ordered multi-turn routing, focus, and context-update cases |
 
@@ -185,7 +191,8 @@ uv --config-file uv.toml run --project tests pytest \
   tests/test_xr_ai_routing.py \
   tests/test_conversation_example_worker.py \
   tests/test_conversation_example_visual_destinations.py \
-  tests/test_conversation_example_monitoring.py \
+  tests/test_conversation_example_agents.py \
+  tests/test_conversation_example_alerts.py \
   tests/test_conversation_example_flows.py \
   tests/test_conversation_example_decision_eval.py
 ```
@@ -195,8 +202,8 @@ uv --config-file uv.toml run --project tests pytest \
 | Routing, native admission, decline/reroute, default fallback, focus, cancellation | `test_xr_ai_routing.py` | Raw choice, effective destination, disposition, and invoked admissions |
 | Completed history, named context, byte budgets, compaction, acknowledgment races | `test_xr_ai_conversation.py` | Context sources and answer checks when captured |
 | Current-frame-only observation and camera/tool failures | `test_conversation_example_visual_destinations.py`, `test_conversation_example_worker.py` | Current-view tool/evidence expectations in both corpora |
-| Monitor task scope, hot sampling, retarget, failure, stop, participant isolation | `test_conversation_example_monitoring.py` | Monitor controls, active/stopped scope, route and evidence expectations |
-| Note capture, readback, focus, release/handoff, overflow, context sharing | `test_conversation_example_worker.py`, `test_conversation_example_monitoring.py` | Note actions, focus transitions, and context-source expectations |
+| One-shot matching, failure, cancellation, participant isolation | `test_conversation_example_alerts.py` | Actual job lifecycle and attributed output |
+| Note capture, readback, focus, release/handoff, overflow, context sharing | `test_conversation_example_worker.py`, `test_conversation_example_agents.py` | Note actions, focus transitions, and context-source expectations |
 | Decision evaluator fixture loading, call limits, teacher-forced history, and not-scored output | `test_conversation_example_decision_eval.py` | Typed Clef route and control decisions |
 | Sample wiring, readiness, Relay attribution and voice-stream boundaries | `test_conversation_example_worker.py` | Not scored unless the run captures those stages |
 
@@ -231,10 +238,13 @@ hashes when resume handling itself changed.
 
 Flow histories are teacher-forced inputs. A seeded exchange is labeled as
 authored state, not as an answer generated during the evaluation. Between turns,
-focus and monitor state follow the actual native control decisions; fixture
+focus and alert controls follow the actual native control decisions; fixture
 expectations for those states are scored separately. The corpus's
 answer checks are lexical smoke checks; they do not establish semantic answer
-quality. Model-decision runs do not establish camera grounding unless they
+quality. `eval/alert-conditions.yaml` supplies separate yes/no image-condition
+cases, including absent, uncertain, and non-observable motion evidence. Hosted
+tests must supply and inspect the actual image bytes. Model-decision runs do not
+establish camera grounding unless they
 include a completed frame/query result, and the deterministic image fixtures do
 not reproduce a participant's live camera stream.
 
@@ -295,18 +305,14 @@ Acknowledgment text is restricted to a short “Let me think through …” goal
 restatement. Nonconforming generated text is dropped without retrying.
 
 The default `summary_context_topics` list includes
-`conversation-example.monitor-window`, `conversation-example.foreground-notes`, and
-`conversation-example.observation-capability`. Each destination owns its text
-and publishes an initial participant-specific snapshot when the participant
-joins, then replaces it when its reported state changes. The monitor reports
-whether it is active and its timestamped observation window; notes report
-whether note-taking is active and saved notes; direct observation describes
-its fresh-frame capability without claiming that a frame is currently being
-observed or that the camera is ready. These summaries are context, not health
-checks. Remove a topic from the list to disable that feed; focused note capture
-and readback continue to use the note destination's local state. Use
-`incremental_context_topics` for a source whose publisher sends append-only
-updates that the conversation compacts.
+`conversation-example.alert-capability`, `conversation-example.foreground-notes`,
+and `conversation-example.observation-capability`. Alert and direct-vision
+capabilities are static. Notes publish participant-scoped saved notes and session
+state. These summaries are context, not health checks or proof of camera input.
+No alert observations or active-job state are sent to conversation. Remove a
+topic from the list to disable that feed; focused note capture and readback
+continue to use local notes. `incremental_context_topics` is for append-only
+context sources that conversation compacts.
 
 Changing an entry in `models.json` changes only the client adapter or endpoint
 that this sample uses. It does not reconfigure or restart the shared server.

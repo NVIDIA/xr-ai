@@ -663,7 +663,7 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
-  - `nemo-relay>=0.7.2,<0.8`
+  - `nemo-relay>=0.10.0,<0.11`
   - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
   - `xr-ai-conversation` → [`xr-ai-conversation`](agent-sdk/xr-ai-conversation/) (local, editable)
   - `xr-ai-routing[runtime]` → [`xr-ai-routing`](agent-sdk/xr-ai-routing/) (local, editable)

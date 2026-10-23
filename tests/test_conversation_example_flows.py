@@ -290,7 +290,7 @@ def test_multi_turn_eval_corpus_is_ordered_and_layer_scored() -> None:
             assert turn["query"].strip()
             destinations = turn.get("acceptable_destinations")
             assert destinations is not None
-            assert set(destinations) <= {"conversation", "observation", "monitor", "notes"}
+            assert set(destinations) <= {"conversation", "observation", "alerts", "notes"}
             if turn.get("route_outcome") == "clarify":
                 assert turn.get("acceptable_router_choices") == ["clarify"]
                 assert destinations == []
@@ -328,10 +328,9 @@ def test_multi_turn_eval_corpus_is_ordered_and_layer_scored() -> None:
     assert {
         "general_ar_vr_followup_topic_shift_and_shared_recall",
         "direct_visual_handoff_to_general_conversation",
-        "background_monitor_and_focused_notes_are_participant_scoped",
+        "one_shot_alert_controls_stay_separate",
         "notes_handoff_releases_to_general_conversation",
         "poisoned_camera_unavailable_history_does_not_block_fresh_view",
-        "monitor_retarget_is_a_routed_control_before_old_scope_view",
     } <= set(by_name)
     assert all(
         "expert" not in destination
@@ -351,9 +350,6 @@ def test_multi_turn_eval_corpus_is_ordered_and_layer_scored() -> None:
         for flow in flows
         for turn in flow["turns"]
     )
-    monitor = by_name["background_monitor_and_focused_notes_are_participant_scoped"]
-    assert all(turn.get("focus_after") != "monitor" for turn in monitor["turns"])
-    assert any(turn.get("participant_id") == "bob" for turn in monitor["turns"])
 
 
 def test_direct_observation_is_available_to_later_general_turn_without_future_output() -> None:
@@ -398,176 +394,6 @@ def test_ambiguous_flow_requires_selection_for_uncertain_or_direct_router_choice
     }
     assert score_turn(expected, actual)["route_outcome"] is True
     assert score_turn(expected, {**actual, "route_outcome": "clarify"})["route_outcome"] is False
-
-
-def test_monitor_retarget_control_precedes_an_old_scope_current_view_request() -> None:
-    flows = yaml.safe_load(_CORPUS.read_text(encoding="utf-8"))
-    flow = next(item for item in flows if item["name"] == "monitor_retarget_is_a_routed_control_before_old_scope_view")
-    start, retarget, old_scope_view = flow["turns"]
-    assert start["acceptable_destinations"] == ["monitor"]
-    assert start["destination_actions"] == {"monitor": "start"}
-    assert retarget["acceptable_destinations"] == ["monitor"]
-    assert retarget["destination_actions"] == {"monitor": "retarget"}
-    assert old_scope_view["acceptable_destinations"] == ["observation"]
-    assert old_scope_view["evidence_expectation"] == "current_view"
-
-
-@pytest.mark.parametrize(
-    ("context_before", "expected_precondition", "expected_answer"),
-    [
-        (None, "not_scored", "not_scored"),
-        (
-            {"conversation-example.monitor-window": "Background visual monitoring status: active."},
-            False,
-            "not_scored",
-        ),
-        (
-            {
-                "conversation-example.monitor-window": (
-                    "Background visual monitoring status: active.\n"
-                    "- 2026-10-16 07:00 UTC (frame source time): Pen beside the notebook."
-                )
-            },
-            True,
-            True,
-        ),
-    ],
-)
-def test_monitor_lookup_answer_requires_completed_timestamped_observation(
-    context_before, expected_precondition, expected_answer
-) -> None:
-    flows = yaml.safe_load(_CORPUS.read_text(encoding="utf-8"))
-    flow = next(
-        flow for flow in flows if flow["name"] == "active_monitor_routes_task_coverage_separately_from_current_view"
-    )
-    expected = flow["turns"][1]
-    scores = score_turn(
-        expected,
-        {
-            "effective_destination": "conversation",
-            "route_outcome": "select",
-            "admissions": {"conversation": "accept"},
-            "evidence": {"tool_names": []},
-            "answer": "The pen is beside the notebook.",
-            "context_before": context_before,
-        },
-    )
-
-    assert scores["context_record_precondition"] is expected_precondition
-    assert scores["answer"] == expected_answer
-
-
-def test_background_monitor_and_notes_focus_are_independent_and_participant_scoped() -> None:
-    flow = {
-        "name": "monitor_background_with_notes_focus",
-        "participants": ["alice", "bob"],
-        "turns": [
-            {"participant_id": "alice", "query": "Start background monitoring."},
-            {"participant_id": "bob", "query": "A separate question."},
-            {"participant_id": "alice", "query": "A general question while monitoring."},
-            {"participant_id": "alice", "query": "Take some notes."},
-            {"participant_id": "alice", "query": "Record this AR/VR note."},
-            {"participant_id": "alice", "query": "Read back my notes."},
-            {"participant_id": "alice", "query": "I'm finished taking notes."},
-            {"participant_id": "alice", "query": "An AR/VR knowledge question after focus."},
-            {"participant_id": "alice", "query": "Stop background monitoring."},
-            {"participant_id": "alice", "query": "A regular question after stop."},
-        ],
-    }
-    actual = [
-        {
-            "completed": True,
-            "answer": "Monitoring started.",
-            "effective_destination": "monitor",
-            "destination_disposition": "answer",
-            "context_updates": [{"source": "conversation-example.monitor-window", "mode": "summary", "text": "active"}],
-        },
-        {"completed": True, "answer": "Bob's independent answer.", "effective_destination": "conversation"},
-        {
-            "completed": True,
-            "answer": "General answer.",
-            "effective_destination": "conversation",
-        },
-        {
-            "completed": True,
-            "answer": "Note taking started.",
-            "effective_destination": "notes",
-            "destination_disposition": "focus",
-            "destination_actions": {"notes": "start"},
-        },
-        {
-            "completed": True,
-            "answer": "Note recorded.",
-            "effective_destination": "notes",
-            "destination_disposition": "focus",
-            "destination_actions": {"notes": "capture"},
-            "context_updates": [
-                {
-                    "source": "conversation-example.foreground-notes",
-                    "mode": "summary",
-                    "text": "Record this AR/VR note.",
-                }
-            ],
-        },
-        {
-            "completed": True,
-            "answer": "Your notes are ...",
-            "effective_destination": "notes",
-            "destination_disposition": "focus",
-            "destination_actions": {"notes": "readback"},
-        },
-        {
-            "completed": True,
-            "answer": "Note taking finished.",
-            "effective_destination": "notes",
-            "destination_disposition": "release",
-            "destination_actions": {"notes": "finish"},
-        },
-        {
-            "completed": True,
-            "answer": "General answer about AR/VR.",
-            "effective_destination": "conversation",
-            "context_updates": [
-                {"source": "conversation-example.monitor-window", "mode": "summary", "text": "latest window"}
-            ],
-        },
-        {
-            "completed": True,
-            "answer": "Monitoring stopped.",
-            "effective_destination": "monitor",
-            "destination_disposition": "answer",
-            "context_updates": [
-                {"source": "conversation-example.monitor-window", "mode": "summary", "text": "stopped window"}
-            ],
-        },
-        {"completed": True, "answer": "Regular answer.", "effective_destination": "conversation"},
-    ]
-
-    before = completed_flow_state_before_turns(flow, actual)
-
-    assert before[1]["focused_destination"] is None
-    assert before[1]["context"] == {}
-    assert before[2]["focused_destination"] is None
-    assert before[2]["context"] == {"conversation-example.monitor-window": "active"}
-    assert before[3]["focused_destination"] is None
-    assert before[4]["focused_destination"] == "notes"
-    assert before[5]["focused_destination"] == "notes"
-    assert before[6]["focused_destination"] == "notes"
-    assert before[7]["focused_destination"] is None
-    assert before[7]["context"] == {
-        "conversation-example.monitor-window": "active",
-        "conversation-example.foreground-notes": "Record this AR/VR note.",
-    }
-    assert before[8]["focused_destination"] is None
-    assert before[8]["context"] == {
-        "conversation-example.monitor-window": "latest window",
-        "conversation-example.foreground-notes": "Record this AR/VR note.",
-    }
-    assert before[9]["focused_destination"] is None
-    assert before[9]["context"] == {
-        "conversation-example.monitor-window": "stopped window",
-        "conversation-example.foreground-notes": "Record this AR/VR note.",
-    }
 
 
 def test_flow_history_uses_only_completed_turns() -> None:
@@ -714,7 +540,7 @@ def test_note_action_and_context_content_are_scored_separately_from_answer() -> 
         "destination_actions": {"notes": "capture"},
         "context_update_expectations": [{"source": "conversation-example.foreground-notes", "mode": "summary"}],
         "context_update_text_contains": "AR/VR labels stay readable",
-        "context_updates_must_not_include": ["conversation-example.monitor-window"],
+        "context_updates_must_not_include": ["conversation-example.alert-capability"],
         "answer_expectation": "nonempty",
     }
     actual = {

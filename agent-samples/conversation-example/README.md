@@ -8,7 +8,7 @@
 This sample is a runnable voice-and-vision application in the repository. Its
 reusable `xr_ai_routing.AgentRouter` routes each
 turn through Clef to general conversation and direct visual observation. It
-also includes an explicitly started background visual monitor and a
+also includes an explicitly started one-shot visual alert and a
 foreground note-taking session that can hold focus and share participant-
 authored notes with general conversation. General conversation covers text
 questions across subjects, including AR/VR knowledge.
@@ -30,12 +30,12 @@ files before starting the sample:
 
 | File | Common changes |
 |---|---|
-| `yaml/conversation_example_worker.yaml` | Frame freshness, VAD sensitivity, idle timeout, optional route-aware acknowledgment delay, context topics (including shared notes), monitor window size, or prompt override |
+| `yaml/conversation_example_worker.yaml` | Frame freshness, VAD sensitivity, idle timeout, optional route-aware acknowledgment delay, context topics (including shared notes), or prompt override |
 | `yaml/voice_gate.yaml` | Conversation controls, optional wake phrases, listening chime, and follow-up window |
 | `yaml/models.json` | Reused model adapters, Clef router endpoint, and conversation generation defaults |
 | `yaml/device_io_hub.yaml` | Room, ports, web client, and network behavior |
 | `yaml/media_capture.yaml` | Opt-in session recording output, NVENC, audio, captions, and retention |
-| `worker/conversation_example_worker/prompts/` | Separate conversation, current-view, monitor, and note-taking instructions |
+| `worker/conversation_example_worker/prompts/` | Separate conversation, current-view, alert, and note-taking instructions |
 
 For example, change `followup_grace_s` in `yaml/voice_gate.yaml` to control how
 long a second utterance can omit “Hey Agent”:

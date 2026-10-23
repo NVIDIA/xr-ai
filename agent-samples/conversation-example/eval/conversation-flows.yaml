@@ -222,177 +222,6 @@
       destination_disposition: answer
       answer_any_of: [closed]
 
-- name: background_monitor_and_focused_notes_are_participant_scoped
-  participants: [alice, bob]
-  turns:
-    - name: alice_enters_monitoring
-      authored_completion: "I'll keep an eye on the room and note relevant changes in the background."
-      participant_id: alice
-      query: Start tracking the current room in the background.
-      acceptable_destinations: [monitor]
-      admission_expectations: {monitor: accept}
-      evidence_expectation: none
-      router_invoked: true
-      destination_disposition: answer
-      destination_actions: {monitor: start}
-      focus_after: null
-      context_update_expectations: [{source: conversation-example.monitor-window, mode: summary}]
-      answer_expectation: nonempty
-    - name: bob_ordinary_turn_does_not_inherit_alice_focus
-      authored_completion: "12 times 12 is 144."
-      participant_id: bob
-      query: What is 12 times 12?
-      acceptable_destinations: [conversation]
-      admission_expectations: {conversation: accept}
-      evidence_expectation: none
-      router_invoked: true
-      destination_disposition: answer
-      focus_after: null
-      answer_any_of: [144]
-    - name: alice_general_question_routes_while_monitor_runs
-      authored_completion: "Asteroids are mostly rocky, while comets contain more ice and can form visible tails near the Sun."
-      participant_id: alice
-      query: What is the difference between a comet and an asteroid?
-      acceptable_destinations: [conversation]
-      admission_expectations: {conversation: accept}
-      evidence_expectation: none
-      router_invoked: true
-      destination_disposition: answer
-      focus_after: null
-      context_sources_before: [conversation-example.monitor-window]
-      answer_expectation: nonempty
-    - name: alice_starts_note_taking
-      authored_completion: "I'm ready. Tell me what you'd like to save."
-      participant_id: alice
-      query: Take some notes.
-      acceptable_destinations: [notes]
-      admission_expectations: {notes: accept}
-      evidence_expectation: none
-      router_invoked: true
-      destination_disposition: focus
-      focus_after: notes
-      destination_actions: {notes: start}
-      answer_expectation: nonempty
-    - name: alice_dictates_ar_vr_note_verbatim
-      authored_completion: "Noted: AR/VR onboarding should keep labels readable at arm's length."
-      participant_id: alice
-      query: "Record this note: AR/VR onboarding should keep labels readable at arm's length."
-      acceptable_destinations: [notes]
-      admission_expectations: {notes: accept}
-      evidence_expectation: none
-      router_invoked: false
-      destination_disposition: focus
-      focus_before: notes
-      focus_after: notes
-      destination_actions: {notes: capture}
-      context_update_expectations: [{source: conversation-example.foreground-notes, mode: summary}]
-      context_update_text_contains: AR/VR onboarding should keep labels readable at arm's length.
-      answer_expectation: nonempty
-    - name: alice_reads_note_without_recording_readback
-      authored_completion: "You noted that AR/VR onboarding labels should be readable at arm's length."
-      participant_id: alice
-      query: Read back my notes.
-      acceptable_destinations: [notes]
-      admission_expectations: {notes: accept}
-      evidence_expectation: none
-      router_invoked: false
-      destination_disposition: focus
-      focus_before: notes
-      focus_after: notes
-      destination_actions: {notes: readback}
-      context_updates_must_not_include: [conversation-example.foreground-notes]
-      answer_expectation: nonempty
-    - name: topic_change_alone_keeps_notes_focus
-      authored_completion: "18 percent of 250 is 45."
-      participant_id: alice
-      query: What is 18 percent of 250?
-      acceptable_destinations: [notes]
-      admission_expectations: {notes: accept}
-      evidence_expectation: none
-      router_invoked: false
-      destination_disposition: focus
-      focus_before: notes
-      focus_after: notes
-      destination_actions: {notes: other}
-      answer_expectation: nonempty
-    - name: alice_finishes_notes_and_general_route_recalls_them
-      authored_completion: "Note-taking is finished."
-      participant_id: alice
-      query: I'm finished taking notes.
-      acceptable_destinations: [notes]
-      admission_expectations: {notes: accept}
-      evidence_expectation: none
-      router_invoked: false
-      destination_disposition: release
-      focus_before: notes
-      focus_after: null
-      destination_actions: {notes: finish}
-      context_update_expectations: [{source: conversation-example.foreground-notes, mode: summary}]
-      answer_expectation: nonempty
-    - name: alice_general_conversation_uses_saved_note_context
-      authored_completion: "You wrote that the onboarding labels should be readable at arm's length."
-      participant_id: alice
-      query: What did I note about the AR/VR onboarding labels?
-      acceptable_destinations: [conversation]
-      admission_expectations: {conversation: accept}
-      evidence_expectation: none
-      router_invoked: true
-      destination_disposition: answer
-      focus_before: null
-      focus_after: null
-      context_sources_before: [conversation-example.foreground-notes, conversation-example.monitor-window]
-      answer_any_of: [readable, arm's length]
-    - name: bob_does_not_inherit_alice_note_context
-      authored_completion: "I don't have an AR/VR note from you in this conversation."
-      participant_id: bob
-      query: What did I note about AR/VR labels?
-      acceptable_destinations: [conversation]
-      admission_expectations: {conversation: accept}
-      evidence_expectation: none
-      router_invoked: true
-      destination_disposition: answer
-      focus_before: null
-      focus_after: null
-      context_sources_before: []
-      answer_expectation: nonempty
-    - name: alice_ar_vr_question_routes_to_conversation_after_note_focus
-      authored_completion: "Try the flow with representative users, then ask about comfort and track where they hesitate or feel disoriented."
-      participant_id: alice
-      query: How should I test comfort in an AR/VR onboarding flow?
-      acceptable_destinations: [conversation]
-      admission_expectations: {conversation: accept}
-      evidence_expectation: none
-      router_invoked: true
-      destination_disposition: answer
-      focus_before: null
-      focus_after: null
-      answer_expectation: nonempty
-    - name: alice_monitor_remains_active_until_stopped
-      authored_completion: "Background visual monitoring has stopped."
-      participant_id: alice
-      query: Stop tracking the room now.
-      acceptable_destinations: [monitor]
-      admission_expectations: {monitor: accept}
-      evidence_expectation: none
-      router_invoked: true
-      destination_disposition: answer
-      focus_before: null
-      focus_after: null
-      destination_actions: {monitor: stop}
-      answer_expectation: nonempty
-    - name: alice_monitor_stays_stopped
-      authored_completion: "Nine times eight is 72."
-      participant_id: alice
-      query: What is 9 times 8?
-      acceptable_destinations: [conversation]
-      admission_expectations: {conversation: accept}
-      evidence_expectation: none
-      router_invoked: true
-      destination_disposition: answer
-      focus_before: null
-      focus_after: null
-      answer_any_of: [72]
-
 - name: notes_handoff_releases_to_general_conversation
   turns:
     - name: start_notes
@@ -406,198 +235,201 @@
       focus_after: notes
       destination_actions: {notes: start}
       answer_expectation: nonempty
-
-- name: active_monitor_routes_task_coverage_separately_from_current_view
-  turns:
-    - name: start_tracking_pen
-      authored_completion: "I'll track where you leave the pen and keep the latest observations available."
-      query: Keep track of where I leave my pen.
-      acceptable_destinations: [monitor]
-      admission_expectations: {monitor: accept}
-      evidence_expectation: none
-      destination_disposition: answer
-      destination_actions: {monitor: start}
-      context_update_expectations: [{source: conversation-example.monitor-window, mode: summary}]
-      answer_expectation: nonempty
-    - name: active_task_question_uses_monitor_context
-      authored_completion: "The latest monitor update places the pen on the table beside the notebook."
-      query: Where is my pen?
-      acceptable_destinations: [conversation]
-      admission_expectations: {conversation: accept}
-      evidence_expectation: completed_history_only
-      destination_disposition: answer
-      context_sources_before: [conversation-example.monitor-window]
-      context_record_required_before:
-        source: conversation-example.monitor-window
-        contains: (frame source time)
-      answer_expectation: nonempty
-    - name: monitor_status_is_a_control
-      authored_completion: "Yes, background monitoring is active for the room."
-      query: Is background monitoring still active?
-      acceptable_destinations: [monitor]
-      admission_expectations: {monitor: accept}
-      evidence_expectation: none
-      destination_disposition: answer
-      destination_actions: {monitor: status}
-      answer_expectation: nonempty
-    - name: unrelated_visual_question_uses_observation
-      authored_completion: "The exit sign appears green."
-      query: What color is the exit sign right now?
-      acceptable_destinations: [observation]
-      admission_expectations: {observation: accept}
-      evidence_expectation: current_view
-      destination_disposition: answer
-      answer_expectation: nonempty
-    - name: explicit_fresh_camera_request_overrides_monitor_coverage
-      authored_completion: "In the current frame, the pen is still on the table."
-      query: Look at the current camera frame. Is my pen still on the table?
-      acceptable_destinations: [observation]
-      admission_expectations: {observation: accept}
-      evidence_expectation: current_view
-      destination_disposition: answer
-      answer_expectation: nonempty
-    - name: stop_monitoring
-      authored_completion: "Background visual monitoring has stopped."
-      query: Stop tracking my pen.
-      acceptable_destinations: [monitor]
-      admission_expectations: {monitor: accept}
-      evidence_expectation: none
-      destination_disposition: answer
-      destination_actions: {monitor: stop}
-      context_update_expectations: [{source: conversation-example.monitor-window, mode: summary}]
-      answer_expectation: nonempty
-
-    - name: stopped_monitor_history_remains_available_to_conversation
-      authored_completion: "The last completed monitor update placed the pen on the table beside the notebook."
-      query: Where did the monitor last see my pen?
-      acceptable_destinations: [conversation]
-      admission_expectations: {conversation: accept}
-      evidence_expectation: completed_history_only
-      destination_disposition: answer
-      context_sources_before: [conversation-example.monitor-window]
-      answer_expectation: nonempty
-    - name: capture_ar_vr_workflow_note
-      authored_completion: "Noted: onboarding should be usable with one hand."
-      query: Note that onboarding should be usable with one hand.
+    - name: save_accessibility_note
+      query: "Save this note: use large print on the exhibit labels."
+      authored_completion: Noted.
       acceptable_destinations: [notes]
       admission_expectations: {notes: accept}
-      evidence_expectation: none
-      router_invoked: false
-      destination_disposition: focus
+      destination_actions: {notes: capture}
       focus_before: notes
       focus_after: notes
-      destination_actions: {notes: capture}
+      router_invoked: false
       context_update_expectations: [{source: conversation-example.foreground-notes, mode: summary}]
-      context_update_text_contains: onboarding should be usable with one hand.
+      evidence_expectation: none
       answer_expectation: nonempty
-    - name: hand_off_same_ar_vr_question_to_conversation
-      authored_completion: "For an AR/VR tutorial, let people complete the main steps with one hand and check that the controls remain reachable."
-      query: How should I validate one-handed use in an AR/VR tutorial?
+    - name: explicit_handoff_for_general_answer
+      query: Why do leaves change color?
+      authored_completion: Leaves change color as chlorophyll breaks down.
       acceptable_destinations: [conversation]
       admission_expectations: {notes: decline, conversation: accept}
-      evidence_expectation: none
-      router_invoked: true
-      destination_disposition: answer
+      destination_actions: {notes: handoff}
       focus_before: notes
       focus_after: notes
-      destination_actions: {notes: handoff}
+      evidence_expectation: none
+      answer_expectation: nonempty
+    - name: capture_statement_after_answer
+      query: I work at a ceramics studio.
+      authored_completion: Noted.
+      acceptable_destinations: [notes]
+      admission_expectations: {notes: accept}
+      destination_actions: {notes: capture}
+      focus_before: notes
+      focus_after: notes
+      evidence_expectation: none
+      answer_expectation: nonempty
+    - name: capture_explicitly_dictated_question
+      query: "Save this question: how does the water pump work?"
+      authored_completion: Noted.
+      acceptable_destinations: [notes]
+      admission_expectations: {notes: accept}
+      destination_actions: {notes: capture}
+      focus_before: notes
+      focus_after: notes
+      evidence_expectation: none
       answer_expectation: nonempty
     - name: focused_notes_read_back_after_handoff
-      authored_completion: "You wrote down that the onboarding should be usable with one hand."
-      query: What did I write down about one-handed use?
+      query: What did I save about the exhibit labels?
+      authored_completion: You saved that the exhibit labels should use large print.
       acceptable_destinations: [notes]
       admission_expectations: {notes: accept}
       destination_actions: {notes: readback}
-      evidence_expectation: completed_history_only
-      router_invoked: false
-      destination_disposition: focus
       focus_before: notes
-      focus_after: notes
-      context_sources_before: [conversation-example.foreground-notes]
-      answer_any_of: [one hand, one-handed]
-
-- name: monitor_aid_keeps_control_and_coverage_separate
-  turns:
-    - name: start_task
-      authored_completion: "I’ll watch for whether the workbench is left clear."
-      query: Track whether the workbench is left clear.
-      acceptable_destinations: [monitor]
-      admission_expectations: {monitor: accept}
-      evidence_expectation: none
-      destination_disposition: answer
-      destination_actions: {monitor: start}
-      answer_expectation: nonempty
-    - name: ask_control_status_during_task
-      authored_completion: "The background monitor is active."
-      query: Is the background monitor still active?
-      acceptable_destinations: [monitor]
-      admission_expectations: {monitor: accept}
-      evidence_expectation: none
-      destination_disposition: answer
-      destination_actions: {monitor: status}
-      answer_expectation: nonempty
-
-- name: retargeted_monitor_does_not_cover_old_visual_scope
-  image: closed_sign
-  initial_history:
-    - user: Start tracking arrivals at the entrance in the background.
-      assistant: The background monitor was started for entrance arrivals.
-    - user: What word was on the entrance sign in the earlier view?
-      assistant: It read ARRIVALS.
-    - user: What color was the entrance door earlier?
-      assistant: In the earlier recorded view, the door looked blue.
-    - user: Retarget monitoring from entrance arrivals to my desk pen.
-      assistant: The active monitor task now covers the pen on the desk; the earlier entrance-arrivals task was replaced.
-    - user: Is the desk near the window?
-      assistant: Yes, the desk is beside the window.
-  turns:
-    - name: current_sign_text_outside_retargeted_task_uses_observation
-      authored_completion: "The sign in the current view reads CLOSED."
-      query: What word is visible on the sign in the current view?
-      acceptable_destinations: [observation]
-      admission_expectations: {observation: accept}
-      evidence_expectation: current_view
-      destination_disposition: answer
-      answer_any_of: [closed]
-
-- name: monitor_retarget_is_a_routed_control_before_old_scope_view
-  image: closed_sign
-  turns:
-    - name: start_entrance_arrival_monitor
-      authored_completion: "I'll watch the entrance for activity and note when someone arrives."
-      query: Track activity by the entrance so I know when someone arrives.
-      acceptable_destinations: [monitor]
-      admission_expectations: {monitor: accept}
-      evidence_expectation: none
-      destination_disposition: answer
-      destination_actions: {monitor: start}
-      answer_expectation: nonempty
-    - name: retarget_entrance_monitor_to_desk_pen
-      authored_completion: "I'll switch the background tracking from entrance arrivals to your desk pen."
-      query: Retarget that entrance-arrival monitor to watch my desk pen instead.
-      acceptable_destinations: [monitor]
-      admission_expectations: {monitor: accept}
-      evidence_expectation: none
-      destination_disposition: answer
-      destination_actions: {monitor: retarget}
-      answer_expectation: nonempty
-    - name: old_scope_current_detail_uses_observation
-      authored_completion: "The entrance sign looks yellow in the current view."
-      query: What color is the entrance sign in the current view?
-      acceptable_destinations: [observation]
-      admission_expectations: {observation: accept}
-      evidence_expectation: current_view
-      destination_disposition: answer
-      answer_expectation: nonempty
+      evidence_expectation: completed_history_only
+      answer_any_of: [large print]
 
 - name: first_turn_agent_capabilities
   image: blank
   turns:
     - name: explain_help_without_claiming_live_camera
-      authored_completion: "I can answer general questions, keep notes when asked, monitor a requested visual task, and inspect a fresh camera frame for a specific question. I am not watching the camera continuously."
-      query: What can you help me with, and are you watching the camera now?
+      # Generation review: include general conversation as well as notes and visual
+      # help. Reject a global refusal of non-visual questions, claims of an active
+      # camera/alert job, a whole-application camera-access refusal, markdown lists,
+      # or an explanation of internal procedures. Missing current evidence must not
+      # become a claim that visual assistance is unavailable, or that delegation
+      # or frame capture already happened.
+      # This rubric is for answer review; the decision-only runner does not score it.
+      authored_completion: "We can talk through your ideas and questions. I can also help keep notes, answer questions about your camera view, or alert you once when a condition you choose is visible."
+      query: I'm preparing a community workshop. Can you help me think it through, and what else can we do together?
       acceptable_destinations: [conversation]
       admission_expectations: {conversation: accept}
+      evidence_expectation: none
+      destination_disposition: answer
+      answer_expectation: nonempty
+
+
+- name: elliptical_visible_state_then_recall_and_refresh
+  image: blank
+  initial_history:
+    - user: Describe the area by the doorway.
+      assistant: A folding chair is beside a coat rack.
+  turns:
+    - name: named_subject_without_camera_keyword
+      authored_completion: "The folding chair is folded."
+      query: folding chair upright or folded?
+      acceptable_destinations: [observation]
+      admission_expectations: {observation: accept}
+      evidence_expectation: current_view
+      destination_disposition: answer
+      answer_any_of: [folded]
+    - name: recall_completed_state_without_rechecking
+      authored_completion: "I said the chair was folded."
+      query: What did you say its position was?
+      acceptable_destinations: [conversation]
+      admission_expectations: {conversation: accept}
+      evidence_expectation: completed_history_only
+      destination_disposition: answer
+      answer_any_of: [folded]
+    - name: current_state_requires_new_evidence
+      authored_completion: "The chair is upright now."
+      query: Is the folding chair still folded now?
+      acceptable_destinations: [observation]
+      admission_expectations: {observation: accept}
+      evidence_expectation: current_view
+      destination_disposition: answer
+      answer_any_of: [upright]
+
+- name: identified_item_knowledge_vs_visible_label
+  image: blank
+  initial_history:
+    - user: Can you identify this electronic reader?
+      assistant: It appears to be a Kindle.
+  turns:
+    - name: knowledge_from_tentative_completed_identity
+      authored_completion: "If it is a Kindle, it is made by Amazon."
+      query: Who makes that model?
+      acceptable_destinations: [conversation]
+      admission_expectations: {conversation: accept}
+      evidence_expectation: completed_history_only
+      destination_disposition: answer
+      answer_any_of: [Amazon]
+    - name: printed_manufacturer_requires_current_image
+      authored_completion: "The label says Amazon."
+      query: Read the maker's name on the back of the e-reader now.
+      acceptable_destinations: [observation]
+      admission_expectations: {observation: accept}
+      evidence_expectation: current_view
+      destination_disposition: answer
+      answer_any_of: [Amazon]
+    - name: general_property_after_visual_identification
+      authored_completion: "Kindle e-readers generally use an e-paper display."
+      query: Does that model generally have a paperlike screen?
+      acceptable_destinations: [conversation]
+      admission_expectations: {conversation: accept}
+      evidence_expectation: completed_history_only
+      destination_disposition: answer
+      answer_any_of: [e-paper, e-ink]
+    - name: current_presence_overrides_established_identity
+      authored_completion: "The e-reader is no longer on the shelf."
+      query: Is the e-reader still on the shelf?
+      acceptable_destinations: [observation]
+      admission_expectations: {observation: accept}
+      evidence_expectation: current_view
+      destination_disposition: answer
+      answer_any_of: [no longer]
+
+- name: unidentified_item_needs_visible_evidence
+  image: blank
+  initial_history:
+    - user: Can you identify the device on the desk?
+      assistant: I could not identify it from the last image.
+  turns:
+    - name: inspect_makers_mark_without_assuming_identity
+      authored_completion: "The maker's mark is not readable."
+      query: Can you read the maker's mark on the unidentified device?
+      acceptable_destinations: [observation]
+      admission_expectations: {observation: accept}
+      evidence_expectation: current_view
+      destination_disposition: answer
+      answer_any_of: [not readable]
+
+- name: one_shot_alert_controls_stay_separate
+  image: red_left_blue_right
+  turns:
+    - name: explicit_alert_start
+      query: Alert me once when a yellow triangle is visible.
+      authored_completion: I'll alert you once when that condition is visible.
+      acceptable_destinations: [alerts]
+      admission_expectations: {alerts: accept}
+      destination_actions: {alerts: start}
+      evidence_expectation: none
+      destination_disposition: answer
+      answer_expectation: nonempty
+    - name: unrelated_question_does_not_replace_alert
+      query: Why do shadows change length during the day?
+      authored_completion: The sun's angle changes as Earth rotates.
+      acceptable_destinations: [conversation]
+      admission_expectations: {conversation: accept}
+      evidence_expectation: none
+      answer_expectation: nonempty
+    - name: visible_question_uses_direct_observation
+      query: What color is the circle on the right now?
+      authored_completion: The circle on the right is blue.
+      acceptable_destinations: [observation]
+      admission_expectations: {observation: accept}
+      evidence_expectation: current_view
+      answer_any_of: [blue]
+    - name: ambiguous_fragment_is_not_a_new_alert
+      query: A triangle over there.
+      authored_completion: What would you like to know about the triangle?
+      acceptable_destinations: [conversation, observation]
+      evidence_expectation: none
+      answer_expectation: nonempty
+    - name: explicit_cancel
+      query: Cancel the visual alert.
+      authored_completion: The visual alert is cancelled.
+      acceptable_destinations: [alerts]
+      admission_expectations: {alerts: accept}
+      destination_actions: {alerts: cancel}
       evidence_expectation: none
       destination_disposition: answer
       answer_expectation: nonempty
