@@ -81,12 +81,12 @@ def test_diagnostics_preserve_primary_mode_decisions(_streaming_models, monkeypa
         cfg = _SpeakerConfig(mode=mode, magic_phrases=("hey agent",), diagnostics=diagnostics, silence_duration=0.16)
         session = _Session(models, cfg, audio_origin_us=0)
         recognized, primary, display, states = {}, [], [], []
-        original = session._decode
+        original = session._step_native
 
         def decode(*args):
             text[0] = recognized.get(args[3], "")
             return original(*args)
-        monkeypatch.setattr(session, "_decode", decode)
+        monkeypatch.setattr(session, "_step_native", decode)
 
         def feed(speakers, words=None):
             activity[:] = speakers
@@ -157,12 +157,12 @@ async def test_actual_speaker_wire_modes_reach_shared_display_and_runtime(
 ):
     models, activity, _calls, _masks, _allocations, text = _streaming_models
     recognized = {1: "unrelated background speech", 7: "hey agent describe this"}
-    original_decode = _Session._decode
+    original_decode = _Session._step_native
 
     def decode(self, *args):
         text[0] = recognized[args[3]]
         return original_decode(self, *args)
-    monkeypatch.setattr(_Session, "_decode", decode)
+    monkeypatch.setattr(_Session, "_step_native", decode)
     allocated = []
 
     def allocate(config, *, audio_origin_us):
@@ -188,7 +188,10 @@ async def test_actual_speaker_wire_modes_reach_shared_display_and_runtime(
     ))
     runtime, recorder = AgentRuntime(), _Recorder()
     runtime.register("recorder", recorder)
-    voice = VoiceAgent(query_topic=_QUERIES, stt=None, tts=SimpleNamespace(), vad=VadConfig(), voice_gate=cfg)
+    voice = VoiceAgent(
+        query_topic=_QUERIES, stt=None, tts=SimpleNamespace(),
+        vad=VadConfig(silence_duration=0.3), voice_gate=cfg,
+    )
     runtime.register("voice", voice)
     voice._runtime = runtime
     display, captions = AsyncMock(), AsyncMock()
@@ -201,7 +204,7 @@ async def test_actual_speaker_wire_modes_reach_shared_display_and_runtime(
     output.push_frame = AsyncMock()
     pipeline, _worker = _build_voice_pipeline(
         transport=transport, stt=None, tts=SimpleNamespace(), io_processor=output,
-        vad_cfg=VadConfig(stop_probe_after_s=0), voice_gate_cfg=cfg,
+        vad_cfg=VadConfig(silence_duration=0.3, stop_probe_after_s=0), voice_gate_cfg=cfg,
         on_final_transcript=captions, use_speaker_asr=True,
     )
     audio, gate = pipeline.processors[2:4]

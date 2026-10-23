@@ -28,7 +28,7 @@ def test_inference_runs_one_target_stream_and_bounds_diarization_history(_stream
     assert feed([], cfg.start_phrase)[-1] == {"kind": "enrolled"}
     count = len(asr_calls)
     assert feed([1], "bystander command") == []
-    assert len(asr_calls) == count
+    assert len(asr_calls) == count + 1
     events = feed([7, 1], "what is that?")
     assert events[0] == {"kind": "speech_start"}
     assert masks[-1][0].shape == (1, 2)
@@ -36,7 +36,7 @@ def test_inference_runs_one_target_stream_and_bounds_diarization_history(_stream
     feed([1], "what is that?")
     assert not masks[-1][0].any() and masks[-1][1].all()
     assert feed([1], "what is that?")[-1]["kind"] == "transcript"
-    assert len(asr_calls) == count + 3
+    assert len(asr_calls) == count + 6
     assert all(call["drop_extra_pre_encoded"] == 2 for call in asr_calls)
     assert all(size == 1 for size in cache_allocations)
 
@@ -127,7 +127,9 @@ def test_diagnostics_isolate_speaker_history_and_share_encoding(_streaming_model
     assert any(e.get("speaker_id") == 1 and e.get("status") == "ignored" for e in events)
     owner_call, other_call = calls[count:]
     assert owner_call["cache_last_channel"] is not other_call["cache_last_channel"]
-    assert owner_call["previous_hypotheses"] is other_call["previous_hypotheses"] is None
+    assert owner_call["previous_hypotheses"] is not other_call["previous_hypotheses"]
+    assert owner_call["previous_hypotheses"][0].y_sequence == []
+    assert other_call["previous_hypotheses"][0].y_sequence == []
     assert all(target.all() and interference.all() for target, interference in masks[-2:])
     feed([], "what is that?")
     owner_call, other_call = calls[-2:]
@@ -146,7 +148,7 @@ def test_diagnostics_isolate_speaker_history_and_share_encoding(_streaming_model
 
 
 @pytest.mark.parametrize("finish", ["silence", "truncation"])
-def test_all_eight_diagnostic_caches_are_released_at_utterance_boundary(_streaming_models, finish):
+def test_all_eight_continuations_stay_bounded_across_utterance_boundary(_streaming_models, finish):
     from speaker_stt._inference import _Session
 
     models, activity, calls, _masks, _allocations, text = _streaming_models
@@ -163,8 +165,11 @@ def test_all_eight_diagnostic_caches_are_released_at_utterance_boundary(_streami
         activity[:] = []
     events = session._feed(bytes(5120))
     assert not session._diagnostic_streams
-    assert len(calls) == 16 and len(models.encodes) == 2
-    assert all(call["keep_all_outputs"] for call in calls[-8:])
+    assert len(calls) == (16 if finish == "truncation" else 32)
+    assert len(models.encodes) == (2 if finish == "truncation" else 18)
+    assert len(session._speaker_states) == 8
+    assert len(session._history) <= models.history_hops
+    assert all(state.previous_hypotheses[0].y_sequence == [] for state in session._speaker_states.values())
     assert session.selection.owner is None
     assert not any(e["kind"] in {"enrolled", "transcript"} for e in events)
     assert len([e for e in events if e["kind"] == "diagnostic" and e["text"]]) == 8
@@ -173,7 +178,7 @@ def test_all_eight_diagnostic_caches_are_released_at_utterance_boundary(_streami
     }
 
 
-@pytest.mark.parametrize("failure", ["decode", "allocation"])
+@pytest.mark.parametrize("failure", ["decode", "allocation", "continuation"])
 def test_ignored_diagnostic_failure_preserves_owner_transcription(_streaming_models, monkeypatch, failure):
     from speaker_stt._inference import _Session
 
@@ -189,6 +194,15 @@ def test_ignored_diagnostic_failure_preserves_owner_transcription(_streaming_mod
             return original(*args)
 
         monkeypatch.setattr(session, "_decode", decode)
+    elif failure == "continuation":
+        original = session._step_native
+
+        def step(*args):
+            if args[3] == 1:
+                raise RuntimeError("background continuation failed")
+            return original(*args)
+
+        monkeypatch.setattr(session, "_step_native", step)
     else:
         original = session._new_asr
         allocations = 0
@@ -214,7 +228,7 @@ def test_ignored_diagnostic_failure_preserves_owner_transcription(_streaming_mod
     assert [e["text"] for e in events if e["kind"] == "transcript"] == ["look around"]
 
 
-def test_diagnostic_encoding_failure_is_isolated_only_without_a_selected_speaker(_streaming_models, monkeypatch):
+def test_continuous_owner_encoding_failure_propagates_during_quiet_or_speech(_streaming_models, monkeypatch):
     from speaker_stt._inference import _Session
 
     models, activity, _calls, _masks, _allocations, _text = _streaming_models
@@ -225,12 +239,10 @@ def test_diagnostic_encoding_failure_is_isolated_only_without_a_selected_speaker
         raise RuntimeError("encoder failed")
 
     monkeypatch.setattr(session.adapter, "forward_pre_encoded", fail)
-    activity[:] = [1]
-    session._feed(bytes(5120))
-    assert session.selection.owner == 7 and not session._diagnostic_streams
-    activity[:] = [7]
-    with pytest.raises(RuntimeError, match="encoder failed"):
-        session._feed(bytes(5120))
+    for speakers in ([1], [7]):
+        activity[:] = speakers
+        with pytest.raises(RuntimeError, match="encoder failed"):
+            session._feed(bytes(5120))
 
 
 def test_selected_diagnostic_decoder_failure_propagates_for_fail_closed_reset(_streaming_models, monkeypatch):
@@ -303,14 +315,19 @@ def _attributed_session(streaming_models, cfg):
     session = _Session(models, cfg, audio_origin_us=1_000_000)
     decoded = []
     original = session._decode
+    original_step = session._step_native
     phrases = {}
 
     def decode(encoded, lengths, predictions, selected, drop, stream, finished):
         decoded.append(selected)
-        text[0] = phrases.get(selected, "")
         return original(encoded, lengths, predictions, selected, drop, stream, finished)
 
+    def step(encoded, lengths, predictions, selected, *args):
+        text[0] = phrases.get(selected, "")
+        return original_step(encoded, lengths, predictions, selected, *args)
+
     session._decode = decode
+    session._step_native = step
 
     def feed(speakers, transcripts, *, audio=None):
         activity[:] = speakers
@@ -401,8 +418,9 @@ def test_candidate_display_reuses_overlap_decode_without_changing_nomination(_st
     feed([1], {1: cfg.start_phrase if tie else "ordinary conversation"})
     feed([1, 2], {2: cfg.start_phrase})
     events = feed([] if tie else [1], {})
-    assert len(calls) == len(decoded) == 5
-    assert len(models.encodes) == 3
+    assert len(decoded) == 5
+    assert len(calls) == (10 if tie else 8)
+    assert len(models.encodes) == (7 if tie else 5)
     assert not session._diagnostic_streams
     assert session.selection.owner == (None if tie else 2)
     assert [e for e in events if e["kind"] == "enrolled"] == ([] if tie else [{"kind": "enrolled"}])
@@ -434,7 +452,7 @@ def test_selected_speaker_allocates_and_decodes_before_optional_caches(_streamin
     session = _Session(models, _SpeakerConfig(diagnostics=True, silence_duration=0.3), audio_origin_us=0)
     session.selection.owner = 7
     trace = []
-    original_allocate, original_decode = session._new_asr, session._decode
+    original_allocate, original_decode = session._new_asr, session._step_native
 
     def allocate():
         trace.append("allocate")
@@ -445,7 +463,7 @@ def test_selected_speaker_allocates_and_decodes_before_optional_caches(_streamin
         return original_decode(*args)
 
     monkeypatch.setattr(session, "_new_asr", allocate)
-    monkeypatch.setattr(session, "_decode", decode)
+    monkeypatch.setattr(session, "_step_native", decode)
     activity[:] = [1, 7]
     text[0] = "look around"
     session._feed(bytes(5120))
@@ -461,56 +479,55 @@ def test_owner_decoder_history_and_finalization_are_independent_of_diagnostics(
 ):
     from types import SimpleNamespace
 
+    import torch
+    from nemo.collections.asr.parts.utils.rnnt_utils import Hypothesis
     from speaker_stt._inference import _Session
 
-    models, activity, calls, _masks, _allocations, _text = _streaming_models
+    models, activity, _calls, masks, _allocations, _text = _streaming_models
 
     def trace(diagnostics):
         cfg = _SpeakerConfig(diagnostics=diagnostics, silence_duration=0.32,
                              max_utterance_s=0.64 if finish == "truncation" else 30.0)
         session = _Session(models, cfg, audio_origin_us=0)
         session.selection.owner = 7
-        owner_calls, events = [], []
         selected = None
-        original = session._decode
+        owner_calls, events = [], []
+        original = session._step_native
 
-        def decode(*args):
+        def step(*args):
             nonlocal selected
             selected = args[3]
             return original(*args)
 
         def model_decode(**kwargs):
             previous = kwargs["previous_hypotheses"]
-            history = [] if previous is None else list(previous[0].history)
-            cache_step = int(kwargs["cache_last_channel_len"][0])
-            assert cache_step == len(history)
-            assert kwargs["previous_pred_out"] is (None if not history else previous[0])
-            history.append(f"speaker-{selected}")
-            state = SimpleNamespace(history=history)
+            count = previous[0].dec_state.count if previous else 0
+            assert int(kwargs["cache_last_channel_len"][0]) == count
+            assert not previous or previous[0].y_sequence == []
+            assert kwargs["previous_pred_out"] is None
             final = kwargs["keep_all_outputs"]
             if selected == 7:
-                owner_calls.append((tuple(history), final))
+                owner_calls.append((count + 1, final))
             channel, time, length = models.asr.encoder.get_initial_cache_state(batch_size=1)
-            length[0] = len(history)
-            text = " ".join(history) + (" final" if final else " partial")
-            return state, [text], channel, time, length, [state]
+            length[0] = count + 1
+            tokens = [65 + selected] if masks[-1][0].any() else []
+            hyp = Hypothesis(y_sequence=torch.tensor(tokens), dec_state=SimpleNamespace(count=count + 1))
+            return None, [hyp], channel, time, length, [hyp]
 
-        monkeypatch.setattr(session, "_decode", decode)
+        monkeypatch.setattr(session, "_step_native", step)
         monkeypatch.setattr(models.asr, "conformer_stream_step", model_decode)
         for _utterance in range(2):
-            for speakers in ([1, 7], [1, 7], [1, 7], [1, 7]) if finish == "truncation" else (
-                [1, 7], [1, 7], [1], [1],
-            ):
+            for speakers in ([1, 7],) * 4 if finish == "truncation" else ([1, 7], [1, 7], [1], [1]):
                 activity[:] = speakers
                 events.extend(session._feed(bytes(5120)))
             assert session.selection.owner == 7
-        assert all("speaker-1" not in event["text"] for event in events if event["kind"] == "transcript")
-        assert [call[0] for call in owner_calls if call[1]] == [("speaker-7",) * 4] * 2
-        assert owner_calls[4][0] == ("speaker-7",)
+        expected = "HHHH" if finish == "truncation" else "HH"
+        assert [e["text"] for e in events if e["kind"] == "transcript"] == [expected, expected]
+        assert [count for count, final in owner_calls if not final] == list(range(1, 9))
+        assert sum(final for _, final in owner_calls) == (0 if finish == "truncation" else 4)
         return owner_calls, [event for event in events if event["kind"] != "diagnostic"]
 
     assert trace(False) == trace(True)
-
 
 
 def test_new_candidate_cannot_enroll_from_its_pre_release_diagnostic_history(_streaming_models, monkeypatch):
@@ -520,23 +537,21 @@ def test_new_candidate_cannot_enroll_from_its_pre_release_diagnostic_history(_st
     cfg = _SpeakerConfig(diagnostics=True, silence_duration=0.3)
     session = _Session(models, cfg, audio_origin_us=0)
     session.selection.owner = 7
-    original = session._decode
+    original = session._step_native
     released = False
 
     def decode(*args):
-        speaker, stream = args[3], args[5]
+        speaker, state = args[3], args[5]
         if speaker == 7:
             text[0] = cfg.stop_phrase
         elif not released:
             text[0] = cfg.start_phrase
         else:
-            # Silence preserves a cumulative hypothesis; a fresh cache starts empty.
-            text[0] = stream.previous_hypotheses[0].text if stream.previous_hypotheses is not None else ""
-        result = original(*args)
-        stream.previous_hypotheses[0].text = result
-        return result
+            previous = state.previous_hypotheses
+            text[0] = (previous[0].dec_state["text"] if previous else "") or cfg.start_phrase
+        return original(*args)
 
-    monkeypatch.setattr(session, "_decode", decode)
+    monkeypatch.setattr(session, "_step_native", decode)
     activity[:] = [7, 1]
     session._feed(bytes(5120))
     activity[:] = [1]
@@ -549,9 +564,62 @@ def test_new_candidate_cannot_enroll_from_its_pre_release_diagnostic_history(_st
     count = len(calls)
     events = session._feed(bytes(5120))
     assert 1 in session._candidate_streams and not session._diagnostic_streams
-    assert calls[count]["previous_hypotheses"] is None
+    assert all(not call["previous_hypotheses"] or call["previous_hypotheses"][0].y_sequence == []
+               for call in calls[count:])
     activity[:] = []
     events += session._feed(bytes(5120))
     events += session._feed(bytes(5120))
     assert session.selection.owner is None
+    assert session._speaker_states[1].previous_hypotheses[0].dec_state["text"] == cfg.start_phrase
     assert not any(e["kind"] == "enrolled" for e in events)
+
+
+def test_repeated_turns_keep_native_continuation_and_bounded_output_history(_streaming_models):
+    from speaker_stt._inference import _Session
+
+    models, activity, _calls, _masks, _allocations, text = _streaming_models
+    session = _Session(models, _SpeakerConfig(mode="always_on", silence_duration=0.16), audio_origin_us=0)
+    state = None
+    for index in range(40):
+        expected = f"parcel number {index}"
+        activity[:] = [3]
+        text[0] = expected
+        session._feed(bytes(5120))
+        state = session._speaker_states[3] if state is None else state
+        activity[:] = []
+        events = session._feed(bytes(5120))
+        assert [e["text"] for e in events if e["kind"] == "one_shot"] == [expected]
+        assert session._speaker_states[3] is state
+        assert state.previous_hypotheses[0].y_sequence == []
+        assert len(state.tokens) == len(expected)
+        assert not state.pending
+        assert len(session._history) <= models.history_hops
+    assert len(session._speaker_states) == 1
+
+
+def test_next_turn_does_not_inherit_late_finalized_tokens(_streaming_models, monkeypatch):
+    import torch
+    from nemo.collections.asr.parts.utils.rnnt_utils import Hypothesis
+    from speaker_stt._inference import _Session
+
+    models, activity, _calls, masks, _allocations, _text = _streaming_models
+
+    def decode(**kwargs):
+        previous = kwargs["previous_hypotheses"]
+        step = previous[0].dec_state + 1 if previous else 1
+        # The previous utterance's last word is emitted during the next
+        # utterance's first frame; virtual quiet must not consume its new word.
+        value = "alpha" if step == 1 else ""
+        if step == 3:
+            value = " beta" + (" gamma" if masks[-1][0].any() else "")
+        hyp = Hypothesis(y_sequence=torch.tensor([ord(c) for c in value]), dec_state=step)
+        return None, [hyp], *models.asr.encoder.get_initial_cache_state(batch_size=1), [hyp]
+
+    monkeypatch.setattr(models.asr, "conformer_stream_step", decode)
+    session = _Session(models, _SpeakerConfig(mode="always_on", silence_duration=0.16), audio_origin_us=0)
+    outputs = []
+    for speakers in ([3], [], [3], []):
+        activity[:] = speakers
+        outputs.extend(e["text"] for e in session._feed(bytes(5120)) if e["kind"] == "one_shot")
+    assert [value.strip() for value in outputs] == ["alpha beta", "gamma"]
+    assert not session._speaker_states[3].pending

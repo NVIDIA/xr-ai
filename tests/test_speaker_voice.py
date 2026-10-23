@@ -164,7 +164,7 @@ async def test_candidate_decoding_arbitration_and_voice_gate_with_synthetic_mode
     gate._use_speaker_asr = True
     gate.push_frame = AsyncMock()
     recognized = {1: cfg._speaker.start_phrase if tie else "ordinary unrelated speech", 7: cfg._speaker.start_phrase}
-    original_decode = session._decode
+    original_decode = session._step_native
 
     def decode(*args):
         # Synthetic model text is label-specific; retain the real server's
@@ -172,7 +172,7 @@ async def test_candidate_decoding_arbitration_and_voice_gate_with_synthetic_mode
         text[0] = recognized[args[3]]
         return original_decode(*args)
 
-    monkeypatch.setattr(session, "_decode", decode)
+    monkeypatch.setattr(session, "_step_native", decode)
 
     async def to_gate(frame, *_args):
         await gate.process_frame(frame, FrameDirection.DOWNSTREAM)

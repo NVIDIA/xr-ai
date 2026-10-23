@@ -273,18 +273,38 @@ refuses another launch rather than allocating a duplicate GPU copy. Persistent
 reuse exits after signaling readiness; monitored reuse keeps its readiness
 proxy alive.
 
-Each session owns one diarization cache and at most eight temporary ASR caches
-before enrollment, bounded by the model's speaker-label capacity. Features and
-model weights are shared. Always-on and wake-only keep candidate decoding as their
+Each session owns one diarization cache and at most eight attributed ASR
+continuations, allocated when their speaker identities appear. Features and model
+weights are shared. The Multitalker Parakeet encoder uses 160 ms chunks. Native
+encoder and predictor state continue through quiet intervals; utterance boundaries
+clear only the text being delivered. Accumulated native transcript metadata is
+replaced after each step while retaining its decoder state, so completed turns do
+not grow the hypothesis history. Initial speaker admission replays at most the
+encoder's existing left-context window through that speaker's masks. Always-on
+and wake-only keep candidate decoding as their
 steady state; hybrid uses it whenever no owner conversation is open. Every
 candidate remains required, so a decoder failure resets that session rather
 than silently ignoring a competing speaker. After enrollment only the owner's
-ASR cache is needed with diagnostics disabled. Enabled diagnostics share encoded features but add
-decoding work and separate temporary ASR caches for non-owner speakers. With the
+ASR continuation is retained with diagnostics disabled. Enabled diagnostics share
+encoded features but add decoding work and separate continuations for non-owner
+speakers. Every retained continuation advances through actual quiet audio; this
+adds inference work compared with resetting each utterance. With the
 default `max_sessions: 16`, up to 128 enrollment decoder caches can coexist;
 GPU memory and latency at that bound have not been qualified. Candidate-decoding
 failure revokes the session because dropping a candidate could conceal a phrase
 tie. All cache allocation, inference, and release use one serialization boundary.
+
+At a quiet endpoint, final text is decoded on an isolated copy with 320 ms of
+terminal silence. This model-specific padding allows delayed subword emissions
+to complete;
+it does not change the configured silence threshold or advance the live capture
+timeline. Forced utterance truncation does not add terminal silence. Tokens already
+delivered by finalization are reconciled against subsequent real decoding before
+new-turn text is exposed. If the real continuation revises that finalized suffix,
+the inference session fails and releases enrollment rather than assigning old
+words to a new turn. The padding is a bounded policy qualified with recorded and
+generated speech, not a universal recognition guarantee.
+
 A connected session may pause without losing enrollment. Disconnect, transport
 liveness failure, or inference failure releases it; `max_sessions` bounds
 retained sessions. Cancelled model work finishes before its cache and
