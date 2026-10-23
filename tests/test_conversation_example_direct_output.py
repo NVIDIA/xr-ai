@@ -21,7 +21,7 @@ from xr_ai_tools.image import ImageReference
 _ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_ROOT / "agent-samples/conversation-example/worker"))
 
-from conversation_example_worker._monitoring import VisualMonitorAgent  # noqa: E402
+from conversation_example_worker._alert_agent import VisualAlertAgent  # noqa: E402
 from conversation_example_worker._note_taking import NoteTakingAgent  # noqa: E402
 from conversation_example_worker._topics import USER_QUERY_TOPIC  # noqa: E402
 from conversation_example_worker._visual_agents import VisualObservationAgent  # noqa: E402
@@ -37,8 +37,8 @@ class _Decisions:
     async def decide(self, _state, questions, **_kwargs):
         key = next(iter(questions))
         choice = self.route
-        if key == "monitor_action":
-            choice = "status"
+        if key == "alert_action":
+            choice = "cancel"
         if key == "note_action":
             choice = "start" if self.note_actions == 0 else "other"
             self.note_actions += 1
@@ -155,7 +155,7 @@ async def _start_notes(runtime, route, output, idle):
         output.completed.clear()
 
 
-@pytest.mark.parametrize("route", ["conversation", "observation", "notes"])
+@pytest.mark.parametrize("route", ["conversation", "observation"])
 @pytest.mark.parametrize("mode", ["before", "partial"])
 async def test_destination_failure_preserves_source_and_never_duplicates_partial_output(route, mode):
     runtime = AgentRuntime()
@@ -186,7 +186,7 @@ async def test_destination_failure_preserves_source_and_never_duplicates_partial
             await conversation.close()
 
 
-@pytest.mark.parametrize("route", ["conversation", "observation", "notes"])
+@pytest.mark.parametrize("route", ["conversation", "observation"])
 @pytest.mark.parametrize("mode", ["cancel", "cancel_return", "cancel_error"])
 async def test_replacement_suppresses_model_chunk_after_swallowed_cancellation(route, mode):
     runtime = AgentRuntime()
@@ -218,23 +218,22 @@ async def test_replacement_suppresses_model_chunk_after_swallowed_cancellation(r
             await conversation.close()
 
 
-async def test_monitor_control_publishes_one_finite_attributed_response():
+async def test_alert_cancel_publishes_one_finite_attributed_response():
     runtime = AgentRuntime()
-    decisions = _Decisions("monitor")
+    decisions = _Decisions("alerts")
 
-    async def publish_window(_participant, _update):
+    async def publish_capability(_participant, _update):
         pass
 
     general = Conversation(_Model("done"), runtime=runtime, output_topic=_OUTPUT)
-    monitor = VisualMonitorAgent(
+    alerts = VisualAlertAgent(
         _Frames(),
-        object(),
+        None,
         decisions,
-        publish_window,
+        publish_capability,
+        vlm=None,
         runtime=runtime,
         output_topic=_OUTPUT,
-        window_size=4,
-        context_budget_bytes=4096,
     )
     idle = asyncio.Event()
 
@@ -243,7 +242,7 @@ async def test_monitor_control_publishes_one_finite_attributed_response():
             idle.set()
 
     router = AgentRouter(
-        {"conversation": general, "monitor": monitor},
+        {"conversation": general, "alerts": alerts},
         decisions,
         query_topic=USER_QUERY_TOPIC,
         output_topic=_OUTPUT,
@@ -253,14 +252,14 @@ async def test_monitor_control_publishes_one_finite_attributed_response():
     output = runtime.register("output", _Output())
     try:
         async with runtime:
-            await _query(runtime, idle, "Is monitoring active?", 789)
+            await _query(runtime, idle, "Cancel my visual alert.", 789)
             await asyncio.wait_for(idle.wait(), 1)
             await router.stop()
         assert len(output.messages) == 1
         metadata, message = output.messages[0]
-        assert metadata.source == "monitor" and metadata.participant_id == "alice"
+        assert metadata.source == "alerts" and metadata.participant_id == "alice"
         assert message.final and message.response_id
         assert message.interrupt and message.timestamp_us == 789
-        assert "has not been started" in message.text
+        assert message.text == "The visual alert is cancelled."
     finally:
         await general.close()

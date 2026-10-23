@@ -20,7 +20,7 @@ _DEFAULT_PROMPT = Path(__file__).parent / "prompts" / "system.txt"
 
 @dataclass(frozen=True, slots=True)
 class WorkerConfig:
-    """Resolved worker settings for models, voice, context, and monitoring."""
+    """Resolved worker settings for models, voice, and conversation context."""
 
     models_config: Path
     voice_gate_yaml: Path
@@ -36,7 +36,6 @@ class WorkerConfig:
     context_budget_bytes: int
     compaction_input_budget_bytes: int
     acknowledgment_delay_secs: float | None = None
-    monitor_window_size: int = 20
 
 
 def _resolve(config_path: Path | None, raw: str) -> Path:
@@ -75,10 +74,6 @@ def load_config(path: Path | None) -> WorkerConfig:
         not math.isfinite(acknowledgment_delay_secs) or acknowledgment_delay_secs <= 0
     ):
         raise ValueError("acknowledgment_delay_secs must be finite and positive")
-    monitor_window_size = int(data.get("monitor_window_size", 20))
-    if monitor_window_size <= 0:
-        raise ValueError("monitor_window_size must be positive")
-
     return WorkerConfig(
         models_config=_resolve(path, "models.json"),
         voice_gate_yaml=_resolve(
@@ -97,5 +92,4 @@ def load_config(path: Path | None) -> WorkerConfig:
         context_budget_bytes=int(data.get("context_budget_bytes", 12_000)),
         compaction_input_budget_bytes=int(data.get("compaction_input_budget_bytes", 12_000)),
         acknowledgment_delay_secs=acknowledgment_delay_secs,
-        monitor_window_size=monitor_window_size,
     )

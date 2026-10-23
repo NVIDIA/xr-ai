@@ -1,1 +1,0 @@
-Describe only directly visible details relevant to the participant's background monitoring request. Treat each image as one current observation. Do not infer events or changes that a single image cannot establish. Keep the observation concise, factual, and free of recommendations.

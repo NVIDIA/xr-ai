@@ -35,12 +35,12 @@ from xr_ai_routing import AgentRouter, RoutingAid
 from xr_ai_runtime import AgentRuntime, Topic
 from xr_ai_tools.current_frame import CurrentFrameTool
 from xr_ai_tools.image import ImageRegistry
-from xr_ai_tools.vision import ImageQueryTool, StreamingImageQueryTool
+from xr_ai_tools.vision import StreamingImageQueryTool
 from xr_ai_voice import VOICE_OUTPUT_TOPIC, HubVoiceTransport, VadConfig, VoiceAgent
 from xr_ai_voicegate import load_voice_gate_config
 
+from ._alert_agent import ALERT_CAPABILITY_TOPIC, VisualAlertAgent
 from ._config import WorkerConfig
-from ._monitoring import MONITOR_WINDOW_TOPIC, VisualMonitorAgent
 from ._note_taking import NoteTakingAgent
 from ._topics import (
     INTERRUPTED_TOPIC,
@@ -52,15 +52,14 @@ from ._visual_agents import OBSERVATION_CONTEXT_TOPIC, VisualObservationAgent
 
 _CONVERSATION_SCOPE = (
     "Provide text assistance across subjects and recall relevant conversation history and participant-authored "
-    "notes. Use active monitor observations only when the current request is covered by the participant's active "
-    "monitor task. If answering depends on what the camera shows now, use direct observation even when prior "
-    "turns contain the same or a similar question and answer. Historical monitor records are not current-camera "
-    "evidence. This destination does not inspect the camera."
+    "notes. "
+    "If answering depends on what the camera shows now, use direct observation even when prior "
+    "turns contain the same or a similar question and answer. "
+    "This destination does not inspect the camera."
 )
 _PROMPTS = Path(__file__).parent / "prompts"
 _CONVERSATION_INSTRUCTIONS = (_PROMPTS / "conversation.txt").read_text(encoding="utf-8").strip()
 _NOTES_INSTRUCTIONS = (_PROMPTS / "note_taking.txt").read_text(encoding="utf-8").strip()
-_MONITOR_VLM_INSTRUCTIONS = (_PROMPTS / "monitor_observation.txt").read_text(encoding="utf-8").strip()
 _NOTES_CONTEXT_TOPIC = Topic("conversation-example.foreground-notes", ConversationContextUpdate)
 
 
@@ -213,12 +212,12 @@ async def run_app(
             participant_id=participant_id,
         )
 
-    async def publish_monitor_window(
+    async def publish_alert_capability(
         participant_id: str,
         update: ConversationContextUpdate,
     ) -> None:
         await runtime.publish(
-            MONITOR_WINDOW_TOPIC,
+            ALERT_CAPABILITY_TOPIC,
             update,
             participant_id=participant_id,
         )
@@ -249,27 +248,26 @@ async def run_app(
         context_budget_bytes=config.context_budget_bytes,
         publish_context=publish_note_context,
     )
-    monitor = VisualMonitorAgent(
+    alerts = VisualAlertAgent(
         frames,
-        ImageQueryTool(images=images, vlm=vlm, system_prompt=_MONITOR_VLM_INSTRUCTIONS),
+        images,
         decisions,
-        publish_monitor_window,
+        publish_alert_capability,
+        vlm=vlm,
         runtime=runtime,
         output_topic=VOICE_OUTPUT_TOPIC,
-        window_size=config.monitor_window_size,
-        context_budget_bytes=config.context_budget_bytes,
     )
 
     async def initialize_participant(participant_id: str) -> None:
         await notes_agent.participant_joined(participant_id)
-        await monitor.participant_joined(participant_id)
+        await alerts.participant_joined(participant_id)
         await observation.participant_joined(participant_id)
 
     async def cleanup_participant(participant_id: str) -> None:
         # Routes used for turns are also cleaned by the router. These idempotent
         # hooks cover resources initialized at join but never selected for a turn.
         errors: list[Exception] = []
-        for owner in (notes_agent, monitor, conversation, notes_conversation):
+        for owner in (notes_agent, alerts, conversation, notes_conversation):
             try:
                 await owner.participant_left(participant_id)
             except Exception as error:  # noqa: BLE001 -- retain independent cleanup failures.
@@ -285,7 +283,7 @@ async def run_app(
         {
             "conversation": conversation,
             "observation": observation,
-            "monitor": monitor,
+            "alerts": alerts,
             "notes": notes_agent,
         },
         decisions,
@@ -318,7 +316,7 @@ async def run_app(
     finally:
         await conversation.close()
         await notes_conversation.close()
-        await monitor.stop()
+        await alerts.stop()
         if acknowledgment_llm is not None:
             await acknowledgment_llm.close()
         await llm.close()

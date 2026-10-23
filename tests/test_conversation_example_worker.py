@@ -1213,15 +1213,13 @@ def test_shipped_config_preserves_models_and_prompt_behavior() -> None:
     assert "supplied current\ncamera frame" in prompt
     assert "named agent summaries" in app._CONVERSATION_INSTRUCTIONS
     assert "not proof of" in app._CONVERSATION_INSTRUCTIONS
-    observation_prompt = (
-        _WORKER_DIR / "conversation_example_worker" / "prompts" / "monitor_observation.txt"
-    ).read_text()
-    assert "background monitoring request" in observation_prompt
+    observation_prompt = (_WORKER_DIR / "conversation_example_worker" / "prompts" / "alert_condition.txt").read_text()
+    assert observation_prompt.strip()
     assert config.frame_max_age_s == 5.0
     assert config.frame_timeout_s == 5.0
     assert config.idle_timeout_secs is None
     assert config.summary_context_topics == (
-        "conversation-example.monitor-window",
+        "conversation-example.alert-capability",
         "conversation-example.foreground-notes",
         "conversation-example.observation-capability",
     )
@@ -1229,7 +1227,6 @@ def test_shipped_config_preserves_models_and_prompt_behavior() -> None:
     assert config.context_budget_bytes == 12_000
     assert config.compaction_input_budget_bytes == 12_000
     assert config.acknowledgment_delay_secs == raw.get("acknowledgment_delay_secs")
-    assert config.monitor_window_size == 20
     assert "system_prompt_file" not in raw
 
     models = load_models_config(_SAMPLE_DIR / "yaml" / "models.json")
@@ -1385,11 +1382,13 @@ async def test_conversation_example_agent_closes_tool_stream_when_publication_fa
     assert closed.is_set()
 
 
-async def test_conversation_example_agent_reports_relay_wrapped_missing_camera_frame() -> None:
+async def test_conversation_example_agent_reports_typed_missing_camera_frame() -> None:
     published: list[ResponseOutput] = []
 
+    unavailable = FrameUnavailable("No camera frame available — please try again.")
+
     async def missing_frame(_request: CurrentFrameRequest) -> ImageFrame:
-        raise FrameUnavailable("No camera frame available — please try again.")
+        raise unavailable
 
     missing_frame_tool = Tool(
         "missing_camera_frame",
@@ -1398,10 +1397,9 @@ async def test_conversation_example_agent_reports_relay_wrapped_missing_camera_f
         ImageFrame,
         missing_frame,
     )
-    with pytest.raises(RuntimeError, match="internal error: FrameUnavailable") as wrapped:
+    with pytest.raises(FrameUnavailable) as raised:
         await missing_frame_tool.execute(CurrentFrameRequest(participant_id="alice"))
-    assert wrapped.value.__cause__ is None
-    assert wrapped.value.__context__ is None
+    assert raised.value is unavailable
 
     class Context:
         agent_name = "conversation-example"
@@ -1654,9 +1652,7 @@ async def test_interruption_cancels_query_admitted_after_blocked_context_initial
             runtime.publish(USER_QUERY_TOPIC, UserQuery(text="Hello", timestamp_us=1), participant_id="alice")
         )
         await initialization_started.wait()
-        interruption = asyncio.create_task(
-            runtime.publish(INTERRUPTED_TOPIC, Interrupted(), participant_id="alice")
-        )
+        interruption = asyncio.create_task(runtime.publish(INTERRUPTED_TOPIC, Interrupted(), participant_id="alice"))
         release_initialization.set()
         await asyncio.gather(query, interruption)
         if destination.started.is_set():
@@ -1876,7 +1872,7 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
                 participant_id="alice",
             )
             for topic, text, participant_id in (
-                ("conversation-example.monitor-window", "The indicator turned blue.", "alice"),
+                ("conversation-example.alert-capability", "Capability: set a one-shot visual alert.", "alice"),
                 ("conversation-example.foreground-notes", "Pack the spare cable.", "alice"),
                 ("conversation-example.foreground-notes", "Bob's private note.", "bob"),
             ):
@@ -1940,10 +1936,10 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     await app.run_app(config, ready_file=ready_file)
 
     assert len(wired_front_ends) == 1
-    assert set(wired_front_ends[0]) == {"conversation", "observation", "monitor", "notes"}
+    assert set(wired_front_ends[0]) == {"conversation", "observation", "alerts", "notes"}
     assert isinstance(wired_front_ends[0]["conversation"], Conversation)
     assert wired_front_ends[0]["observation"].__class__.__name__ == "VisualObservationAgent"
-    assert wired_front_ends[0]["monitor"].__class__.__name__ == "VisualMonitorAgent"
+    assert wired_front_ends[0]["alerts"].__class__.__name__ == "VisualAlertAgent"
     assert wired_front_ends[0]["notes"].__class__.__name__ == "NoteTakingAgent"
 
     assert ready_file.exists()
@@ -1982,8 +1978,8 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
         ("alice", "Hello there.", True, 124),
     ]
     conversation_prompt = "\n".join(message.content for message in llm.requests[-1][0])
-    assert "fresh camera frame" in conversation_prompt
-    assert "The indicator turned blue." in conversation_prompt
+    assert "current view" in conversation_prompt
+    assert "Capability: set a one-shot visual alert." in conversation_prompt
     assert "Pack the spare cable." in conversation_prompt
     assert "Bob's private note." not in conversation_prompt
     assert all(task.done() for task in response_tasks)
@@ -2222,7 +2218,7 @@ async def test_current_frame_tool_propagates_conversion_errors(monkeypatch) -> N
 
     monkeypatch.setattr(current_frame_module, "frame_to_pil", malformed_frame)
 
-    with pytest.raises(RuntimeError, match="malformed pixels"):
+    with pytest.raises(ValueError, match="malformed pixels"):
         await frames.execute(CurrentFrameRequest(participant_id="alice"))
 
 

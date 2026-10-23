@@ -33,19 +33,15 @@ idle_timeout_secs: 0
 # selected here; publishers send only source-owned `text`. Summaries replace a
 # source section; incremental updates append and compact asynchronously per source.
 summary_context_topics:
-  - conversation-example.monitor-window
+  - conversation-example.alert-capability
   - conversation-example.foreground-notes
   - conversation-example.observation-capability
 incremental_context_topics: []
 # Total general-conversation budget, divided evenly across dialogue and each
-# configured context topic. Also bounds sample-owned cues, notes, and windows.
+# configured context topic. Also bounds sample-owned cues and saved notes.
 context_budget_bytes: 12000
 # Input limit for one asynchronous context compaction request.
 compaction_input_budget_bytes: 12000
-
-# Background visual monitor keeps the newest timestamped text observations.
-# It takes the next frame as soon as each previous observation completes.
-monitor_window_size: 20
 
 # Optional route-aware intention acknowledgment. When omitted, prediction and
 # acknowledgment are disabled. Set a positive delay in seconds to enable it.
