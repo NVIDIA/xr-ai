@@ -123,16 +123,20 @@ voice floor that decides what is spoken and when:
 - Other updates wait until neither the bot nor the participant is speaking, then
   all pending updates are spoken as one utterance. An update stays pending until
   that utterance has been heard: if it is cut or cancelled, including while the
-  combiner runs, its updates are spoken again later. `VoiceAgent` learns playback state from the media
+  combiner runs, its updates are spoken again later. The utterance is checked
+  again just before its first chunk reaches TTS, so a participant who starts
+  speaking while the combiner runs is not talked over: the utterance is
+  dropped and rebuilt once they stop. `VoiceAgent` learns playback state from the media
   output, not from a duration estimate. By default the texts are joined with
   spaces; pass `combiner`, an async callable from the pending texts to one
   spoken text, to rewrite them. `llm_update_combiner(llm)` returns a combiner
   that rewrites them with an `LLMService` and falls back to the join on failure
   or when the rewrite stops at its token limit.
-  A failing combiner also falls back to the join. At most 64 updates wait per
+  A failing combiner, or one that returns no text, also falls back to the join. At most 64 updates wait per
   participant; the oldest is dropped with a warning.
 - A new user query or a barge-in cancels replies and the response in flight and
-  supersedes the active request, but keeps pending and urgent updates.
+  supersedes the active request, but keeps pending and urgent updates. An
+  urgent update cancelled before any of it reached TTS plays again next.
 - A `withdraw` from a producer drops that producer's pending updates and urgent
   updates that have not been heard. Output already playing is not cut; a batch
   being combined that contains a withdrawn update is discarded and rebuilt from

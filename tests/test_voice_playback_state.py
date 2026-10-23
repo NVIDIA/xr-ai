@@ -82,6 +82,12 @@ async def _ignore_query(_query: VoiceQuery) -> None:
     return None
 
 
+def _responding(io_processor: _VoiceIOProcessor) -> bool:
+    """Whether a response task is still producing; finished output may still hold the floor."""
+
+    return any(not output.task.done() for output in io_processor._floor.values())  # noqa: SLF001
+
+
 async def _until(predicate: Callable[[], bool]) -> None:
     async def poll() -> None:
         while not predicate():
@@ -161,12 +167,12 @@ async def test_update_waits_for_reply_audio_to_finish(monkeypatch: pytest.Monkey
         await io_processor.enqueue_reply(_PID, _one_reply("Hello there."), request_id="r1")
         await asyncio.wait_for(endpoint.first_chunk.wait(), _TIMEOUT_S)
         await _until(lambda: _PID in io_processor._speaking)  # noqa: SLF001
-        await _until(lambda: not io_processor._inflight)  # noqa: SLF001
+        await _until(lambda: not _responding(io_processor))  # noqa: SLF001
 
         await io_processor.enqueue_update(_PID, "Timer done.", source="timer")
         await asyncio.sleep(0.2)
         assert tts.calls == ["Hello there."]
-        assert not io_processor._inflight  # noqa: SLF001
+        assert not _responding(io_processor)  # noqa: SLF001
 
         endpoint.release.set()
         await _until(lambda: "Timer done." in tts.calls)
@@ -219,7 +225,7 @@ async def test_new_request_cancels_reply_audio_still_being_synthesized(monkeypat
 
         tts.synthesize = slow_first  # type: ignore[method-assign]
         await io_processor.enqueue_reply(_PID, _one_reply("Old answer."), request_id="r1")
-        await _until(lambda: not io_processor._inflight and tts.calls == [])  # noqa: SLF001
+        await _until(lambda: not _responding(io_processor) and tts.calls == [])  # noqa: SLF001
         await asyncio.sleep(0.05)
         assert _PID not in io_processor._speaking  # noqa: SLF001
 

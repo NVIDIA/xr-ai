@@ -68,6 +68,20 @@ class _QueuedResponse:
     updates: tuple[_PendingUpdate, ...] = ()
 
 
+@dataclass(slots=True, eq=False)
+class _Output:
+    """The output holding one participant's floor.
+
+    It is *preparing* until its first chunk is committed to TTS and can still be
+    dropped without a trace; after that it is *playing* and keeps the floor until
+    the transport returns its done marker or its audio is interrupted.
+    """
+
+    item: _QueuedResponse
+    task: asyncio.Task[None] | None = None
+    playing: bool = False
+
+
 class _VoiceIOProcessor(FrameProcessor):
     """Publish accepted input and arbitrate each participant's voice floor.
 
@@ -96,12 +110,9 @@ class _VoiceIOProcessor(FrameProcessor):
         self._on_interrupted = on_interrupted
         self._interrupt_on_supersede = interrupt_on_supersede
         self._combiner = combiner
-        self._inflight: dict[str, asyncio.Task[None]] = {}
-        self._flight: dict[str, _QueuedResponse] = {}
-        # Holds the floor from its start until the output transport returns its
-        # done marker or its audio is interrupted. The next output starts only
-        # then, so an interruption only ever flushes the owner's audio.
-        self._owner: dict[str, _QueuedResponse] = {}
+        # One output per participant; the next starts only once it gives up the
+        # floor, so an interruption only ever flushes that output's audio.
+        self._floor: dict[str, _Output] = {}
         self._input_tasks: set[asyncio.Task[None]] = set()
         self._queued_replies: dict[str, deque[_QueuedResponse]] = {}
         self._queued_urgent: dict[str, deque[_QueuedResponse]] = {}
@@ -111,7 +122,6 @@ class _VoiceIOProcessor(FrameProcessor):
         self._superseded: dict[str, dict[str, None]] = {}
         self._speaking: set[str] = set()
         self._user_speaking: set[str] = set()
-        self._turn_tokens: dict[str, object] = {}
         # Completed output may still be draining through TTS when new input arrives.
         self._seen_output: set[str] = set()
 
@@ -217,10 +227,11 @@ class _VoiceIOProcessor(FrameProcessor):
             if pid:
                 logger.info("voice cancel pid={!r} reason=interruption", pid)
                 _ = await self._barge_in(pid)
-                self._owner.pop(pid, None)
+                self._release(pid)
             else:
                 await self._barge_in_all()
-                self._owner.clear()
+                for owner in [*self._floor]:
+                    self._release(owner)
             await self.push_frame(frame, direction)
             await self._notify_interrupted(pid)
             for waiting in [pid] if pid else [*self._queued_urgent, *self._pending_updates]:
@@ -228,10 +239,10 @@ class _VoiceIOProcessor(FrameProcessor):
             return
 
         if isinstance(frame, _OutputDoneFrame):
-            owner = self._owner.get(frame.pid)
-            if owner is not None and owner is frame.output:
-                del self._owner[frame.pid]
-                self._discard_updates(frame.pid, owner.updates)
+            output = self._floor.get(frame.pid)
+            if output is not None and output is frame.output:
+                del self._floor[frame.pid]
+                self._discard_updates(frame.pid, output.item.updates)
                 await self._start_next(frame.pid)
             return
 
@@ -309,6 +320,7 @@ class _VoiceIOProcessor(FrameProcessor):
         )
         self._input_tasks.add(task)
         task.add_done_callback(self._input_tasks.discard)
+        await self._start_next(pid)
 
     async def _run_query(
         self,
@@ -366,9 +378,9 @@ class _VoiceIOProcessor(FrameProcessor):
         previous = self._active_request.get(pid)
         if previous is not None and previous != request_id:
             self._supersede(pid, previous)
-        owner = self._owner.get(pid)
-        if owner is not None and not owner.urgent and owner.request_id != request_id:
-            await self._cut(pid, owner, keep=request_id)
+        owner = self._floor.get(pid)
+        if owner is not None and not owner.item.urgent and owner.item.request_id != request_id:
+            await self._cut(pid, owner.item, keep=request_id)
         self._active_request[pid] = request_id
         pending = self._queued_replies.setdefault(pid, deque())
         pending.append(item)
@@ -378,12 +390,12 @@ class _VoiceIOProcessor(FrameProcessor):
     async def _spawn_urgent(self, item: _QueuedResponse) -> None:
         pid = item.participant_id
         self._queued_urgent.setdefault(pid, deque()).append(item)
-        owner = self._owner.get(pid)
-        if owner is not None and owner.urgent:
+        owner = self._floor.get(pid)
+        if owner is not None and owner.item.urgent:
             # Starts once the urgent output holding the floor finishes playing.
             logger.info("voice urgent update queued pid={!r}", pid)
         elif owner is not None:
-            await self._cut(pid, owner)
+            await self._cut(pid, owner.item)
         else:
             await self._interrupt_audio(pid)
         await self._start_next(pid)
@@ -391,16 +403,16 @@ class _VoiceIOProcessor(FrameProcessor):
     async def _cut(self, pid: str, owner: _QueuedResponse, *, keep: str | None = None) -> None:
         """Stop the owner's output, supersede its request, and flush its audio."""
 
-        _ = self._stop_flight(pid)
+        _ = self._stop(pid)
         if owner.request_id is not None:
             self._supersede(pid, owner.request_id)
             await self._drop_queued_replies(pid, keep=keep)
         await self._interrupt_audio(pid)
 
     async def _interrupt_audio(self, pid: str) -> None:
-        """Flush ``pid``'s audio, releasing the floor; no output may be in flight."""
+        """Flush ``pid``'s audio, releasing the floor."""
 
-        self._owner.pop(pid, None)
+        self._release(pid)
         interruption = InterruptionFrame()
         interruption.transport_source = pid
         await self.push_frame(interruption)
@@ -408,28 +420,18 @@ class _VoiceIOProcessor(FrameProcessor):
     async def _start_response(self, item: _QueuedResponse) -> None:
         pid = item.participant_id
         self._seen_output.add(pid)
-        token = object()
-        self._turn_tokens[pid] = token
-        task = asyncio.create_task(
-            self._run_response(item, token),
-            name=f"voice-response-{pid}",
-        )
-        self._flight[pid] = item
-        self._owner[pid] = item
-        self._inflight[pid] = task
+        output = _Output(item)
+        self._floor[pid] = output
+        output.task = asyncio.create_task(self._run_response(output), name=f"voice-response-{pid}")
 
-    async def _run_response(self, item: _QueuedResponse, token: object) -> None:
+    async def _run_response(self, output: _Output) -> None:
+        item = output.item
         pid = item.participant_id
         chunks: list[str] = []
         cancelled = False
+        dropped = False
         try:
-            await self._consume_response(
-                item.response,
-                pid=pid,
-                token=token,
-                accumulated=chunks,
-                updates=item.updates,
-            )
+            dropped = not await self._consume_response(output, accumulated=chunks)
         except asyncio.CancelledError:
             cancelled = True
             raise
@@ -438,8 +440,8 @@ class _VoiceIOProcessor(FrameProcessor):
         finally:
             # Settle the floor before closing the stream: a cancel landing in
             # aclose() would otherwise skip it and hold the floor forever.
-            is_current = self._turn_tokens.get(pid) is token
-            if not cancelled and is_current:
+            current = self._floor.get(pid) is output
+            if current and not cancelled and not dropped:
                 try:
                     await self.push_frame(
                         AssistantResponseEndFrame(
@@ -450,51 +452,67 @@ class _VoiceIOProcessor(FrameProcessor):
                     )
                 except Exception:
                     logger.exception("emit voice response end failed pid={!r}", pid)
-            if is_current:
-                self._turn_tokens.pop(pid, None)
-                self._inflight.pop(pid, None)
-                self._flight.pop(pid, None)
-            if self._owner.get(pid) is item and chunks:
+            if current and output.playing:
                 # Its audio may still be synthesizing or playing; the transport
                 # returns this marker once that audio is written, and the next
                 # output starts then.
-                done = _OutputDoneFrame(pid=pid, output=item)
+                done = _OutputDoneFrame(pid=pid, output=output)
                 done.transport_destination = pid
                 await self.push_frame(done)
-            elif self._owner.get(pid) is item:
+            elif current:
                 # Nothing reached TTS, so there is no audio to wait for.
-                del self._owner[pid]
+                del self._floor[pid]
                 await self._start_next(pid)
             await self._close_response(item.response)
 
-    async def _consume_response(
-        self,
-        response: VoiceResponse,
-        *,
-        pid: str,
-        token: object,
-        accumulated: list[str],
-        updates: tuple[_PendingUpdate, ...],
-    ) -> None:
-        # An update withdrawn while its batch was being combined voids the
-        # batch: speak nothing, and the remaining updates form a new one.
+    async def _consume_response(self, output: _Output, *, accumulated: list[str]) -> bool:
+        """Push ``output``'s chunks; False if it was dropped before its first chunk."""
+
+        response = output.item.response
         if isinstance(response, str):
-            if response and self._turn_tokens.get(pid) is token and self._still_pending(pid, updates):
-                accumulated.append(response)
-                await self._push_text(response, pid=pid)
-            return
+            if not response:
+                return True
+            if not self._commit(output):
+                return False
+            accumulated.append(response)
+            await self._push_text(response, pid=output.item.participant_id)
+            return True
         async for chunk in response:
-            if self._turn_tokens.get(pid) is not token:
-                return
             if not chunk:
                 continue
-            if not accumulated and not self._still_pending(pid, updates):
-                return
+            if not output.playing and not self._commit(output):
+                return False
             accumulated.append(chunk)
-            await self._push_text(chunk, pid=pid)
+            await self._push_text(chunk, pid=output.item.participant_id)
+        return True
+
+    def _commit(self, output: _Output) -> bool:
+        """Turn ``output`` from preparing to playing, if it may still speak.
+
+        Preparing awaits (task startup, the combiner, a model stream) let the
+        state change after scheduling, so this repeats the scheduling check at
+        the last moment the output can still be dropped cleanly.
+        """
+
+        if self._floor.get(output.item.participant_id) is not output or not self._may_speak(output.item):
+            return False
+        output.playing = True
+        return True
+
+    def _may_speak(self, item: _QueuedResponse) -> bool:
+        """Replies and urgent updates speak once they hold the floor; other
+        updates only while both sides are quiet and none of them was withdrawn."""
+
+        if item.request_id is not None or item.urgent:
+            return True
+        pid = item.participant_id
+        return self._quiet(pid) and self._still_pending(pid, item.updates)
+
+    def _quiet(self, pid: str) -> bool:
+        return pid not in self._speaking and pid not in self._user_speaking
 
     async def _start_next(self, pid: str) -> None:
-        if pid in self._owner:
+        if pid in self._floor:
             return
         if urgent := self._queued_urgent.get(pid):
             item = urgent.popleft()
@@ -504,11 +522,7 @@ class _VoiceIOProcessor(FrameProcessor):
             item = replies.popleft()
             if not replies:
                 self._queued_replies.pop(pid, None)
-        elif (
-            pid not in self._speaking
-            and pid not in self._user_speaking
-            and (updates := tuple(self._pending_updates.get(pid, ())))
-        ):
+        elif self._quiet(pid) and (updates := tuple(self._pending_updates.get(pid, ()))):
             item = _QueuedResponse(
                 participant_id=pid,
                 response=self._update_response([update.text for update in updates]),
@@ -548,6 +562,10 @@ class _VoiceIOProcessor(FrameProcessor):
         except Exception:  # noqa: BLE001
             # isolation boundary: a failing user-supplied combiner must not drop the updates.
             logger.exception("voice update combiner failed")
+            text = " ".join(texts)
+        if not text.strip():
+            # An empty rewrite would leave the batch pending and rebuild it at once.
+            logger.warning("voice update combiner returned no text")
             text = " ".join(texts)
         yield text
 
@@ -595,25 +613,45 @@ class _VoiceIOProcessor(FrameProcessor):
         return task
 
     async def _barge_in_all(self) -> None:
-        pids = {*self._flight, *self._queued_replies, *self._active_request}
+        pids = {*self._floor, *self._queued_replies, *self._active_request}
         for pid in pids:
             _ = await self._barge_in(pid)
         self._cancel_input_tasks()
 
     async def _cancel_output(self, pid: str) -> asyncio.Task[None] | None:
-        current = self._flight.get(pid)
-        if current is not None and current.request_id is not None:
-            self._supersede(pid, current.request_id)
+        current = self._floor.get(pid)
+        if current is not None and current.item.request_id is not None:
+            self._supersede(pid, current.item.request_id)
         await self._drop_queued_replies(pid)
-        return self._stop_flight(pid)
+        return self._stop(pid)
 
-    def _stop_flight(self, pid: str) -> asyncio.Task[None] | None:
-        self._flight.pop(pid, None)
-        self._turn_tokens.pop(pid, None)
-        task = self._inflight.pop(pid, None)
+    def _stop(self, pid: str) -> asyncio.Task[None] | None:
+        """Cancel ``pid``'s output task; output that is not playing yet also gives up the floor.
+
+        The floor is released here rather than in the task, because a task
+        cancelled before it first runs never reaches its cleanup. An urgent
+        update that has not been heard goes back to the front of its queue.
+        Playing output keeps the floor until its done marker or an interruption.
+        """
+
+        output = self._floor.get(pid)
+        if output is None:
+            return None
+        task = output.task
         if task is not None and not task.done():
             task.cancel()
+        if not output.playing:
+            del self._floor[pid]
+            if output.item.urgent:
+                self._queued_urgent.setdefault(pid, deque()).appendleft(output.item)
         return task
+
+    def _release(self, pid: str) -> None:
+        """Give up ``pid``'s floor; its task never outlives it."""
+
+        output = self._floor.pop(pid, None)
+        if output is not None and output.task is not None and not output.task.done():
+            output.task.cancel()
 
     async def _drop_queued_replies(self, pid: str, *, keep: str | None = None) -> None:
         pending = self._queued_replies.get(pid)
@@ -648,7 +686,7 @@ class _VoiceIOProcessor(FrameProcessor):
         self._superseded.pop(pid, None)
         self._speaking.discard(pid)
         self._user_speaking.discard(pid)
-        self._owner.pop(pid, None)
+        self._release(pid)
         self._seen_output.discard(pid)
 
     @staticmethod
@@ -665,17 +703,16 @@ class _VoiceIOProcessor(FrameProcessor):
     async def _shutdown(self) -> None:
         tasks = [
             task
-            for task in (*self._inflight.values(), *self._input_tasks)
-            if not task.done()
+            for task in (*(output.task for output in self._floor.values()), *self._input_tasks)
+            if task is not None and not task.done()
         ]
         await self._cancel_all()
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
 
     async def _cancel_all(self) -> None:
-        for task in self._inflight.values():
-            if not task.done():
-                task.cancel()
+        for pid in [*self._floor]:
+            self._release(pid)
         for queues in (*self._queued_replies.values(), *self._queued_urgent.values()):
             for item in queues:
                 await self._close_response(item.response)
@@ -686,10 +723,6 @@ class _VoiceIOProcessor(FrameProcessor):
         self._superseded.clear()
         self._speaking.clear()
         self._user_speaking.clear()
-        self._inflight.clear()
-        self._flight.clear()
-        self._owner.clear()
-        self._turn_tokens.clear()
         self._cancel_input_tasks()
 
     def _cancel_input_tasks(self) -> None:

@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import asyncio
+import random
 from collections.abc import AsyncIterator, Sequence
 
 from loguru import logger
@@ -285,7 +286,7 @@ async def test_reply_for_a_new_request_cuts_audio_of_a_finished_reply() -> None:
     await floor.processor.enqueue_reply("alice", "old answer", request_id="r1")
     await floor.settle()
     await floor.bot(started=True)
-    assert floor.processor._inflight == {}  # noqa: SLF001
+    assert floor.processor._floor["alice"].task.done()  # noqa: SLF001
 
     await floor.processor.enqueue_reply("alice", "new answer", request_id="r2")
     await floor.settle()
@@ -300,7 +301,7 @@ async def test_reply_for_a_new_request_cuts_audio_still_being_synthesized() -> N
     floor = _Floor()
     await floor.processor.enqueue_reply("alice", "old answer", request_id="r1")
     await floor.settle()
-    assert floor.processor._inflight == {}  # noqa: SLF001
+    assert floor.processor._floor["alice"].task.done()  # noqa: SLF001
 
     await floor.processor.enqueue_reply("alice", "new answer", request_id="r2")
     await floor.settle()
@@ -632,3 +633,190 @@ async def test_cancel_while_closing_a_stream_still_releases_the_floor() -> None:
     await floor.played()
 
     assert floor.texts == ["answer", "Timer done."]
+
+
+async def test_updates_combined_while_the_participant_starts_speaking_wait_for_them() -> None:
+    combiner = _GatedCombiner()
+    floor = _Floor(combiner=combiner)
+    await floor.bot(started=True)
+    await floor.processor.enqueue_update("alice", "one", source="producer")
+    await floor.processor.enqueue_update("alice", "two", source="producer")
+    await floor.bot(started=False)
+
+    await floor.user(started=True)
+    combiner.release.set()
+    await floor.settle()
+    assert floor.texts == []
+
+    await floor.user(started=False)
+    assert floor.texts == ["one + two"]
+
+
+async def test_query_before_an_urgent_update_starts_does_not_strand_the_floor() -> None:
+    floor = _Floor()
+    # No await yields between these, so the urgent task is cancelled before it runs.
+    await floor.processor.enqueue_update("alice", "Hot water!", source="safety", urgent=True)
+    await floor.processor.enqueue_query("alice", "What next?")
+    await floor.processor.enqueue_reply("alice", "Add the tea.", request_id="r1")
+    await floor.settle()
+    await floor.played()
+
+    assert floor.texts == ["Hot water!", "Add the tea."]
+
+
+async def test_empty_combiner_result_speaks_the_joined_updates_once() -> None:
+    combiner = _Combiner("")
+    floor = _Floor(combiner=combiner)
+    await floor.bot(started=True)
+    await floor.processor.enqueue_update("alice", "one", source="producer")
+    await floor.processor.enqueue_update("alice", "two", source="producer")
+    await floor.bot(started=False)
+
+    assert combiner.calls == [["one", "two"]]
+    assert floor.texts == ["one two"]
+
+
+class _FuzzFloor(_Floor):
+    """Drive one participant's floor with a random interleaving of every event it handles.
+
+    Each await yields a random number of times, so cancellations, combiner calls
+    and playback land at arbitrary points. Texts are tokens: ``u`` updates,
+    ``x`` urgent updates, ``r`` replies.
+    """
+
+    def __init__(self, seed: int) -> None:
+        self.rng = random.Random(seed)
+        super().__init__(combiner=self._combine)
+        self.user_speaking = False
+        self.bot_speaking = False
+        self.sources: dict[str, str] = {}
+        self.withdrawn: set[str] = set()
+        self.spoken: set[str] = set()
+        self.violations: list[str] = []
+        self.request = 0
+        self.serial = 0
+
+    async def _yield(self) -> None:
+        for _ in range(self.rng.randint(0, 4)):
+            await asyncio.sleep(0)
+
+    async def _combine(self, texts: Sequence[str]) -> str:
+        await self._yield()
+        return "+".join(texts)
+
+    async def _capture(self, frame: Frame, direction: FrameDirection = FrameDirection.DOWNSTREAM) -> None:
+        await super()._capture(frame, direction)
+        if not isinstance(frame, TextFrame):
+            return
+        for token in frame.text.replace("+", " ").split():
+            if token in self.withdrawn:
+                self.violations.append(f"withdrawn {token} spoken")
+            if token.startswith("u") and (self.user_speaking or self.bot_speaking):
+                self.violations.append(f"update {token} spoken while someone speaks")
+            self.spoken.add(token)
+
+    def _token(self, kind: str) -> str:
+        self.serial += 1
+        return f"{kind}{self.serial}"
+
+    async def _stream(self, tokens: list[str]) -> AsyncIterator[str]:
+        for token in tokens:
+            await self._yield()
+            yield f"{token} "
+
+    async def step(self) -> None:
+        processor = self.processor
+        op = self.rng.choice([
+            "update", "update", "urgent", "withdraw", "query", "reply", "reply",
+            "user", "bot", "played", "played", "interrupt",
+        ])
+        if op == "update":
+            token, source = self._token("u"), self.rng.choice(["guide", "timer"])
+            self.sources[token] = source
+            await processor.enqueue_update("alice", token, source=source)
+        elif op == "urgent":
+            await processor.enqueue_update("alice", self._token("x"), source="safety", urgent=True)
+        elif op == "withdraw":
+            source = self.rng.choice(["guide", "timer"])
+            self.withdrawn |= {
+                token for token, owner in self.sources.items() if owner == source and token not in self.spoken
+            }
+            await processor.withdraw_updates("alice", source=source)
+        elif op == "query":
+            self.user_speaking = False
+            self.request += 1
+            await processor.enqueue_query("alice", "question")
+        elif op == "reply":
+            tokens = [self._token("r") for _ in range(self.rng.randint(1, 3))]
+            response = " ".join(tokens) if self.rng.random() < 0.5 else self._stream(tokens)
+            await processor.enqueue_reply("alice", response, request_id=f"q{self.request}")
+        elif op == "user":
+            self.user_speaking = not self.user_speaking
+            await self._user_frame()
+        elif op == "bot":
+            self.bot_speaking = not self.bot_speaking
+            await self._bot_frame()
+        elif op == "played" and self.done:
+            await self._return_done()
+        elif op == "interrupt":
+            interruption = InterruptionFrame()
+            interruption.transport_source = "alice"
+            await processor.process_frame(interruption, FrameDirection.UPSTREAM)
+        await self._yield()
+
+    async def _user_frame(self) -> None:
+        frame = UserStartedSpeakingFrame() if self.user_speaking else UserStoppedSpeakingFrame()
+        frame.transport_source = "alice"
+        await self.processor.process_frame(frame, FrameDirection.DOWNSTREAM)
+
+    async def _bot_frame(self) -> None:
+        frame = BotStartedSpeakingFrame() if self.bot_speaking else BotStoppedSpeakingFrame()
+        frame.transport_destination = "alice"
+        await self.processor.process_frame(frame, FrameDirection.UPSTREAM)
+
+    async def _return_done(self) -> None:
+        done = self.done.pop(0)
+        await self.processor.process_frame(
+            _OutputDoneFrame(pid=done.pid, output=done.output), FrameDirection.UPSTREAM,
+        )
+
+    async def quiesce(self) -> bool:
+        """Let everyone fall silent and play all audio; True once nothing is left to speak."""
+
+        if self.user_speaking:
+            self.user_speaking = False
+            await self._user_frame()
+        if self.bot_speaking:
+            self.bot_speaking = False
+            await self._bot_frame()
+        processor = self.processor
+        for _ in range(500):
+            await asyncio.sleep(0)
+            if self.done:
+                await self._return_done()
+            if not (
+                processor._floor  # noqa: SLF001
+                or processor._queued_urgent  # noqa: SLF001
+                or processor._queued_replies  # noqa: SLF001
+                or processor._pending_updates  # noqa: SLF001
+            ):
+                return True
+        return False
+
+
+async def test_random_interleavings_keep_the_floor_invariants() -> None:
+    """Under any interleaving: updates never speak over anyone or after being
+    withdrawn, every other update is eventually spoken, and the floor drains."""
+
+    for seed in range(300):
+        fuzz = _FuzzFloor(seed)
+        for _ in range(40):
+            await fuzz.step()
+        drained = await fuzz.quiesce()
+        lost = {
+            token for token in fuzz.sources if token not in fuzz.withdrawn and token not in fuzz.spoken
+        }
+        assert fuzz.violations == [], f"seed {seed}"
+        assert drained, f"seed {seed}: floor stuck"
+        assert lost == set(), f"seed {seed}"
+        await fuzz.processor._shutdown()  # noqa: SLF001
