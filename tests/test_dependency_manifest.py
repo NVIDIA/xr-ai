@@ -140,9 +140,17 @@ def test_manifest_isolates_vllm_projects_without_overriding_dependencies(
 
 def test_manifest_lock_inventories_both_pynvvideocodec_environments() -> None:
     lock = tomllib.loads((_ROOT / MANIFEST / "uv.lock").read_text())
-    versions = {package["version"] for package in lock["package"] if package["name"] == "pynvvideocodec"}
-
-    assert {"2.0.4", "2.2.2"} <= versions
+    packages = {package["name"]: package for package in lock["package"]}
+    for name, version in (
+        ("vllm", "2.0.4"),
+        ("device-io-hub", "2.2.3"),
+        ("xr-video-memory-service", "2.2.3"),
+    ):
+        codecs = [
+            dependency for dependency in packages[name]["dependencies"]
+            if dependency["name"] == "pynvvideocodec"
+        ]
+        assert codecs and all(codec["version"] == version for codec in codecs)
 
 
 def test_manifest_lock_preserves_generated_environment_split() -> None:

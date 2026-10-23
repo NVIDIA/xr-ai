@@ -17,10 +17,12 @@ from unittest.mock import AsyncMock
 import nemo_relay
 import pytest
 import yaml
+from xr_ai_hub import FrameUnavailable
 from xr_ai_interaction import ParticipantJoined, ParticipantLeft, ResponseOutput, UserQuery
 from xr_ai_models import ChatMessage, ChatResponse, ToolCall
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, subscribe
-from xr_ai_tools import ToolSet
+from xr_ai_tools import Tool, ToolSet
+from xr_ai_tools.current_frame import CurrentFrameRequest, ImageFrame
 from xr_ai_tools.image import ImageReference, ImageRegistry
 from xr_ai_tools.tool_calling import ToolCallRecord, ToolLoopResult
 from xr_ai_tools.vision import ImageQueryChunk, ImageQueryResult
@@ -78,6 +80,7 @@ from tea_making_worker.workflow_state import WorkflowStore  # noqa: E402  # pyri
 from tea_making_worker.workflow_tools import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     CurrentViewRequest,
     TemperatureThresholdRequest,
+    participant_current_view_tool,
     temperature_threshold_tool,
 )
 
@@ -1365,6 +1368,53 @@ async def test_mixed_tool_turn_with_streamed_current_view_is_already_spoken(
     assert response == "A kettle is visible."
     assert calls == ["rag_lookup", "current_view"]
     assert spoken is True
+
+
+@pytest.mark.parametrize("error_type", [FrameUnavailable, ValueError, TypeError, RuntimeError])
+async def test_current_view_tool_recovers_only_camera_unavailability(error_type) -> None:
+    error = error_type("camera failed")
+
+    async def fail(_request: CurrentFrameRequest) -> ImageFrame:
+        raise error
+
+    frames = Tool("camera_failure", "Select a frame.", CurrentFrameRequest, ImageFrame, fail)
+    tool = participant_current_view_tool("alice", frames, None)  # type: ignore[arg-type]
+    if error_type is FrameUnavailable:
+        result = await tool.execute(CurrentViewRequest(question="Visible?"))
+        assert not result.available and "camera failed" in result.text
+    else:
+        with pytest.raises(error_type) as raised:
+            await tool.execute(CurrentViewRequest(question="Visible?"))
+        assert raised.value is error
+
+
+@pytest.mark.parametrize("error_type", [FrameUnavailable, ValueError, TypeError, RuntimeError])
+async def test_foreground_current_view_recovers_only_camera_unavailability(error_type) -> None:
+    error = error_type("camera failed")
+    published = []
+
+    async def fail(_request: CurrentFrameRequest) -> ImageFrame:
+        raise error
+
+    async def publish(_topic, message):
+        published.append(message)
+
+    frames = Tool("camera_failure", "Select a frame.", CurrentFrameRequest, ImageFrame, fail)
+    foreground = object.__new__(ForegroundAgent)
+    foreground._images = SimpleNamespace(get_current_frame=frames)
+    foreground._vlm_timeout_s = 15
+    ctx = SimpleNamespace(metadata=SimpleNamespace(message_id="turn"), publish=publish)
+    call = foreground._stream_current_view("Visible?", "alice", ctx, timestamp_us=1)
+    if error_type is FrameUnavailable:
+        result = await call
+        assert not result.available and result.text == str(error)
+        assert [output.text for output in published] == [str(error), ""]
+        assert [output.final for output in published] == [False, True]
+    else:
+        with pytest.raises(error_type) as raised:
+            await call
+        assert raised.value is error
+        assert not published
 
 
 @pytest.mark.asyncio

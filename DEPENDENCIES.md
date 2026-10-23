@@ -117,7 +117,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
-  - `nemo-relay>=0.7.2,<0.8`
+  - `nemo-relay>=0.10.0,<0.11`
   - `pydantic>=2.10`
   - `xr-ai-models` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
   - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
@@ -170,7 +170,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
-  - `nemo-relay>=0.7.2,<0.8`
+  - `nemo-relay>=0.10.0,<0.11`
   - `xr-ai-models` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
 - Optional dependency groups:
   - `runtime`:
@@ -184,7 +184,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
-  - `nemo-relay>=0.7.2,<0.8`
+  - `nemo-relay>=0.10.0,<0.11`
   - `pydantic>=2.10`
   - `xr-ai-tools` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
 - Optional dependency groups: none
@@ -196,7 +196,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
-  - `nemo-relay>=0.7.2,<0.8`
+  - `nemo-relay>=0.10.0,<0.11`
   - `pydantic>=2.10`
 - Optional dependency groups:
   - `capture`:
@@ -229,7 +229,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `hatchling`
 - Runtime dependencies:
   - `multidict>=6.9.1`
-  - `nemo-relay>=0.7.2,<0.8`
+  - `nemo-relay>=0.10.0,<0.11`
   - `pydantic>=2.10`
   - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
   - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
@@ -660,7 +660,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `hatchling`
 - Runtime dependencies:
   - `Pillow>=10.1.0`
-  - `nemo-relay>=0.7.2,<0.8`
+  - `nemo-relay>=0.10.0,<0.11`
   - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
   - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
   - `xr-ai-interaction` → [`xr-ai-interaction`](agent-sdk/xr-ai-interaction/) (local, editable)
@@ -706,7 +706,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
-  - `nemo-relay>=0.7.2,<0.8`
+  - `nemo-relay>=0.10.0,<0.11`
   - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
   - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
   - `xr-ai-interaction` → [`xr-ai-interaction`](agent-sdk/xr-ai-interaction/) (local, editable)
@@ -751,7 +751,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
-  - `nemo-relay>=0.7.2,<0.8`
+  - `nemo-relay>=0.10.0,<0.11`
   - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
   - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
   - `xr-ai-interaction` → [`xr-ai-interaction`](agent-sdk/xr-ai-interaction/) (local, editable)
@@ -795,7 +795,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
-  - `nemo-relay>=0.7.2,<0.8`
+  - `nemo-relay>=0.10.0,<0.11`
   - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
   - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
   - `xr-ai-interaction` → [`xr-ai-interaction`](agent-sdk/xr-ai-interaction/) (local, editable)
@@ -966,8 +966,9 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
     - `xr-render-demo-worker` → [`xr-render-demo-worker`](agent-samples/xr-render-demo/worker/) (local, editable)
     - `xr-ai-conversation` → [`xr-ai-conversation`](agent-sdk/xr-ai-conversation/) (local, editable)
     - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
+    - `xr-ai-interaction` → [`xr-ai-interaction`](agent-sdk/xr-ai-interaction/) (local, editable)
     - `xr-ai-models[riva,speaker]` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
-    - `xr-ai-routing` → [`xr-ai-routing`](agent-sdk/xr-ai-routing/) (local, editable)
+    - `xr-ai-routing[runtime]` → [`xr-ai-routing`](agent-sdk/xr-ai-routing/) (local, editable)
     - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
     - `xr-ai-tools[capture,frames,image-editing,marker-tracking,relay,services,vision]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
     - `xr-ai-voice` → [`xr-ai-voice`](agent-sdk/xr-ai-voice/) (local, editable)
@@ -991,7 +992,6 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
     - `xr-ai-voicegate` → [`xr-ai-voicegate`](utils/xr-ai-voicegate/) (local, editable)
   - `vllm`:
     - `embedding-server` → [`embedding-server`](services/embedding-server/) (local, editable)
-    - `llama-nemotron-llm-server`
     - `nemotron-omni-llm-server` → [`nemotron-omni-llm-server`](services/nemotron-omni-llm/) (local, editable)
     - `nemotron3-nano-llm-server` → [`nemotron3-nano-llm-server`](services/nemotron3-nano-llm/) (local, editable)
     - `vlm-server` → [`vlm-server`](services/vlm-server/) (local, editable)

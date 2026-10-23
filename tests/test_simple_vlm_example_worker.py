@@ -421,11 +421,12 @@ async def test_simple_vlm_agent_closes_tool_stream_when_publication_fails() -> N
     assert closed.is_set()
 
 
-async def test_simple_vlm_agent_reports_relay_wrapped_missing_camera_frame() -> None:
+async def test_simple_vlm_agent_reports_typed_missing_camera_frame() -> None:
     published: list[ResponseOutput] = []
+    unavailable = FrameUnavailable("No camera frame available — please try again.")
 
     async def missing_frame(_request: CurrentFrameRequest) -> ImageFrame:
-        raise FrameUnavailable("No camera frame available — please try again.")
+        raise unavailable
 
     missing_frame_tool = Tool(
         "missing_camera_frame",
@@ -434,10 +435,9 @@ async def test_simple_vlm_agent_reports_relay_wrapped_missing_camera_frame() -> 
         ImageFrame,
         missing_frame,
     )
-    with pytest.raises(RuntimeError, match="internal error: FrameUnavailable") as wrapped:
+    with pytest.raises(FrameUnavailable) as raised:
         await missing_frame_tool.execute(CurrentFrameRequest(participant_id="alice"))
-    assert wrapped.value.__cause__ is None
-    assert wrapped.value.__context__ is None
+    assert raised.value is unavailable
 
     class Context:
         agent_name = "simple-vlm"
@@ -465,6 +465,28 @@ async def test_simple_vlm_agent_reports_relay_wrapped_missing_camera_frame() -> 
         "",
     ]
     assert [output.final for output in published] == [False, True]
+
+
+@pytest.mark.parametrize("error_type", [ValueError, TypeError, RuntimeError])
+async def test_simple_vlm_agent_propagates_camera_programming_errors(error_type) -> None:
+    error = error_type("internal error: FrameUnavailable: misleading exception text")
+    published = []
+
+    async def fail(_request: CurrentFrameRequest) -> ImageFrame:
+        raise error
+
+    async def publish(_topic, output):
+        published.append(output)
+
+    frames = Tool("camera_failure", "Select a frame.", CurrentFrameRequest, ImageFrame, fail)
+    agent = SimpleVlmAgent(lambda: (frames, _StreamingImageQueryTool()), _ignore_status)
+    ctx = SimpleNamespace(
+        metadata=SimpleNamespace(message_id="turn", participant_id="alice"), publish=publish,
+    )
+    with pytest.raises(error_type) as raised:
+        await agent._stream_response(UserQuery(text="Visible?", timestamp_us=1), ctx)
+    assert raised.value is error
+    assert not published
 
 
 async def test_cancelled_vlm_turn_does_not_publish_stream_terminator() -> None:
@@ -892,7 +914,7 @@ async def test_current_frame_tool_propagates_conversion_errors(monkeypatch) -> N
 
     monkeypatch.setattr(current_frame_module, "frame_to_pil", malformed_frame)
 
-    with pytest.raises(RuntimeError, match="malformed pixels"):
+    with pytest.raises(ValueError, match="malformed pixels"):
         await frames.execute(CurrentFrameRequest(participant_id="alice"))
 
 

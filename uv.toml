@@ -2,35 +2,4 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Advance only as part of a repository-wide dependency qualification change.
-exclude-newer = "2026-08-27T17:15:48Z"
-
-# CVE-2026-80047: qualify the fixed Transformers release independently.
-[exclude-newer-package]
-transformers = "2026-09-10T00:00:00Z"
-# Qualify the HTTP and JWT security releases independently of the global cutoff.
-urllib3 = "2026-09-16T00:00:00Z"
-pyjwt = "2026-09-29T00:00:00Z"
-
-# Qualify pip vLLM 0.30.0 and its required accelerator dependencies.
-vllm = "2026-09-23T00:00:00Z"
-huggingface-hub = "2026-09-23T00:00:00Z"
-flashinfer-python = "2026-09-23T00:00:00Z"
-instanttensor = "2026-09-23T00:00:00Z"
-nvidia-cutlass-dsl = "2026-09-23T00:00:00Z"
-quack-kernels = "2026-09-23T00:00:00Z"
-nvidia-cutlass-dsl-libs-base = "2026-09-23T00:00:00Z"
-nvidia-cutlass-dsl-libs-core = "2026-09-23T00:00:00Z"
-nvidia-cutlass-dsl-libs-cu12 = "2026-09-23T00:00:00Z"
-nvidia-cutlass-dsl-libs-cu13 = "2026-09-23T00:00:00Z"
-
-# CVE-2026-104874: qualify multidict 6.9.1.
-multidict = "2026-09-22T00:00:00Z"
-# CVE-2026-102598: qualify werkzeug 3.1.9.
-werkzeug = "2026-09-28T00:00:00Z"
-# CVE-2026-58659: qualify pytorch-lightning 2.6.6.
-pytorch-lightning = "2026-09-11T00:00:00Z"
-
-# Qualify the Pillow decoder fixes and MCP session cleanup independently.
-pillow = "2026-10-17T00:00:00Z"
-mcp = "2026-09-08T00:00:00Z"
-mcp-types = "2026-09-08T00:00:00Z"
+exclude-newer = "2026-10-22T21:39:43Z"

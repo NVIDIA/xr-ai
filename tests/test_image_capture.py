@@ -386,3 +386,14 @@ async def test_capture_request_and_image_route_through_real_hub(
 
     assert image.participant_id == "alice"
     assert image.data == _jpeg()
+
+
+async def test_current_frame_execute_preserves_unavailable_type_and_cause() -> None:
+    endpoint = _Endpoint()
+    tool = CurrentFrameTool(endpoint=endpoint, images=ImageRegistry())  # type: ignore[arg-type]
+
+    with pytest.raises(FrameUnavailable, match="Participant is not connected") as raised:
+        await tool.execute(CurrentFrameRequest(participant_id="disconnected"))
+
+    assert isinstance(raised.value.__cause__, _ImageCaptureUnavailable)
+    assert endpoint.requests == []
