@@ -98,6 +98,8 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--hub-config", type=Path, metavar="PATH",
                         help="use hub YAML instead of the sample default (relative to launch directory)")
+    parser.add_argument("--health-port", type=int, metavar="PORT",
+                        help="serve stack process health on loopback PORT (1–65535; disabled by default)")
     return parser
 
 
@@ -329,7 +331,8 @@ def run(argv: Sequence[str] | None = None) -> None:
         else:
             _ensure_web_vendor()
     _ensure_lovr_bin()
-    run_stack(_build_processes(capture=args.session_recording, hub_config=hub_config), _BASE)
+    run_stack(_build_processes(capture=args.session_recording, hub_config=hub_config), _BASE,
+              health_port=args.health_port)
 
 
 if __name__ == "__main__":

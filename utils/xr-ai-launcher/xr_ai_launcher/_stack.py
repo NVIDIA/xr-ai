@@ -50,6 +50,7 @@ from typing import Sequence, Union
 
 from ._credentials import load_credentials
 from ._failure import FailureContext, emit_failure_summary, failure_exit_status
+from ._health import stack_health
 
 _READY_INTERVAL = 5.0   # seconds between progress lines
 _STOP_TIMEOUT   = 20.0  # seconds before SIGKILL during shutdown
@@ -319,10 +320,13 @@ def _drain_output_readers(
 # ── readiness wait ─────────────────────────────────────────────────────────────
 
 class _Cancellation:
-    def __init__(self) -> None:
+    def __init__(self, initialized: threading.Event | None = None) -> None:
+        self.initialized = initialized
         self.signum: int | None = None
 
     def _request(self, signum, _frame) -> None:
+        if self.initialized is not None:
+            self.initialized.clear()
         # Do not interrupt Popen before its handle is registered for cleanup.
         if self.signum is None:
             self.signum = signum
@@ -543,6 +547,7 @@ def run_stack(
     base: Path,
     *,
     exit_after_ready: bool = False,
+    health_port: int | None = None,
 ) -> None:
     """
     Start *processes* in declaration order, waiting for each item to signal
@@ -556,6 +561,17 @@ def run_stack(
     it must ``Path(ready_file).touch()`` to signal the launcher.  Progress
     is printed every five seconds so model-loading or CloudXR start-up
     remains visible.
+
+    Pass ``health_port`` as an integer TCP port (1–65535) to expose
+    ``GET http://127.0.0.1:<port>/healthz`` for this foreground stack. It returns
+    503 during startup and cleanup, or when any spawned process has exited;
+    200 means startup completed and every spawned process is still running.
+    The endpoint is disabled with ``health_port=None`` (the default) and for
+    ``exit_after_ready=True``. Invalid ports and bind failures abort
+    before any process is launched. This is process health, not an inference
+    probe, and does not check services declared with ``launch_mode="reuse"``.
+    The JSON body reports ``status``, spawned ``processes`` (running or exited),
+    and ``unchecked_reuse`` process names. HEAD is also supported.
 
     After all processes are ready the launcher monitors them: if any exits,
     the remaining foreground processes are terminated. The launcher preserves
@@ -596,12 +612,9 @@ def run_stack(
 
     # "persist" and "reuse" processes are left running on shutdown.
     # "reuse" processes are not spawned at all — assumed already running.
-    _no_kill: set[str] = {
-        p.name
-        for item in processes
-        for p in (item.processes if isinstance(item, Parallel) else [item])
-        if p.launch_mode in ("persist", "reuse")
-    }
+    declared = [p for item in processes for p in (item.processes if isinstance(item, Parallel) else [item])]
+    _no_kill = {p.name for p in declared if p.launch_mode in ("persist", "reuse")}
+    unchecked_reuse = tuple(p.name for p in declared if p.launch_mode == "reuse")
 
     launched: dict[str, subprocess.Popen] = {}
     failure_contexts: dict[str, FailureContext] = {}
@@ -611,8 +624,16 @@ def run_stack(
     # unloading models that are already ready.
     aborted = False
     failure_status: int | None = None
+    if health_port is not None and (type(health_port) is not int or not 1 <= health_port <= 65535):
+        raise ValueError("health_port must be an integer port from 1 to 65535")
+    if exit_after_ready:
+        health_port = None
 
-    with tempfile.TemporaryDirectory(prefix="xr-ai-") as _tmpdir, _Cancellation() as cancellation:
+    with (
+        stack_health(launched, health_port, unchecked_reuse) as initialized,
+        _Cancellation(initialized) as cancellation,
+        tempfile.TemporaryDirectory(prefix="xr-ai-") as _tmpdir,
+    ):
         tmpdir = Path(_tmpdir)
         try:
             for item in processes:
@@ -665,6 +686,7 @@ def run_stack(
                     _wait_ready(item.name, ready_file, launched[item.name], cancellation)
 
             cancellation.check()
+            initialized.set()
             log.info("All processes ready.")
             _print_ready_banner(list(launched.keys()))
             cancellation.check()
@@ -718,6 +740,7 @@ def run_stack(
             )
             raise
         finally:
+            initialized.clear()
             # Inspect readiness files even if cancellation or a parallel peer's
             # failure interrupted the wait before it observed them.
             no_kill = _no_kill

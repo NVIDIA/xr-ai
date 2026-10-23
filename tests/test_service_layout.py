@@ -509,7 +509,7 @@ def test_sample_run_passes_session_recording(
     )
     launches = []
     monkeypatch.setattr(sample, "setup_logging", lambda *args, **kwargs: None)
-    monkeypatch.setattr(sample, "run_stack", lambda processes, base: launches.append(processes))
+    monkeypatch.setattr(sample, "run_stack", lambda processes, base, **kwargs: launches.append(processes))
     if sample_name == "xr-render-demo":
         monkeypatch.setattr(sample, "read_device_profile", lambda path: "webrtc")
         monkeypatch.setattr(sample, "_ensure_web_vendor", lambda: None)
@@ -536,7 +536,7 @@ def test_sample_run_passes_capture_and_preserves_web_event_option(
     )
     launches = []
     monkeypatch.setattr(sample, "setup_logging", lambda *args, **kwargs: None)
-    def capture_launch(processes, base):
+    def capture_launch(processes, base, **kwargs):
         worker = next(process for process in processes if process.name == "worker")
         config = yaml.safe_load(Path(worker.config).read_text())
         launches.append((processes, config["web_events_host"]))
@@ -576,7 +576,7 @@ def test_sample_selects_deployment_hub_config(sample_name, extra, relative, tmp_
     launches = []
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(sample, "setup_logging", lambda *args, **kwargs: None)
-    monkeypatch.setattr(sample, "run_stack", lambda processes, base: launches.append(processes))
+    monkeypatch.setattr(sample, "run_stack", lambda processes, base, **kwargs: launches.append(processes))
     if sample_name == "xr-render-demo":
         monkeypatch.setattr(sample, "read_device_profile", lambda path: "webrtc")
         monkeypatch.setattr(sample, "_ensure_web_vendor", lambda: None)
@@ -595,11 +595,45 @@ def test_sample_selects_deployment_hub_config(sample_name, extra, relative, tmp_
     assert selected.read_text() == "web_server_port: 9443\n"
 
 
+@pytest.mark.parametrize("sample_name, extra", [
+    ("simple-vlm-example", []),
+    ("xr-render-demo", []),
+    ("tea-making-sample", []),
+    ("lab-instrument-monitoring", []),
+    ("procedure-capture-guide", []),
+    ("procedure-capture-guide", ["--output-root", "evidence"]),
+    ("procedure-capture-guide", ["--mode", "guide", "Tea Making"]),
+    ("procedure-capture-guide", ["--session-recording"]),
+    ("procedure-capture-guide", ["--output-root", "evidence", "--session-recording"]),
+    ("procedure-capture-guide", ["--mode", "guide", "Tea Making", "--session-recording"]),
+])
+@pytest.mark.parametrize("port", [None, 8093])
+def test_sample_passes_explicit_health_port(sample_name, extra, port, monkeypatch):
+    sample = _load_module(f"health_selection_{sample_name.replace('-', '_')}", f"agent-samples/{sample_name}/main.py")
+    launches = []
+    monkeypatch.setattr(sample, "setup_logging", lambda *args, **kwargs: None)
+    def launch(processes, base, **kwargs):
+        assert ("capture" in [process.name for process in processes]) == ("--session-recording" in extra)
+        launches.append(kwargs)
+
+    monkeypatch.setattr(sample, "run_stack", launch)
+    if sample_name == "xr-render-demo":
+        monkeypatch.setattr(sample, "read_device_profile", lambda path: "webrtc")
+        monkeypatch.setattr(sample, "_ensure_web_vendor", lambda: None)
+        monkeypatch.setattr(sample, "_ensure_lovr_bin", lambda: None)
+    assert sample._parser().parse_args([]).health_port is None
+    with pytest.raises(SystemExit) as error:
+        sample._parser().parse_args(["--health-port", "invalid"])
+    assert error.value.code == 2
+    sample.run([*extra, *(["--health-port", str(port)] if port is not None else [])])
+    assert launches == [{"health_port": port}]
+
+
 def test_render_custom_hub_keeps_browser_assets_deployment_owned(tmp_path, monkeypatch):
     sample = _load_module("render_deployment_assets", "agent-samples/xr-render-demo/main.py")
     monkeypatch.delenv(sample._NO_WEB_CLIENT_ENV, raising=False)
     monkeypatch.setattr(sample, "setup_logging", lambda *args, **kwargs: None)
-    monkeypatch.setattr(sample, "run_stack", lambda *args: None)
+    monkeypatch.setattr(sample, "run_stack", lambda *args, **kwargs: None)
     monkeypatch.setattr(sample, "_ensure_lovr_bin", lambda: None)
     monkeypatch.setattr(sample, "read_device_profile", lambda _: pytest.fail("deployment owns browser configuration"))
     monkeypatch.setattr(sample, "_ensure_web_vendor", lambda: pytest.fail("must not build sample-owned browser assets"))

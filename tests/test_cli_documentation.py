@@ -35,6 +35,7 @@ def test_sample_command_catalog_matches_top_level_projects() -> None:
         ("--expose-web-events",),
         ("--session-recording",),
         ("--hub-config",),
+        ("--health-port",),
     ]
     for sample in ("simple-vlm-example", "lab-instrument-monitoring", "tea-making-sample", "xr-render-demo"):
         command = commands[sample.replace("-", "_") + "_model_servers"]
@@ -43,9 +44,11 @@ def test_sample_command_catalog_matches_top_level_projects() -> None:
     assert [argument.flags for argument in commands["simple_vlm_example"].arguments] == [
         ("--session-recording",),
         ("--hub-config",),
+        ("--health-port",),
     ]
     assert [argument.flags for argument in commands["procedure_capture_guide"].arguments] == [
         ("--mode",), ("guide_name",), ("--output-root",), ("--session-recording",), ("--hub-config",),
+        ("--health-port",),
     ]
     assert [argument.flags for argument in commands["procedure_capture_guide_model_servers"].arguments] == [
         ("--stop",), ("--gpu-profile",),
@@ -57,10 +60,12 @@ def test_sample_command_catalog_matches_top_level_projects() -> None:
         ("--expose-web-events",),
         ("--session-recording",),
         ("--hub-config",),
+        ("--health-port",),
     ]
     assert [argument.flags for argument in commands["xr_render_demo"].arguments] == [
         ("--session-recording",),
         ("--hub-config",),
+        ("--health-port",),
     ]
 
 
