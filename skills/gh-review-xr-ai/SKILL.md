@@ -103,7 +103,7 @@ load without weakening review quality.
   entire PR when a smaller evidence packet is sufficient.
 - Require each subagent to return only candidate findings with category,
   causal code location, underlying cause, observable impact, evidence relative
-  to base, and a precise, focused, and durable fix.
+  to base, and any uncertainty in the causal explanation.
 - Prohibit subagents from posting comments, changing GitHub state, editing the
   checkout, approving, or requesting changes. The coordinator owns all writes.
 - Independently inspect the cited code before accepting any candidate finding.
@@ -158,6 +158,10 @@ and apply the scope categories below. If the underlying cause is not yet
 established, state what the evidence proves and what remains uncertain rather
 than presenting a hypothesis as fact.
 
+Keep findings diagnostic: identify the structural or implementation cause and
+the responsible component, but leave the choice of fix to the author. Do not
+prescribe a specific implementation or architectural redesign in the review.
+
 Evaluate at least:
 
 - correctness and regressions relative to base;
@@ -199,10 +203,6 @@ For each blocker or nit, include:
 1. The causal file and line, symbol, or smallest useful set of code locations.
 2. The underlying cause and how it produces the observable failure or risk.
 3. Evidence that the PR causes it relative to base.
-4. A precise, focused, and durable correction at the responsible layer.
-   Recommend architectural or structural redesign when needed to address the
-   underlying cause, explaining why it is necessary. Keep the proposed scope
-   tied to the problem rather than minimizing the diff or hiding the symptom.
 
 Apply the same causal explanation to follow-ups, while keeping pre-existing or
 unrelated defects outside the current PR's merge requirements.
@@ -216,12 +216,12 @@ Use this structure, omitting empty sections:
 
 - `path/to/file.py:123` — **Short finding title.** Explain the change-caused
   failure, the underlying cause at the cited code, its impact, the base
-  comparison, and a precise, focused, and durable fix.
+  comparison, and any uncertainty in the causal explanation.
 
 ## Nits
 
 - `path/to/file.py:145` — Explain the cause and impact of the small
-  change-scoped issue and its correction.
+  change-scoped issue.
 
 ## Follow-ups (not blocking)
 
