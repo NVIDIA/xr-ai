@@ -438,10 +438,7 @@ class _VoiceIOProcessor(FrameProcessor):
                 # output starts then.
                 done = _OutputDoneFrame(pid=pid, output=item)
                 done.transport_destination = pid
-                try:
-                    await self.push_frame(done)
-                except Exception:
-                    logger.exception("emit voice output done failed pid={!r}", pid)
+                await self.push_frame(done)
 
     async def _consume_response(
         self,
