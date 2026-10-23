@@ -257,12 +257,14 @@ recorded demonstrations.
 
 ## Generate a draft guide
 
-Use a coding agent with local file and image access to follow the bundled
-`recording-to-guide` and `evaluate-guide` skills. The first writes YAML directly;
-the second runs a fixed draft against captured images with the configured XR-AI
-models and tools, then returns findings for revision. Both skills, their
-references, the validator and packet-playback support belong to this generation
-workflow. No separate sample regression suite is needed.
+Use a coding agent with local file and image access to follow
+`guide-generation-skills/SKILL.md`. This orchestration skill coordinates the
+initial draft, runtime evaluation, evidence-supported revisions, and human-review
+handoff. Its `draft-guide/` child writes YAML directly; `evaluate-guide/` runs a
+fixed draft against captured images with the configured XR-AI models and tools,
+then reports findings without editing the guide. The orchestrator owns revisions.
+These skills, their references, the validator, and packet-playback support belong
+to the generation workflow. No separate sample regression suite is needed.
 
 The authoring model observes runtime results and edits the
 guide. It does not replace the runtime VLM, invent tool answers, compile a plan
@@ -271,8 +273,9 @@ into YAML, or approve the result. The capture worker does not invoke the skills.
 From the repository root, give the agent this request:
 
 ```text
-Read agent-samples/procedure-capture-guide/skills/recording-to-guide/SKILL.md,
-its schema reference, and applicable examples.
+Read agent-samples/procedure-capture-guide/guide-generation-skills/SKILL.md
+and follow its draft-guide and evaluate-guide child skills, shared schema,
+and applicable examples.
 Use agent-samples/procedure-capture-guide/artifacts/sessions/<session-id>/packet.json.
 Create <slug>-guide/ under agent-samples/procedure-capture-guide/ and write
 guide.yaml and review.md inside it. Use a lowercase, hyphen-separated slug
@@ -287,7 +290,7 @@ their effects and questions needing human confirmation in review.md, while
 continuing to draft sufficiently understood parts.
 Preserve distinct actions, counts, orientation, order, and required durations.
 Validate with the runtime parser, then follow
-agent-samples/procedure-capture-guide/skills/evaluate-guide/SKILL.md to test the
+agent-samples/procedure-capture-guide/guide-generation-skills/evaluate-guide/SKILL.md to test the
 draft with the captured images and configured local XR-AI models and tools.
 Assess fidelity to the intended task and clarity for someone performing it
 afresh, not just whether the recording passes. Distinguish recording coverage
@@ -301,8 +304,10 @@ your own visual answers, or invent successful tests when models are unavailable.
 ```
 
 No installation is required for this explicit-file request. To install the
-skills, copy the entire `recording-to-guide/` and `evaluate-guide/` directories
-as siblings, including references and metadata. Keep the target checkout and
+workflow, copy the entire `guide-generation-skills/` directory, preserving its
+top-level `SKILL.md`, child skills, references, scripts, and metadata. Start with
+the top-level skill, which links to the child instructions; do not depend on
+nested skills being independently discovered. Keep the target checkout and
 packet paths explicit; the evaluator runs that checkout's implementation.
 
 The outputs are local and Git-ignored:
@@ -315,7 +320,7 @@ The outputs are local and Git-ignored:
   observations, evaluated hash, untested checks and findings for the next revision.
 
 Source session IDs and recording timestamps belong in review notes, not
-executable YAML. Update the request, both skills, schema reference and examples
+executable YAML. Update the request, orchestration and child skills, schema reference and examples
 together when changing this workflow.
 
 ### Validate and refine
@@ -334,7 +339,7 @@ A schema-valid guide can still omit an action or accept an incorrect result.
 With this sample's configured model servers running, evaluate a fixed draft:
 
 ```bash
-PYTHONPATH=agent-samples/procedure-capture-guide/worker uv run --project agent-samples/procedure-capture-guide/worker python agent-samples/procedure-capture-guide/skills/evaluate-guide/scripts/evaluate.py --packet /path/to/packet.json --guide agent-samples/procedure-capture-guide/<slug>-guide/guide.yaml --output agent-samples/procedure-capture-guide/<slug>-guide/evaluation/run-001
+PYTHONPATH=agent-samples/procedure-capture-guide/worker uv run --project agent-samples/procedure-capture-guide/worker python agent-samples/procedure-capture-guide/guide-generation-skills/evaluate-guide/scripts/evaluate.py --packet /path/to/packet.json --guide agent-samples/procedure-capture-guide/<slug>-guide/guide.yaml --output agent-samples/procedure-capture-guide/<slug>-guide/evaluation/run-001
 ```
 
 The existing runtime evaluator supplies each captured frame once at its original
@@ -626,7 +631,7 @@ caption regression fixtures live under the repository's
 `tests/procedure_capture_guide/`, including the simplified indicator procedure.
 
 Recorded-packet replay and the runtime harness used by guide authoring live in
-`skills/evaluate-guide/scripts/`. The tea scenario runner reuses that harness
+`guide-generation-skills/evaluate-guide/scripts/`. The tea scenario runner reuses that harness
 for production agent/tool setup and trace collection; its scene rendering,
 scripted actions, and assertions stay here. The skill runner does not import
 tea-example or test files. There is no sample-level `eval/` directory.

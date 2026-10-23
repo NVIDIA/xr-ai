@@ -16,34 +16,36 @@ import yaml
 
 _SAMPLE = Path(__file__).resolve().parents[1] / "agent-samples/procedure-capture-guide"
 _TEST_DATA = Path(__file__).resolve().parent / "procedure_capture_guide"
-_REFERENCES = _SAMPLE / "skills/recording-to-guide/references"
+_REFERENCES = _SAMPLE / "guide-generation-skills/draft-guide/references"
 sys.path.insert(0, str(_SAMPLE / "worker"))
 
 from procedure_capture_guide_worker._validate_guide import main  # noqa: E402
 from procedure_capture_guide_worker.guide._workflow_spec import load_workflow, parse_workflow  # noqa: E402
 
 
-def test_installed_skill_pair_resolves_shared_contract_and_references(tmp_path):
-    # The generation package includes both authoring and runtime-evaluation skills.
-    for name in ("recording-to-guide", "evaluate-guide"):
-        shutil.copytree(_SAMPLE / "skills" / name, tmp_path / name)
+def test_installed_skill_workflow_resolves_children_and_shared_references(tmp_path):
+    package = tmp_path / "guide-generation-skills"
+    shutil.copytree(_SAMPLE / "guide-generation-skills", package)
     for path in tmp_path.rglob("*.md"):
         for target in re.findall(r"\[[^\]]+\]\(([^)]+)\)", path.read_text()):
             if "://" not in target and not target.startswith("#"):
                 assert (path.parent / target.split("#", 1)[0]).is_file(), (path, target)
     contracts = list(tmp_path.rglob("packet-and-guide-schema.md"))
     assert len(contracts) == 1
-    for name in ("recording-to-guide", "evaluate-guide"):
-        skill = tmp_path / name
+    for skill in (package, package / "draft-guide", package / "evaluate-guide"):
+        name = skill.name
         metadata = yaml.safe_load((skill / "SKILL.md").read_text().split("---", 2)[1])
         assert metadata["name"] == name
         interface = yaml.safe_load((skill / "agents/openai.yaml").read_text())["interface"]
         assert f"${name}" in interface["default_prompt"]
+    entrypoint = (package / "SKILL.md").read_text()
+    for child in ("draft-guide", "evaluate-guide"):
+        assert f"]({child}/SKILL.md)" in entrypoint
 
 
 def test_packet_entry_point_imports_without_example_or_test_helpers(tmp_path):
-    scripts = tmp_path / "sample/skills/evaluate-guide/scripts"
-    shutil.copytree(_SAMPLE / "skills/evaluate-guide/scripts", scripts)
+    scripts = tmp_path / "sample/guide-generation-skills/evaluate-guide/scripts"
+    shutil.copytree(_SAMPLE / "guide-generation-skills/evaluate-guide/scripts", scripts)
     result = subprocess.run(
         [sys.executable, str(scripts / "evaluate.py"), "--help"],
         cwd=tmp_path, env={**os.environ, "PYTHONPATH": str(_SAMPLE / "worker")},

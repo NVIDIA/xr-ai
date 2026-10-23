@@ -9,8 +9,9 @@ Record narrated demonstrations with spoken start and stop commands. The sample
 saves sampled frames, visual captions, and narration as local evidence packets.
 Guide mode provides spoken guidance and evidence checks for an approved local guide.
 
-To draft a guide from a captured packet, use the bundled `recording-to-guide`
-and `evaluate-guide` skills. Refer to the
+To generate a guide from a captured packet, start with
+`guide-generation-skills/SKILL.md`, which coordinates drafting, evaluation, and
+revision. Refer to the
 [guide-generation reference](https://nvidia.github.io/xr-ai/latest/reference/procedure-capture-guide.html#generate-a-draft-guide)
 for the authoring request, validation, and human review workflow.
 

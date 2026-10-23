@@ -1,0 +1,7 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+interface:
+  display_name: "Generate Procedure Guide"
+  short_description: "Draft, evaluate, and refine a guide from captured evidence"
+  default_prompt: "Use $guide-generation-skills to draft a guide from my capture, evaluate it with the local XR-AI runtime, and revise it for human review."

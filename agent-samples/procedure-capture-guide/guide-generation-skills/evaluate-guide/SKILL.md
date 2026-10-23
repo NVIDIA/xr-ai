@@ -12,17 +12,17 @@ description: Test a draft SOP against recorded camera input using the XR-AI guid
 
 Run the fixed draft through XR-AI, observe its outputs, and write
 `evaluation.md` beside its `guide.yaml`. Do not edit the guide; the
-[authoring skill](../recording-to-guide/SKILL.md) owns revisions. Do not approve
+[orchestration skill](../SKILL.md) owns revisions. Do not approve
 the source guide or modify the recording, runner, runtime, models, or skills to
 make a test pass.
 
 ## Inputs and roles
 
 Read the guide, original packet, and
-[shared contract](../recording-to-guide/references/packet-and-guide-schema.md).
-Read the [visual example](../recording-to-guide/references/example.yaml),
-[timer example](../recording-to-guide/references/timer.yaml) for waits,
-and [blocked example](../recording-to-guide/references/review-blocked.yaml)
+[shared contract](../draft-guide/references/packet-and-guide-schema.md).
+Read the [visual example](../draft-guide/references/example.yaml),
+[timer example](../draft-guide/references/timer.yaml) for waits,
+and [blocked example](../draft-guide/references/review-blocked.yaml)
 for unresolved requirements. These links are relative to this skill.
 
 The authoring LLM, including GPT Luna, is the **observer**, not the runtime VLM,
@@ -107,7 +107,7 @@ and untested steps, and trace paths. Separate observed execution from your
 interpretation. List all simulated inputs and excluded layers (STT, TTS,
 browser, hub IPC, and LiveKit); this is not a full audiovisual end-to-end test.
 
-Return actionable findings to the author without changing the guide. After an
+Return actionable findings to the orchestrator without changing the guide. After an
 authorized revision, run the new YAML again; a previous pass cannot validate an
 edit. Count a modification round only when a completed evaluation is followed
 by a substantive YAML change. Repeated runs, validation-only formatting edits,

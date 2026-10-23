@@ -5,15 +5,16 @@
 
 # Recorded-camera evaluation during guide generation
 
-This guide-generation package includes both skills, the runtime validator, and
-recorded-packet playback. No separate sample regression suite is required.
+The guide-generation workflow uses the orchestration, drafting, and evaluation
+skills together with the runtime validator and recorded-packet playback.
+No separate sample regression suite is required.
 Start this checkout's configured local LLM and VLM servers; the evaluator never
 starts, stops, or substitutes model servers.
 
 From the repository root, using a new output directory:
 
 ```bash
-PYTHONPATH=agent-samples/procedure-capture-guide/worker uv run --project agent-samples/procedure-capture-guide/worker python agent-samples/procedure-capture-guide/skills/evaluate-guide/scripts/evaluate.py --packet /path/to/packet.json --guide agent-samples/procedure-capture-guide/<slug>-guide/guide.yaml --output agent-samples/procedure-capture-guide/<slug>-guide/evaluation/run-001
+PYTHONPATH=agent-samples/procedure-capture-guide/worker uv run --project agent-samples/procedure-capture-guide/worker python agent-samples/procedure-capture-guide/guide-generation-skills/evaluate-guide/scripts/evaluate.py --packet /path/to/packet.json --guide agent-samples/procedure-capture-guide/<slug>-guide/guide.yaml --output agent-samples/procedure-capture-guide/<slug>-guide/evaluation/run-001
 ```
 
 The runner imports the runtime's YAML parser and uses the worker's model,

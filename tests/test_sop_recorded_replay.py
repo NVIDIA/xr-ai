@@ -25,7 +25,7 @@ from PIL import Image
 
 _SAMPLE = Path(__file__).resolve().parents[1] / "agent-samples/procedure-capture-guide"
 _TEST_DATA = Path(__file__).resolve().parent / "procedure_capture_guide"
-_SCRIPTS = _SAMPLE / "skills/evaluate-guide/scripts"
+_SCRIPTS = _SAMPLE / "guide-generation-skills/evaluate-guide/scripts"
 
 
 @pytest.fixture
@@ -151,9 +151,9 @@ def test_packet_cli_uses_runtime_controls_and_unique_source_evidence(
     else:
         assert result["checks_not_scored"] > 0
     sources = json.loads((output / "runtime.json").read_text())
-    assert {"skills/evaluate-guide/scripts/evaluate.py",
-            "skills/evaluate-guide/scripts/_recorded_camera.py",
-            "skills/evaluate-guide/scripts/_guide_runtime.py"} <= sources.keys()
+    assert {"guide-generation-skills/evaluate-guide/scripts/evaluate.py",
+            "guide-generation-skills/evaluate-guide/scripts/_recorded_camera.py",
+            "guide-generation-skills/evaluate-guide/scripts/_guide_runtime.py"} <= sources.keys()
     assert not any("example-guides/" in source or "tests/" in source for source in sources)
     assert (output / "relay.jsonl").is_file()
     llm.close.assert_awaited_once()
