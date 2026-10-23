@@ -534,7 +534,7 @@ class _Guide:
                     return
                 session.observed_frames[key] = position
             evidence = step.evidence
-            if evidence is not None:
+            if evidence is not None and evidence.source == "observation":
                 value = observation.value if isinstance(observation.value, str) else json.dumps(
                     observation.value, separators=(",", ":"),
                 )
@@ -558,7 +558,15 @@ class _Guide:
         observation: _Observation,
     ) -> None:
         assert step.agent is not None  # Validation requires a policy for model-backed observations.
-        commit = self._commit_tool(session, step, revision)
+        async with session.lock:
+            if not self._current(session, step, revision):
+                return
+            previous_hits = session.evidence_hits
+            if step.evidence is not None and step.evidence.source == "model":
+                # Missing, cancelled, or failed judgments break the sequence too.
+                # Only a valid completion proposal can restore and extend it.
+                session.evidence_hits = 0
+        commit = self._commit_tool(session, step, revision, previous_hits=previous_hits)
         named = self._named_tools(session.participant_id, step.agent.tools)
         tools = ToolSet({commit.name: commit, **dict(named.items())})
         writable = {
@@ -578,7 +586,11 @@ class _Guide:
                 "writable_state": writable,
                 "complete_when": step.complete_when,
                 "rules": [
-                    "Use workflow__commit for every state change.",
+                    "Judge the step requirements from the supplied observation, not from a user claim.",
+                    "Call workflow__commit exactly once for this observation.",
+                    "Propose all required completion fields only when every requirement is supported.",
+                    "Otherwise use empty updates when evidence is negative, ambiguous, or incomplete.",
+                    "The runtime counts consecutive fresh observations; do not invent prior confirmations.",
                     "Commit only facts supported by the observation or deterministic tools.",
                     "Do not infer hidden actions or outcomes.",
                 ],
@@ -590,8 +602,13 @@ class _Guide:
         except ToolLoopError:
             logger.opt(exception=True).warning("SOP observation tool loop failed")
 
-    def _commit_tool(self, session: _Session, step: Step, revision: int) -> Tool[_CommitRequest, _CommitResult]:
+    def _commit_tool(
+        self, session: _Session, step: Step, revision: int, *, previous_hits: int = 0,
+    ) -> Tool[_CommitRequest, _CommitResult]:
+        judged = False
+
         async def commit(request: _CommitRequest) -> _CommitResult:
+            nonlocal judged
             async with session.lock:
                 if not self._current(session, step, revision):
                     return _CommitResult(
@@ -600,6 +617,17 @@ class _Guide:
                         message="stale workflow revision",
                         revision=session.revision,
                     )
+                if step.evidence is not None and step.evidence.source == "model":
+                    # Retries or multiple tool calls on one frame are one judgment.
+                    if judged:
+                        return _CommitResult(
+                            accepted=False, complete=False, message="observation already judged",
+                            revision=session.revision,
+                        )
+                    judged = True
+                    valid = not self._invalid_updates(session, step, request.updates)
+                    proposed = step.is_complete({**session.state, **request.updates})
+                    session.evidence_hits = previous_hits + 1 if valid and proposed else 0
                 accepted, complete, message = self._commit(session, step, request.updates, request.message)
                 return _CommitResult(
                     accepted=accepted,
@@ -610,12 +638,23 @@ class _Guide:
 
         return Tool(
             "workflow__commit",
-            "Atomically commit evidence-backed fields writable by the active SOP step.",
+            "Judge this fresh observation once. Propose supported writable fields; use empty updates "
+            "if completion is not supported. The runtime validates and counts confirmation before completing.",
             _CommitRequest,
             _CommitResult,
             commit,
             return_direct=True,
         )
+
+    @staticmethod
+    def _invalid_updates(session: _Session, step: Step, updates: dict[str, Any]) -> str:
+        unknown = updates.keys() - set(step.writes)
+        if unknown:
+            return f"fields not writable in this step: {sorted(unknown)}"
+        for name, value in updates.items():
+            if not session.workflow.state_fields[name].accepts(value):
+                return f"{name} has the wrong type"
+        return ""
 
     def _commit(
         self,
@@ -624,12 +663,9 @@ class _Guide:
         updates: dict[str, Any],
         message: str,
     ) -> tuple[bool, bool, str]:
-        unknown = updates.keys() - set(step.writes)
-        if unknown:
-            return False, False, f"fields not writable in this step: {sorted(unknown)}"
-        for name, value in updates.items():
-            if not session.workflow.state_fields[name].accepts(value):
-                return False, False, f"{name} has the wrong type"
+        invalid = self._invalid_updates(session, step, updates)
+        if invalid:
+            return False, False, invalid
         candidate = {**session.state, **updates}
         complete = step.is_complete(candidate)
         if complete and step.trigger.function == "clock__timer":

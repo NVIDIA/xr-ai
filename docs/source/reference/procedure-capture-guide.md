@@ -289,6 +289,11 @@ judgment for ordinary organization and wording. Document consequential assumptio
 their effects and questions needing human confirmation in review.md, while
 continuing to draft sufficiently understood parts.
 Preserve distinct actions, counts, orientation, order, and required durations.
+For visual steps, ask Cosmos for descriptive evidence, and put the completion
+criteria in the observation agent prompt. Use evidence.source: model with two
+fresh-frame confirmations. The local observation LLM judges the facts and
+proposes workflow__commit; the runtime validates progress. Keep timer checks
+deterministic. Do not turn visual verification into a raw YES/NO regex gate.
 Validate with the runtime parser, then follow
 agent-samples/procedure-capture-guide/guide-generation-skills/evaluate-guide/SKILL.md to test the
 draft with the captured images and configured local XR-AI models and tools.
@@ -426,8 +431,11 @@ Like {doc}`tea-making-sample`, guide separates foreground conversation from
 background verification. The foreground answers guide questions using the
 current step and its allowed tools. It cannot directly commit completion.
 Periodic observations use a fresh camera view or a deterministic elapsed-time
-check. The observer can commit only declared writable fields, with any required
-consecutive evidence. Late observations from a previous step or run cannot
+check. In model-judged visual steps, Cosmos describes the frame and the observation
+LLM judges it against the step's `agent.prompt`. Only valid completion proposals
+from distinct fresh frames count toward `evidence.consecutive`; the runtime
+commits progress after the required confirmations. The observer can commit only
+declared writable fields. Late observations from a previous step or run cannot
 change current progress. The agent announces step completion once, without
 requiring a user question. Advancement is explicit unless the terminal step
 sets `finish_on_complete: true`, which ends the run automatically.
@@ -494,25 +502,18 @@ tea sample's workflow YAML:
   blend names such as **Chamomile Lemon**, regardless of brand. The brand does
   not need to be visible. The brewing settings are fixed in the guide; the
   brewing reference is not retrieved at runtime.
-- Its three visual steps require two distinct fresh frames. Identification
-  accepts only `YES` (case-insensitive) to visible `CHAMOMILE` text, not `NO`,
-  `UNKNOWN`, or explanatory prose; the second step reads a current
-  `LABEL | NUMBER UNIT` reading and accepts `CURRENT`, `ACTUAL`, or `THERMOMETER`
-  with `100 C` or `212 F`. It preserves `TARGET` and `SET` labels in the visual
-  result so those readings cannot satisfy completion. Unlabeled displays are
-  unavailable rather than assumed to show current temperature. Matching tolerates
-  equivalent letter case, spacing, degree symbols, and trailing decimal zeros,
-  not different temperatures. Immersion requires `YES` for
-  visible bag contact with visible water, including a floating bag.
-  Missing frames and responses outside each step's accepted format cannot
-  satisfy its evidence requirement. A well-formed answer can still be a
-  visual misclassification; the response contract does not prove visual accuracy.
-  These bounded evidence commits do not use an observation LLM; the foreground
-  LLM still handles questions and controls.
+- Its three visual steps use `evidence.source: model` and require two distinct
+  fresh frames. Cosmos describes printed names, labeled temperature readings,
+  or bag contact with water. The observation LLM decides whether those facts
+  satisfy the step and calls `workflow__commit`. The runtime validates fields
+  and counts confirmations before accepting completion. Negative, uncertain,
+  missing, invalid, or failed judgments break the confirmation sequence.
+  No raw VLM answer regex decides these steps. Both models can still make
+  factual mistakes; two confirmations do not prove visual accuracy.
 - The heating check verifies a displayed current temperature at the brewing
   target, not a target setting or a “heating underway” threshold. Guide
-  does not expose the tea sample's typed temperature tools: this is a VLM
-  judgment, not a deterministic temperature measurement or safety guarantee.
+  does not expose the tea sample's typed temperature tools: the LLM interprets
+  VLM evidence, not a deterministic temperature measurement or safety guarantee.
 - Immersion detection does not start the timer. Say **next** promptly after
   immersion is confirmed to enter the timer step. The runtime then measures a
   full 300 seconds; time spent waiting at the immersion step is not subtracted.
@@ -568,10 +569,13 @@ directory, or absolute) and lists ordered `actions`:
   `scenes` map names to a rectangle color, display text, or a tea scene.
   `scenes_file` loads a shared scene map relative to the manifest.
 - `observe`: wait for `count` visual results (default two) from the displayed
-  image and compare them to the allowed `answers`. Alternatively, name a `case`
+  image and compare them to the allowed `answers` or an `expect_evidence` regex
+  for descriptive text. Alternatively, name a `case`
   from `visual_cases_file` (relative to the manifest) to reuse its scene, step,
   and expected-answer regex. Recognition comparisons ignore whitespace layout
-  and case; unavailable observations never count as correct answers.
+  and case; unavailable observations never count as correct answers. These
+  text checks do not assert completion; use status and completion speech to
+  test the observation LLM and runtime decision.
 - `say`: send `text` as a user turn. Optional `expect` checks the delivered
   answer against a regex; `tools` and `arguments` check model tool calls.
   Status assertions use **What is my status?** and `workflow__status`.
@@ -679,13 +683,13 @@ loading `example-guides/tea-making/guide.yaml` through the production guide runt
 They exercise the same procedure, prompts, and verification rules that users run,
 without a separate copy of the tea guide. The purpose-built
 `tests/test_procedure_indicator_guide.yaml` remains a separate, simplified test procedure.
-Identification checks whether chamomile is visibly printed on the packet,
-using the shipped guide's YES, NO, or UNKNOWN contract.
+Identification checks the described packet text and the observation LLM's
+judgment that chamomile is visibly printed, not a fixed YES/NO VLM response.
 
 | Layer | What it checks | What it does not establish |
 |---|---|---|
 | CPU regression tests | Reproducible images, shipped-guide selection, scoring, timeout handling, and existing guide state-machine guards | Live model accuracy |
-| Isolated visual cases | Configured VLM responses to the shipped guide's exact questions and evidence gates | Conversation, consecutive-frame enforcement, or task completion |
+| Isolated visual cases | Factual-text recognition in configured VLM responses to the shipped guide's questions | Semantic correctness, LLM judgment, consecutive-frame enforcement, or task completion |
 | Multi-turn guide scenario | Actual guide agent, frame tools, local LLM and VLM, controls, announcements, and the five-minute timer | Microphone, STT, network camera transport, or audible TTS |
 
 From the sample directory, generate images for inspection without model calls:
@@ -714,14 +718,12 @@ covered labels, cold through boiling readings, Celsius and Fahrenheit, target
 versus current labels, competing readings, and dry, immersed, floating, and
 obscured tea bags. Expected answers describe scene content and are used only for
 scoring, not supplied to the VLM. Isolated and conversational checks share this
-answer table. The suite reports recognition accuracy (allowing whitespace layout
-and equivalent temperature notation),
-evidence-gate accuracy, false accepts, false rejects, and unavailable requests
-separately. An unavailable model cannot pass a negative case. Correctly rejecting
-a scene while misreading its contents is not a recognition pass. Repetitions
-measure response variability on the same images, not additional independent scenes.
-Evidence-gate scores apply the production regex to the raw stripped answer;
-recognition normalization never changes whether the guide would accept it.
+answer table. The visual diagnostic reports factual-text matches (allowing
+whitespace layout and equivalent temperature notation) and unavailable requests.
+These regex diagnostics do not judge semantic correctness or guide completion;
+the multi-turn scenarios test the actual observation LLM and accepted progress.
+An unavailable model cannot pass a negative case. Repetitions measure response
+variability on the same images, not additional independent scenes.
 
 The step-verification scenario tests early advance rejection, completion
 announcements, and explicit advancement for the three visual steps, then stops.
@@ -772,8 +774,15 @@ even when their `task.status` is `approved`.
   are `current_view`, `clock__now`, and `clock__timer`. Only the observer receives
   `workflow__commit`. Foreground workflow controls are supplied by the runner,
   not listed in the guide's step tools.
-- Optional `evidence` contains a full-match regex `pattern`, positive
-  `consecutive` count, and optional `commit` mapping. With `commit`, matching
+- For visual steps, use `evidence: {source: model, consecutive: 2}` and an
+  observation `agent` policy. This requires `current_view` and forbids `pattern`
+  and `commit`. The local LLM judges descriptive evidence and proposes completion;
+  only a valid completing proposal counts. Each frame can contribute once.
+  Negative, incomplete, missing, invalid, failed, or cancelled judgments reset
+  the count. The completing state update waits for the required confirmations.
+- The existing `evidence.source: observation` (the default when omitted) uses
+  a full-match regex `pattern`, positive `consecutive`, and optional `commit`.
+  This remains useful for deterministic timer results. With `commit`, matching
   observations directly apply that bounded patch without an observation LLM.
   The patch must satisfy every `complete_when` requirement. Each step must have
   at least one initially unmet completion field that no preceding step can write;
