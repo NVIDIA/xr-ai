@@ -326,12 +326,12 @@ async def test_real_speaker_producer_websocket_hybrid_to_runtime_without_enrollm
     cfg = _config(tmp_path, "hybrid")
     models, activity, _calls, _masks, _allocations, text = _streaming_models
     recognized = {1: "unrelated continuous background speech", 7: "hey agent describe this"}
-    original_decode = _Session._decode
+    original_step = _Session._step_native
 
-    def decode(self, *args):
+    def step(self, *args):
         text[0] = recognized[args[3]]
-        return original_decode(self, *args)
-    monkeypatch.setattr(_Session, "_decode", decode)
+        return original_step(self, *args)
+    monkeypatch.setattr(_Session, "_step_native", step)
     allocated = []
 
     def allocate(config, *, audio_origin_us):
