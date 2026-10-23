@@ -11,7 +11,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from xr_ai_conversation import Conversation
+from xr_ai_conversation import ContextManager, Conversation
 from xr_ai_interaction import ResponseOutput, UserQuery
 from xr_ai_models import ChatStreamEvent
 from xr_ai_routing import AgentRouter, RoutingAid
@@ -113,9 +113,12 @@ class _Output(Agent):
 
 def _stack(runtime, route, mode):
     model = _Model(mode)
-    general = Conversation(model, runtime=runtime, output_topic=_OUTPUT)
+    manager = ContextManager(model)
+    general = Conversation(model, context=manager, runtime=runtime, output_topic=_OUTPUT)
+    manager = ContextManager(model)
     notes = Conversation(
         model,
+        context=manager,
         routing=RoutingAid(name="notes", description="Focused note-taking destination."),
         runtime=runtime,
         output_topic=_OUTPUT,
@@ -179,7 +182,6 @@ async def test_destination_failure_preserves_source_and_never_duplicates_partial
         else:
             assert [message.text for message in messages] == ["first", ""]
             assert [message.final for message in messages] == [False, True]
-            assert [message.interrupt for message in messages] == [True, False]
             assert messages[0].response_id == messages[1].response_id
     finally:
         for conversation in conversations:
@@ -225,7 +227,8 @@ async def test_alert_cancel_publishes_one_finite_attributed_response():
     async def publish_capability(_participant, _update):
         pass
 
-    general = Conversation(_Model("done"), runtime=runtime, output_topic=_OUTPUT)
+    manager = ContextManager(_Model("done"))
+    general = Conversation(_Model("done"), context=manager, runtime=runtime, output_topic=_OUTPUT)
     alerts = VisualAlertAgent(
         _Frames(),
         None,
@@ -255,11 +258,11 @@ async def test_alert_cancel_publishes_one_finite_attributed_response():
             await _query(runtime, idle, "Cancel my visual alert.", 789)
             await asyncio.wait_for(idle.wait(), 1)
             await router.stop()
-        assert len(output.messages) == 1
-        metadata, message = output.messages[0]
-        assert metadata.source == "alerts" and metadata.participant_id == "alice"
-        assert message.final and message.response_id
-        assert message.interrupt and message.timestamp_us == 789
-        assert message.text == "The visual alert is cancelled."
+        # One reply: its text, then the empty terminator that completes it.
+        assert {(metadata.source, metadata.participant_id) for metadata, _ in output.messages} == {("alerts", "alice")}
+        text, terminator = (message for _, message in output.messages)
+        assert text.kind == "reply" and text.request_id and text.timestamp_us == 789
+        assert text.text == "The visual alert is cancelled."
+        assert terminator.final and not terminator.text and terminator.response_id == text.response_id
     finally:
         await general.close()

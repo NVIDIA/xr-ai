@@ -34,9 +34,9 @@ class _Output:
 
     async def publish(self, _topic, message, **metadata):
         self.messages.append((message, metadata))
-        if message.text and (message.response_id or "").endswith(":description"):
+        if message.kind == "update" and not message.urgent:
             self.description.set()
-        if (message.response_id or "").startswith("alert:"):
+        if message.kind == "update" and message.urgent:
             self.background.set()
             if self.fail_background:
                 raise RuntimeError("output unavailable")
@@ -194,7 +194,7 @@ async def _start(agent, participant="alice", request="Alert me when the lamp is 
     assert (await agent.admit(turn, focused=False)).disposition == "accept"
 
     async def started():
-        return True
+        return None
 
     await agent.answer(turn, started=started)
 
@@ -223,11 +223,9 @@ async def test_alert_speaks_once_after_matching_and_never_publishes_observations
     assert len(alerts) == 1
     assert alerts[0][0].text == "Alert"
     notice = alerts[0][0]
-    assert notice.final and notice.interrupt
-    chunks = [message for message, _ in output.messages if message.response_id == notice.response_id + ":description"]
-    assert chunks[0].text == "The lamp is blue." and not chunks[0].final
-    assert chunks[-1].final and not chunks[-1].text
-    assert all(not chunk.interrupt for chunk in chunks)
+    assert notice.kind == "update" and notice.urgent
+    descriptions = [message for message, _ in output.messages if message.kind == "update" and not message.urgent]
+    assert [description.text for description in descriptions] == ["The lamp is blue."]
     assert alerts[0][1] == {"participant_id": "alice", "source": "alerts"}
     assert len(frames.calls) >= 2 and len(images.resolved) == 2
     assert len(capabilities) == 1
@@ -313,7 +311,7 @@ async def test_failed_alert_publication_is_not_retried_as_another_message():
     await asyncio.wait_for(job.task, 1)
     assert not agent._jobs
     await agent.stop()
-    assert len([message for message, _ in output.messages if (message.response_id or "").startswith("alert:")]) == 1
+    assert len([message for message, _ in output.messages if message.kind == "update" and message.urgent]) == 1
     assert not agent._jobs
 
 
@@ -324,13 +322,14 @@ async def test_cancel_drains_followup_after_notice_without_more_spoken_output():
     agent, output, _ = _agent(_HedgedDecisions("start", fast=("yes", 0.99)), _Frames((_open(), None)), vlm=vlm)
     await _start(agent)
     job = agent._jobs["alice"]
-    await asyncio.wait_for(output.description.wait(), 1)
+    await asyncio.wait_for(output.background.wait(), 1)
+    await asyncio.wait_for(vlm.entered.wait(), 1)
     assert agent._jobs["alice"] is job
-    assert [message.text for message, _ in output.messages][-2:] == ["Alert", "The lamp is blue."]
     await agent.participant_left("alice")
     await asyncio.wait_for(vlm.closed.wait(), 1)
     assert job.task.done() and not agent._jobs
-    assert output.messages[-1][0].final and not output.messages[-1][0].text
+    # The description is one finite update, so a description cut off by cancellation is never spoken.
+    assert [message.text for message, _ in output.messages if message.kind == "update"] == ["Alert"]
 
 
 @pytest.mark.asyncio
