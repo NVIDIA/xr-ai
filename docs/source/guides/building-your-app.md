@@ -5,11 +5,14 @@
 
 # Build your application
 
-Read this when building an XR AI application. The directions below assume the
-application is under `apps/<your-app>/`. This directory is for applications
-that are not part of the repository's sample catalog. The XR AI SDK
-distributions are not published to a package registry; they resolve through
-relative `[tool.uv.sources]` entries in each application's `pyproject.toml`.
+This reference workflow builds an application under `apps/<your-app>/`, outside
+the repository's sample catalog. Adapt the application layout and tooling to
+its owner's requirements. Refer to
+[Engineering guidance](https://github.com/NVIDIA/xr-ai/blob/main/AGENTS.md#engineering-guidance).
+
+The XR AI SDK distributions are not published to a package registry; they
+resolve through relative `[tool.uv.sources]` entries in each application's
+`pyproject.toml`.
 
 ## Start from a source checkout
 
@@ -302,8 +305,8 @@ markers = [
 ]
 ```
 
-Point model clients at a `StubOpenAI`-style transport, then run the application
-test directory explicitly with the repository test environment:
+Point model clients at a `StubOpenAI`-style transport. One option is to run the
+application tests explicitly with the repository test environment:
 
 ```bash
 uv --config-file uv.toml run --project tests \
@@ -330,6 +333,7 @@ to `agent-samples/` and `tests/`. Git ignores `apps/*` by default so private
 application work is not staged accidentally. Remove that ignore rule when the
 application owner wants to track the application in the fork.
 
-The rest of the checkout remains repository-owned. Commit-wide hooks such as
-DCO sign-off still run when installed, and changes outside `apps/` continue to
-follow `AGENTS.md` and the repository's contribution checks.
+The tooling exclusions above apply only to `apps/`. Checks still inspect their
+configured paths elsewhere in the checkout, and commit-wide hooks such as DCO
+sign-off still run when installed. Refer to the routing in `AGENTS.md` before
+changing repository-owned files.
