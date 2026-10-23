@@ -51,11 +51,11 @@ not a claim that all packages can be installed together. Refer to
 [`DEPENDENCIES.md`](https://github.com/NVIDIA/xr-ai/blob/main/DEPENDENCIES.md)
 for snapshot refresh rules and dependency boundaries.
 
-The inventory covers registry-sourced Python runtime dependencies, web runtime
-and development dependencies, and Android application and buildscript dependencies
-recorded in those locks. Python editable workspace members, the virtual manifest root, and
-git-sourced packages are excluded from all three inventories; they are not
-assigned PyPI identities. License fields are limited to metadata in the inputs;
+The inventory covers locked third-party Python runtime dependencies, including
+registry and git sources, web runtime and development dependencies, and Android
+application and buildscript dependencies recorded in those locks. Python editable workspace members and the virtual
+manifest root are excluded from all three inventories; they are not assigned
+PyPI identities. License fields are limited to metadata in the inputs;
 generation does not fetch license texts or establish license compliance. The SBOM does not
 replace `THIRD_PARTY_NOTICES.md` or `third_party_licenses/`.
 

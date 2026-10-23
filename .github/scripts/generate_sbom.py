@@ -29,7 +29,9 @@ MANIFEST = ROOT / "dependency-manifest"
 def _expected_packages() -> dict[str, set[tuple[str, str]]]:
     lock = tomllib.loads((MANIFEST / "uv.lock").read_text())
     python = {
-        (re.sub(r"[-_.]+", "-", p["name"]).lower(), p["version"]) for p in lock["package"] if "registry" in p["source"]
+        (re.sub(r"[-_.]+", "-", p["name"]).lower(), p["version"])
+        for p in lock["package"]
+        if not {"editable", "virtual"}.intersection(p["source"])
     }
     lock = json.loads((MANIFEST / "web-xr-build/package-lock.json").read_text())
     npm = {(p.get("name", path.rsplit("node_modules/", 1)[-1]), p["version"]) for path, p in lock["packages"].items()}
@@ -97,13 +99,13 @@ def main() -> None:
             env={**os.environ, "SYFT_CHECK_FOR_APP_UPDATE": "false"},
         )
         document = json.loads((staged / "xr-ai.syft.json").read_text())
-        # Syft assigns PyPI identities even to editable, virtual, and git sources.
-        # Keep only registry Python dependencies in all three output formats.
+        # Syft assigns PyPI identities even to first-party editable and virtual
+        # sources. Remove those while retaining third-party git dependencies.
         lock = tomllib.loads((staged / "uv.lock").read_text())
         excluded = {
             (re.sub(r"[-_.]+", "-", p["name"]).lower(), p["version"])
             for p in lock["package"]
-            if "registry" not in p["source"]
+            if {"editable", "virtual"}.intersection(p["source"])
         }
         removed_ids = {
             p["id"] for p in document["artifacts"] if p["type"] == "python" and (p["name"], p["version"]) in excluded

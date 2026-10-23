@@ -114,7 +114,8 @@ def _scanner(monkeypatch, *, omit=None, unexpected=False):
             )
         elif args[1] == "convert":
             document = json.loads(Path(args[2]).read_text())
-            assert {p["name"] for p in document["artifacts"]}.isdisjoint({"local-worker", "snapshot", "git-lib"})
+            assert {p["name"] for p in document["artifacts"]}.isdisjoint({"local-worker", "snapshot"})
+            assert ("git-lib", "3") in {(p["name"], p["version"]) for p in document["artifacts"]}
             for output in args:
                 if output.startswith("spdx-json="):
                     Path(output.split("=", 1)[1]).write_text(
@@ -138,7 +139,7 @@ def _scanner(monkeypatch, *, omit=None, unexpected=False):
 
 def test_expected_packages(repo):
     assert sbom._expected_packages() == {
-        "python": {("some-package-name", "1")},
+        "python": {("some-package-name", "1"), ("git-lib", "3")},
         "npm": {("web", "1"), ("@scope/dev", "2")},
         "java-archive": {("group:app", "1"), ("group:plugin", "2")},
     }
@@ -148,6 +149,7 @@ def test_expected_packages(repo):
     "omit,unexpected",
     [
         ("some-package-name", False),
+        ("git-lib", False),
         ("web", False),
         ("@scope/dev", False),
         ("plugin", False),
@@ -174,6 +176,10 @@ def test_outputs_scope_locations_and_provenance(repo, monkeypatch):
     output = repo / "output"
     native = json.loads((output / "xr-ai.syft.json").read_text())
     assert native["artifactRelationships"] == [{"parent": "web", "child": "@scope/dev"}]
+    cdx = json.loads((output / "xr-ai.cdx.json").read_text())
+    for packages in (native["artifacts"], cdx["components"]):
+        assert ("git-lib", "3") in {(p["name"], p["version"]) for p in packages}
+        assert {p["name"] for p in packages}.isdisjoint({"local-worker", "snapshot"})
     spdx = json.loads((output / "xr-ai.spdx.json").read_text())
     assert spdx["packages"] == [
         {
@@ -187,7 +193,7 @@ def test_outputs_scope_locations_and_provenance(repo, monkeypatch):
         "exclude-newer": "2026-08-27T17:15:48Z",
         "exclude-newer-package": {"pillow": "2026-10-17T00:00:00Z"},
     }
-    assert evidence["packages"] == {"python": 1, "npm": 2, "java-archive": 2}
+    assert evidence["packages"] == {"python": 2, "npm": 2, "java-archive": 2}
     assert "uv.toml" in evidence["inputs"]
     for name, digest in evidence["inputs"].items():
         assert hashlib.sha256((repo / name).read_bytes()).hexdigest() == digest
