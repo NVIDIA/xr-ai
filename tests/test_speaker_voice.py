@@ -15,7 +15,14 @@ import httpx
 import pytest
 import uvicorn
 import yaml
-from pipecat.frames.frames import CancelFrame, InputAudioRawFrame, InterruptionFrame, TextFrame, TranscriptionFrame
+from pipecat.frames.frames import (
+    CancelFrame,
+    InputAudioRawFrame,
+    InterruptionFrame,
+    TextFrame,
+    TranscriptionFrame,
+    UserStoppedSpeakingFrame,
+)
 from pipecat.processors.frame_processor import FrameDirection
 from speaker_stt.__main__ import _build_app, _Server
 from speaker_stt._selection import _Selection
@@ -349,6 +356,31 @@ async def test_early_stop_never_runs_for_unenrolled_voice_or_control_prefix():
     processor.push_frame.reset_mock()
     await processor._event("a", {"kind": "partial", "text": "stop"})
     assert not processor.push_frame.called
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("end", ["released", "reset", "local_reset"])
+async def test_enrollment_ending_mid_utterance_stops_the_utterance(end):
+    """Speech events are dropped once enrollment ends, so the processor closes
+    the open utterance itself; otherwise the participant stays speaking downstream."""
+    processor = _SpeakerSttProcessor(cfg=_SpeakerConfig())
+    processor.push_frame = AsyncMock()
+    await processor._event("a", {"kind": "enrolled"})
+    await processor._event("a", {"kind": "speech_start"})
+    processor.push_frame.reset_mock()
+
+    if end == "local_reset":
+        await processor._reset("a")
+    else:
+        await processor._event("a", {"kind": end})
+    await processor._event("a", {"kind": "speech_stop"})
+
+    stops = [
+        call.args[0] for call in processor.push_frame.call_args_list
+        if isinstance(call.args[0], UserStoppedSpeakingFrame)
+    ]
+    assert len(stops) == 1
+    assert stops[0].transport_source == "a"
 
 
 @pytest.mark.asyncio

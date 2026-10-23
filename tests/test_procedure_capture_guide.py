@@ -274,7 +274,9 @@ async def speak(demo, text, pid="user", timestamp_us=None, wait=True):
     timestamp_us = time.time_ns() // 1000 if timestamp_us is None else timestamp_us
     await demo.capture.on_input(
         UserQuery(text=text, timestamp_us=timestamp_us),
-        SimpleNamespace(metadata=SimpleNamespace(participant_id=pid), publish=demo.output),
+        SimpleNamespace(
+            metadata=SimpleNamespace(participant_id=pid, message_id=f"request-{timestamp_us}"), publish=demo.output,
+        ),
     )
     if wait and (task := demo.capture._tails.get(pid)):
         await asyncio.shield(task)
@@ -289,7 +291,7 @@ def narration(state):
 
 
 def announcements(demo):
-    return [call.args[1].text for call in demo.output.await_args_list]
+    return [call.args[1].text for call in demo.output.await_args_list if call.args[1].text]
 
 
 async def test_join_is_idle_and_voice_can_record_multiple_sessions(demo):
@@ -327,7 +329,8 @@ async def test_join_is_idle_and_voice_can_record_multiple_sessions(demo):
     for call in demo.output.await_args_list:
         assert call.args[0] == VOICE_OUTPUT_TOPIC
         assert call.kwargs["participant_id"] == "user"
-        assert call.args[1].interrupt is False
+        assert call.args[1].kind == "reply"
+        assert call.args[1].request_id.startswith("request-")
 
 
 @pytest.mark.parametrize("disconnect", [False, True])
@@ -536,12 +539,21 @@ async def test_app_drains_voice_transcripts_and_recordings_before_endpoint_close
     transport = SimpleNamespace(endpoint=Mock(), shutdown=shutdown_voice, send_return_data=AsyncMock(side_effect=send))
     real_voice = app.VoiceAgent
     voices = []
-    spoken = AsyncMock()
+    texts = []
+    consumers = []
+
+    async def enqueue_reply(participant_id, response, *, request_id, pts_us=None):
+        async def consume():
+            texts.append((participant_id, "".join([chunk async for chunk in response])))
+
+        consumers.append(asyncio.create_task(consume()))
+
+    spoken = AsyncMock(side_effect=enqueue_reply)
 
     def make_voice(**kwargs):
         assert set(kwargs["probes"]) == {"stt", "tts", "vlm"}
         voice = real_voice(transport=transport, **kwargs)
-        monkeypatch.setattr(voice._session, "enqueue_response", spoken)
+        monkeypatch.setattr(voice._session, "enqueue_reply", spoken)
         voices.append(voice)
         return voice
 
@@ -597,10 +609,8 @@ async def test_app_drains_voice_transcripts_and_recordings_before_endpoint_close
         await asyncio.gather(task, return_exceptions=True)
     assert capture_closed
     assert receiver_cancelled.is_set()
-    assert spoken.await_args_list[0].args == ("user", "Capture started.")
-    if stop_command:
-        assert spoken.await_args_list[1].args == ("user", "Capture stopped.")
-    assert spoken.await_count == (2 if stop_command else 1)
+    await asyncio.wait_for(asyncio.gather(*consumers), 2)
+    assert texts == [("user", "Capture started.")] + ([("user", "Capture stopped.")] if stop_command else [])
 
 
 @pytest.mark.parametrize("raw_transcript_first", [True, False])

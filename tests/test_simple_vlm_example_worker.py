@@ -447,7 +447,7 @@ async def test_simple_vlm_agent_reports_typed_missing_camera_frame() -> None:
             participant_id="alice",
         )
 
-        async def publish(self, _topic, output) -> None:
+        async def publish(self, _topic, output, *, participant_id) -> None:
             published.append(output)
 
     agent = SimpleVlmAgent(
@@ -465,6 +465,7 @@ async def test_simple_vlm_agent_reports_typed_missing_camera_frame() -> None:
         "",
     ]
     assert [output.final for output in published] == [False, True]
+    assert [output.request_id for output in published] == ["turn-1", "turn-1"]
 
 
 @pytest.mark.parametrize("error_type", [ValueError, TypeError, RuntimeError])
@@ -489,7 +490,7 @@ async def test_simple_vlm_agent_propagates_camera_programming_errors(error_type)
     assert not published
 
 
-async def test_cancelled_vlm_turn_does_not_publish_stream_terminator() -> None:
+async def test_cancelled_vlm_turn_terminates_published_stream() -> None:
     waiting = asyncio.Event()
     closed = asyncio.Event()
     published: list[ResponseOutput] = []
@@ -524,7 +525,7 @@ async def test_cancelled_vlm_turn_does_not_publish_stream_terminator() -> None:
             participant_id="alice",
         )
 
-        async def publish(self, _topic, output) -> None:
+        async def publish(self, _topic, output, *, participant_id) -> None:
             published.append(output)
 
     factory_calls: list[None] = []
@@ -546,8 +547,8 @@ async def test_cancelled_vlm_turn_does_not_publish_stream_terminator() -> None:
 
     assert factory_calls == [None]
     assert closed.is_set()
-    assert len(published) == 1
-    assert published[0].final is False
+    assert [output.final for output in published] == [False, True]
+    assert [output.request_id for output in published] == ["turn-1", "turn-1"]
 
 
 async def test_vlm_warmup_failure_is_retried_by_readiness() -> None:
@@ -621,22 +622,22 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
 
             await asyncio.wait_for(wait_until_released(), 1.0)
 
-        async def enqueue_response(
+        async def enqueue_reply(
             participant_id: str,
             response: str | AsyncIterator[str],
             *,
-            interrupt: bool = False,
+            request_id: str,
             pts_us: int | None = None,
         ) -> None:
             async def consume() -> None:
                 text = response if isinstance(response, str) else "".join([chunk async for chunk in response])
-                responses.append((participant_id, text, interrupt, pts_us))
+                responses.append((participant_id, text, request_id, pts_us))
                 response_complete.set()
 
             response_tasks.append(asyncio.create_task(consume()))
 
         session.run = run  # type: ignore[method-assign]
-        session.enqueue_response = enqueue_response  # type: ignore[method-assign]
+        session.enqueue_reply = enqueue_reply  # type: ignore[method-assign]
         return session
 
     monkeypatch.setattr(voice_runtime_module, "_VoiceSession", make_session)
@@ -680,7 +681,8 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     assert _StreamingImageQueryTool.instances[0].kwargs["system_prompt"] == (config.system_prompt)
     assert _StreamingImageQueryTool.instances[0].requests[0].query == ("What is in front of me?")
     assert _StreamingImageQueryTool.instances[0].requests[0].image.uri == ("https://example.com/frame.jpg")
-    assert responses == [("alice", "a blue square", True, 123)]
+    assert [(pid, text, pts_us) for pid, text, _, pts_us in responses] == [("alice", "a blue square", 123)]
+    assert responses[0][2]
     assert all(task.done() for task in response_tasks)
     assert run_options["interrupt_on_supersede"] is True
     assert callable(run_options["on_interrupted"])
@@ -946,16 +948,16 @@ async def test_sample_runtime_streams_vision_through_voice_agent(monkeypatch) ->
             self.started.set()
             await asyncio.Event().wait()
 
-        async def enqueue_response(
+        async def enqueue_reply(
             self,
             participant_id: str,
             response: str | AsyncIterator[str],
             *,
-            interrupt: bool = False,
+            request_id: str,
             pts_us: int | None = None,
         ) -> None:
             assert participant_id == "alice"
-            assert interrupt is True
+            assert request_id
             assert pts_us == 123
 
             async def consume() -> None:

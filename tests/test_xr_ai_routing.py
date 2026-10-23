@@ -60,14 +60,14 @@ async def test_direct_response_signal_cancels_blocked_ack_without_emitting_text(
     responded = asyncio.Event()
     respond = asyncio.Event()
     finish = asyncio.Event()
-    notifications = []
     llm = _AcknowledgmentLLM(blocked=True)
 
     class Destination(_AckDestination):
         async def answer(self, _turn, *, started):
             await llm.started.wait()
             await respond.wait()
-            notifications.extend((await started(), await started()))
+            await started()
+            await started()
             responded.set()
             await finish.wait()
             return DestinationResult("focus", "The application updated the scene.")
@@ -89,7 +89,6 @@ async def test_direct_response_signal_cancels_blocked_ack_without_emitting_text(
     await asyncio.wait_for(llm.cancelled.wait(), timeout=1)
     assert not task.done()
     assert output == []
-    assert notifications == [True, True]
     now = 50.0
     finish.set()
     result = await asyncio.wait_for(task, timeout=1)
@@ -141,11 +140,11 @@ async def test_response_signal_from_old_answer_cannot_affect_later_turn(ending):
     await asyncio.wait_for(entered["new"].wait(), timeout=1)
     if ending not in {"completion", "failure"}:
         assert isinstance((await asyncio.gather(old, return_exceptions=True))[0], asyncio.CancelledError)
-    assert await signals["old"]() is False
-    assert await signals["new"]() is True
+    await signals["old"]()
+    await signals["new"]()
     finish["new"].set()
     await asyncio.wait_for(new, timeout=1)
-    assert await signals["new"]() is False
+    await signals["new"]()
     assert output == ([("destination", router_module._FAILURE_TEXT)] if ending == "failure" else [])
     assert router._history["alice"] == []
     assert router._focus == {}
@@ -154,21 +153,19 @@ async def test_response_signal_from_old_answer_cannot_affect_later_turn(ending):
 
 @pytest.mark.asyncio
 async def test_direct_destination_output_keeps_its_source_and_explicit_progress():
-    notifications = []
 
     class Destination(_AckDestination):
         async def answer(self, _turn, *, started):
             emit = _destination_output(started)
             await emit("wrong-source", " ")
-            notifications.append(await started())
+            await started()
             await emit("wrong-source", "answer")
-            notifications.append(await started())
+            await started()
             return DestinationResult("answer", "routing context")
 
     router = AgentRouter({"destination": Destination()}, None, output=_emit_control, default_destination="destination")
     output = []
     await _ack_output(router, "request", output)
-    assert notifications == [True, True]
     assert output == [("wrong-source", " "), ("wrong-source", "answer")]
     assert router._history["alice"] == [AgentExchange("request", "routing context")]
     assert len(router._first_answer_samples["alice"]["destination"]) == 1
@@ -1524,18 +1521,8 @@ async def test_real_answer_cancels_pending_ack_generation_without_waiting():
 
 
 @pytest.mark.asyncio
-async def test_answer_does_not_reuse_interrupt_slot_after_ack_was_delivered():
-    leads = []
-
-    class Destination(_AckDestination):
-        async def answer(self, turn, *, started):
-            async def recorded():
-                leads.append(await started())
-                return leads[-1]
-
-            return await super().answer(turn, started=recorded)
-
-    destination = Destination(blocked=True)
+async def test_answer_output_waits_for_committed_acknowledgment_delivery():
+    destination = _AckDestination(blocked=True)
     decisions = _Prediction("slow", {"slow": 0.9, "within_delay": 0.05, "uncertain": 0.05})
     llm = _AcknowledgmentLLM()
     front_end = AgentRouter(
@@ -1565,7 +1552,6 @@ async def test_answer_does_not_reuse_interrupt_slot_after_ack_was_delivered():
     await asyncio.wait_for(task, timeout=1)
 
     assert output == [("destination", "Let me think through that. "), ("destination", "Here is the answer.")]
-    assert leads == [False]
     assert llm.calls
 
 

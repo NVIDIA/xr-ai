@@ -304,8 +304,9 @@ voice.output topic (final response)
 triggers `ReturnAudioFlush`, so the hub clears the LiveKit audio queue for that
 participant. Its interruption callback also cancels the participant's active
 render-agent task without waiting on its cleanup in the media processor. Each
-turn publishes one complete `voice.output` message; a superseded turn is
-cancelled before its reply is published, so no partial stream is left open.
+turn publishes one complete reply to its request on `voice.output`; a superseded
+turn is cancelled before its reply is published, so no partial stream is left open.
+An XR display start failure is spoken as an update.
 
 ## Agent runtime and voice topology
 

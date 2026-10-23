@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 
 from loguru import logger
 from xr_ai_hub import ParticipantEvent
-from xr_ai_interaction import ResponseOutput, UserQuery
+from xr_ai_interaction import ResponseOutputs, UserQuery
 from xr_ai_runtime import Agent, RuntimeContext, Topic, subscribe
 from xr_ai_voice import VOICE_OUTPUT_TOPIC
 
@@ -79,7 +79,9 @@ class CaptureAgent(Agent):
             return
         try:
             # Preserve the order of start and stop acknowledgements.
-            await ctx.publish(VOICE_OUTPUT_TOPIC, ResponseOutput(text=text), participant_id=pid)
+            reply = ResponseOutputs(ctx, VOICE_OUTPUT_TOPIC).reply(pid, request_id=ctx.metadata.message_id)
+            async with reply:
+                await reply.send(text)
         except (Exception, BaseExceptionGroup):
             # Runtime shutdown wraps cancelled output deliveries in a group.
             # Announcement delivery is best effort, not a prerequisite for saving.

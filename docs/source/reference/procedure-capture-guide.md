@@ -530,7 +530,7 @@ Those tests do not establish accuracy on real tea-making images or appliances.
 #### Local-model guide evaluation
 
 `example-guides/tea-making/evaluation/run_scenario.py` exercises a manifest's selected guide through
-the actual guide agent, runtime, voice aggregation, frame selection, and model
+the actual guide agent, runtime, frame selection, and model
 tools. It uses the sample's configured LLM and VLM. Fixture images replace the
 hub camera endpoint, and typed requests enter the same runtime topic as
 transcribed speech. Microphones, STT, network camera delivery, and audible TTS
@@ -648,7 +648,11 @@ is the only procedure-specific YAML fixture left in `tests/`.
 
 The sample-owned `evaluation/guide/_runtime_harness.py` is an evaluation harness,
 not the production guide runtime. It provides simulated camera and speech
-boundaries, production agent and tool setup, and trace collection. Both the
+boundaries, production agent and tool setup, and trace collection. Its speech
+boundary records each published output without running the voice floor, so
+update combining and withdraws are not exercised: a notice that production
+withdraws on a step transition still appears in the trace.
+`tests/test_sop_guide.py` covers those paths through the real floor. Both the
 recorded-packet runner and tea scenario runner consume this harness.
 Recorded-packet playback and orchestration stay in
 `evaluation/guide/`; tea-specific scene rendering,
@@ -830,8 +834,8 @@ agent is registered. With no mode flag, capture remains the default.
 `guide/agent.py` handles connection events, foreground questions, and conversational
 controls. Its `_Guide` backend in `guide/guiding.py` owns guide progress,
 runtime timers, frame evidence, and background verification. Transitions clear
-both local notices and pending voice-aggregation output under the session lock,
-so obsolete completion notices cannot follow the new step's instruction.
+local notices under the session lock, so obsolete completion notices cannot
+follow the new step's instruction.
 The foreground receives detached guidance context and scoped tools. Observation
 updates have a state revision; controls have a separate run-and-step revision.
 Completing the same step during inference does not invalidate a stop or advance
@@ -844,7 +848,8 @@ drain those tasks without speaking to disconnected participants.
 Stop guide cancels the observer and clears timer
 state without unloading the selected guide. Connecting only loads an inactive
 session; start guide activates it and starts its observer and any first-step timer.
-Guide mode uses `VoiceAggregationAgent`, `ImageQueryTool`, native tools, and the
+Guide mode gives `VoiceAgent` an LLM update combiner for unprompted guide
+announcements, and uses `ImageQueryTool`, native tools, and the
 shared tool loop. The conversation prompt governs intent without an English
 wording filter. Polite action requests can use controls; questions about controls
 do not authorize them. This is model policy, not a deterministic intent guarantee.

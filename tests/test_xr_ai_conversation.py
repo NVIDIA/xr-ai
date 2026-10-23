@@ -172,9 +172,8 @@ async def test_conversation_notifies_before_delivery_and_preserves_answer_contex
     class Recording(Conversation):
         async def answer(self, turn, *, started):
             async def recorded():
-                leads = await started()
-                events.append(("started", leads))
-                return leads
+                await started()
+                events.append("started")
 
             return await super().answer(turn, started=recorded)
 
@@ -186,7 +185,7 @@ async def test_conversation_notifies_before_delivery_and_preserves_answer_contex
     result = await _route(router, AgentTurn("alice", "turn-1", "Hello."), emit=emit)
 
     assert events == [
-        ("started", True),
+        "started",
         ("conversation", "Hello"),
         ("conversation", " there."),
     ]

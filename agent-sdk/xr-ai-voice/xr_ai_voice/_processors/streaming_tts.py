@@ -4,7 +4,7 @@
 """``StreamingTtsProcessor`` — per-participant sentence-batched TTS.
 
 Consumes ``TextFrame``s (assistant output, one per chunk/token) and emits
-``OutputAudioRawFrame``s. Buffers text per participant until a sentence
+``TTSAudioRawFrame``s. Buffers text per participant until a sentence
 boundary, then emits audio in order so each participant's playback stays
 monotonic. Streaming TTS adapters emit PCM as the model generates it; other
 adapters synthesize sentences in parallel and emit completed WAVs.
@@ -42,8 +42,8 @@ from pipecat.frames.frames import (
     EndFrame,
     Frame,
     InterruptionFrame,
-    OutputAudioRawFrame,
     TextFrame,
+    TTSAudioRawFrame,
     TTSStoppedFrame,
 )
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
@@ -59,6 +59,7 @@ from .._frames import (
     AssistantResponseEndFrame,
     ParticipantLeftFrame,
     TextResponseEndFrame,
+    _OutputDoneFrame,
 )
 
 if TYPE_CHECKING:
@@ -177,6 +178,11 @@ class StreamingTtsProcessor(FrameProcessor):
 
         if isinstance(frame, TextFrame):
             await self._handle_text(frame)
+            return
+
+        if isinstance(frame, _OutputDoneFrame) and direction == FrameDirection.DOWNSTREAM:
+            # Queue behind the output's synthesis so it follows all its audio.
+            await self._ensure_sender(frame.pid).put(frame)
             return
 
         await self.push_frame(frame, direction)
@@ -319,7 +325,7 @@ class StreamingTtsProcessor(FrameProcessor):
 
     async def _sender_loop(self, queue: asyncio.Queue) -> None:
         """Await each synth task in FIFO order, observe the WAV, and push the
-        decoded audio downstream as ``OutputAudioRawFrame``s."""
+        decoded audio downstream as ``TTSAudioRawFrame``s."""
         try:
             while True:
                 item = await queue.get()
@@ -332,6 +338,9 @@ class StreamingTtsProcessor(FrameProcessor):
                     st = self._by_pid.get(item.pid)
                     if st is not None and st.active_responses:
                         st.active_responses -= 1
+                    continue
+                if isinstance(item, _OutputDoneFrame):
+                    await self.push_frame(item)
                     continue
                 if isinstance(item, _TtsStreamRequest):
                     try:
@@ -381,7 +390,7 @@ class StreamingTtsProcessor(FrameProcessor):
                         marker.transport_destination = pid
                         await self.push_frame(marker)
                     first = False
-                out = OutputAudioRawFrame(
+                out = TTSAudioRawFrame(
                     audio=chunk.data,
                     sample_rate=chunk.sample_rate,
                     num_channels=chunk.channels,
@@ -439,7 +448,7 @@ class StreamingTtsProcessor(FrameProcessor):
                     continue
                 if isinstance(item, _TtsResponseBoundary):
                     continue
-                if isinstance(item, _TtsStreamRequest):
+                if isinstance(item, (_TtsStreamRequest, _OutputDoneFrame)):
                     continue
                 synth_task, _ = item
                 synth_task.cancel()

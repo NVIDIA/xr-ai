@@ -5,9 +5,9 @@
 
 from __future__ import annotations
 
-from xr_ai_interaction import ResponseOutput
+from xr_ai_interaction import ResponseOutputs
 from xr_ai_runtime import Agent, RuntimeContext, subscribe
-from xr_ai_voice import VOICE_CONTRIBUTION_TOPIC
+from xr_ai_voice import VOICE_OUTPUT_TOPIC
 
 from .events import (
     INSTRUMENT_CHANGE_TOPIC,
@@ -33,10 +33,7 @@ class InstrumentAlertAgent(Agent):
             text = f"Now tracking {event.device_name} at {event.meter_reading}."
         else:
             text = f"{event.device_name} changed from {event.previous_reading} to {event.meter_reading}."
-        await ctx.publish(
-            VOICE_CONTRIBUTION_TOPIC,
-            ResponseOutput(text=text, timestamp_us=event.timestamp_us),
-        )
+        await self._update(ctx, text, event.timestamp_us)
 
     @subscribe(INSTRUMENT_LOST_TOPIC)
     async def instrument_lost(
@@ -44,13 +41,18 @@ class InstrumentAlertAgent(Agent):
         event: InstrumentLost,
         ctx: RuntimeContext,
     ) -> None:
-        await ctx.publish(
-            VOICE_CONTRIBUTION_TOPIC,
-            ResponseOutput(
-                text=(f"I am no longer tracking {event.device_name}. Its last reading was {event.meter_reading}."),
-                timestamp_us=event.timestamp_us,
-            ),
+        await self._update(
+            ctx,
+            f"I am no longer tracking {event.device_name}. Its last reading was {event.meter_reading}.",
+            event.timestamp_us,
         )
+
+    @staticmethod
+    async def _update(ctx: RuntimeContext, text: str, timestamp_us: int) -> None:
+        participant_id = ctx.metadata.participant_id
+        if participant_id is None:
+            return
+        await ResponseOutputs(ctx, VOICE_OUTPUT_TOPIC).update(participant_id, text, timestamp_us=timestamp_us)
 
 
 __all__ = ["InstrumentAlertAgent"]

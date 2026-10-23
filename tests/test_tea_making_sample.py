@@ -26,7 +26,7 @@ from xr_ai_tools.current_frame import CurrentFrameRequest, ImageFrame
 from xr_ai_tools.image import ImageReference, ImageRegistry
 from xr_ai_tools.tool_calling import ToolCallRecord, ToolLoopResult
 from xr_ai_tools.vision import ImageQueryChunk, ImageQueryResult
-from xr_ai_voice import VOICE_CONTRIBUTION_TOPIC
+from xr_ai_voice import VOICE_OUTPUT_TOPIC
 from xr_ai_web_events import WEB_EVENT_TOPIC, WebEvent, WebEventsAgent
 
 _ROOT = Path(__file__).resolve().parents[1]
@@ -37,7 +37,6 @@ sys.path.insert(0, str(_WORKER))
 import tea_making_worker.foreground as foreground_module  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.app import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     _CLIENT_TEXT_TOPIC,
-    _ParticipantVoiceAggregationAgent,
     _relay_event_log,
 )
 from tea_making_worker.background_context import (  # noqa: E402  # pyright: ignore[reportMissingImports]
@@ -556,20 +555,6 @@ async def test_web_viewer_surrounds_runtime_lifecycle() -> None:
             )
         assert viewer.running
     assert not viewer.running
-
-
-@pytest.mark.asyncio
-async def test_participant_leave_releases_voice_aggregation_state() -> None:
-    aggregation = object.__new__(_ParticipantVoiceAggregationAgent)
-    aggregation.release = AsyncMock()
-    ctx = SimpleNamespace(metadata=SimpleNamespace(participant_id="participant-voice"))
-
-    await aggregation.participant_left(
-        ParticipantLeft(),
-        ctx,  # type: ignore[arg-type]
-    )
-
-    aggregation.release.assert_awaited_once_with("participant-voice")
 
 
 def test_published_guide_covers_architecture_and_adaptation() -> None:
@@ -1396,7 +1381,7 @@ async def test_foreground_current_view_recovers_only_camera_unavailability(error
     async def fail(_request: CurrentFrameRequest) -> ImageFrame:
         raise error
 
-    async def publish(_topic, message):
+    async def publish(_topic, message, *, participant_id):
         published.append(message)
 
     frames = Tool("camera_failure", "Select a frame.", CurrentFrameRequest, ImageFrame, fail)
@@ -1439,8 +1424,8 @@ async def test_streaming_current_view_uses_question_and_times_out() -> None:
     class Context:
         metadata = SimpleNamespace(message_id="view-timeout")
 
-        async def publish(self, topic, message):
-            assert topic is VOICE_CONTRIBUTION_TOPIC
+        async def publish(self, topic, message, *, participant_id=None):
+            assert topic is VOICE_OUTPUT_TOPIC
             published.append(message)
 
     foreground = object.__new__(ForegroundAgent)
@@ -1461,7 +1446,8 @@ async def test_streaming_current_view_uses_question_and_times_out() -> None:
     assert "vision timeout" in result.text
     assert observed == ["What number is on the display?"]
     assert published[0].text == result.text
-    assert published[0].interrupt is True
+    assert published[0].kind == "reply"
+    assert published[0].request_id == "view-timeout"
     assert published[-1].text == ""
     assert published[-1].final is True
 
@@ -1499,8 +1485,8 @@ async def test_streaming_current_view_handles_leading_whitespace(
     class Context:
         metadata = SimpleNamespace(message_id="view-whitespace")
 
-        async def publish(self, topic, message):
-            assert topic is VOICE_CONTRIBUTION_TOPIC
+        async def publish(self, topic, message, *, participant_id=None):
+            assert topic is VOICE_OUTPUT_TOPIC
             published.append(message)
 
     foreground = object.__new__(ForegroundAgent)
@@ -1517,7 +1503,7 @@ async def test_streaming_current_view_handles_leading_whitespace(
 
     assert result == ImageQueryResult(text=expected_text, available=available)
     assert [output.text for output in published] == [expected_text, ""]
-    assert published[0].interrupt is True
+    assert {output.request_id for output in published} == {"view-whitespace"}
     assert published[-1].final is True
 
 
@@ -1531,7 +1517,7 @@ async def test_foreground_record_failure_does_not_suppress_speech() -> None:
             message_id="query-1",
         )
 
-        async def publish(self, topic, message):
+        async def publish(self, topic, message, *, participant_id=None):
             if topic is FOREGROUND_RECORD_TOPIC:
                 raise OSError("disk full")
             published.append((topic, message))
@@ -1547,11 +1533,13 @@ async def test_foreground_record_failure_does_not_suppress_speech() -> None:
         Context(),  # type: ignore[arg-type]
     )
 
-    assert len(published) == 1
-    topic, message = published[0]
-    assert topic is VOICE_CONTRIBUTION_TOPIC
+    assert [topic for topic, _message in published] == [VOICE_OUTPUT_TOPIC] * 2
+    message = published[0][1]
     assert isinstance(message, ResponseOutput)
+    assert message.kind == "reply"
+    assert message.request_id == "query-1"
     assert message.text == "Your water is ready."
+    assert published[1][1].final is True
 
 
 @pytest.mark.asyncio

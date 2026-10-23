@@ -42,6 +42,8 @@ class _SpeakerSttProcessor(FrameProcessor):
         self._on_final = on_final_transcript
         self._enrolled: set[str] = set()
         self._interrupted: set[str] = set()
+        # Participants with a started utterance the server has not stopped yet.
+        self._utterances: set[str] = set()
         self._queues: dict[str, asyncio.Queue] = {}
         self._tasks: dict[str, asyncio.Task] = {}
         self._queued_bytes: dict[str, int] = {}
@@ -65,6 +67,7 @@ class _SpeakerSttProcessor(FrameProcessor):
         await self._client._close()
         self._enrolled.clear()
         self._interrupted.clear()
+        self._utterances.clear()
         self._retry_after.clear()
         self._tracks.clear()
 
@@ -90,6 +93,7 @@ class _SpeakerSttProcessor(FrameProcessor):
             self._retry_after.pop(pid, None)
             self._enrolled.discard(pid)
             self._interrupted.discard(pid)
+            self._utterances.discard(pid)
             self._tracks.pop(pid, None)
         elif isinstance(frame, InputAudioRawFrame):
             pid = frame.transport_source
@@ -171,6 +175,7 @@ class _SpeakerSttProcessor(FrameProcessor):
         self._enrolled.discard(pid)
         self._interrupted.discard(pid)
         await self._cancel_worker(pid)
+        await self._end_utterance(pid)
         if self._closed or lifecycle is None or self._lifecycles.get(pid) is not lifecycle:
             return False
         if reset:
@@ -187,7 +192,22 @@ class _SpeakerSttProcessor(FrameProcessor):
             self._retry_after.pop(pid, None)
         self._enrolled.discard(pid)
         self._interrupted.discard(pid)
+        await self._end_utterance(pid)
         await self.push_frame(_SpeakerEnrollmentFrame(pid, "reset"))
+
+    async def _end_utterance(self, pid: str) -> None:
+        """Stop an utterance whose stop event can no longer arrive.
+
+        Speech events are dropped once enrollment ends, so without this the
+        participant would stay speaking downstream and hold back voice updates.
+        """
+
+        if pid not in self._utterances:
+            return
+        self._utterances.discard(pid)
+        frame = UserStoppedSpeakingFrame()
+        frame.transport_source = pid
+        await self.push_frame(frame)
 
     async def _event(self, pid: str, event: dict) -> None:
         kind = event["kind"]
@@ -226,6 +246,7 @@ class _SpeakerSttProcessor(FrameProcessor):
                 self._enrolled.add(pid)
             else:
                 self._enrolled.discard(pid)
+                await self._end_utterance(pid)
             self._interrupted.discard(pid)
             await self.push_frame(_SpeakerEnrollmentFrame(pid, kind))
             return
@@ -233,8 +254,10 @@ class _SpeakerSttProcessor(FrameProcessor):
             return
         if kind == "speech_start":
             self._interrupted.discard(pid)
+            self._utterances.add(pid)
             frame = UserStartedSpeakingFrame()
         elif kind == "speech_stop":
+            self._utterances.discard(pid)
             frame = UserStoppedSpeakingFrame()
         elif kind == "partial":
             text = event["text"]

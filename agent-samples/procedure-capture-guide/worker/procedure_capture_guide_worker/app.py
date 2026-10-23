@@ -24,7 +24,7 @@ from xr_ai_runtime import AgentRuntime
 from xr_ai_tools.current_frame import CurrentFrameTool
 from xr_ai_tools.image import ImageRegistry
 from xr_ai_tools.vision import ImageQueryTool, MultiImageQueryTool
-from xr_ai_voice import VadConfig, VoiceAgent, VoiceAggregationAgent
+from xr_ai_voice import VadConfig, VoiceAgent, llm_update_combiner
 from xr_ai_voicegate import load_voice_gate_config
 
 from .capture.agent import CAPTURE_INPUT_TOPIC, CaptureAgent
@@ -59,7 +59,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
         endpoint=endpoint, images=images, frame_max_age_s=config.frame_max_age_s, frame_timeout_s=config.frame_timeout_s
     )
     runtime = AgentRuntime()
-    capture = guide = aggregation = None
+    capture = guide = None
     voice_options = {}
     probes = {"stt": stt.health, "tts": tts.health, "vlm": vlm.health}
     if selected_guide is None:
@@ -76,9 +76,8 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
         capture = runtime.register("capture", CaptureAgent(capture_backend))
         endpoint.on_participant(capture.receive)
     else:
-        aggregation = runtime.register("voice-aggregation", VoiceAggregationAgent(llm=llm))
         guide = runtime.register("guide", GuideAgent(
-            guide=selected_guide, llm=llm, current_frame=frames, aggregation=aggregation,
+            guide=selected_guide, llm=llm, current_frame=frames,
             image_query=ImageQueryTool(
                 images=images, vlm=vlm,
                 system_prompt=(Path(__file__).parent / "guide/prompts/guide_vision.txt").read_text(encoding="utf-8"),
@@ -92,6 +91,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
             "participant_left_topic": PARTICIPANT_LEFT_TOPIC,
             "interrupted_topic": INTERRUPTED_TOPIC,
             "interrupt_on_supersede": True,
+            "combiner": llm_update_combiner(llm),
         }
     # Accepted voice input is delivered after prior speech is cancelled, so
     # each capture command cannot interrupt its own acknowledgement.
@@ -127,8 +127,6 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
                 await capture.close()
             if guide is not None:
                 await guide.stop()
-            if aggregation is not None:
-                await aggregation.stop()
         finally:
             # stop() alone cannot wake an idle ZMQ receive. Drain captures
             # first, then cancel the receiver before closing its sockets.

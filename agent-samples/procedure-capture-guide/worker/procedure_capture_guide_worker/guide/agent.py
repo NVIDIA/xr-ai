@@ -17,14 +17,14 @@ from pathlib import Path
 
 import nemo_relay
 from loguru import logger
-from xr_ai_interaction import Interrupted, ParticipantJoined, ParticipantLeft, ResponseOutput, UserQuery
+from xr_ai_interaction import Interrupted, ParticipantJoined, ParticipantLeft, ResponseOutputs, UserQuery
 from xr_ai_models import ChatMessage, ChatResponse, LLMService, ToolDef
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeClosedError, RuntimeContext, subscribe
 from xr_ai_tools import ToolSet
 from xr_ai_tools.current_frame import CurrentFrameTool
 from xr_ai_tools.tool_calling import run_tool_loop
 from xr_ai_tools.vision import ImageQueryTool
-from xr_ai_voice import VOICE_CONTRIBUTION_TOPIC, VoiceAggregationAgent
+from xr_ai_voice import VOICE_OUTPUT_TOPIC
 
 from .events import INTERRUPTED_TOPIC, PARTICIPANT_JOINED_TOPIC, PARTICIPANT_LEFT_TOPIC, USER_QUERY_TOPIC
 from .guides import SelectedGuide
@@ -35,6 +35,12 @@ _FOREGROUND_MODEL_OPTIONS = {"max_tokens": 1536, "enable_thinking": True, "think
 _FOREGROUND_PROMPT = (Path(__file__).with_name("prompts") / "guide_conversation.txt").read_text(
     encoding="utf-8",
 ).strip()
+
+
+def _outputs(runtime: AgentRuntime) -> ResponseOutputs:
+    return ResponseOutputs(
+        runtime, VOICE_OUTPUT_TOPIC, source="sop-guide", closed_errors=(RuntimeClosedError,),
+    )
 
 
 class GuideAgent(Agent):
@@ -48,11 +54,9 @@ class GuideAgent(Agent):
         current_frame: CurrentFrameTool,
         image_query: ImageQueryTool,
         vision_timeout_s: float,
-        aggregation: VoiceAggregationAgent,
     ) -> None:
         super().__init__()
         self._llm = llm
-        self._aggregation = aggregation
         self._controls: dict[str, asyncio.Lock] = {}
         self._runtime: AgentRuntime | None = None
         self._connected: set[str] = set()
@@ -61,7 +65,7 @@ class GuideAgent(Agent):
         self._backend = _Guide(
             guide=guide, current_frame=current_frame, image_query=image_query,
             vision_timeout_s=vision_timeout_s, run_model=self._tool_loop,
-            announce=self._announce, invalidate=aggregation.release,
+            announce=self._announce, invalidate=self._withdraw,
             connected=lambda pid: pid in self._connected,
         )
 
@@ -76,7 +80,7 @@ class GuideAgent(Agent):
         participants = tuple(self._turns) if participant_id is None else (participant_id,)
         for pid in participants:
             async with self._controls.setdefault(pid, asyncio.Lock()):
-                await self._aggregation.release(pid)
+                await self._withdraw(pid)
                 await _cancel(self._turns, pid)
 
     @subscribe(PARTICIPANT_JOINED_TOPIC)
@@ -104,7 +108,7 @@ class GuideAgent(Agent):
         async with self._controls.setdefault(participant_id, asyncio.Lock()):
             await _cancel(self._turns, participant_id)
             await self._backend.leave(participant_id)
-            await self._aggregation.release(participant_id)
+            await self._withdraw(participant_id)
 
     @subscribe(USER_QUERY_TOPIC)
     async def user_query(self, query: UserQuery, ctx: RuntimeContext) -> None:
@@ -113,26 +117,21 @@ class GuideAgent(Agent):
         async with self._controls.setdefault(participant_id, asyncio.Lock()):
             if participant_id not in self._connected:
                 return
-            await self._aggregation.release(participant_id)
+            await self._withdraw(participant_id)
             await _cancel(self._turns, participant_id)
             if participant_id not in self._connected:
                 return
-            await self._start_answer(query, participant_id)
+            await self._start_answer(query, participant_id, ctx.metadata.message_id)
 
     async def _say(self, participant_id: str, text: str) -> None:
         runtime = self._runtime
         if runtime is not None and runtime.running:
-            await runtime.publish(
-                VOICE_CONTRIBUTION_TOPIC,
-                ResponseOutput(text=text, interrupt=True),
-                participant_id=participant_id,
-                source="sop-guide",
-            )
+            await _outputs(runtime).update(participant_id, text, urgent=True)
 
-    async def _start_answer(self, query: UserQuery, participant_id: str) -> None:
+    async def _start_answer(self, query: UserQuery, participant_id: str, request_id: str) -> None:
         await _cancel(self._turns, participant_id)
         task = asyncio.create_task(
-            self._answer(query, participant_id),
+            self._answer(query, participant_id, request_id),
             name=f"sop-answer:{participant_id}",
             context=nemo_relay.fork_asyncio_context(),
         )
@@ -151,21 +150,26 @@ class GuideAgent(Agent):
             await asyncio.gather(*tasks, return_exceptions=True)
         await self._backend.stop()
         for pid in participants:
-            await self._aggregation.release(pid)
+            await self._withdraw(pid)
         self._controls.clear()
+
+    async def _withdraw(self, participant_id: str) -> None:
+        runtime = self._runtime
+        if runtime is not None and runtime.running:
+            try:
+                await _outputs(runtime).withdraw(participant_id)
+            except RuntimeClosedError:
+                pass
 
     async def _announce(self, participant_id: str, text: str) -> None:
         runtime = self._runtime
         if runtime is not None and runtime.running:
             try:
-                await runtime.publish(
-                    VOICE_CONTRIBUTION_TOPIC, ResponseOutput(text=text),
-                    participant_id=participant_id, source="sop-guide",
-                )
+                await _outputs(runtime).update(participant_id, text)
             except RuntimeClosedError:
                 pass
 
-    async def _answer(self, query: UserQuery, participant_id: str) -> None:
+    async def _answer(self, query: UserQuery, participant_id: str, request_id: str) -> None:
         try:
             response = await self._route(query.text, participant_id)
         except asyncio.CancelledError:
@@ -178,14 +182,11 @@ class GuideAgent(Agent):
         if not response or runtime is None or not runtime.running or participant_id not in self._connected:
             return
         try:
-            await runtime.publish(
-                VOICE_CONTRIBUTION_TOPIC,
-                ResponseOutput(
-                    text=response, interrupt=True, timestamp_us=query.timestamp_us,
-                ),
-                participant_id=participant_id,
-                source="sop-guide",
+            reply = _outputs(runtime).reply(
+                participant_id, request_id=request_id, timestamp_us=query.timestamp_us,
             )
+            async with reply:
+                await reply.send(response)
         except RuntimeClosedError:
             return
 

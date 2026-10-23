@@ -45,7 +45,7 @@ from xr_ai_hub._capture import CAPTURE_TTS_TOPIC
 
 from ._audio import float32_to_int16, int16_to_float32
 from ._capture_frames import _CaptureTtsCaptionFrame
-from ._frames import ParticipantJoinedFrame, ParticipantLeftFrame, _TrackedInputAudioFrame
+from ._frames import ParticipantJoinedFrame, ParticipantLeftFrame, _OutputDoneFrame, _TrackedInputAudioFrame
 
 _HUB_PUB  = "ipc:///tmp/xr_hub_pub"
 _HUB_PUSH = "ipc:///tmp/xr_hub_in"
@@ -603,6 +603,10 @@ class DeviceIOHubOutputTransport(BaseOutputTransport):
                 self._pending_capture_captions.setdefault(pid, deque()).append(
                     frame.text
                 )
+            return
+        if isinstance(frame, _OutputDoneFrame):
+            # The audio queued ahead of the marker has been written.
+            await self.push_frame(_OutputDoneFrame(pid=frame.pid, output=frame.output), FrameDirection.UPSTREAM)
             return
         await super().write_transport_frame(frame)
 
