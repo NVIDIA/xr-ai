@@ -102,8 +102,8 @@ load without weakening review quality.
 - Partition work by files or concerns. Do not make every subagent load the
   entire PR when a smaller evidence packet is sufficient.
 - Require each subagent to return only candidate findings with category,
-  causal code location, underlying cause, observable impact, evidence relative
-  to base, and any uncertainty in the causal explanation.
+  relevant locations, observable impact, evidence relative to base, and, for
+  code defects, the root-cause analysis described in step 5.
 - Prohibit subagents from posting comments, changing GitHub state, editing the
   checkout, approving, or requesting changes. The coordinator owns all writes.
 - Independently inspect the cited code before accepting any candidate finding.
@@ -147,20 +147,23 @@ base implementation to understand control flow, ownership, configuration, and
 existing patterns. Search for callers, sibling implementations, tests,
 documentation, launch paths, and cleanup paths affected by the change.
 
-For every finding, trace the observable problem to the code that causes it.
+For every code defect, investigate the root cause and include that analysis in
+the finding. Trace the observable problem to the code that causes it.
 Identify the responsible architectural boundary, structural design decision,
 or implementation detail, and explain the causal path to the failure. Cite
 the relevant files and symbols or lines, including interacting components
 when the cause spans them; a location where an error surfaces is not enough.
 For missing behavior, identify the code path or component that should own it.
-Distinguish the PR's triggering change from any pre-existing underlying defect
-and apply the scope categories below. If the underlying cause is not yet
-established, state what the evidence proves and what remains uncertain rather
-than presenting a hypothesis as fact.
+If a deeper cause remains uncertain after investigation, separate the verified
+causal path from the remaining hypothesis. A blocker requires an established
+PR-caused problem or material risk; an unverified hypothesis alone is not enough.
 
-Keep findings diagnostic: identify the structural or implementation cause and
-the responsible component, but leave the choice of fix to the author. Do not
-prescribe a specific implementation or architectural redesign in the review.
+For code defects, identify the cause and responsible component without
+prescribing a specific implementation or architectural redesign; the author
+chooses the fix. This does not prevent requests to correct misleading claims,
+provide missing validation, or revert or split unrelated changes. For those
+findings, cite the relevant description claim, diff, or tests and explain the
+discrepancy or gap rather than inventing a causal code location.
 
 Evaluate at least:
 
@@ -198,14 +201,18 @@ Use these categories:
 Do not disguise out-of-scope work as a blocker or nit. Conversely, scope creep
 inside the PR is itself change-caused: ask for it to be removed or split.
 
+Distinguish the PR's triggering change from the underlying cause. Classify by
+whether the PR introduces, worsens, or makes the problem newly reachable, even
+when the causal code is unchanged. Otherwise, treat a pre-existing defect as a
+non-blocking follow-up. Anchor change-scoped findings at the triggering change
+and cite any separate causal locations in the explanation.
+
 For each blocker or nit, include:
 
-1. The causal file and line, symbol, or smallest useful set of code locations.
-2. The underlying cause and how it produces the observable failure or risk.
+1. The triggering change or relevant description claim, diff, or tests.
+2. The observable failure or risk and its underlying cause, with causal code
+   references for code defects or evidence of the discrepancy for other findings.
 3. Evidence that the PR causes it relative to base.
-
-Apply the same causal explanation to follow-ups, while keeping pre-existing or
-unrelated defects outside the current PR's merge requirements.
 
 ### 7. Draft one top-level review comment
 
@@ -214,14 +221,16 @@ Use this structure, omitting empty sections:
 ```markdown
 ## Blockers
 
-- `path/to/file.py:123` — **Short finding title.** Explain the change-caused
-  failure, the underlying cause at the cited code, its impact, the base
-  comparison, and any uncertainty in the causal explanation.
+- `trigger/path.py:123` or relevant PR claim — **Short finding title.** Explain
+  the established change-caused problem, impact, and base comparison. For code
+  defects, include the root cause and any separate causal code references;
+  distinguish verified evidence from uncertainty about a deeper cause. For
+  scope, description, or validation issues, state the gap and requested action.
 
 ## Nits
 
-- `path/to/file.py:145` — Explain the cause and impact of the small
-  change-scoped issue.
+- `path/to/file.py:145` — Explain the small change-scoped issue, keeping the
+  cause and impact brief when self-evident.
 
 ## Follow-ups (not blocking)
 
