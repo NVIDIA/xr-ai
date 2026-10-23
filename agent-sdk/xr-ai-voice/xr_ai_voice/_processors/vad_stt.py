@@ -288,12 +288,9 @@ class VadSttProcessor(FrameProcessor):
 
         # Accumulate audio for the probe only while speech is active —
         # the dict entry is opened in on_speech_start and closed in
-        # on_utterance. Append AFTER ``feed`` so the chunk that synchronously
-        # triggered
-        # on_speech_start lands in the buffer. (In production
-        # on_speech_start runs as a task and may not have created the
-        # entry yet — at most we lose ~20-30ms of audio, which is fine
-        # for STOP detection on the remainder.)
+        # on_utterance. Append AFTER ``feed`` so the chunk that triggered
+        # on_speech_start lands in the buffer, unless it also finalized the
+        # utterance and closed the buffer.
         buf = self._probe_buffer.get(pid)
         if buf is not None:
             buf.extend(frame.audio)
