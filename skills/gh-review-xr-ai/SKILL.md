@@ -102,7 +102,8 @@ load without weakening review quality.
 - Partition work by files or concerns. Do not make every subagent load the
   entire PR when a smaller evidence packet is sufficient.
 - Require each subagent to return only candidate findings with category,
-  location, observable impact, evidence relative to base, and smallest fix.
+  causal code location, underlying cause, observable impact, evidence relative
+  to base, and smallest durable fix.
 - Prohibit subagents from posting comments, changing GitHub state, editing the
   checkout, approving, or requesting changes. The coordinator owns all writes.
 - Independently inspect the cited code before accepting any candidate finding.
@@ -146,6 +147,17 @@ base implementation to understand control flow, ownership, configuration, and
 existing patterns. Search for callers, sibling implementations, tests,
 documentation, launch paths, and cleanup paths affected by the change.
 
+For every finding, trace the observable problem to the code that causes it.
+Identify the responsible architectural boundary, structural design decision,
+or implementation detail, and explain the causal path to the failure. Cite
+the relevant files and symbols or lines, including interacting components
+when the cause spans them; a location where an error surfaces is not enough.
+For missing behavior, identify the code path or component that should own it.
+Distinguish the PR's triggering change from any pre-existing underlying defect
+and apply the scope categories below. If the underlying cause is not yet
+established, state what the evidence proves and what remains uncertain rather
+than presenting a hypothesis as fact.
+
 Evaluate at least:
 
 - correctness and regressions relative to base;
@@ -184,10 +196,14 @@ inside the PR is itself change-caused: ask for it to be removed or split.
 
 For each blocker or nit, include:
 
-1. A precise file and line or smallest useful code location.
-2. The observable failure or risk.
+1. The causal file and line, symbol, or smallest useful set of code locations.
+2. The underlying cause and how it produces the observable failure or risk.
 3. Evidence that the PR causes it relative to base.
-4. The smallest viable correction, without prescribing unnecessary redesign.
+4. The smallest durable correction at the responsible layer, without
+   prescribing unnecessary redesign or a workaround that only hides the symptom.
+
+Apply the same causal explanation to follow-ups, while keeping pre-existing or
+unrelated defects outside the current PR's merge requirements.
 
 ### 7. Draft one top-level review comment
 
@@ -197,16 +213,19 @@ Use this structure, omitting empty sections:
 ## Blockers
 
 - `path/to/file.py:123` — **Short finding title.** Explain the change-caused
-  failure, its impact, the base comparison, and the smallest fix.
+  failure, the underlying cause at the cited code, its impact, the base
+  comparison, and the smallest durable fix.
 
 ## Nits
 
-- `path/to/file.py:145` — Explain the small change-scoped improvement.
+- `path/to/file.py:145` — Explain the cause and impact of the small
+  change-scoped issue and its correction.
 
 ## Follow-ups (not blocking)
 
-- Propose a self-contained follow-up PR or an issue with a narrow outcome and
-  validation target. State clearly that it does not block this PR.
+- Cite the responsible code and explain the underlying cause. Propose a
+  self-contained follow-up PR or an issue with a narrow outcome and validation
+  target. State clearly that it does not block this PR.
 ```
 
 If there are no change-scoped findings, write: `No change-scoped blockers or
