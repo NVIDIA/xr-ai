@@ -107,11 +107,19 @@ view cannot prove a required past motion sequence. Comparing authoring images
 does not give the guide runtime a sequence tool. A plainly narrated orientation is a known
 requirement, not an unknown one merely because its saved image is unavailable.
 
-For each normal visual check, put every required object, count, attachment,
-target, and direction in the actual question (1–500 characters); the tool does
-not receive the voice prompt. Held nearby is not attached. Request exactly
-`ready`, `not ready`, or `unclear`; only `^ready$` after two consecutive matches
-commits. Prefer direct `evidence.commit`; uncertainty and failure never complete.
+For each normal visual check, ask Cosmos for the visible evidence needed to
+judge the action: object identities, count, contact or attachment, location,
+orientation, readable values, and obscured details. The actual question is
+1–500 characters; the tool does not receive the agent or voice prompt. Ask for
+observations, not a ready/YES verdict or inference of hidden success.
+
+Put the completion criteria in `agent.prompt`. The local observation LLM judges
+the fresh evidence and proposes writable fields through `workflow__commit`.
+Require all action details; held nearby is not attached and ambiguity is not
+completion. Use `evidence: {source: model, consecutive: 2}` with no `pattern`
+or `commit`. Code counts valid completion proposals on distinct fresh frames;
+a negative, uncertain, missing, or failed judgment breaks the sequence.
+The authoring model writes this policy; it does not judge the live user's step.
 
 ## Write, validate, and review
 
@@ -131,8 +139,9 @@ For the human-review handoff, after approval run from
 to the sample, not the repository root. Use an absolute path for a guide saved elsewhere.
 
 Give each step its own initially false completion boolean. Use the same field
-in `writes`, `complete_when`, and direct `evidence.commit`. Timer setup completes
-on its own boolean, not a timestamp sentinel or an earlier step's boolean.
+in `writes`, `complete_when`, and the observation LLM's completion instructions.
+Use direct `evidence.commit` for deterministic timer results, not visual judgments.
+Timer setup completes on its own boolean, not a timestamp sentinel or an earlier step's boolean.
 Preserve the linked step chain and user-controlled advancement.
 
 Validate from the repository root and repair YAML yourself until it passes:

@@ -4,7 +4,8 @@
 """Share recognition expectations between this sample's visual and guide evaluators.
 
 Expected answers come from the case manifest, not model responses. Recognition
-ignores whitespace layout; production evidence gates still score the raw answer.
+ignores whitespace layout. These factual-text diagnostics do not establish
+semantic correctness or completion; the runtime's observation LLM judges that.
 """
 
 import re
