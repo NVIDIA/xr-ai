@@ -93,6 +93,15 @@ Applications publish `ResponseOutput` values with `kind="reply"` or
 end with `final=True`. Producer identity is part of the stream key so
 independent agents cannot merge accidentally.
 
+Each running `VoiceAgent` remembers its 1,024 most recently closed stream keys.
+Output that reuses one of those keys is ignored, and the runtime logs one
+warning for that participant, producer, and `response_id`. An empty terminator
+for a closed stream, such as a reply's terminator after a barge-in, is ignored
+without a warning. Streams close by finalization, cancellation, or eviction;
+waiting does not reopen a retained key. Use one identifier per inbound query,
+such as `ctx.metadata.message_id`, or omit `response_id` when publishing a
+finite response in one `ResponseOutput`.
+
 (multiple-voice-producers)=
 ### Multiple speech producers
 
@@ -111,21 +120,28 @@ voice floor that decides what is spoken and when:
 - An urgent update cancels current output unless that is itself urgent,
   supersedes the cancelled reply's request, flushes queued hub audio, and plays
   next. Urgent updates play in order without cutting each other.
-- Other updates wait until the bot is not speaking, then all pending updates are
-  spoken as one utterance. `VoiceAgent` learns playback state from the media
+- Other updates wait until neither the bot nor the participant is speaking, then
+  all pending updates are spoken as one utterance. An update stays pending until
+  that utterance has been heard: if it is cut or cancelled, including while the
+  combiner runs, its updates are spoken again later. `VoiceAgent` learns playback state from the media
   output, not from a duration estimate. By default the texts are joined with
   spaces; pass `combiner`, an async callable from the pending texts to one
   spoken text, to rewrite them. `llm_update_combiner(llm)` returns a combiner
-  that rewrites them with an `LLMService` and falls back to the join on failure.
+  that rewrites them with an `LLMService` and falls back to the join on failure
+  or when the rewrite stops at its token limit.
   A failing combiner also falls back to the join. At most 64 updates wait per
   participant; the oldest is dropped with a warning.
 - A new user query or a barge-in cancels replies and the response in flight and
   supersedes the active request, but keeps pending and urgent updates.
 - A `withdraw` from a producer drops that producer's pending updates and urgent
-  updates that have not started playing. The response in flight and other
-  producers' updates are kept.
+  updates that have not been heard. Output already playing is not cut; a batch
+  being combined that contains a withdrawn update is discarded and rebuilt from
+  the remaining updates. Other producers' updates are kept.
 - A streamed reply that receives no fragment for `stream_idle_timeout_s`
-  (default 15 s) is closed so a stalled producer cannot hold the floor.
+  (default 15 s) is closed so a stalled producer cannot hold the floor. The
+  producer is not told: its later fragments are dropped, and its terminator is
+  still accepted, so `Reply.delivered` can be true for text that was never
+  spoken.
 
 `text_topic` controls the completed-response data echo and defaults to
 `agent.response`. Set it to an empty string when the application owns its own

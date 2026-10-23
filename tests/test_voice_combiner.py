@@ -20,8 +20,10 @@ class _LLM:
         error: Exception | None = None,
         gate: asyncio.Event | None = None,
         tool_calls: object = None,
+        finish_reason: str = "stop",
     ) -> None:
         self.content = content
+        self.finish_reason = finish_reason
         self.error = error
         self.gate = gate
         self.tool_calls = tool_calls
@@ -38,7 +40,7 @@ class _LLM:
             except asyncio.CancelledError:
                 self.cancelled = True
                 raise
-        return ChatResponse(self.content, None, self.tool_calls, "stop", {})
+        return ChatResponse(self.content, None, self.tool_calls, self.finish_reason, {})
 
 
 async def test_single_update_bypasses_the_model() -> None:
@@ -68,6 +70,7 @@ async def test_several_updates_are_rewritten_once() -> None:
         _LLM(error=ModelServiceError("unavailable")),
         _LLM(content="   "),
         _LLM(content="Calling a tool.", tool_calls=[object()]),
+        _LLM(content="Combined but cut", finish_reason="length"),
     ],
 )
 async def test_unusable_model_output_falls_back_to_joined_updates(llm: _LLM) -> None:

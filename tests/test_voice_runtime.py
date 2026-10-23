@@ -941,6 +941,37 @@ async def test_cancelled_response_stream_releases_blocked_publishers() -> None:
     ) == 1
 
 
+async def test_terminator_for_a_stream_the_floor_closed_is_not_warned() -> None:
+    session = _Session()
+    runtime = AgentRuntime()
+    agent = _voice_agent(session, text_input=False)
+    runtime.register("voice", agent)
+    messages: list[str] = []
+    handler_id = logger.add(messages.append, format="{message}", level="WARNING")
+
+    try:
+        async with _running_voice(runtime, agent, session):
+            await runtime.publish(
+                VOICE_OUTPUT_TOPIC,
+                ResponseOutput(kind="reply", request_id="r1", text="one", response_id="turn", final=False),
+                participant_id="alice",
+                source="observer",
+            )
+            await asyncio.sleep(0)
+            # A barge-in cancels the stream before the producer's terminator.
+            session.response_tasks[0].cancel()
+            await asyncio.gather(*session.response_tasks, return_exceptions=True)
+            await runtime.publish(
+                VOICE_OUTPUT_TOPIC,
+                ResponseOutput(kind="reply", request_id="r1", response_id="turn"),
+                participant_id="alice",
+                source="observer",
+            )
+    finally:
+        logger.remove(handler_id)
+    assert messages == []
+
+
 async def test_reused_finalized_response_id_is_ignored_and_warned_once() -> None:
     session = _Session()
     runtime = AgentRuntime()

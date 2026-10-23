@@ -457,7 +457,16 @@ class VoiceAgent(Agent):
         stream: _ResponseStream
         async with self._output_lock:
             if key in self._closed_streams:
-                if not self._closed_streams[key]:
+                if output.final and not output.text:
+                    # A producer's terminator for a stream the floor already
+                    # closed, as after every barge-in; nothing is lost.
+                    logger.debug(
+                        "voice terminator for closed response pid={!r} source={!r} response_id={!r}",
+                        participant_id,
+                        metadata.source,
+                        output.response_id,
+                    )
+                elif not self._closed_streams[key]:
                     logger.warning(
                         "ignored voice output for closed response pid={!r} source={!r} "
                         "response_id={!r}; use a new response_id",

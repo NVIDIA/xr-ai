@@ -30,8 +30,8 @@ def llm_update_combiner(
     The combiner rewrites several updates into one spoken utterance. It uses
     temperature 0 with thinking disabled. It falls back to joining the updates
     with spaces, and logs why, when the model service fails, the call times
-    out, or the model returns no text or tool calls. A single update is
-    returned unchanged without a model call.
+    out, the model returns no text or tool calls, or the rewrite stops at the
+    token limit. A single update is returned unchanged without a model call.
 
     :param llm: Model service that rewrites the updates.
     :param prompt: System prompt for the rewrite.
@@ -74,6 +74,10 @@ def llm_update_combiner(
         text = response.content.strip()
         if not text or response.tool_calls:
             logger.warning("voice update combiner returned no usable text")
+            return fallback
+        if response.finish_reason in {"length", "max_tokens"}:
+            # A truncated rewrite would silently drop facts from the updates.
+            logger.warning("voice update combiner rewrite hit the token limit")
             return fallback
         return text
 

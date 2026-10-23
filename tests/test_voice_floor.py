@@ -15,6 +15,8 @@ from pipecat.frames.frames import (
     Frame,
     InterruptionFrame,
     TextFrame,
+    UserStartedSpeakingFrame,
+    UserStoppedSpeakingFrame,
 )
 from pipecat.processors.frame_processor import FrameDirection
 from xr_ai_voice._frames import ParticipantLeftFrame, _OutputDoneFrame
@@ -60,6 +62,12 @@ class _Floor:
         frame = BotStartedSpeakingFrame() if started else BotStoppedSpeakingFrame()
         frame.transport_destination = pid
         await self.processor.process_frame(frame, FrameDirection.UPSTREAM)
+        await self.settle()
+
+    async def user(self, started: bool, pid: str = "alice") -> None:
+        frame = UserStartedSpeakingFrame() if started else UserStoppedSpeakingFrame()
+        frame.transport_source = pid
+        await self.processor.process_frame(frame, FrameDirection.DOWNSTREAM)
         await self.settle()
 
     async def played(self) -> None:
@@ -524,3 +532,103 @@ async def test_stalled_stream_is_closed_after_the_idle_timeout() -> None:
     assert fragments == ["spoken"]
     assert closed == [stream]
     assert stream.closed.is_set()
+
+
+class _GatedCombiner:
+    """Combine updates only once ``release`` is set, recording each batch."""
+
+    def __init__(self) -> None:
+        self.release = asyncio.Event()
+        self.calls: list[list[str]] = []
+
+    async def __call__(self, texts: Sequence[str]) -> str:
+        self.calls.append(list(texts))
+        await self.release.wait()
+        return " + ".join(texts)
+
+
+async def test_updates_wait_while_the_participant_is_speaking() -> None:
+    floor = _Floor()
+    await floor.user(started=True)
+    await floor.processor.enqueue_update("alice", "Timer done.", source="producer")
+    barge_in = InterruptionFrame()
+    barge_in.transport_source = "alice"
+    await floor.processor.process_frame(barge_in, FrameDirection.UPSTREAM)
+    await floor.bot(started=False)
+    assert floor.texts == []
+
+    await floor.user(started=False)
+
+    assert floor.texts == ["Timer done."]
+
+
+async def test_update_cut_by_a_reply_is_spoken_again_after_it() -> None:
+    floor = _Floor()
+    await floor.processor.enqueue_update("alice", "Timer done.", source="producer")
+    await floor.settle()
+
+    await floor.processor.enqueue_reply("alice", "answer", request_id="r1")
+    await floor.settle()
+    await floor.played()  # The cut update's marker no longer owns the floor.
+    assert floor.texts == ["Timer done.", "answer"]
+
+    await floor.played()
+
+    assert floor.interruptions == ["alice"]
+    assert floor.texts == ["Timer done.", "answer", "Timer done."]
+
+
+async def test_updates_cancelled_while_combining_are_kept() -> None:
+    combiner = _GatedCombiner()
+    floor = _Floor(combiner=combiner)
+    await floor.bot(started=True)
+    await floor.processor.enqueue_update("alice", "one", source="producer")
+    await floor.processor.enqueue_update("alice", "two", source="producer")
+    await floor.bot(started=False)
+    await floor.processor.enqueue_reply("alice", "answer", request_id="r1")
+    await floor.settle()
+    combiner.release.set()
+    await floor.played()
+
+    assert combiner.calls == [["one", "two"], ["one", "two"]]
+    assert floor.texts == ["answer", "one + two"]
+
+
+async def test_withdraw_while_combining_respeaks_only_the_remaining_updates() -> None:
+    combiner = _GatedCombiner()
+    floor = _Floor(combiner=combiner)
+    await floor.bot(started=True)
+    await floor.processor.enqueue_update("alice", "guide notice", source="guide")
+    await floor.processor.enqueue_update("alice", "timer notice", source="timer")
+    await floor.bot(started=False)
+
+    await floor.processor.withdraw_updates("alice", source="guide")
+    combiner.release.set()
+    await floor.settle()
+
+    assert floor.texts == ["timer notice"]
+
+
+async def test_cancel_while_closing_a_stream_still_releases_the_floor() -> None:
+    floor = _Floor()
+    closing = asyncio.Event()
+
+    class SlowClose(_Held):
+        async def __anext__(self) -> str:
+            if not self._sent:
+                self._sent = True
+                return self.chunk
+            raise StopAsyncIteration
+
+        async def aclose(self) -> None:
+            closing.set()
+            await asyncio.Event().wait()
+
+    await floor.processor.enqueue_reply("alice", SlowClose("answer"), request_id="r1")
+    await asyncio.wait_for(closing.wait(), 1)
+    await floor.processor.enqueue_query("alice", "next question")
+    await floor.settle()
+    await floor.processor.enqueue_update("alice", "Timer done.", source="producer")
+    await floor.played()
+
+    assert floor.texts == ["answer", "Timer done."]

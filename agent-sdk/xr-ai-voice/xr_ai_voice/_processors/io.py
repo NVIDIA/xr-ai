@@ -22,6 +22,8 @@ from pipecat.frames.frames import (
     Frame,
     InterruptionFrame,
     TextFrame,
+    UserStartedSpeakingFrame,
+    UserStoppedSpeakingFrame,
 )
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from xr_ai_hub import DataMessage
@@ -46,6 +48,13 @@ _PENDING_UPDATE_CAPACITY = 64
 _SUPERSEDED_CAPACITY = 256
 
 
+@dataclass(frozen=True, slots=True, eq=False)
+class _PendingUpdate:
+    text: str
+    pts_us: int
+    source: str
+
+
 @dataclass(frozen=True, slots=True)
 class _QueuedResponse:
     participant_id: str
@@ -55,21 +64,17 @@ class _QueuedResponse:
     request_id: str | None = None
     urgent: bool = False
     source: str | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class _PendingUpdate:
-    text: str
-    pts_us: int
-    source: str
+    # The pending updates this output speaks; they stay pending until heard.
+    updates: tuple[_PendingUpdate, ...] = ()
 
 
 class _VoiceIOProcessor(FrameProcessor):
     """Publish accepted input and arbitrate each participant's voice floor.
 
     Replies answer the active request and supersede output for other requests.
-    Urgent updates cut current speech. Other updates wait for silence and are
-    combined into one utterance.
+    Urgent updates cut current speech. Other updates wait until neither the bot
+    nor the participant is speaking, are combined into one utterance, and stay
+    pending until that utterance has been heard.
     """
 
     def __init__(
@@ -105,6 +110,7 @@ class _VoiceIOProcessor(FrameProcessor):
         # Insertion-ordered sets, bounded like the voice agent's closed streams.
         self._superseded: dict[str, dict[str, None]] = {}
         self._speaking: set[str] = set()
+        self._user_speaking: set[str] = set()
         self._turn_tokens: dict[str, object] = {}
         # Completed output may still be draining through TTS when new input arrives.
         self._seen_output: set[str] = set()
@@ -182,9 +188,9 @@ class _VoiceIOProcessor(FrameProcessor):
         await self._start_next(participant_id)
 
     async def withdraw_updates(self, participant_id: str, *, source: str) -> None:
-        """Drop one producer's updates that have not started playing.
+        """Drop one producer's updates that have not been heard.
 
-        The response in flight and other producers' updates are kept.
+        Output already playing is not cut, and other producers' updates are kept.
         """
 
         if pending := self._pending_updates.get(participant_id):
@@ -222,9 +228,21 @@ class _VoiceIOProcessor(FrameProcessor):
             return
 
         if isinstance(frame, _OutputDoneFrame):
-            if self._owner.get(frame.pid) is frame.output:
+            owner = self._owner.get(frame.pid)
+            if owner is not None and owner is frame.output:
                 del self._owner[frame.pid]
+                self._discard_updates(frame.pid, owner.updates)
                 await self._start_next(frame.pid)
+            return
+
+        if isinstance(frame, (UserStartedSpeakingFrame, UserStoppedSpeakingFrame)):
+            await self.push_frame(frame, direction)
+            if pid := frame.transport_source:
+                if isinstance(frame, UserStartedSpeakingFrame):
+                    self._user_speaking.add(pid)
+                else:
+                    self._user_speaking.discard(pid)
+                    await self._start_next(pid)
             return
 
         if isinstance(frame, (EndFrame, CancelFrame)):
@@ -278,6 +296,8 @@ class _VoiceIOProcessor(FrameProcessor):
     async def _spawn_query(self, frame: GatedQueryFrame) -> None:
         pid = frame.participant_id
         logger.info("voice input pid={!r}", pid)
+        # A query ends the utterance even if its stop frame was not forwarded.
+        self._user_speaking.discard(pid)
         interrupted_response = await self._barge_in(pid)
         if interrupted_response is not None and interrupted_response.done():
             interrupted_response = None
@@ -408,6 +428,7 @@ class _VoiceIOProcessor(FrameProcessor):
                 pid=pid,
                 token=token,
                 accumulated=chunks,
+                updates=item.updates,
             )
         except asyncio.CancelledError:
             cancelled = True
@@ -415,7 +436,8 @@ class _VoiceIOProcessor(FrameProcessor):
         except Exception:
             logger.exception("voice response failed pid={!r}", pid)
         finally:
-            await self._close_response(item.response)
+            # Settle the floor before closing the stream: a cancel landing in
+            # aclose() would otherwise skip it and hold the floor forever.
             is_current = self._turn_tokens.get(pid) is token
             if not cancelled and is_current:
                 try:
@@ -432,13 +454,18 @@ class _VoiceIOProcessor(FrameProcessor):
                 self._turn_tokens.pop(pid, None)
                 self._inflight.pop(pid, None)
                 self._flight.pop(pid, None)
-            if self._owner.get(pid) is item:
+            if self._owner.get(pid) is item and chunks:
                 # Its audio may still be synthesizing or playing; the transport
                 # returns this marker once that audio is written, and the next
                 # output starts then.
                 done = _OutputDoneFrame(pid=pid, output=item)
                 done.transport_destination = pid
                 await self.push_frame(done)
+            elif self._owner.get(pid) is item:
+                # Nothing reached TTS, so there is no audio to wait for.
+                del self._owner[pid]
+                await self._start_next(pid)
+            await self._close_response(item.response)
 
     async def _consume_response(
         self,
@@ -447,9 +474,12 @@ class _VoiceIOProcessor(FrameProcessor):
         pid: str,
         token: object,
         accumulated: list[str],
+        updates: tuple[_PendingUpdate, ...],
     ) -> None:
+        # An update withdrawn while its batch was being combined voids the
+        # batch: speak nothing, and the remaining updates form a new one.
         if isinstance(response, str):
-            if response and self._turn_tokens.get(pid) is token:
+            if response and self._turn_tokens.get(pid) is token and self._still_pending(pid, updates):
                 accumulated.append(response)
                 await self._push_text(response, pid=pid)
             return
@@ -458,6 +488,8 @@ class _VoiceIOProcessor(FrameProcessor):
                 return
             if not chunk:
                 continue
+            if not accumulated and not self._still_pending(pid, updates):
+                return
             accumulated.append(chunk)
             await self._push_text(chunk, pid=pid)
 
@@ -472,15 +504,36 @@ class _VoiceIOProcessor(FrameProcessor):
             item = replies.popleft()
             if not replies:
                 self._queued_replies.pop(pid, None)
-        elif pid not in self._speaking and (updates := self._pending_updates.pop(pid, None)):
+        elif (
+            pid not in self._speaking
+            and pid not in self._user_speaking
+            and (updates := tuple(self._pending_updates.get(pid, ())))
+        ):
             item = _QueuedResponse(
                 participant_id=pid,
                 response=self._update_response([update.text for update in updates]),
                 pts_us=updates[0].pts_us,
+                updates=updates,
             )
         else:
             return
         await self._start_response(item)
+
+    def _still_pending(self, pid: str, updates: tuple[_PendingUpdate, ...]) -> bool:
+        pending = {id(update) for update in self._pending_updates.get(pid, ())}
+        return all(id(update) in pending for update in updates)
+
+    def _discard_updates(self, pid: str, updates: tuple[_PendingUpdate, ...]) -> None:
+        """Drop updates that have been heard; later and unheard ones stay pending."""
+
+        if not updates or not (pending := self._pending_updates.get(pid)):
+            return
+        heard = {id(update) for update in updates}
+        kept = deque(update for update in pending if id(update) not in heard)
+        if kept:
+            self._pending_updates[pid] = kept
+        else:
+            del self._pending_updates[pid]
 
     def _update_response(self, texts: list[str]) -> VoiceResponse:
         if len(texts) == 1 or self._combiner is None:
@@ -594,6 +647,7 @@ class _VoiceIOProcessor(FrameProcessor):
         self._active_request.pop(pid, None)
         self._superseded.pop(pid, None)
         self._speaking.discard(pid)
+        self._user_speaking.discard(pid)
         self._owner.pop(pid, None)
         self._seen_output.discard(pid)
 
@@ -631,6 +685,7 @@ class _VoiceIOProcessor(FrameProcessor):
         self._active_request.clear()
         self._superseded.clear()
         self._speaking.clear()
+        self._user_speaking.clear()
         self._inflight.clear()
         self._flight.clear()
         self._owner.clear()

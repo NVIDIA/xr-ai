@@ -58,7 +58,8 @@ async with outputs.reply(participant_id, request_id=query_id) as reply:
 
 `Reply` publishes each fragment, then an empty terminator when the block exits,
 including on an exception or cancellation, unless nothing was published or a
-publish failed. It never publishes for a canceled task. Pass `closed_errors` to
+publish failed. Once its task is being canceled, `send` publishes no further
+fragments. Pass `closed_errors` to
 suppress the error a closed consumer raises for the terminator, and read
 `reply.delivered` afterward to learn whether the terminator was published.
 

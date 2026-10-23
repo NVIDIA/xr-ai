@@ -32,8 +32,9 @@ them from the new `xr-ai-interaction` package under their new names, and add
 | `VoiceParticipantLeft` | `ParticipantLeft` |
 | `VoiceInterrupted` | `Interrupted` |
 
-Fields, validation rules, and the `voice.output` and `voice.transcript` topics are
-unchanged; `VOICE_OUTPUT_TOPIC`, `VoiceTranscript`, and `VoiceAgent` stay in
+Apart from the `ResponseOutput` fields described under *Voice output declares
+reply or update*, fields, validation rules, and the `voice.output` and
+`voice.transcript` topics are unchanged; `VOICE_OUTPUT_TOPIC`, `VoiceTranscript`, and `VoiceAgent` stay in
 `xr_ai_voice`.
 
 Two validation error messages now say `response output` instead of `voice
@@ -119,6 +120,12 @@ async with outputs.reply(participant_id, request_id=query_id) as reply:
 The aggregation tuning parameters have no replacement: coalescing follows real
 playback state, and `llm_update_combiner` takes only `prompt`, `max_tokens`,
 and `timeout_s`.
+
+Scheduling changes too. A reply for a different request than the one being
+spoken now cuts current speech and flushes queued audio. Non-urgent updates
+wait while the participant is speaking. A streamed reply that publishes no
+fragment for 15 seconds is closed and its later fragments are dropped; set
+`stream_idle_timeout_s` on `VoiceAgent` for producers that pause longer.
 
 ### Persistent services after startup failure
 

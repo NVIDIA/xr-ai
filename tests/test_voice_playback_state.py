@@ -18,7 +18,13 @@ from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 
 import pytest
-from pipecat.frames.frames import EndFrame, Frame, InterruptionFrame
+from pipecat.frames.frames import (
+    EndFrame,
+    Frame,
+    InterruptionFrame,
+    UserStartedSpeakingFrame,
+    UserStoppedSpeakingFrame,
+)
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.worker import PipelineWorker
 from pipecat.processors.frame_processor import FrameDirection
@@ -307,3 +313,28 @@ async def test_another_participants_interruption_keeps_the_done_marker(monkeypat
         await worker.queue_frame(interruption)
 
         await _until(lambda: tts.calls == ["One.", "Two."])
+
+
+@pytest.mark.asyncio
+async def test_updates_wait_for_the_participant_after_a_barge_in(monkeypatch: pytest.MonkeyPatch) -> None:
+    async with _pipeline(monkeypatch) as (io_processor, worker, tts, endpoint, _gate):
+        await io_processor.enqueue_reply(_PID, _one_reply("Hello there."), request_id="r1")
+        await _until(lambda: _PID in io_processor._speaking)  # noqa: SLF001
+        await io_processor.enqueue_update(_PID, "Timer done.", source="timer")
+
+        started = UserStartedSpeakingFrame()
+        started.transport_source = _PID
+        await worker.queue_frame(started)
+        interruption = InterruptionFrame()
+        interruption.transport_source = _PID
+        await worker.queue_frame(interruption)
+        endpoint.release.set()
+        # The interruption stops the bot, but the participant is still talking.
+        await _until(lambda: _PID not in io_processor._speaking)  # noqa: SLF001
+        await asyncio.sleep(0.2)
+        assert tts.calls == ["Hello there."]
+
+        stopped = UserStoppedSpeakingFrame()
+        stopped.transport_source = _PID
+        await worker.queue_frame(stopped)
+        await _until(lambda: tts.calls == ["Hello there.", "Timer done."])
