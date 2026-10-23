@@ -79,6 +79,10 @@ Package Contents
 
       Run one validated request through the shared Relay tool lifecycle.
 
+      Handler exceptions propagate with their original type, instance, and
+      cause. Relay records failures before propagating them; middleware can
+      recover from or replace a handler failure. Cancellation propagates.
+
 
 
    .. py:method:: invoke(arguments: str) -> ToolInvocationResult

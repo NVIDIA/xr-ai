@@ -526,6 +526,25 @@ wording.</p>
 <code class="docutils literal notranslate"><span class="pre">[voice]</span></code> extra from <code class="docutils literal notranslate"><span class="pre">xr-ai-conversation</span></code>, which now depends on
 <code class="docutils literal notranslate"><span class="pre">xr-ai-interaction</span></code> directly.</p>
 </section>
+<section id="dependency-refresh-and-native-tool-callback-exceptions">
+<h3>Dependency refresh and native tool callback exceptions<a class="headerlink" href="#dependency-refresh-and-native-tool-callback-exceptions" title="Link to this heading">#</a></h3>
+<p>The SDK now requires the NeMo Relay 0.10 release series. Update copied worker
+dependency constraints from <code class="docutils literal notranslate"><span class="pre">nemo-relay&gt;=0.7.2,&lt;0.8</span></code> to <code class="docutils literal notranslate"><span class="pre">nemo-relay&gt;=0.10.0,&lt;0.11</span></code>.
+The dependency qualification date is now <code class="docutils literal notranslate"><span class="pre">2026-10-22T21:39:43Z</span></code>, including
+Relay 0.10.4. Refresh existing environments from the repository root with
+<code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">--config-file</span> <span class="pre">uv.toml</span> <span class="pre">sync</span> <span class="pre">--project</span> <span class="pre">&lt;project-directory&gt;</span></code>.</p>
+<p>Native tool and model callbacks now propagate their original Python exceptions.
+Catch an expected exception such as <code class="docutils literal notranslate"><span class="pre">FrameUnavailable</span></code> directly instead of
+catching <code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code> and parsing its message. Unexpected exceptions and
+cancellation continue to propagate. Tool requests and returned SDK result types
+are unchanged; Relay’s tool result envelope stays inside the adapter.</p>
+<p>Applications that supply a Relay observability configuration must migrate it
+to <code class="docutils literal notranslate"><span class="pre">version</span> <span class="pre">=</span> <span class="pre">4</span></code>. Custom Relay tool execution intercepts now receive
+<code class="docutils literal notranslate"><span class="pre">(context,</span> <span class="pre">next_call)</span></code>; read the tool name and arguments from <code class="docutils literal notranslate"><span class="pre">context</span></code>.
+LLM execution intercepts must accept the new codec context parameter. Refer to the
+<a class="reference external" href="https://github.com/NVIDIA/NeMo-Relay/releases/tag/0.10.0">Relay 0.10.0 migration notes</a>
+for the configuration and intercept changes.</p>
+</section>
 <section id="persistent-services-after-startup-failure">
 <h3>Persistent services after startup failure<a class="headerlink" href="#persistent-services-after-startup-failure" title="Link to this heading">#</a></h3>
 <p>Stacks using <code class="docutils literal notranslate"><span class="pre">launch_mode=&quot;persist&quot;</span></code> now retain services that had signaled
@@ -887,6 +906,7 @@ and <a class="reference internal" href="agent-sdk-conversation.html"><span class
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#changes-since-v0-3-0-beta">Changes since v0.3.0-beta</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#interaction-messages-move-to-xr-ai-interaction">Interaction messages move to xr-ai-interaction</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#dependency-refresh-and-native-tool-callback-exceptions">Dependency refresh and native tool callback exceptions</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#persistent-services-after-startup-failure">Persistent services after startup failure</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nemotron-3-embedding-model">Nemotron 3 embedding model</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#embedding-sdk-identity-and-rag-cache-contract">Embedding SDK identity and RAG cache contract</a></li>

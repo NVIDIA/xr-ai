@@ -54,6 +54,27 @@ Replace `xr-ai-routing[voice]` with `xr-ai-routing[runtime]`. Remove the
 `[voice]` extra from `xr-ai-conversation`, which now depends on
 `xr-ai-interaction` directly.
 
+### Dependency refresh and native tool callback exceptions
+
+The SDK now requires the NeMo Relay 0.10 release series. Update copied worker
+dependency constraints from `nemo-relay>=0.7.2,<0.8` to `nemo-relay>=0.10.0,<0.11`.
+The dependency qualification date is now `2026-10-22T21:39:43Z`, including
+Relay 0.10.4. Refresh existing environments from the repository root with
+`uv --config-file uv.toml sync --project <project-directory>`.
+
+Native tool and model callbacks now propagate their original Python exceptions.
+Catch an expected exception such as `FrameUnavailable` directly instead of
+catching `RuntimeError` and parsing its message. Unexpected exceptions and
+cancellation continue to propagate. Tool requests and returned SDK result types
+are unchanged; Relay's tool result envelope stays inside the adapter.
+
+Applications that supply a Relay observability configuration must migrate it
+to `version = 4`. Custom Relay tool execution intercepts now receive
+`(context, next_call)`; read the tool name and arguments from `context`.
+LLM execution intercepts must accept the new codec context parameter. Refer to the
+[Relay 0.10.0 migration notes](https://github.com/NVIDIA/NeMo-Relay/releases/tag/0.10.0)
+for the configuration and intercept changes.
+
 ### Persistent services after startup failure
 
 Stacks using `launch_mode="persist"` now retain services that had signaled
