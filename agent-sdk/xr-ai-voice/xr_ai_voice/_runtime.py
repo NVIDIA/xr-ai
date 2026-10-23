@@ -158,6 +158,11 @@ class VoiceAgent(Agent):
     profile and the same voice-gate configuration, without application-side
     backend inspection. The normal constructor accepts explicitly owned clients.
 
+    ``vad.silence_duration`` owns utterance finalization for either ASR backend,
+    overriding any ``speaker.silence_duration`` in ``voice_gate`` for this agent.
+    Each agent copies its effective speaker settings; the shared voice-gate
+    configuration is unchanged. Other ``VadConfig`` fields tune batch STT only.
+
     Accepted queries also return participant-routed UTF-8 display text on
     ``voice.user-query``. Speaker ASR includes its session-local speaker label;
     ordinary STT and typed input use ``User``. This display does not change

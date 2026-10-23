@@ -1023,3 +1023,87 @@ async def test_malformed_diagnostic_cannot_reset_worker_enrollment(invalid):
     finally:
         await processor.cleanup()
     assert not processor._tasks and not processor._queues
+
+
+@pytest.mark.asyncio
+async def test_pipeline_silence_reaches_speaker_stream_without_mutating_shared_config(tmp_path):
+    openings = []
+
+    async def handler(socket):
+        opening = json.loads(await socket.recv())
+        openings.append(opening["config"]["silence_duration"])
+        await socket.send(json.dumps({"service": "xr-ai-speaker-stt", "protocol": 5}))
+        async for _audio in socket:
+            await socket.send(json.dumps({"events": []}))
+
+    async with serve(handler, "127.0.0.1", 0) as server:
+        port = server.sockets[0].getsockname()[1]
+        cfg = _voice_cfg(tmp_path, base_url=f"http://127.0.0.1:{port}", silence_duration=1.4)
+        pipelines = []
+        standalone = _SpeakerClient(cfg._speaker)
+        try:
+            for silence in (0.24, 0.67):
+                transport = HubVoiceTransport()
+                pipeline, _worker = _build_voice_pipeline(
+                    transport=transport, stt=None, tts=SimpleNamespace(),
+                    io_processor=_VoiceIOProcessor(AsyncMock()),
+                    vad_cfg=VadConfig(silence_duration=silence), voice_gate_cfg=cfg,
+                    use_speaker_asr=True,
+                )
+                audio, gate = pipeline.processors[2:4]
+                pipelines.append((audio, gate, transport))
+                await audio._client._feed("wearer", bytes(640), 0)
+            await standalone._feed("direct-client", bytes(640), 0)
+            assert openings == [0.24, 0.67, 1.4]
+            assert cfg._speaker.silence_duration == 1.4
+        finally:
+            await standalone._close()
+            for audio, gate, transport in pipelines:
+                await audio.cleanup()
+                await gate.cleanup()
+                transport.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_pipeline_silence_reaches_batch_vad(tmp_path, monkeypatch):
+    detectors = []
+
+    class Detector:
+        def __init__(self, **kwargs):
+            detectors.append(kwargs)
+        async def feed(self, *_args):
+            pass
+
+    monkeypatch.setattr("xr_ai_voice._processors.vad_stt.VadDetector", Detector)
+    transport = HubVoiceTransport()
+    pipeline, _worker = _build_voice_pipeline(
+        transport=transport, stt=SimpleNamespace(), tts=SimpleNamespace(),
+        io_processor=_VoiceIOProcessor(AsyncMock()),
+        vad_cfg=VadConfig(silence_duration=0.24), voice_gate_cfg=_voice_cfg(tmp_path),
+        use_speaker_asr=False,
+    )
+    audio, gate = pipeline.processors[2:4]
+    try:
+        frame = InputAudioRawFrame(audio=bytes(640), sample_rate=16000, num_channels=1)
+        frame.transport_source = "wearer"
+        await audio.process_frame(frame, FrameDirection.DOWNSTREAM)
+        assert len(detectors) == 1 and detectors[0]["silence_duration"] == 0.24
+    finally:
+        await audio.cleanup()
+        await gate.cleanup()
+        transport.shutdown()
+
+
+def test_pipeline_rejects_silence_exceeding_speaker_utterance_limit(tmp_path):
+    cfg = _voice_cfg(tmp_path, max_utterance_s=1.0)
+    transport = HubVoiceTransport()
+    try:
+        with pytest.raises(ValueError, match="max_utterance_s must exceed silence_duration"):
+            _build_voice_pipeline(
+                transport=transport, stt=None, tts=SimpleNamespace(),
+                io_processor=_VoiceIOProcessor(AsyncMock()),
+                vad_cfg=VadConfig(silence_duration=1.0), voice_gate_cfg=cfg,
+                use_speaker_asr=True,
+            )
+    finally:
+        transport.shutdown()

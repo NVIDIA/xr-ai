@@ -49,6 +49,14 @@ typed text ingress, TTS, signals, pipeline cancellation, and cleanup. Its media
 session remains private. Applications that need a shared public
 `HubVoiceTransport` construct and inject one explicitly.
 
+Set utterance-ending silence once through `VadConfig.silence_duration` passed
+to `VoiceAgent`. It controls the active backend: Silero VAD for batch STT, or
+per-speaker inactivity for speaker ASR. This value takes precedence over the
+voice-gate YAML's `speaker.silence_duration`; direct speaker sessions retain
+their own configuration. Other `VadConfig` fields apply only to batch STT.
+Speaker ASR checks inactivity at model-chunk boundaries, so the threshold is
+not an exact end-to-end latency target. Changes apply to newly opened sessions.
+
 For the startup probe contract, refer to {py:class}`~xr_ai_voice.VoiceAgent`.
 For deployment order and model availability requirements, refer to
 {ref}`consumer-model-readiness`.

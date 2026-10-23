@@ -14,6 +14,7 @@ path through its internal media session.
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from dataclasses import replace
 
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.worker import PipelineWorker
@@ -83,8 +84,10 @@ def _build_voice_pipeline(
     if use_speaker_asr:
         if voice_gate_cfg._speaker is None:
             raise ValueError("speaker ASR needs speaker configuration")
+        speaker_cfg = replace(voice_gate_cfg._speaker, silence_duration=vad_cfg.silence_duration)
+        speaker_cfg._validate()
         vad_stt = _SpeakerSttProcessor(
-            cfg=voice_gate_cfg._speaker,
+            cfg=speaker_cfg,
             on_partial_transcript=(
                 voice_gate_proc.handle_partial_transcript
                 if voice_gate_cfg._conversation is not None else None
