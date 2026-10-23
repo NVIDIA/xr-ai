@@ -865,31 +865,17 @@ workflow.</p></li>
 </pre></div>
 </div>
 </section>
-<section id="config-procedure-capture-guide-yaml-voice-gate-guide-yaml">
-<h3>yaml/voice_gate.guide.yaml<a class="headerlink" href="#config-procedure-capture-guide-yaml-voice-gate-guide-yaml" title="Link to this heading">#</a></h3>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
-<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
-
-<span class="c1"># The CLI selects the guide. Every utterance is a guide question or control.</span>
-<span class="nt">magic_phrases</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span>
-<span class="nt">listening_chime</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
-<span class="nt">followup_grace_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.0</span>
-<span class="c1"># Let guide handle "stop guide"; do not consume it as a generic STOP.</span>
-<span class="nt">stop_commands_enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
-</pre></div>
-</div>
-</section>
 <section id="config-procedure-capture-guide-yaml-voice-gate-yaml">
 <h3>yaml/voice_gate.yaml<a class="headerlink" href="#config-procedure-capture-guide-yaml-voice-gate-yaml" title="Link to this heading">#</a></h3>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
 <span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
 
-<span class="c1"># Silent, wake-word-free narration. "start capture" and "stop capture"</span>
-<span class="c1"># are sample-owned commands, separate from shared media capture.</span>
-<span class="c1"># The always-on gate passes all final speech to the sample's input handler.</span>
+<span class="c1"># Shared wake-word-free input for capture and guide modes. Pass final speech</span>
+<span class="c1"># to the selected agent so it can handle its own start and stop commands;</span>
+<span class="c1"># generic STOP handling must not consume those commands or narration.</span>
 <span class="nt">magic_phrases</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span>
 <span class="nt">listening_chime</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
-<span class="nt">stop_commands_enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span><span class="w">  </span><span class="c1"># "stop" is narration, not a spoken control.</span>
+<span class="nt">stop_commands_enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
 <span class="nt">followup_grace_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.0</span>
 </pre></div>
 </div>
@@ -2423,7 +2409,6 @@ workflow.</p></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-procedure-capture-guide-yaml-guide-agent-config-yaml">yaml/guide-agent-config.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-procedure-capture-guide-yaml-media-capture-yaml">yaml/media_capture.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-procedure-capture-guide-yaml-models-json">yaml/models.json</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-procedure-capture-guide-yaml-voice-gate-guide-yaml">yaml/voice_gate.guide.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-procedure-capture-guide-yaml-voice-gate-yaml">yaml/voice_gate.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-procedure-capture-guide-yaml-worker-yaml">yaml/worker.yaml</a></li>
 </ul>
