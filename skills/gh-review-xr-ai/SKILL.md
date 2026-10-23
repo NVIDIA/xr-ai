@@ -103,7 +103,7 @@ load without weakening review quality.
   entire PR when a smaller evidence packet is sufficient.
 - Require each subagent to return only candidate findings with category,
   causal code location, underlying cause, observable impact, evidence relative
-  to base, and smallest durable fix.
+  to base, and a precise, focused, and durable fix.
 - Prohibit subagents from posting comments, changing GitHub state, editing the
   checkout, approving, or requesting changes. The coordinator owns all writes.
 - Independently inspect the cited code before accepting any candidate finding.
@@ -199,8 +199,10 @@ For each blocker or nit, include:
 1. The causal file and line, symbol, or smallest useful set of code locations.
 2. The underlying cause and how it produces the observable failure or risk.
 3. Evidence that the PR causes it relative to base.
-4. The smallest durable correction at the responsible layer, without
-   prescribing unnecessary redesign or a workaround that only hides the symptom.
+4. A precise, focused, and durable correction at the responsible layer.
+   Recommend architectural or structural redesign when needed to address the
+   underlying cause, explaining why it is necessary. Keep the proposed scope
+   tied to the problem rather than minimizing the diff or hiding the symptom.
 
 Apply the same causal explanation to follow-ups, while keeping pre-existing or
 unrelated defects outside the current PR's merge requirements.
@@ -214,7 +216,7 @@ Use this structure, omitting empty sections:
 
 - `path/to/file.py:123` — **Short finding title.** Explain the change-caused
   failure, the underlying cause at the cited code, its impact, the base
-  comparison, and the smallest durable fix.
+  comparison, and a precise, focused, and durable fix.
 
 ## Nits
 
