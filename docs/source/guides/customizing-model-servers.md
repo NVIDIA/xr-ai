@@ -12,6 +12,23 @@ These launchers are editable development presets. Applications can also use
 compatible services launched individually or independently operated endpoints.
 Refer to {doc}`deploying-with-nim` for external NIM endpoints.
 
+## Existing services
+
+Inspect the selected services' configured ports before invoking a model
+launcher. Server identities are shared across samples, but reuse checks differ:
+
+- **vLLM Docker:** reuse requires the expected container name and a matching
+  launch-configuration fingerprint. On the selected ports, startup can evict
+  other xr-ai containers and listeners, or recreate a changed container.
+- **Pocket TTS:** reuses a listener whose `/health` endpoint is healthy,
+  without checking ownership or a launch-configuration fingerprint.
+- **Speaker ASR:** requires an owned listener and matching service fingerprint.
+  An unmanaged listener or configuration mismatch stops startup; it does not
+  evict or recreate the existing service.
+
+Before launching against occupied ports, establish that services will be reused
+unchanged or obtain permission from their operator to replace them.
+
 ## Required local servers
 
 | Sample | Servers |
@@ -99,8 +116,11 @@ without stopping models while its server configuration stays the same.
 These stacks use common ports and server identities. They are intended for
 one local sample stack at a time. Stopping a stack also stops recognized
 services on its configured ports if another sample or manual invocation
-started them. Starting a stack does not stop services outside its selection.
-Always stop the source stack before switching so unused models release memory.
+started them; `--stop` cannot selectively stop only services started by the
+latest invocation. Always stop the source stack before switching so unused
+models release memory. If any affected service predates your run, obtain its
+operator's authorization before that whole-stack shutdown and switch.
+Starting a stack does not stop services outside its selection.
 
 Launchers read the current configuration; they do not keep a launch history
 or reconcile every older checkout. If you already switched, use the previous
