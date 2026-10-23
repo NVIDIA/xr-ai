@@ -40,6 +40,8 @@ class _Connection:
     # Accepted input identity, including a start still queued behind finalization.
     # It can differ from CaptureAgent._sessions, which tracks backend ownership.
     recording: _Recording | None = None
+    # A stop restores idle state but must not revive reminders from before a start.
+    capture_generation: int = 0
 
 
 @dataclass
@@ -170,6 +172,7 @@ class CaptureAgent(Agent):
                 return
             recording = _Recording(connection)
             connection.recording = recording
+            connection.capture_generation += 1
 
             async def start() -> None:
                 if self._closed or connection.cancelled.is_set():
@@ -209,8 +212,10 @@ class CaptureAgent(Agent):
 
             self._enqueue(pid, narrate)
         else:
+            generation = connection.capture_generation
+
             async def remind() -> None:
-                if connection.recording is None:
+                if connection.recording is None and connection.capture_generation == generation:
                     await self._say(pid, connection, ctx, _WELCOME)
 
             self._enqueue(pid, remind)

@@ -374,22 +374,75 @@ async def test_welcome_uses_voice_join_regardless_of_endpoint_order(demo, hub_fi
     assert len(announcements(demo)) == count
 
 
-@pytest.mark.parametrize("transition", ["start", "disconnect"])
+@pytest.mark.parametrize("transition", ["start", "start_stop", "disconnect"])
 async def test_queued_idle_hint_does_not_follow_capture_start_or_departure(demo, transition):
     await demo.capture.receive(joined())
     release = asyncio.Event()
     demo.capture._enqueue("user", release.wait)
     await speak(demo, "What can you do?", wait=False)
     departure = None
-    if transition == "start":
+    if transition in {"start", "start_stop"}:
         await speak(demo, "start capture", wait=False)
+        if transition == "start_stop":
+            await speak(demo, "stop capture", wait=False)
     else:
         departure = demo.capture.receive(ParticipantEvent("user", False, 2, participant_session_id="session"))
     release.set()
     await asyncio.shield(demo.capture._tails["user"])
     if departure is not None:
         await departure
-    assert announcements(demo) == (["Capture started."] if transition == "start" else [])
+    expected = {"start": ["Capture started."], "start_stop": ["Capture started.", "Capture stopped."], "disconnect": []}
+    assert announcements(demo) == expected[transition]
+
+
+async def test_intervening_capture_permanently_invalidates_hint_queued_during_finalization(demo, monkeypatch):
+    from xr_ai_interaction import ResponseOutput
+    from xr_ai_runtime import Agent, RuntimeContext, subscribe
+
+    spoken = []
+
+    class Output(Agent):
+        @subscribe(VOICE_OUTPUT_TOPIC)
+        async def output(self, message: ResponseOutput, ctx: RuntimeContext):
+            if message.text:
+                spoken.append(message.text)
+
+    entered, release = asyncio.Event(), asyncio.Event()
+    original = demo.capture_backend._finalize
+
+    async def delayed(*args, **kwargs):
+        entered.set()
+        await release.wait()
+        await original(*args, **kwargs)
+
+    monkeypatch.setattr(demo.capture_backend, "_finalize", delayed)
+    runtime = AgentRuntime()
+    runtime.register("capture", demo.capture)
+    runtime.register("output", Output())
+
+    async def dispatch(text, *, wait=True):
+        await runtime.publish(
+            CAPTURE_INPUT_TOPIC, UserQuery(text=text, timestamp_us=time.time_ns() // 1000), participant_id="user",
+        )
+        if wait:
+            await asyncio.wait_for(asyncio.shield(demo.capture._tails["user"]), 2)
+
+    async with runtime:
+        await demo.capture.receive(joined())
+        try:
+            await dispatch("start capture")
+            await dispatch("stop capture", wait=False)
+            await asyncio.wait_for(entered.wait(), 2)
+            await dispatch("What can you do?", wait=False)
+            await dispatch("start capture", wait=False)
+            await dispatch("stop capture", wait=False)
+        finally:
+            release.set()
+            await asyncio.wait_for(asyncio.shield(demo.capture._tails["user"]), 2)
+        assert spoken == ["Capture started.", "Capture stopped."] * 2
+        # A new question in the new idle period must still receive a reminder.
+        await dispatch("What can you do?")
+        assert spoken == ["Capture started.", "Capture stopped."] * 2 + [_CAPTURE_WELCOME]
 
 
 @pytest.mark.parametrize("disconnect", [False, True])
