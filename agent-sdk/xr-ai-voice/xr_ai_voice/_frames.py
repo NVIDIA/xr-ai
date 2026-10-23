@@ -11,7 +11,7 @@ and synthesized-text response boundaries live here.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from pipecat.frames.frames import DataFrame, InputAudioRawFrame, TranscriptionFrame, UninterruptibleFrame
 
@@ -151,7 +151,7 @@ class AssistantResponseEndFrame(TextResponseEndFrame):
 
 
 @dataclass
-class _OutputDoneFrame(DataFrame):
+class _OutputDoneFrame(DataFrame, UninterruptibleFrame):
     """Marks the end of one floor-holding output's audio.
 
     The IO processor sends it downstream behind the output's text.
@@ -164,4 +164,3 @@ class _OutputDoneFrame(DataFrame):
 
     pid: str
     output: object
-    interruptible: bool = field(default=False, init=False)

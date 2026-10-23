@@ -25,6 +25,7 @@ from pipecat.processors.frame_processor import FrameDirection
 from pipecat.transports import base_output
 from pipecat.transports.base_transport import TransportParams
 from pipecat.workers.runner import WorkerRunner
+from xr_ai_voice._frames import AssistantResponseEndFrame
 from xr_ai_voice._processors import StreamingTtsProcessor, VoiceGateProcessor, _VoiceIOProcessor
 from xr_ai_voice._transport import TTS_NATIVE_SAMPLE_RATE, DeviceIOHubOutputTransport
 from xr_ai_voice._types import VoiceQuery
@@ -276,3 +277,33 @@ async def test_queued_reply_does_not_let_an_urgent_update_cut_a_playing_one(monk
         endpoint.release.set()
         await _until(lambda: tts.calls == ["Fire alarm.", "Leave now.", "Answer."])
         assert interruptions == []
+
+
+@pytest.mark.asyncio
+async def test_another_participants_interruption_keeps_the_done_marker(monkeypatch: pytest.MonkeyPatch) -> None:
+    async with _pipeline(monkeypatch) as (io_processor, worker, tts, endpoint, gate):
+        endpoint.release.set()
+        held = asyncio.Event()
+        interrupted = asyncio.Event()
+        process_frame = gate.process_frame
+
+        # Hold Bob's response end in the gate until Alice's interruption has
+        # passed it, so Bob's done marker waits in the gate's queue meanwhile.
+        async def hold_bob(frame: Frame, direction: FrameDirection) -> None:
+            if isinstance(frame, AssistantResponseEndFrame) and frame.pid == "bob":
+                held.set()
+                await interrupted.wait()
+            await process_frame(frame, direction)
+            if isinstance(frame, InterruptionFrame):
+                interrupted.set()
+
+        gate.process_frame = hold_bob  # type: ignore[method-assign]
+        await io_processor.enqueue_reply("bob", _one_reply("One."), request_id="r1")
+        await asyncio.wait_for(held.wait(), _TIMEOUT_S)
+        await io_processor.enqueue_reply("bob", _one_reply("Two."), request_id="r1")
+
+        interruption = InterruptionFrame()
+        interruption.transport_source = _PID
+        await worker.queue_frame(interruption)
+
+        await _until(lambda: tts.calls == ["One.", "Two."])
