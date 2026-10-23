@@ -36,7 +36,7 @@ repository = [
     "xr-ai-conversation[voice]",
     "xr-ai-hub-client",
     "xr-ai-models[riva,speaker]",
-    "xr-ai-routing",
+    "xr-ai-routing[voice]",
     "xr-ai-agent-runtime",
     "xr-ai-tools[capture,frames,image-editing,marker-tracking,relay,services,vision]",
     "xr-ai-voice",
