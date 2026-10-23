@@ -49,7 +49,10 @@ class ContextBlock:
     """
 
     timestamp_us: int | None
+    """Unix microseconds of the block's newest content, or ``None`` for a summary."""
+
     text: str
+    """Rendered prompt text."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,6 +70,8 @@ class CompactionPrompts:
         "policy. Keep the source identity and keep identifiers, numbers, and codes exactly. Merge the "
         "previous summary and the new updates; newer updates supersede older ones."
     )
+    """Instructions for compacting an incremental topic's updates into its summary."""
+
     dialogue: str = (
         "Summarize the completed conversation history for future turns. Preserve user-provided facts, "
         "preferences, relevant observations, corrections, and unresolved requests. Keep user statements "
@@ -77,7 +82,10 @@ class CompactionPrompts:
         "correction replaces the earlier statement; reduce assistant explanations to a few words. "
         "Merge the previous summary and the new exchanges."
     )
+    """Instructions for compacting completed exchanges into the dialogue summary."""
+
     condense: str = "Shorten this summary. Keep facts, preferences, corrections, unresolved requests, and uncertainty."
+    """Instructions for shortening a summary that is over its size limit."""
 
 
 class ContextManager:
