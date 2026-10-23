@@ -2543,6 +2543,7 @@ dependencies = [
     { name = "pyyaml" },
     { name = "xr-ai-agent-runtime" },
     { name = "xr-ai-hub-client" },
+    { name = "xr-ai-interaction" },
     { name = "xr-ai-logging" },
     { name = "xr-ai-models", extra = ["riva"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
     { name = "xr-ai-tools", extra = ["frames", "marker-tracking", "vision"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
@@ -2560,6 +2561,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "xr-ai-agent-runtime", editable = "../agent-sdk/xr-ai-runtime" },
     { name = "xr-ai-hub-client", editable = "../agent-sdk/xr-ai-hub" },
+    { name = "xr-ai-interaction", editable = "../agent-sdk/xr-ai-interaction" },
     { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
     { name = "xr-ai-models", extras = ["riva"], editable = "../agent-sdk/xr-ai-models" },
     { name = "xr-ai-tools", extras = ["frames", "marker-tracking", "vision"], editable = "../agent-sdk/xr-ai-tools" },
@@ -5129,6 +5131,7 @@ dependencies = [
     { name = "pyyaml" },
     { name = "xr-ai-agent-runtime" },
     { name = "xr-ai-hub-client" },
+    { name = "xr-ai-interaction" },
     { name = "xr-ai-logging" },
     { name = "xr-ai-models", extra = ["riva"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
     { name = "xr-ai-tools", extra = ["frames", "vision"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
@@ -5144,6 +5147,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "xr-ai-agent-runtime", editable = "../agent-sdk/xr-ai-runtime" },
     { name = "xr-ai-hub-client", editable = "../agent-sdk/xr-ai-hub" },
+    { name = "xr-ai-interaction", editable = "../agent-sdk/xr-ai-interaction" },
     { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
     { name = "xr-ai-models", extras = ["riva"], editable = "../agent-sdk/xr-ai-models" },
     { name = "xr-ai-tools", extras = ["frames", "vision"], editable = "../agent-sdk/xr-ai-tools" },
@@ -6561,6 +6565,7 @@ dependencies = [
     { name = "pyyaml" },
     { name = "xr-ai-agent-runtime" },
     { name = "xr-ai-hub-client" },
+    { name = "xr-ai-interaction" },
     { name = "xr-ai-logging" },
     { name = "xr-ai-models", extra = ["riva"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
     { name = "xr-ai-tools", extra = ["frames", "vision"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
@@ -6575,6 +6580,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "xr-ai-agent-runtime", editable = "../agent-sdk/xr-ai-runtime" },
     { name = "xr-ai-hub-client", editable = "../agent-sdk/xr-ai-hub" },
+    { name = "xr-ai-interaction", editable = "../agent-sdk/xr-ai-interaction" },
     { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
     { name = "xr-ai-models", extras = ["riva"], editable = "../agent-sdk/xr-ai-models" },
     { name = "xr-ai-tools", extras = ["frames", "vision"], editable = "../agent-sdk/xr-ai-tools" },
@@ -6838,6 +6844,7 @@ dependencies = [
     { name = "pyyaml" },
     { name = "xr-ai-agent-runtime" },
     { name = "xr-ai-hub-client" },
+    { name = "xr-ai-interaction" },
     { name = "xr-ai-logging" },
     { name = "xr-ai-models", extra = ["riva"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
     { name = "xr-ai-tools", extra = ["frames", "services", "vision"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
@@ -6854,6 +6861,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "xr-ai-agent-runtime", editable = "../agent-sdk/xr-ai-runtime" },
     { name = "xr-ai-hub-client", editable = "../agent-sdk/xr-ai-hub" },
+    { name = "xr-ai-interaction", editable = "../agent-sdk/xr-ai-interaction" },
     { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
     { name = "xr-ai-models", extras = ["riva"], editable = "../agent-sdk/xr-ai-models" },
     { name = "xr-ai-tools", extras = ["frames", "services", "vision"], editable = "../agent-sdk/xr-ai-tools" },
@@ -7960,13 +7968,9 @@ dependencies = [
     { name = "nemo-relay" },
     { name = "pydantic" },
     { name = "xr-ai-agent-runtime" },
+    { name = "xr-ai-interaction" },
     { name = "xr-ai-models" },
     { name = "xr-ai-routing" },
-]
-
-[package.optional-dependencies]
-voice = [
-    { name = "xr-ai-voice" },
 ]
 
 [package.metadata]
@@ -7974,11 +7978,10 @@ requires-dist = [
     { name = "nemo-relay", specifier = ">=0.10.0,<0.11" },
     { name = "pydantic", specifier = ">=2.10" },
     { name = "xr-ai-agent-runtime", editable = "../agent-sdk/xr-ai-runtime" },
+    { name = "xr-ai-interaction", editable = "../agent-sdk/xr-ai-interaction" },
     { name = "xr-ai-models", editable = "../agent-sdk/xr-ai-models" },
     { name = "xr-ai-routing", editable = "../agent-sdk/xr-ai-routing" },
-    { name = "xr-ai-voice", marker = "extra == 'voice'", editable = "../agent-sdk/xr-ai-voice" },
 ]
-provides-extras = ["voice"]
 
 [package.metadata.requires-dev]
 eval = [{ name = "pyyaml", specifier = ">=6.0" }]
@@ -8009,14 +8012,15 @@ repository = [
     { name = "tea-making-sample-model-servers" },
     { name = "tea-making-worker" },
     { name = "xr-ai-agent-runtime" },
-    { name = "xr-ai-conversation", extra = ["voice"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
+    { name = "xr-ai-conversation" },
     { name = "xr-ai-gpu" },
     { name = "xr-ai-hub-client" },
+    { name = "xr-ai-interaction" },
     { name = "xr-ai-launcher" },
     { name = "xr-ai-logging" },
     { name = "xr-ai-model-server-stack" },
     { name = "xr-ai-models", extra = ["riva", "speaker"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
-    { name = "xr-ai-routing", extra = ["voice"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
+    { name = "xr-ai-routing", extra = ["runtime"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
     { name = "xr-ai-tests" },
     { name = "xr-ai-tools", extra = ["capture", "frames", "image-editing", "marker-tracking", "relay", "services", "vision"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
     { name = "xr-ai-vad" },
@@ -8065,14 +8069,15 @@ requires-dist = [
     { name = "tea-making-worker", marker = "extra == 'repository'", editable = "../agent-samples/tea-making-sample/worker" },
     { name = "vlm-server", marker = "extra == 'vllm'", editable = "../services/vlm-server" },
     { name = "xr-ai-agent-runtime", marker = "extra == 'repository'", editable = "../agent-sdk/xr-ai-runtime" },
-    { name = "xr-ai-conversation", extras = ["voice"], marker = "extra == 'repository'", editable = "../agent-sdk/xr-ai-conversation" },
+    { name = "xr-ai-conversation", marker = "extra == 'repository'", editable = "../agent-sdk/xr-ai-conversation" },
     { name = "xr-ai-gpu", marker = "extra == 'repository'", editable = "../utils/xr-ai-gpu" },
     { name = "xr-ai-hub-client", marker = "extra == 'repository'", editable = "../agent-sdk/xr-ai-hub" },
+    { name = "xr-ai-interaction", marker = "extra == 'repository'", editable = "../agent-sdk/xr-ai-interaction" },
     { name = "xr-ai-launcher", marker = "extra == 'repository'", editable = "../utils/xr-ai-launcher" },
     { name = "xr-ai-logging", marker = "extra == 'repository'", editable = "../utils/xr-ai-logging" },
     { name = "xr-ai-model-server-stack", marker = "extra == 'repository'", editable = "../utils/xr-ai-model-server-stack" },
     { name = "xr-ai-models", extras = ["riva", "speaker"], marker = "extra == 'repository'", editable = "../agent-sdk/xr-ai-models" },
-    { name = "xr-ai-routing", extras = ["voice"], marker = "extra == 'repository'", editable = "../agent-sdk/xr-ai-routing" },
+    { name = "xr-ai-routing", extras = ["runtime"], marker = "extra == 'repository'", editable = "../agent-sdk/xr-ai-routing" },
     { name = "xr-ai-tests", marker = "extra == 'repository'", editable = "../tests" },
     { name = "xr-ai-tools", extras = ["capture", "frames", "image-editing", "marker-tracking", "relay", "services", "vision"], marker = "extra == 'repository'", editable = "../agent-sdk/xr-ai-tools" },
     { name = "xr-ai-vad", marker = "extra == 'repository'", editable = "../utils/xr-ai-vad" },
@@ -8110,6 +8115,17 @@ requires-dist = [
     { name = "msgpack", specifier = ">=1.0" },
     { name = "pyzmq", specifier = ">=27.0" },
 ]
+
+[[package]]
+name = "xr-ai-interaction"
+version = "0.1.0"
+source = { editable = "../agent-sdk/xr-ai-interaction" }
+dependencies = [
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "pydantic", specifier = ">=2.10" }]
 
 [[package]]
 name = "xr-ai-launcher"
@@ -8192,17 +8208,19 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
-voice = [
-    { name = "xr-ai-voice" },
+runtime = [
+    { name = "xr-ai-agent-runtime" },
+    { name = "xr-ai-interaction" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "nemo-relay", specifier = ">=0.10.0,<0.11" },
+    { name = "xr-ai-agent-runtime", marker = "extra == 'runtime'", editable = "../agent-sdk/xr-ai-runtime" },
+    { name = "xr-ai-interaction", marker = "extra == 'runtime'", editable = "../agent-sdk/xr-ai-interaction" },
     { name = "xr-ai-models", editable = "../agent-sdk/xr-ai-models" },
-    { name = "xr-ai-voice", marker = "extra == 'voice'", editable = "../agent-sdk/xr-ai-voice" },
 ]
-provides-extras = ["voice"]
+provides-extras = ["runtime"]
 
 [[package]]
 name = "xr-ai-tests"
@@ -8224,6 +8242,7 @@ dependencies = [
     { name = "xr-ai-conversation" },
     { name = "xr-ai-gpu" },
     { name = "xr-ai-hub-client" },
+    { name = "xr-ai-interaction" },
     { name = "xr-ai-launcher" },
     { name = "xr-ai-logging" },
     { name = "xr-ai-model-server-stack" },
@@ -8258,6 +8277,7 @@ requires-dist = [
     { name = "xr-ai-conversation", editable = "../agent-sdk/xr-ai-conversation" },
     { name = "xr-ai-gpu", editable = "../utils/xr-ai-gpu" },
     { name = "xr-ai-hub-client", editable = "../agent-sdk/xr-ai-hub" },
+    { name = "xr-ai-interaction", editable = "../agent-sdk/xr-ai-interaction" },
     { name = "xr-ai-launcher", editable = "../utils/xr-ai-launcher" },
     { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
     { name = "xr-ai-model-server-stack", editable = "../utils/xr-ai-model-server-stack" },
@@ -8385,6 +8405,7 @@ dependencies = [
     { name = "scipy", version = "1.18.1", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.12' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
     { name = "xr-ai-agent-runtime" },
     { name = "xr-ai-hub-client" },
+    { name = "xr-ai-interaction" },
     { name = "xr-ai-logging" },
     { name = "xr-ai-models", extra = ["speaker"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
     { name = "xr-ai-vad" },
@@ -8402,6 +8423,7 @@ requires-dist = [
     { name = "scipy", specifier = ">=1.11" },
     { name = "xr-ai-agent-runtime", editable = "../agent-sdk/xr-ai-runtime" },
     { name = "xr-ai-hub-client", editable = "../agent-sdk/xr-ai-hub" },
+    { name = "xr-ai-interaction", editable = "../agent-sdk/xr-ai-interaction" },
     { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
     { name = "xr-ai-models", extras = ["speaker"], editable = "../agent-sdk/xr-ai-models" },
     { name = "xr-ai-vad", editable = "../utils/xr-ai-vad" },
@@ -8540,6 +8562,7 @@ dependencies = [
     { name = "pyyaml" },
     { name = "xr-ai-agent-runtime" },
     { name = "xr-ai-hub-client" },
+    { name = "xr-ai-interaction" },
     { name = "xr-ai-logging" },
     { name = "xr-ai-models", extra = ["riva"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
     { name = "xr-ai-tools", extra = ["frames", "services", "vision"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
@@ -8554,6 +8577,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "xr-ai-agent-runtime", editable = "../agent-sdk/xr-ai-runtime" },
     { name = "xr-ai-hub-client", editable = "../agent-sdk/xr-ai-hub" },
+    { name = "xr-ai-interaction", editable = "../agent-sdk/xr-ai-interaction" },
     { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
     { name = "xr-ai-models", extras = ["riva"], editable = "../agent-sdk/xr-ai-models" },
     { name = "xr-ai-tools", extras = ["frames", "services", "vision"], editable = "../agent-sdk/xr-ai-tools" },
