@@ -32,6 +32,8 @@ class _Floor:
         self.done: list[_OutputDoneFrame] = []
         self.processor = _VoiceIOProcessor(self._input, **options)
         self.processor.push_frame = self._capture  # type: ignore[method-assign]
+        # Outside a pipeline: an interruption must not try to restart a process task.
+        self.processor._enable_direct_mode = True  # noqa: SLF001
 
     async def _input(self, query: VoiceQuery) -> None:
         self.queries.append(query)
