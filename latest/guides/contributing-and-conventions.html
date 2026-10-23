@@ -490,7 +490,7 @@ uv<span class="w"> </span>tool<span class="w"> </span>run<span class="w"> </span
 change therefore updates the code, its co-located documentation, and tests; the
 strict documentation build rejects unresolved or undocumented exports. Update
 a narrative page when concepts, workflows, operations, or architecture change,
-and add a migration entry for a breaking change. Refer to
+and add a migration entry for a breaking change to released behavior. Refer to
 <a class="reference internal" href="#migration-release-rollover"><span class="std std-ref">Migration entries and release rollover</span></a> for the migration guide’s release scope.</p>
 <p>The repository-wide README and documentation ownership rules live in the
 <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/main/AGENTS.md#comments-and-documentation"><code class="docutils literal notranslate"><span class="pre">Comments</span> <span class="pre">and</span> <span class="pre">documentation</span></code></a>
@@ -554,10 +554,13 @@ state that <code class="docutils literal notranslate"><span class="pre">main</sp
 that heading, before <code class="docutils literal notranslate"><span class="pre">Earlier</span> <span class="pre">releases</span></code>. Link to the baseline release’s
 archived guide and <a class="reference internal" href="../reference/migration-history.html"><span class="doc">Migration history</span></a>; users skipping releases
 apply earlier guides in release order.</p>
-<p>For each breaking change, name who is affected, state the required action, and
-include a before-and-after example when useful. Update the entry when another
-change in the same development cycle supersedes it, so the instructions lead
-directly from the baseline release to the final behavior.</p>
+<p>Before adding an entry, check the baseline tag’s code and configuration with
+<code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">show</span> <span class="pre">&lt;baseline-tag&gt;:&lt;path&gt;</span></code>. Changes affecting only interfaces introduced
+after the baseline belong in their canonical documentation.</p>
+<p>For each breaking change to released behavior, name who is affected, state the
+required action, and include a before-and-after example when useful. Update the
+entry when another change in the same development cycle supersedes it, so the
+instructions lead directly from the baseline release to the final behavior.</p>
 <p>Use this checklist for every release:</p>
 <ol class="arabic simple">
 <li><p>Prepare the guide on the branch being released. Compare its code with the

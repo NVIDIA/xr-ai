@@ -526,30 +526,6 @@ wording.</p>
 <code class="docutils literal notranslate"><span class="pre">[voice]</span></code> extra from <code class="docutils literal notranslate"><span class="pre">xr-ai-conversation</span></code>, which now depends on
 <code class="docutils literal notranslate"><span class="pre">xr-ai-interaction</span></code> directly.</p>
 </section>
-<section id="routed-agents-publish-their-own-output">
-<h3>Routed agents publish their own output<a class="headerlink" href="#routed-agents-publish-their-own-output" title="Link to this heading">#</a></h3>
-<p><code class="docutils literal notranslate"><span class="pre">RoutableAgent.answer()</span></code> now accepts <code class="docutils literal notranslate"><span class="pre">turn</span></code> and a keyword-only <code class="docutils literal notranslate"><span class="pre">started</span></code>
-callable instead of <code class="docutils literal notranslate"><span class="pre">emit</span></code>. Move destination answer
-publication out of the router’s <code class="docutils literal notranslate"><span class="pre">emit</span></code> callback and into each agent. Return
-<code class="docutils literal notranslate"><span class="pre">DestinationResult.text</span></code> when completed response context is needed for later
-routing; <code class="docutils literal notranslate"><span class="pre">routing_aid(participant_id)</span></code> remains the explicit source of each
-agent’s routing context. Await <code class="docutils literal notranslate"><span class="pre">started()</span></code> when the first meaningful response
-is ready to suppress a pending acknowledgment.</p>
-<p>Move the router’s own finite control callback from <code class="docutils literal notranslate"><span class="pre">handle(...,</span> <span class="pre">emit=callback)</span></code>
-to constructor configuration with <code class="docutils literal notranslate"><span class="pre">AgentRouter(...,</span> <span class="pre">output=callback)</span></code>, then call
-<code class="docutils literal notranslate"><span class="pre">handle(turn)</span></code>. The callback now receives <code class="docutils literal notranslate"><span class="pre">(turn,</span> <span class="pre">source,</span> <span class="pre">text)</span></code> so one configured
-publisher can preserve each participant’s identity and originating timestamp.
-It receives acknowledgments, admission preambles, clarification or release
-messages, and the failure message for a turn that fails before its destination
-calls <code class="docutils literal notranslate"><span class="pre">started()</span></code>; it never receives destination answer text.</p>
-<p>Construct <code class="docutils literal notranslate"><span class="pre">Conversation(runtime=runtime,</span> <span class="pre">output_topic=voice_output_topic)</span></code> with
-both required arguments. Conversation now publishes directly and owns stream finalization. The router
-reports failures before the first chunk. <code class="docutils literal notranslate"><span class="pre">Conversation.stream()</span></code> has been
-removed. Route requests through <code class="docutils literal notranslate"><span class="pre">AgentRouter</span></code>, or call
-<code class="docutils literal notranslate"><span class="pre">await</span> <span class="pre">conversation.answer(AgentTurn(participant_id,</span> <span class="pre">turn_id,</span> <span class="pre">request),</span> <span class="pre">started=started)</span></code>
-with an async <code class="docutils literal notranslate"><span class="pre">started</span></code> callable; the conversation streams its answer to the
-configured output topic.</p>
-</section>
 <section id="persistent-services-after-startup-failure">
 <h3>Persistent services after startup failure<a class="headerlink" href="#persistent-services-after-startup-failure" title="Link to this heading">#</a></h3>
 <p>Stacks using <code class="docutils literal notranslate"><span class="pre">launch_mode=&quot;persist&quot;</span></code> now retain services that had signaled
@@ -568,8 +544,9 @@ standalone RAG now default to 2048 dimensions. The local endpoint remains on
 port 8109 with the served name <code class="docutils literal notranslate"><span class="pre">embed</span></code>.</p>
 <ol class="arabic">
 <li><p>Stop the agent and its persistent embedding server <strong>before updating</strong>.
-For the tea sample, run from the repository root:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/tea-making-sample/model-servers<span class="w"> </span>tea_making_sample_model_servers<span class="w"> </span>--stop
+For the <code class="docutils literal notranslate"><span class="pre">v0.3.0-beta</span></code> shared model stack, run from the old checkout’s
+repository root:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-server-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span>--stop
 </pre></div>
 </div>
 <p>For a standalone deployment, stop the embedding process or container through
@@ -577,24 +554,19 @@ the supervisor that started it. Check that its listener on port 8109 has
 stopped. Stopping only RAG or the embedding launcher does not stop persistent
 weights; the pip launcher reuses a healthy listener without comparing models.</p>
 </li>
-<li><p>Update the checkout and change <code class="docutils literal notranslate"><span class="pre">embedding_dim:</span> <span class="pre">768</span></code> to <code class="docutils literal notranslate"><span class="pre">embedding_dim:</span> <span class="pre">2048</span></code>
-in copied tea <strong>and standalone</strong> <code class="docutils literal notranslate"><span class="pre">rag_service.yaml</span></code> files. Restart the
-embedding server before RAG. Verify the <code class="docutils literal notranslate"><span class="pre">embed</span></code> entry’s <code class="docutils literal notranslate"><span class="pre">root</span></code> in
-<code class="docutils literal notranslate"><span class="pre">/v1/models</span></code> identifies Nemotron 3 Embed, not the previous model.</p></li>
-<li><p>Restart the agent. Changing the default dimension from 768 to 2048 changes
-the existing cache digest, so RAG rebuilds the index automatically. If a
-copied configuration already used 2048 dimensions, set a new <code class="docutils literal notranslate"><span class="pre">cache_key</span></code> or
-delete its generated cache before
-restarting RAG; a local served alias such as <code class="docutils literal notranslate"><span class="pre">embed</span></code> does not identify weights.
-If RAG started while the previous pip server was still listening, stop RAG,
-verify the new model is serving, and delete the generated cache
+<li><p>Update the checkout and change <code class="docutils literal notranslate"><span class="pre">embedding_dim:</span> <span class="pre">768</span></code> to
+<code class="docutils literal notranslate"><span class="pre">embedding_dim:</span> <span class="pre">2048</span></code> in copied tea <strong>and standalone</strong> <code class="docutils literal notranslate"><span class="pre">rag_service.yaml</span></code>
+files. While RAG is stopped, you can empty its generated cache directory
 (<code class="docutils literal notranslate"><span class="pre">models/tea-making-rag-cache</span></code> for tea, or the configured <code class="docutils literal notranslate"><span class="pre">.rag-cache</span></code> for
-standalone RAG) or set a new <code class="docutils literal notranslate"><span class="pre">cache_key</span></code> before restarting RAG. Otherwise,
-old-model vectors saved at 2048 dimensions remain reusable after the server
-switches models. The Docker launcher recreates its container on model changes.</p></li>
+standalone RAG) to reclaim space. Restart the embedding server before RAG.
+Verify the <code class="docutils literal notranslate"><span class="pre">embed</span></code> entry’s <code class="docutils literal notranslate"><span class="pre">root</span></code> in <code class="docutils literal notranslate"><span class="pre">/v1/models</span></code> identifies Nemotron 3
+Embed, not the previous model. If it still reports the previous model, stop
+the old listener, restart the updated embedding server, and repeat this
+check before starting RAG.</p></li>
+<li><p>Restart the agent. RAG’s new cache format rebuilds the <code class="docutils literal notranslate"><span class="pre">v0.3.0-beta</span></code> index
+automatically, including caches that already used 2048 dimensions. Refer to
+<a class="reference internal" href="#embedding-service-identity-migration"><span class="std std-ref">Embedding SDK identity and RAG cache contract</span></a> for the endpoint requirements.</p></li>
 </ol>
-<p>Old 768-dimensional <code class="docutils literal notranslate"><span class="pre">.npz</span></code> caches are no longer used by the default
-configuration and can be deleted to reclaim space without losing documents.</p>
 <p>Independently deployed NIM endpoints must serve the new model before using the
 updated NIM profile. For later model changes behind an unchanged profile, set
 an explicit model revision in <code class="docutils literal notranslate"><span class="pre">cache_key</span></code> and restart RAG. Do not change models
@@ -858,6 +830,9 @@ For current worker startup and model availability requirements, refer to
 <p id="clef-model-cache-configuration"><span id="clef-image-decision-inputs"></span><span id="clef-image-input-migration"></span>For Clef updates between development checkouts, refer to
 <a class="reference internal" href="clef-flash.html#clef-service-updates"><span class="std std-ref">Updating a running service</span></a>. For image inputs and model cache configuration,
 refer to <a class="reference internal" href="clef-flash.html"><span class="doc">Clef-Flash local decision server</span></a>.</p>
+<p id="routed-agents-publish-their-own-output">For routing and conversation output contracts, refer to
+<a class="reference internal" href="agent-sdk-routing.html#response-progress-and-routing-context"><span class="std std-ref">the routing contract</span></a>
+and <a class="reference internal" href="agent-sdk-conversation.html"><span class="doc">xr-ai-conversation</span></a>.</p>
 </section>
 </section>
 
@@ -912,7 +887,6 @@ refer to <a class="reference internal" href="clef-flash.html"><span class="doc">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#changes-since-v0-3-0-beta">Changes since v0.3.0-beta</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#interaction-messages-move-to-xr-ai-interaction">Interaction messages move to xr-ai-interaction</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#routed-agents-publish-their-own-output">Routed agents publish their own output</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#persistent-services-after-startup-failure">Persistent services after startup failure</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nemotron-3-embedding-model">Nemotron 3 embedding model</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#embedding-sdk-identity-and-rag-cache-contract">Embedding SDK identity and RAG cache contract</a></li>

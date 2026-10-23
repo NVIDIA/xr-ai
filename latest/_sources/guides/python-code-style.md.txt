@@ -356,12 +356,13 @@ limits comments to non-obvious invariants and failure modes. The tags are a
   supported, such as an enrolled module, is a breaking change.
 - State in the pull request whether the change alters behavior. A refactor that
   must not change behavior passes the existing tests unmodified.
-- Add a migration entry for a breaking change.
+- Add a migration entry for a breaking change to released behavior.
 
 **Basis:** Google's engineering practices on
 [small changes](https://google.github.io/eng-practices/review/developer/small-cls.html)
 say the right size is "one self-contained change" and that refactorings
 belong in a separate change from bug fixes, with "moving and renaming a class"
 as the example. The migration entry is required by the `AGENTS.md` change
-contract. The 300-line guideline and the re-export step are **repository
+contract; refer to {ref}`migration-release-rollover` for baseline verification
+and entry scope. The 300-line guideline and the re-export step are **repository
 conventions**.

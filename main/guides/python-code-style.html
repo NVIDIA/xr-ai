@@ -818,14 +818,15 @@ Remove the re-export in a follow-up change. Removing an import path that is
 supported, such as an enrolled module, is a breaking change.</p></li>
 <li><p>State in the pull request whether the change alters behavior. A refactor that
 must not change behavior passes the existing tests unmodified.</p></li>
-<li><p>Add a migration entry for a breaking change.</p></li>
+<li><p>Add a migration entry for a breaking change to released behavior.</p></li>
 </ul>
 <p><strong>Basis:</strong> Google’s engineering practices on
 <a class="reference external" href="https://google.github.io/eng-practices/review/developer/small-cls.html">small changes</a>
 say the right size is “one self-contained change” and that refactorings
 belong in a separate change from bug fixes, with “moving and renaming a class”
 as the example. The migration entry is required by the <code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code> change
-contract. The 300-line guideline and the re-export step are <strong>repository
+contract; refer to <a class="reference internal" href="contributing-and-conventions.html#migration-release-rollover"><span class="std std-ref">Migration entries and release rollover</span></a> for baseline verification
+and entry scope. The 300-line guideline and the re-export step are <strong>repository
 conventions</strong>.</p>
 </section>
 </section>
