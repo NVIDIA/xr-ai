@@ -64,7 +64,7 @@ class _QueuedResponse:
     request_id: str | None = None
     urgent: bool = False
     source: str | None = None
-    # The pending updates this output speaks; they stay pending until heard.
+    # The pending updates this output speaks; they leave the pending set once it starts.
     updates: tuple[_PendingUpdate, ...] = ()
 
 
@@ -74,7 +74,8 @@ class _Output:
 
     It is *preparing* until its first chunk is committed to TTS and can still be
     dropped without a trace; after that it is *playing* and keeps the floor until
-    the transport returns its done marker or its audio is interrupted.
+    the transport returns its done marker or its audio is interrupted. Playing
+    output is never replayed.
     """
 
     item: _QueuedResponse
@@ -87,8 +88,8 @@ class _VoiceIOProcessor(FrameProcessor):
 
     Replies answer the active request and supersede output for other requests.
     Urgent updates cut current speech. Other updates wait until neither the bot
-    nor the participant is speaking, are combined into one utterance, and stay
-    pending until that utterance has been heard.
+    nor the participant is speaking and are combined into one utterance. Output
+    that has started speaking is never replayed, even when it is cut.
     """
 
     def __init__(
@@ -218,6 +219,7 @@ class _VoiceIOProcessor(FrameProcessor):
                 self._queued_urgent[participant_id] = kept_urgent
             else:
                 del self._queued_urgent[participant_id]
+        await self._recheck(participant_id)
 
     async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
         await super().process_frame(frame, direction)
@@ -242,7 +244,6 @@ class _VoiceIOProcessor(FrameProcessor):
             output = self._floor.get(frame.pid)
             if output is not None and output is frame.output:
                 del self._floor[frame.pid]
-                self._discard_updates(frame.pid, output.item.updates)
                 await self._start_next(frame.pid)
             return
 
@@ -251,6 +252,7 @@ class _VoiceIOProcessor(FrameProcessor):
             if pid := frame.transport_source:
                 if isinstance(frame, UserStartedSpeakingFrame):
                     self._user_speaking.add(pid)
+                    await self._recheck(pid)
                 else:
                     self._user_speaking.discard(pid)
                     await self._start_next(pid)
@@ -267,6 +269,7 @@ class _VoiceIOProcessor(FrameProcessor):
             if pid:
                 if isinstance(frame, BotStartedSpeakingFrame):
                     self._speaking.add(pid)
+                    await self._recheck(pid)
                 else:
                     self._speaking.discard(pid)
                     await self._start_next(pid)
@@ -379,8 +382,12 @@ class _VoiceIOProcessor(FrameProcessor):
         if previous is not None and previous != request_id:
             self._supersede(pid, previous)
         owner = self._floor.get(pid)
-        if owner is not None and not owner.item.urgent and owner.item.request_id != request_id:
+        if owner is not None and owner.item.request_id not in {None, request_id}:
             await self._cut(pid, owner.item, keep=request_id)
+        elif owner is not None and owner.item.request_id is None and not owner.item.urgent and not owner.playing:
+            # An update not yet heard yields to the reply and stays pending;
+            # one already playing finishes first.
+            _ = self._stop(pid)
         self._active_request[pid] = request_id
         pending = self._queued_replies.setdefault(pid, deque())
         pending.append(item)
@@ -494,10 +501,21 @@ class _VoiceIOProcessor(FrameProcessor):
         the last moment the output can still be dropped cleanly.
         """
 
-        if self._floor.get(output.item.participant_id) is not output or not self._may_speak(output.item):
+        pid = output.item.participant_id
+        if self._floor.get(pid) is not output or not self._may_speak(output.item):
             return False
         output.playing = True
+        self._discard_updates(pid, output.item.updates)
         return True
+
+    async def _recheck(self, pid: str) -> None:
+        """Drop ``pid``'s preparing output once it may no longer speak, without
+        waiting for its combiner or stream, and start whatever may speak now."""
+
+        output = self._floor.get(pid)
+        if output is not None and not output.playing and not self._may_speak(output.item):
+            _ = self._stop(pid)
+            await self._start_next(pid)
 
     def _may_speak(self, item: _QueuedResponse) -> bool:
         """Replies and urgent updates speak once they hold the floor; other
@@ -538,7 +556,7 @@ class _VoiceIOProcessor(FrameProcessor):
         return all(id(update) in pending for update in updates)
 
     def _discard_updates(self, pid: str, updates: tuple[_PendingUpdate, ...]) -> None:
-        """Drop updates that have been heard; later and unheard ones stay pending."""
+        """Drop updates that have started speaking; later ones stay pending."""
 
         if not updates or not (pending := self._pending_updates.get(pid)):
             return

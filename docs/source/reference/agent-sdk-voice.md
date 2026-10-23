@@ -112,21 +112,23 @@ voice floor that decides what is spoken and when:
   last audio has been sent to the hub, including while TTS is still
   synthesizing it and across pauses in playback. The next output starts after
   it, so cutting the current output never cuts output queued behind it.
+- Output is never replayed. Once any of it reaches TTS it is spent, whether it
+  plays to the end or is cut; only output that has made no sound yet stays
+  pending. A producer that must not lose a notice marks it urgent.
 - A reply for request R plays in order with other replies for R. A reply for a
   different request supersedes the previous request, even when nothing is
-  playing, cancels current output and any queued replies, and flushes queued
-  hub audio. Later output for a superseded request is dropped. Pending updates
-  are kept.
+  playing, cancels that request's current output and queued replies, and
+  flushes queued hub audio. Later output for a superseded request is dropped.
+  A reply never cuts an update: it waits for a playing update to finish, and
+  an update still being prepared waits for the reply.
 - An urgent update cancels current output unless that is itself urgent,
   supersedes the cancelled reply's request, flushes queued hub audio, and plays
   next. Urgent updates play in order without cutting each other.
 - Other updates wait until neither the bot nor the participant is speaking, then
-  all pending updates are spoken as one utterance. An update stays pending until
-  that utterance has been heard: if it is cut or cancelled, including while the
-  combiner runs, its updates are spoken again later. The utterance is checked
-  again just before its first chunk reaches TTS, so a participant who starts
-  speaking while the combiner runs is not talked over: the utterance is
-  dropped and rebuilt once they stop. `VoiceAgent` learns playback state from the media
+  all pending updates are spoken as one utterance. If the participant starts
+  speaking or one of its updates is withdrawn before the utterance reaches TTS,
+  including while the combiner runs, it is dropped at once and rebuilt from
+  the updates still pending when it may speak again. `VoiceAgent` learns playback state from the media
   output, not from a duration estimate. By default the texts are joined with
   spaces; pass `combiner`, an async callable from the pending texts to one
   spoken text, to rewrite them. `llm_update_combiner(llm)` returns a combiner
@@ -135,12 +137,13 @@ voice floor that decides what is spoken and when:
   A failing combiner, or one that returns no text, also falls back to the join. At most 64 updates wait per
   participant; the oldest is dropped with a warning.
 - A new user query or a barge-in cancels replies and the response in flight and
-  supersedes the active request, but keeps pending and urgent updates. An
-  urgent update cancelled before any of it reached TTS plays again next.
-- A `withdraw` from a producer drops that producer's pending updates and urgent
-  updates that have not been heard. Output already playing is not cut; a batch
-  being combined that contains a withdrawn update is discarded and rebuilt from
-  the remaining updates. Other producers' updates are kept.
+  supersedes the active request. Pending and queued urgent updates are kept,
+  including an urgent update cancelled before any of it reached TTS; output
+  that was playing is not replayed.
+- A `withdraw` from a producer drops that producer's pending updates and queued
+  urgent updates. Output already playing is not cut; a batch being combined
+  that contains a withdrawn update is dropped at once and rebuilt from the
+  remaining updates. Other producers' updates are kept.
 - A streamed reply that receives no fragment for `stream_idle_timeout_s`
   (default 15 s) is closed so a stalled producer cannot hold the floor. The
   producer is not told: its later fragments are dropped, and its terminator is

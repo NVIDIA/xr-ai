@@ -176,12 +176,14 @@ class VoiceAgent(Agent):
     existing hub transport and retains its backpressure and best-effort semantics.
 
     Each participant has one voice floor. A reply answers one request and
-    supersedes speech for any other request, which is dropped. An urgent update
-    cuts current speech and plays next. Other updates wait until the bot stops
-    speaking and are spoken as one utterance, joined with spaces or rewritten by
+    supersedes speech for any other request, which is dropped; it waits for a
+    playing update. An urgent update cuts current speech and plays next. Other
+    updates wait until neither the bot nor the participant is speaking and are
+    spoken as one utterance, joined with spaces or rewritten by
     ``combiner``, an async callable from the pending update texts to the spoken
     text; a failing combiner falls back to the join. A new user query or a
-    barge-in cancels replies but keeps updates. A streamed reply that receives
+    barge-in cancels replies but keeps pending updates; speech that was cut is
+    never replayed. A streamed reply that receives
     no fragment for ``stream_idle_timeout_s`` is closed so it cannot hold the floor.
     """
 

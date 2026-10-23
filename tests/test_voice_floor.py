@@ -380,7 +380,7 @@ async def test_reply_does_not_cut_a_playing_urgent_update() -> None:
     assert floor.texts == ["Fire alarm.", "answer"]
 
 
-async def test_reply_cuts_a_playing_update() -> None:
+async def test_reply_waits_for_a_playing_update() -> None:
     floor = _Floor()
     await floor.processor.enqueue_update("alice", "Timer done.", source="producer")
     await floor.settle()
@@ -388,8 +388,12 @@ async def test_reply_cuts_a_playing_update() -> None:
 
     await floor.processor.enqueue_reply("alice", "answer", request_id="r1")
     await floor.settle()
+    assert floor.texts == ["Timer done."]
 
-    assert floor.interruptions == ["alice"]
+    await floor.played()
+
+    assert floor.interruptions == []
+    assert floor.texts == ["Timer done.", "answer"]
 
 
 async def test_urgent_update_cuts_a_reply_and_supersedes_its_request() -> None:
@@ -563,20 +567,23 @@ async def test_updates_wait_while_the_participant_is_speaking() -> None:
     assert floor.texts == ["Timer done."]
 
 
-async def test_update_cut_by_a_reply_is_spoken_again_after_it() -> None:
-    floor = _Floor()
+async def test_update_cut_by_a_question_is_not_replayed() -> None:
+    floor = _Floor(interrupt_on_supersede=True)
     await floor.processor.enqueue_update("alice", "Timer done.", source="producer")
     await floor.settle()
+    await floor.bot(started=True)
+
+    await floor.processor.enqueue_query("alice", "What next?")
+    await floor.bot(started=False)  # Answers the interruption the query caused.
+    assert floor.interruptions == ["alice"]
+    assert floor.texts == ["Timer done."]
 
     await floor.processor.enqueue_reply("alice", "answer", request_id="r1")
     await floor.settle()
-    await floor.played()  # The cut update's marker no longer owns the floor.
-    assert floor.texts == ["Timer done.", "answer"]
-
+    await floor.played()
     await floor.played()
 
-    assert floor.interruptions == ["alice"]
-    assert floor.texts == ["Timer done.", "answer", "Timer done."]
+    assert floor.texts == ["Timer done.", "answer"]
 
 
 async def test_updates_cancelled_while_combining_are_kept() -> None:
@@ -604,9 +611,9 @@ async def test_withdraw_while_combining_respeaks_only_the_remaining_updates() ->
     await floor.bot(started=False)
 
     await floor.processor.withdraw_updates("alice", source="guide")
-    combiner.release.set()
     await floor.settle()
-
+    # The voided batch does not wait for its combiner call.
+    assert combiner.calls == [["guide notice", "timer notice"]]
     assert floor.texts == ["timer notice"]
 
 
@@ -686,7 +693,7 @@ class _FuzzFloor(_Floor):
 
     def __init__(self, seed: int) -> None:
         self.rng = random.Random(seed)
-        super().__init__(combiner=self._combine)
+        super().__init__(combiner=self._combine, interrupt_on_supersede=self.rng.random() < 0.5)
         self.user_speaking = False
         self.bot_speaking = False
         self.sources: dict[str, str] = {}
@@ -713,6 +720,8 @@ class _FuzzFloor(_Floor):
                 self.violations.append(f"withdrawn {token} spoken")
             if token.startswith("u") and (self.user_speaking or self.bot_speaking):
                 self.violations.append(f"update {token} spoken while someone speaks")
+            if token.startswith("u") and token in self.spoken:
+                self.violations.append(f"update {token} replayed")
             self.spoken.add(token)
 
     def _token(self, kind: str) -> str:
@@ -805,8 +814,8 @@ class _FuzzFloor(_Floor):
 
 
 async def test_random_interleavings_keep_the_floor_invariants() -> None:
-    """Under any interleaving: updates never speak over anyone or after being
-    withdrawn, every other update is eventually spoken, and the floor drains."""
+    """Under any interleaving: updates never speak over anyone, after being
+    withdrawn, or twice; every other update is spoken; and the floor drains."""
 
     for seed in range(300):
         fuzz = _FuzzFloor(seed)

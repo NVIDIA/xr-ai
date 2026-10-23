@@ -122,8 +122,9 @@ playback state, and `llm_update_combiner` takes only `prompt`, `max_tokens`,
 and `timeout_s`.
 
 Scheduling changes too. A reply for a different request than the one being
-spoken now cuts current speech and flushes queued audio. Non-urgent updates
-wait while the participant is speaking. A streamed reply that publishes no
+spoken now cuts that reply and flushes queued audio; a playing update is never
+cut by a reply and finishes first. Non-urgent updates wait while the
+participant is speaking, and speech that is cut is never replayed. A streamed reply that publishes no
 fragment for 15 seconds is closed and its later fragments are dropped; set
 `stream_idle_timeout_s` on `VoiceAgent` for producers that pause longer.
 
