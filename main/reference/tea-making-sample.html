@@ -556,7 +556,7 @@ accepted speech or typed query         ├─&gt; GuidanceAgent observation loop
                                       │
                                       v
                                 typed runtime events
-                                      ├─&gt; GuidanceVoiceAgent ─&gt; voice aggregation
+                                      ├─&gt; GuidanceVoiceAgent ─&gt; voice updates
                                       ├─&gt; BackgroundContextAgent
                                       ├─&gt; FileOutputAgent ─────&gt; JSONL
                                       ├─&gt; TeaWebEventsAgent ───&gt; live browser
@@ -572,11 +572,9 @@ The sample accepts speech without a wake phrase during an active conversation;
 callers can enable its configured wake phrases. Every spoken response is also
 sent to the connection client on <code class="docutils literal notranslate"><span class="pre">agent.response</span></code> so the client can render
 accessible text alongside audio.
-Raw streamed responses are finalized there as soon as their content completes,
-and batched responses are finalized as soon as their rewrite completes. The
-voice aggregator’s playback reservation affects only subsequent speech
-scheduling, not when the text appears. An urgent barge-in can still stop audio
-after the full intended utterance has reached the client.</p>
+Streamed responses are finalized there as soon as their content completes, and
+combined updates as soon as their rewrite completes. An urgent barge-in can
+still stop audio after the full intended utterance has reached the client.</p>
 </section>
 <section id="agent-responsibilities">
 <h2>Agent responsibilities<a class="headerlink" href="#agent-responsibilities" title="Link to this heading">#</a></h2>
@@ -620,19 +618,15 @@ after the full intended utterance has reached the client.</p>
 <td><p>Which guidance notices are spoken</p></td>
 <td><p>Workflow decisions</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">VoiceAggregationAgent</span></code></p></td>
-<td><p>Participant speech pacing, ordering, and coalescing</p></td>
-<td><p>Workflow decisions</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">FileOutputAgent</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">FileOutputAgent</span></code></p></td>
 <td><p>Participant session files and JSONL records</p></td>
 <td><p>Agent policy</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">TeaWebEventsAgent</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">TeaWebEventsAgent</span></code></p></td>
 <td><p>Explicit compact projections for the generic live viewer</p></td>
 <td><p>Durable storage or file polling</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">WebEventsAgent</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">WebEventsAgent</span></code></p></td>
 <td><p>Bounded HTTP presentation grouped by participant and topic</p></td>
 <td><p>Application event selection</p></td>
 </tr>
@@ -1003,11 +997,13 @@ or voice by accident.</p>
 <p><code class="docutils literal notranslate"><span class="pre">GuidanceVoiceAgent</span></code> is intentionally separate from <code class="docutils literal notranslate"><span class="pre">GuidanceAgent</span></code>. Add,
 suppress, batch, or redirect notices there. Background applications remain
 text and event producers unless a dedicated voice subscriber chooses otherwise.
-Foreground responses and guidance notices publish to <code class="docutils literal notranslate"><span class="pre">VoiceAggregationAgent</span></code>,
-which combines non-urgent output produced during an active utterance before it
-reaches <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code>. The response text reaches the connection client’s Agent
-panel as soon as that raw or rewritten response is complete; the aggregator’s
-open-loop playback estimate remains private scheduling state.</p>
+Foreground answers are replies to the user’s query, and guidance notices are
+unprompted updates, both published through <code class="docutils literal notranslate"><span class="pre">ResponseOutputs</span></code> to
+<code class="docutils literal notranslate"><span class="pre">VOICE_OUTPUT_TOPIC</span></code>. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> owns when they are spoken: it combines
+updates that arrive while the participant is being spoken to, using the
+<code class="docutils literal notranslate"><span class="pre">llm_update_combiner</span></code> passed to it in <code class="docutils literal notranslate"><span class="pre">app.py</span></code>, and a new query supersedes
+prior output. The response text reaches the connection client’s Agent panel as
+soon as that response or combined update is complete.</p>
 </section>
 </section>
 <section id="lifecycle-invariants">
@@ -1016,8 +1012,6 @@ open-loop playback estimate remains private scheduling state.</p>
 <li><p>Participant join starts a fresh workflow and output session.</p></li>
 <li><p>Participant leave cancels foreground, observation, and background tasks
 before image resources are released.</p></li>
-<li><p>Participant leave also releases queued voice-aggregation state, so a later
-connection reusing the participant ID cannot inherit stale speech.</p></li>
 <li><p>Record-producing agents publish cleanup-complete events after cancellation;
 <code class="docutils literal notranslate"><span class="pre">FileOutputAgent</span></code> closes the session only after every producer has finished.</p></li>
 <li><p>A superseding query cancels the participant’s prior foreground turn.</p></li>

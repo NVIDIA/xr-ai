@@ -540,18 +540,66 @@ processor. <code class="docutils literal notranslate"><span class="pre">VoiceAge
 </section>
 <section id="voice-output-and-interruption">
 <span id="voice-tuning-and-data-echo"></span><h2>Voice output and interruption<a class="headerlink" href="#voice-output-and-interruption" title="Link to this heading">#</a></h2>
-<p>Applications publish finite or incremental <code class="docutils literal notranslate"><span class="pre">ResponseOutput</span></code> values. Chunks in one
-stream share <code class="docutils literal notranslate"><span class="pre">response_id</span></code> and end with <code class="docutils literal notranslate"><span class="pre">final=True</span></code>. Output is serialized per
-participant; <code class="docutils literal notranslate"><span class="pre">interrupt=True</span></code> flushes queued hub audio and replaces active
-speech. Without aggregation, producer identity is part of the stream key so
+<p>Applications publish <code class="docutils literal notranslate"><span class="pre">ResponseOutput</span></code> values with <code class="docutils literal notranslate"><span class="pre">kind=&quot;reply&quot;</span></code> or
+<code class="docutils literal notranslate"><span class="pre">kind=&quot;update&quot;</span></code>; <a class="reference internal" href="agent-sdk-interaction.html"><span class="doc">xr-ai-interaction</span></a> defines the messages and the
+<code class="docutils literal notranslate"><span class="pre">ResponseOutputs</span></code> helper. Chunks in one streamed reply share <code class="docutils literal notranslate"><span class="pre">response_id</span></code> and
+end with <code class="docutils literal notranslate"><span class="pre">final=True</span></code>. Producer identity is part of the stream key so
 independent agents cannot merge accidentally.</p>
 <p>Each running <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> remembers its 1,024 most recently closed stream keys.
 Output that reuses one of those keys is ignored, and the runtime logs one
-warning for that participant, producer, and <code class="docutils literal notranslate"><span class="pre">response_id</span></code>. Streams close by
-finalization, cancellation, or eviction; waiting does not reopen a retained
-key. Use one identifier per inbound query, such as
-<code class="docutils literal notranslate"><span class="pre">ctx.metadata.message_id</span></code>, or omit <code class="docutils literal notranslate"><span class="pre">response_id</span></code> when publishing a finite
-response in one <code class="docutils literal notranslate"><span class="pre">ResponseOutput</span></code>.</p>
+warning for that participant, producer, and <code class="docutils literal notranslate"><span class="pre">response_id</span></code>. An empty terminator
+for a closed stream, such as a reply’s terminator after a barge-in, is ignored
+without a warning. Streams close by finalization, cancellation, or eviction;
+waiting does not reopen a retained key. Use one identifier per inbound query,
+such as <code class="docutils literal notranslate"><span class="pre">ctx.metadata.message_id</span></code>, or omit <code class="docutils literal notranslate"><span class="pre">response_id</span></code> when publishing a
+finite response in one <code class="docutils literal notranslate"><span class="pre">ResponseOutput</span></code>.</p>
+<section id="multiple-speech-producers">
+<span id="multiple-voice-producers"></span><h3>Multiple speech producers<a class="headerlink" href="#multiple-speech-producers" title="Link to this heading">#</a></h3>
+<p>Several agents can publish to the same participant. Each participant has one
+voice floor that decides what is spoken and when:</p>
+<ul class="simple">
+<li><p>One output holds the floor at a time, from when its text starts until its
+last audio has been sent to the hub, including while TTS is still
+synthesizing it and across pauses in playback. The next output starts after
+it, so cutting the current output never cuts output queued behind it.</p></li>
+<li><p>Output is never replayed. Once any of it reaches TTS it is spent, whether it
+plays to the end or is cut; only output that has made no sound yet stays
+pending. A producer that must not lose a notice marks it urgent.</p></li>
+<li><p>A reply for request R plays in order with other replies for R. A reply for a
+different request supersedes the previous request, even when nothing is
+playing, cancels that request’s current output and queued replies, and
+flushes queued hub audio. Later output for a superseded request is dropped.
+A reply never cuts an update: it waits for a playing update to finish, and
+an update still being prepared waits for the reply.</p></li>
+<li><p>An urgent update cancels current output unless that is itself urgent,
+supersedes the cancelled reply’s request, flushes queued hub audio, and plays
+next. Urgent updates play in order without cutting each other.</p></li>
+<li><p>Other updates wait until neither the bot nor the participant is speaking, then
+all pending updates are spoken as one utterance. If the participant starts
+speaking or one of its updates is withdrawn before the utterance reaches TTS,
+including while the combiner runs, it is dropped at once and rebuilt from
+the updates still pending when it may speak again. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> learns playback state from the media
+output, not from a duration estimate. By default the texts are joined with
+spaces; pass <code class="docutils literal notranslate"><span class="pre">combiner</span></code>, an async callable from the pending texts to one
+spoken text, to rewrite them. <code class="docutils literal notranslate"><span class="pre">llm_update_combiner(llm)</span></code> returns a combiner
+that rewrites them with an <code class="docutils literal notranslate"><span class="pre">LLMService</span></code> and falls back to the join on failure
+or when the rewrite stops at its token limit.
+A failing combiner, or one that returns no text, also falls back to the join. At most 64 updates wait per
+participant; the oldest is dropped with a warning.</p></li>
+<li><p>A new user query or a barge-in cancels replies and the response in flight and
+supersedes the active request. Pending and queued urgent updates are kept,
+including an urgent update cancelled before any of it reached TTS; output
+that was playing is not replayed.</p></li>
+<li><p>A <code class="docutils literal notranslate"><span class="pre">withdraw</span></code> from a producer drops that producer’s pending updates and urgent
+updates that have not started. Output already playing is not cut; a batch being combined
+that contains a withdrawn update is dropped at once and rebuilt from the
+remaining updates. Other producers’ updates are kept.</p></li>
+<li><p>A streamed reply that receives no fragment for <code class="docutils literal notranslate"><span class="pre">stream_idle_timeout_s</span></code>
+(default 15 s) is closed so a stalled producer cannot hold the floor. The
+producer is not told: its later fragments are dropped, and its terminator is
+still accepted, so <code class="docutils literal notranslate"><span class="pre">Reply.delivered</span></code> can be true for text that was never
+spoken.</p></li>
+</ul>
 <p><code class="docutils literal notranslate"><span class="pre">text_topic</span></code> controls the completed-response data echo and defaults to
 <code class="docutils literal notranslate"><span class="pre">agent.response</span></code>. Set it to an empty string when the application owns its own
 caption channel. The echo describes intended completed text, not client playback
@@ -566,40 +614,6 @@ initial chunks immediately rather than waiting to fill the reserve, and
 interruption flushes participant-scoped queued audio. The hub setting
 <code class="docutils literal notranslate"><span class="pre">return_audio_max_buffer_s</span></code> must be at least <code class="docutils literal notranslate"><span class="pre">0.12</span></code> for built-in voice output.</p>
 </section>
-<section id="multiple-speech-producers">
-<span id="multiple-voice-producers"></span><h2>Multiple speech producers<a class="headerlink" href="#multiple-speech-producers" title="Link to this heading">#</a></h2>
-<p>Applications with foreground replies, background monitors, and alerts may
-register one <code class="docutils literal notranslate"><span class="pre">VoiceAggregationAgent</span></code>. Producers publish to
-<code class="docutils literal notranslate"><span class="pre">VOICE_CONTRIBUTION_TOPIC</span></code>; only the aggregator publishes to
-<code class="docutils literal notranslate"><span class="pre">VOICE_OUTPUT_TOPIC</span></code>.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_interaction</span><span class="w"> </span><span class="kn">import</span> <span class="n">ResponseOutput</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_voice</span><span class="w"> </span><span class="kn">import</span> <span class="n">VOICE_CONTRIBUTION_TOPIC</span><span class="p">,</span> <span class="n">VoiceAggregationAgent</span>
-
-<span class="n">aggregation</span> <span class="o">=</span> <span class="n">runtime</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
-    <span class="s2">"voice-aggregation"</span><span class="p">,</span>
-    <span class="n">VoiceAggregationAgent</span><span class="p">(</span><span class="n">llm</span><span class="o">=</span><span class="n">llm</span><span class="p">),</span>
-<span class="p">)</span>
-
-<span class="k">await</span> <span class="n">ctx</span><span class="o">.</span><span class="n">publish</span><span class="p">(</span>
-    <span class="n">VOICE_CONTRIBUTION_TOPIC</span><span class="p">,</span>
-    <span class="n">ResponseOutput</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="s2">"The timer is done."</span><span class="p">),</span>
-<span class="p">)</span>
-</pre></div>
-</div>
-<p>Aggregation is participant-scoped. One finite contribution passes through
-after a short coalescing window; simultaneous finite updates are rewritten into
-one utterance. Completed text is published immediately, while a bounded
-open-loop spoken-duration estimate schedules later speech. Tune its word rate
-and playback bounds for the selected voice; the estimate is not an audio
-acknowledgement.</p>
-<p>Rewrite timeout or failure falls back to ordered source text. Urgent output
-bypasses coalescing, cancels a rewrite, and interrupts active speech. Bounded
-queues prefer recent alerts over routine updates and log every drop. Dropping
-or interrupting a streaming contribution quarantines its response ID through
-its terminator or idle expiry so stale fragments cannot reopen speech.</p>
-<p>Applications call <code class="docutils literal notranslate"><span class="pre">release(participant_id)</span></code> on departure and <code class="docutils literal notranslate"><span class="pre">stop()</span></code> before
-runtime shutdown. The aggregator logs accepted contributions discarded during
-release or shutdown.</p>
 </section>
 <section id="voice-gate-configuration-reference">
 <h2>Voice-gate configuration reference<a class="headerlink" href="#voice-gate-configuration-reference" title="Link to this heading">#</a></h2>
@@ -1033,8 +1047,10 @@ not client playback.</p>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#voice-agent">Voice agent</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#voice-output-and-interruption">Voice output and interruption</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#multiple-speech-producers">Multiple speech producers</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#voice-output-and-interruption">Voice output and interruption</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#multiple-speech-producers">Multiple speech producers</a></li>
+</ul>
+</li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#voice-gate-configuration-reference">Voice-gate configuration reference</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#conversation-controls">Conversation controls</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#voice-gating-and-early-probes">Voice gating and early probes</a></li>

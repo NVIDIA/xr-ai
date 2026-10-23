@@ -829,8 +829,9 @@ reply to Pocket TTS and returns the audio to the participant.</p>
 triggers <code class="docutils literal notranslate"><span class="pre">ReturnAudioFlush</span></code>, so the hub clears the LiveKit audio queue for that
 participant. Its interruption callback also cancels the participant’s active
 render-agent task without waiting on its cleanup in the media processor. Each
-turn publishes one complete <code class="docutils literal notranslate"><span class="pre">voice.output</span></code> message; a superseded turn is
-cancelled before its reply is published, so no partial stream is left open.</p>
+turn publishes one complete reply to its request on <code class="docutils literal notranslate"><span class="pre">voice.output</span></code>; a superseded
+turn is cancelled before its reply is published, so no partial stream is left open.
+An XR display start failure is spoken as an update.</p>
 </section>
 <section id="agent-runtime-and-voice-topology">
 <h2>Agent runtime and voice topology<a class="headerlink" href="#agent-runtime-and-voice-topology" title="Link to this heading">#</a></h2>

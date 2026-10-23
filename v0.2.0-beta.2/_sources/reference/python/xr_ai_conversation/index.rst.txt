@@ -51,7 +51,7 @@ Package Contents
        one value for every topic, or a mapping with a value for each configured topic.
    :param runtime: Runtime used to publish answers. The application owns runtime startup and shutdown.
    :param output_topic: Explicit ``ResponseOutput`` topic for routed answers.
-       The conversation publishes with its routing name as source, the turn ID as response ID,
+       The conversation publishes replies with its routing name as source, the turn ID as request ID,
        and the originating timestamp. It owns stream framing and finalization.
        No default output or query topic is subscribed.
    :param compaction_input_budget_bytes: UTF-8 byte budget for the summary and entries in one
@@ -75,16 +75,15 @@ Package Contents
 
 
 
-   .. py:method:: answer(turn: xr_ai_routing.AgentTurn, *, started: collections.abc.Callable[[], collections.abc.Awaitable[bool]]) -> xr_ai_routing.DestinationResult
+   .. py:method:: answer(turn: xr_ai_routing.AgentTurn, *, started: collections.abc.Callable[[], collections.abc.Awaitable[None]]) -> xr_ai_routing.DestinationResult
       :async:
 
 
       Publish a routed answer directly to the configured output topic.
 
-      Requires ``runtime`` and ``output_topic``. The first nonblank ready chunk
-      awaits ``started()`` before publication. That body frame
-      interrupts older output unless router control text already started
-      this turn, and an empty final frame closes a completed, failed, or
+      Requires ``runtime`` and ``output_topic``. The answer is a reply to the
+      turn's ID. The first nonblank ready chunk awaits ``started()`` before
+      publication, and an empty final frame closes a completed, failed, or
       canceled response once opened. Canceled answers publish no further text,
       and a publication failure publishes no further frames. Failures
       propagate after closing the model iterator; the router reports

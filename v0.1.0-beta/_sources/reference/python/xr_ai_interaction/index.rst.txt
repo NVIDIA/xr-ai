@@ -19,6 +19,8 @@ Classes
    xr_ai_interaction.ParticipantLeft
    xr_ai_interaction.ResponseOutput
    xr_ai_interaction.UserQuery
+   xr_ai_interaction.Reply
+   xr_ai_interaction.ResponseOutputs
 
 
 Package Contents
@@ -49,18 +51,29 @@ Package Contents
 
 
 
-   One complete response or one chunk of an incremental response.
+   One complete response or one fragment of a streamed response.
 
-   The consumer renders it, for example as speech or text.
+   A producer declares what kind of output it emits; the consumer decides
+   when and how to render it, for example as speech or text. A ``reply``
+   answers one request. An ``update`` is unprompted information. A ``withdraw``
+   carries no content: it asks the consumer to drop the updates this producer
+   queued for the participant that have not started playing.
 
    Without ``response_id``, this is a complete standalone response. Otherwise,
    ordered messages with the same participant, producer, and ``response_id``
-   form one response: append each message's text until ``final=True`` closes
-   it. The final message may contain text or be an empty terminator.
-   ``interrupt=True`` applies only to the first message of a response.
+   form one streamed reply: append each message's text until ``final=True``
+   closes it. The final message may contain text or be an empty terminator.
 
    This model validates individual messages, not stream state. Consumers own
    stream tracking and their duplicate-handling policy.
+
+
+   .. py:attribute:: kind
+      :type:  Literal['reply', 'update', 'withdraw']
+
+      ``reply`` answers ``request_id``; ``update`` is unprompted information;
+      ``withdraw`` drops this producer's not-yet-played updates.
+
 
 
    .. py:attribute:: text
@@ -68,14 +81,30 @@ Package Contents
       :value: ''
 
 
-      Complete response text or one incremental fragment.
+      Complete response text or one streamed fragment.
+
+
+
+   .. py:attribute:: request_id
+      :type:  str | None
+
+      Request a reply answers. Required for replies and forbidden for updates.
+
+
+
+   .. py:attribute:: urgent
+      :type:  bool
+      :value: False
+
+
+      Updates only: cut current output and play this update next.
 
 
 
    .. py:attribute:: response_id
       :type:  str | None
 
-      Response identifier shared by chunks within one participant and producer.
+      Identifier shared by the fragments of one streamed reply from one participant and producer.
 
 
 
@@ -88,15 +117,6 @@ Package Contents
 
 
 
-   .. py:attribute:: interrupt
-      :type:  bool
-      :value: False
-
-
-      Whether the first response message supersedes active output.
-
-
-
    .. py:attribute:: timestamp_us
       :type:  int | None
 
@@ -106,7 +126,7 @@ Package Contents
 
    .. py:method:: validate_boundary() -> ResponseOutput
 
-      Require identity for incremental output and text for finite output.
+      Require identity for streamed replies and text for finite output.
 
 
 
@@ -128,6 +148,97 @@ Package Contents
       :type:  int
 
       Input presentation time as Unix microseconds.
+
+
+
+.. py:class:: Reply(outputs: ResponseOutputs, participant_id: str, *, request_id: str, timestamp_us: int | None = None, started: collections.abc.Callable[[], collections.abc.Awaitable[None]] | None = None)
+
+   Async context manager that publishes one reply, streamed or single.
+
+   Create it with :meth:`ResponseOutputs.reply`. Every :meth:`send` publishes
+   one fragment of the reply, and leaving the context publishes the empty
+   terminator that completes it. A single-message reply is one ``send``.
+
+   - Fragments that are blank before the first published fragment are skipped.
+   - A canceled task never publishes: ``send`` raises
+     :class:`asyncio.CancelledError` when the current task is being canceled,
+     even if the code it awaited swallowed the cancellation.
+   - On exit, whether normal, by exception, or by cancellation, the terminator
+     is published if any fragment was published and no publish failed. A
+     failed publish is never retried or closed. Exceptions listed in the
+     ``closed_errors`` of the :class:`ResponseOutputs` are suppressed when
+     they come from the terminator.
+   - Calling ``send`` after the context exits raises :class:`RuntimeError`.
+
+
+   .. py:property:: delivered
+      :type: bool
+
+
+      Whether the terminator was published; meaningful after the context exits.
+
+
+
+   .. py:method:: send(text: str) -> None
+      :async:
+
+
+      Publish one fragment of the reply.
+
+
+
+.. py:class:: ResponseOutputs(publisher: _Publisher, topic: Any, *, source: str | None = None, closed_errors: tuple[type[BaseException], Ellipsis] = ())
+
+   Publish replies and updates without building protocol messages.
+
+   A producer declares what it emits. The consumer decides when it is
+   rendered, so a producer never chooses interruption flags or stream
+   identifiers.
+
+   :param publisher: Object with an async ``publish(topic, message, *, participant_id=...)``
+       method, such as ``AgentRuntime`` or ``RuntimeContext``.
+   :param topic: Topic that carries :class:`ResponseOutput` messages.
+   :param source: Producer name passed to ``publish`` as ``source``. Omitted from the call
+       when ``None``.
+   :param closed_errors: Exception types that mean the consumer is already closed.
+       :class:`Reply` suppresses them when it publishes the terminator.
+
+
+   .. py:method:: update(participant_id: str, text: str, *, urgent: bool = False, timestamp_us: int | None = None) -> None
+      :async:
+
+
+      Publish unprompted information; blank text publishes nothing.
+
+      An urgent update cuts the output being played and plays next.
+
+      :param participant_id: Participant that hears the update.
+      :param text: Update text.
+      :param urgent: Whether the update cuts current output and plays next.
+      :param timestamp_us: Originating input time as Unix microseconds.
+
+
+
+   .. py:method:: withdraw(participant_id: str) -> None
+      :async:
+
+
+      Drop this producer's updates for a participant that have not started playing.
+
+      Output already playing and other producers' updates are kept.
+
+      :param participant_id: Participant whose queued updates are dropped.
+
+
+
+   .. py:method:: reply(participant_id: str, *, request_id: str, timestamp_us: int | None = None, started: collections.abc.Callable[[], collections.abc.Awaitable[None]] | None = None) -> Reply
+
+      Return the context manager for one reply to ``request_id``.
+
+      :param participant_id: Participant that hears the reply.
+      :param request_id: Request the reply answers.
+      :param timestamp_us: Originating input time as Unix microseconds.
+      :param started: Awaited once, before the first fragment is published.
 
 
 

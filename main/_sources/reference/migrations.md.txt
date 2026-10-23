@@ -32,8 +32,9 @@ them from the new `xr-ai-interaction` package under their new names, and add
 | `VoiceParticipantLeft` | `ParticipantLeft` |
 | `VoiceInterrupted` | `Interrupted` |
 
-Fields, validation rules, and the `voice.output` and `voice.transcript` topics are
-unchanged; `VOICE_OUTPUT_TOPIC`, `VoiceTranscript`, and `VoiceAgent` stay in
+Apart from the `ResponseOutput` fields described under *Voice output declares
+reply or update*, fields, validation rules, and the `voice.output` and
+`voice.transcript` topics are unchanged; `VOICE_OUTPUT_TOPIC`, `VoiceTranscript`, and `VoiceAgent` stay in
 `xr_ai_voice`.
 
 Two validation error messages now say `response output` instead of `voice
@@ -83,6 +84,49 @@ to `version = 4`. Custom Relay tool execution intercepts now receive
 LLM execution intercepts must accept the new codec context parameter. Refer to the
 [Relay 0.10.0 migration notes](https://github.com/NVIDIA/NeMo-Relay/releases/tag/0.10.0)
 for the configuration and intercept changes.
+
+### Voice output declares reply or update
+
+`ResponseOutput` replaces `interrupt` with `kind`, `request_id`, and `urgent`.
+`kind` is required: a `reply` answers `request_id`, and an `update` is unprompted
+and may set `urgent=True` to cut current speech. Updates are finite and have no
+`response_id`. `VoiceAgent` now decides when each message is spoken, so
+`VoiceAggregationAgent` and `VOICE_CONTRIBUTION_TOPIC` are removed. Publish
+updates straight to `VOICE_OUTPUT_TOPIC`, and pass
+`combiner=llm_update_combiner(llm)` to `VoiceAgent` to have pending updates
+rewritten into one utterance. `ResponseOutputs`, exported from
+`xr_ai_interaction`, builds these messages and frames streamed replies. A
+producer whose queued updates became stale can drop them with
+`outputs.withdraw(participant_id)`, which publishes `kind="withdraw"`.
+
+```python
+# Before
+from xr_ai_voice import VOICE_CONTRIBUTION_TOPIC, VoiceAggregationAgent, VoiceOutput
+
+runtime.register("voice-aggregation", VoiceAggregationAgent(llm=llm))
+await ctx.publish(VOICE_CONTRIBUTION_TOPIC, VoiceOutput(text="Timer done.", interrupt=True))
+
+# After
+from xr_ai_interaction import ResponseOutputs
+from xr_ai_voice import VOICE_OUTPUT_TOPIC, VoiceAgent, llm_update_combiner
+
+voice = VoiceAgent(..., combiner=llm_update_combiner(llm))
+outputs = ResponseOutputs(ctx, VOICE_OUTPUT_TOPIC)
+await outputs.update(participant_id, "Timer done.", urgent=True)
+async with outputs.reply(participant_id, request_id=query_id) as reply:
+    await reply.send("Here is the answer.")
+```
+
+The aggregation tuning parameters have no replacement: coalescing follows real
+playback state, and `llm_update_combiner` takes only `prompt`, `max_tokens`,
+and `timeout_s`.
+
+Scheduling changes too. A reply for a different request than the one being
+spoken now cuts that reply and flushes queued audio; a playing update is never
+cut by a reply and finishes first. Non-urgent updates wait while the
+participant is speaking, and speech that is cut is never replayed. A streamed reply that publishes no
+fragment for 15 seconds is closed and its later fragments are dropped; set
+`stream_idle_timeout_s` on `VoiceAgent` for producers that pause longer.
 
 ### Persistent services after startup failure
 

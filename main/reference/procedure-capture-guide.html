@@ -983,7 +983,7 @@ Those tests do not establish accuracy on real tea-making images or appliances.</
 <section id="local-model-guide-evaluation">
 <h4>Local-model guide evaluation<a class="headerlink" href="#local-model-guide-evaluation" title="Link to this heading">#</a></h4>
 <p><code class="docutils literal notranslate"><span class="pre">example-guides/tea-making/evaluation/run_scenario.py</span></code> exercises a manifest’s selected guide through
-the actual guide agent, runtime, voice aggregation, frame selection, and model
+the actual guide agent, runtime, frame selection, and model
 tools. It uses the sample’s configured LLM and VLM. Fixture images replace the
 hub camera endpoint, and typed requests enter the same runtime topic as
 transcribed speech. Microphones, STT, network camera delivery, and audible TTS
@@ -1110,7 +1110,11 @@ text-only authoring probes described above; <code class="docutils literal notran
 is the only procedure-specific YAML fixture left in <code class="docutils literal notranslate"><span class="pre">tests/</span></code>.</p>
 <p>The sample-owned <code class="docutils literal notranslate"><span class="pre">evaluation/guide/_runtime_harness.py</span></code> is an evaluation harness,
 not the production guide runtime. It provides simulated camera and speech
-boundaries, production agent and tool setup, and trace collection. Both the
+boundaries, production agent and tool setup, and trace collection. Its speech
+boundary records each published output without running the voice floor, so
+update combining and withdraws are not exercised: a notice that production
+withdraws on a step transition still appears in the trace.
+<code class="docutils literal notranslate"><span class="pre">tests/test_sop_guide.py</span></code> covers those paths through the real floor. Both the
 recorded-packet runner and tea scenario runner consume this harness.
 Recorded-packet playback and orchestration stay in
 <code class="docutils literal notranslate"><span class="pre">evaluation/guide/</span></code>; tea-specific scene rendering,
@@ -1298,8 +1302,8 @@ agent is registered. With no mode flag, capture remains the default.</p>
 <p><code class="docutils literal notranslate"><span class="pre">guide/agent.py</span></code> handles connection events, foreground questions, and conversational
 controls. Its <code class="docutils literal notranslate"><span class="pre">_Guide</span></code> backend in <code class="docutils literal notranslate"><span class="pre">guide/guiding.py</span></code> owns guide progress,
 runtime timers, frame evidence, and background verification. Transitions clear
-both local notices and pending voice-aggregation output under the session lock,
-so obsolete completion notices cannot follow the new step’s instruction.
+local notices under the session lock, so obsolete completion notices cannot
+follow the new step’s instruction.
 The foreground receives detached guidance context and scoped tools. Observation
 updates have a state revision; controls have a separate run-and-step revision.
 Completing the same step during inference does not invalidate a stop or advance
@@ -1312,7 +1316,8 @@ drain those tasks without speaking to disconnected participants.
 Stop guide cancels the observer and clears timer
 state without unloading the selected guide. Connecting only loads an inactive
 session; start guide activates it and starts its observer and any first-step timer.
-Guide mode uses <code class="docutils literal notranslate"><span class="pre">VoiceAggregationAgent</span></code>, <code class="docutils literal notranslate"><span class="pre">ImageQueryTool</span></code>, native tools, and the
+Guide mode gives <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> an LLM update combiner for unprompted guide
+announcements, and uses <code class="docutils literal notranslate"><span class="pre">ImageQueryTool</span></code>, native tools, and the
 shared tool loop. The conversation prompt governs intent without an English
 wording filter. Polite action requests can use controls; questions about controls
 do not authorize them. This is model policy, not a deterministic intent guarantee.

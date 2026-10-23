@@ -477,11 +477,54 @@ publishes recognized speech as <code class="docutils literal notranslate"><span 
 <code class="docutils literal notranslate"><span class="pre">VOICE_OUTPUT_TOPIC</span></code>; a text front end can publish and render the same
 messages. Routing and conversation use them without depending on voice.
 Applications choose topic names; the models define only the payloads.</p>
-<p>Consumers assemble incremental messages into one response using the framing
-contract documented on <code class="docutils literal notranslate"><span class="pre">ResponseOutput</span></code> in the Python reference below. Stream
-tracking and duplicate handling belong to the consumer; the payload model does
-not implement them. Refer to <a class="reference internal" href="agent-sdk-voice.html#voice-tuning-and-data-echo"><span class="std std-ref">Voice output and interruption</span></a> for <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code>’s
-output policy.</p>
+<section id="reply-and-update-output">
+<h2>Reply and update output<a class="headerlink" href="#reply-and-update-output" title="Link to this heading">#</a></h2>
+<p>A producer declares what kind of output it emits; the consumer decides when it
+is rendered. <code class="docutils literal notranslate"><span class="pre">ResponseOutput.kind</span></code> is required:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">reply</span></code> answers one user request and carries that request’s <code class="docutils literal notranslate"><span class="pre">request_id</span></code>. A
+consumer renders replies for one request in order and drops output for a
+request that a newer request or an interruption superseded.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">update</span></code> is unprompted information, such as a timer or a monitor reading. It
+has no <code class="docutils literal notranslate"><span class="pre">request_id</span></code>. The consumer renders updates when the participant is not
+being spoken to and may combine several into one. <code class="docutils literal notranslate"><span class="pre">urgent=True</span></code> marks an
+update that cuts current output and plays next; only updates can be urgent.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">withdraw</span></code> carries no content. It asks the consumer to drop the updates the
+producer queued for the participant that have not started playing, for
+example when a notice describes a state that has since changed. Output that is
+already playing and other producers’ updates are kept.</p></li>
+</ul>
+<p>A reply is either one message without <code class="docutils literal notranslate"><span class="pre">response_id</span></code>, or a stream of fragments
+that share a <code class="docutils literal notranslate"><span class="pre">response_id</span></code>, carry <code class="docutils literal notranslate"><span class="pre">final=False</span></code>, and end with an empty
+<code class="docutils literal notranslate"><span class="pre">final=True</span></code> terminator. Updates are always finite. Producers never choose
+interrupt flags or stream identifiers themselves.</p>
+<p><code class="docutils literal notranslate"><span class="pre">ResponseOutputs</span></code> frames these messages so agents do not build them by hand.
+It wraps anything with an async <code class="docutils literal notranslate"><span class="pre">publish(topic,</span> <span class="pre">message,</span> <span class="pre">*,</span> <span class="pre">participant_id=...)</span></code>
+method, such as <code class="docutils literal notranslate"><span class="pre">AgentRuntime</span></code> or the <code class="docutils literal notranslate"><span class="pre">RuntimeContext</span></code> passed to a subscriber:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_interaction</span><span class="w"> </span><span class="kn">import</span> <span class="n">ResponseOutputs</span>
+
+<span class="n">outputs</span> <span class="o">=</span> <span class="n">ResponseOutputs</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">VOICE_OUTPUT_TOPIC</span><span class="p">)</span>
+
+<span class="k">await</span> <span class="n">outputs</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">participant_id</span><span class="p">,</span> <span class="s2">"The timer is done."</span><span class="p">)</span>
+<span class="k">await</span> <span class="n">outputs</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">participant_id</span><span class="p">,</span> <span class="s2">"The oven is too hot."</span><span class="p">,</span> <span class="n">urgent</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">await</span> <span class="n">outputs</span><span class="o">.</span><span class="n">withdraw</span><span class="p">(</span><span class="n">participant_id</span><span class="p">)</span>
+
+<span class="k">async</span> <span class="k">with</span> <span class="n">outputs</span><span class="o">.</span><span class="n">reply</span><span class="p">(</span><span class="n">participant_id</span><span class="p">,</span> <span class="n">request_id</span><span class="o">=</span><span class="n">query_id</span><span class="p">)</span> <span class="k">as</span> <span class="n">reply</span><span class="p">:</span>
+    <span class="k">async</span> <span class="k">for</span> <span class="n">fragment</span> <span class="ow">in</span> <span class="n">model_stream</span><span class="p">:</span>
+        <span class="k">await</span> <span class="n">reply</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">fragment</span><span class="p">)</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">Reply</span></code> publishes each fragment, then an empty terminator when the block exits,
+including on an exception or cancellation, unless nothing was published or a
+publish failed. Once its task is being canceled, <code class="docutils literal notranslate"><span class="pre">send</span></code> publishes no further
+fragments. Pass <code class="docutils literal notranslate"><span class="pre">closed_errors</span></code> to
+suppress the error a closed consumer raises for the terminator, and read
+<code class="docutils literal notranslate"><span class="pre">reply.delivered</span></code> afterward to learn whether the terminator was published.</p>
+<p>The framing contract on <code class="docutils literal notranslate"><span class="pre">ResponseOutput</span></code> in the Python reference below
+describes how consumers assemble streamed fragments. Stream tracking and
+duplicate handling belong to the consumer. Refer to
+<a class="reference internal" href="agent-sdk-voice.html#voice-tuning-and-data-echo"><span class="std std-ref">Voice output and interruption</span></a> for <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code>’s output policy.</p>
+</section>
 <section id="python-api-reference">
 <h2>Python API reference<a class="headerlink" href="#python-api-reference" title="Link to this heading">#</a></h2>
 <p>The generated <a class="reference internal" href="python/xr_ai_interaction/index.html"><span class="doc">Python reference</span></a>
@@ -538,6 +581,7 @@ documents the exported names and their fields and validation.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reply-and-update-output">Reply and update output</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#python-api-reference">Python API reference</a></li>
 </ul>
   </nav></div>

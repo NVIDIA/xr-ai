@@ -454,20 +454,17 @@
   <section id="module-xr_ai_voice">
 <span id="xr-ai-voice"></span><h1>xr_ai_voice<a class="headerlink" href="#module-xr_ai_voice" title="Link to this heading">#</a></h1>
 <p>Public voice runtime for XR agents.</p>
-<p>Applications configure and register <a class="reference internal" href="#xr_ai_voice.VoiceAgent" title="xr_ai_voice.VoiceAgent"><code class="xref py py-class docutils literal notranslate"><span class="pre">VoiceAgent</span></code></a> and may route
-concurrent producers through <a class="reference internal" href="#xr_ai_voice.VoiceAggregationAgent" title="xr_ai_voice.VoiceAggregationAgent"><code class="xref py py-class docutils literal notranslate"><span class="pre">VoiceAggregationAgent</span></code></a>; media sessions,
+<p>Applications configure and register <a class="reference internal" href="#xr_ai_voice.VoiceAgent" title="xr_ai_voice.VoiceAgent"><code class="xref py py-class docutils literal notranslate"><span class="pre">VoiceAgent</span></code></a>, and may pass it an
+update <code class="docutils literal notranslate"><span class="pre">combiner</span></code> such as <a class="reference internal" href="#xr_ai_voice.llm_update_combiner" title="xr_ai_voice.llm_update_combiner"><code class="xref py py-func docutils literal notranslate"><span class="pre">llm_update_combiner()</span></code></a>; media sessions,
 audio framing, and pipeline processors are implementation details.</p>
 <section id="attributes">
 <h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading">#</a></h2>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table autosummary">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_voice.VOICE_CONTRIBUTION_TOPIC" title="xr_ai_voice.VOICE_CONTRIBUTION_TOPIC"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VOICE_CONTRIBUTION_TOPIC</span></code></a></p></td>
-<td><p>Candidate spoken output consumed by <a class="reference internal" href="#xr_ai_voice.VoiceAggregationAgent" title="xr_ai_voice.VoiceAggregationAgent"><code class="xref py py-class docutils literal notranslate"><span class="pre">VoiceAggregationAgent</span></code></a>.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_voice.VOICE_OUTPUT_TOPIC" title="xr_ai_voice.VOICE_OUTPUT_TOPIC"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VOICE_OUTPUT_TOPIC</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_voice.VOICE_OUTPUT_TOPIC" title="xr_ai_voice.VOICE_OUTPUT_TOPIC"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VOICE_OUTPUT_TOPIC</span></code></a></p></td>
 <td><p>Finite or incremental responses consumed by <a class="reference internal" href="#xr_ai_voice.VoiceAgent" title="xr_ai_voice.VoiceAgent"><code class="xref py py-class docutils literal notranslate"><span class="pre">VoiceAgent</span></code></a>.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_voice.VOICE_TRANSCRIPT_TOPIC" title="xr_ai_voice.VOICE_TRANSCRIPT_TOPIC"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VOICE_TRANSCRIPT_TOPIC</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_voice.VOICE_TRANSCRIPT_TOPIC" title="xr_ai_voice.VOICE_TRANSCRIPT_TOPIC"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VOICE_TRANSCRIPT_TOPIC</span></code></a></p></td>
 <td><p>Non-empty final STT results queued for publication before gate filtering.</p></td>
 </tr>
 </tbody>
@@ -489,20 +486,28 @@ audio framing, and pipeline processors are implementation details.</p>
 <h2>Classes<a class="headerlink" href="#classes" title="Link to this heading">#</a></h2>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table autosummary">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_voice.VoiceAggregationAgent" title="xr_ai_voice.VoiceAggregationAgent"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VoiceAggregationAgent</span></code></a></p></td>
-<td><p>Serialize and coalesce candidate speech independently per participant.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_voice.VadConfig" title="xr_ai_voice.VadConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VadConfig</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_voice.VadConfig" title="xr_ai_voice.VadConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VadConfig</span></code></a></p></td>
 <td><p>Utterance endpointing and Silero-VAD tuning for <a class="reference internal" href="#xr_ai_voice.VoiceAgent" title="xr_ai_voice.VoiceAgent"><code class="xref py py-class docutils literal notranslate"><span class="pre">VoiceAgent</span></code></a>.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_voice.VoiceAgent" title="xr_ai_voice.VoiceAgent"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VoiceAgent</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_voice.VoiceAgent" title="xr_ai_voice.VoiceAgent"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VoiceAgent</span></code></a></p></td>
 <td><p>Own voice media lifecycle and bridge runtime input and output topics.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_voice.VoiceTranscript" title="xr_ai_voice.VoiceTranscript"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VoiceTranscript</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_voice.VoiceTranscript" title="xr_ai_voice.VoiceTranscript"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VoiceTranscript</span></code></a></p></td>
 <td><p>One final STT result emitted before voice-gate filtering.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_voice.HubVoiceTransport" title="xr_ai_voice.HubVoiceTransport"><code class="xref py py-obj docutils literal notranslate"><span class="pre">HubVoiceTransport</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_voice.HubVoiceTransport" title="xr_ai_voice.HubVoiceTransport"><code class="xref py py-obj docutils literal notranslate"><span class="pre">HubVoiceTransport</span></code></a></p></td>
 <td><p>Own the hub endpoint and bidirectional voice media transport.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table autosummary">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_voice.llm_update_combiner" title="xr_ai_voice.llm_update_combiner"><code class="xref py py-obj docutils literal notranslate"><span class="pre">llm_update_combiner</span></code></a>(...)</p></td>
+<td><p>Return a <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> <code class="docutils literal notranslate"><span class="pre">combiner</span></code> that rewrites pending updates with <code class="docutils literal notranslate"><span class="pre">llm</span></code>.</p></td>
 </tr>
 </tbody>
 </table>
@@ -510,67 +515,38 @@ audio framing, and pipeline processors are implementation details.</p>
 </section>
 <section id="package-contents">
 <h2>Package Contents<a class="headerlink" href="#package-contents" title="Link to this heading">#</a></h2>
-<dl class="py data">
-<dt class="sig sig-object py" id="xr_ai_voice.VOICE_CONTRIBUTION_TOPIC">
-<span class="sig-prename descclassname"><span class="pre">xr_ai_voice.</span></span><span class="sig-name descname"><span class="pre">VOICE_CONTRIBUTION_TOPIC</span></span><a class="headerlink" href="#xr_ai_voice.VOICE_CONTRIBUTION_TOPIC" title="Link to this definition">#</a></dt>
-<dd><p>Candidate spoken output consumed by <a class="reference internal" href="#xr_ai_voice.VoiceAggregationAgent" title="xr_ai_voice.VoiceAggregationAgent"><code class="xref py py-class docutils literal notranslate"><span class="pre">VoiceAggregationAgent</span></code></a>.</p>
-</dd></dl>
-
-<dl class="py class">
-<dt class="sig sig-object py" id="xr_ai_voice.VoiceAggregationAgent">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_voice.</span></span><span class="sig-name descname"><span class="pre">VoiceAggregationAgent</span></span><span class="sig-paren">(</span>
+<dl class="py function">
+<dt class="sig sig-object py" id="xr_ai_voice.llm_update_combiner">
+<span class="sig-prename descclassname"><span class="pre">xr_ai_voice.</span></span><span class="sig-name descname"><span class="pre">llm_update_combiner</span></span><span class="sig-paren">(</span>
 
 <dl>
-<dd><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">llm</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../xr_ai_models/index.html#xr_ai_models.LLMService" title="xr_ai_models.LLMService"><span class="pre">xr_ai_models.LLMService</span></a></span></em>,</dd>
+<dd><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">prompt</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">_DEFAULT_PROMPT</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">coalesce_window_s</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.15</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">queue_capacity</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">64</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">max_batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">8</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">max_tokens</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">192</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">stream_idle_timeout_s</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">15.0</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">participant_idle_timeout_s</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">60.0</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">speech_rate_wpm</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">150.0</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">minimum_playback_s</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.4</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">maximum_playback_s</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">30.0</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">rewrite_timeout_s</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">5.0</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">timeout_s</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">5.0</span></span></em>,</dd>
 </dl>
 
-<span class="sig-paren">)</span><a class="headerlink" href="#xr_ai_voice.VoiceAggregationAgent" title="Link to this definition">#</a></dt>
-<dd><p>Serialize and coalesce candidate speech independently per participant.</p>
-<p>A lone finite contribution passes through without a model call after the
-short coalescing window. Completed text is finalized downstream immediately,
-while the aggregator independently reserves its estimated spoken duration
-so later updates wait and coalesce instead of building a speech queue.
-Multiple pending finite contributions are rewritten into one response. A
-lone incremental response streams through immediately and uses the same
-scheduling reservation after its final chunk. An urgent contribution
-interrupts the active output.</p>
-<dl class="py method">
-<dt class="sig sig-object py" id="xr_ai_voice.VoiceAggregationAgent.contribute">
-<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">contribute</span></span><span class="sig-paren">(</span>
-
-<dl>
-<dd><em class="sig-param"><span class="n"><span class="pre">output</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../xr_ai_interaction/index.html#xr_ai_interaction.ResponseOutput" title="xr_ai_interaction.ResponseOutput"><span class="pre">xr_ai_interaction.ResponseOutput</span></a></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">ctx</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../xr_ai_runtime/index.html#xr_ai_runtime.RuntimeContext" title="xr_ai_runtime.RuntimeContext"><span class="pre">xr_ai_runtime.RuntimeContext</span></a></span></em>,</dd>
+<span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">collections.abc.Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="pre">collections.abc.Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">collections.abc.Awaitable</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#xr_ai_voice.llm_update_combiner" title="Link to this definition">#</a></dt>
+<dd><p>Return a <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> <code class="docutils literal notranslate"><span class="pre">combiner</span></code> that rewrites pending updates with <code class="docutils literal notranslate"><span class="pre">llm</span></code>.</p>
+<p>The combiner rewrites several updates into one spoken utterance. It uses
+temperature 0 with thinking disabled. It falls back to joining the updates
+with spaces, and logs why, when the model service fails, the call times
+out, the model returns no text or tool calls, or the rewrite stops at the
+token limit. A single update is returned unchanged without a model call.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>llm</strong> – Model service that rewrites the updates.</p></li>
+<li><p><strong>prompt</strong> – System prompt for the rewrite.</p></li>
+<li><p><strong>max_tokens</strong> – Token limit for the rewrite.</p></li>
+<li><p><strong>timeout_s</strong> – Deadline for one rewrite call, in seconds.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>ValueError</strong> – If <code class="docutils literal notranslate"><span class="pre">prompt</span></code> is empty or <code class="docutils literal notranslate"><span class="pre">max_tokens</span></code> or <code class="docutils literal notranslate"><span class="pre">timeout_s</span></code> is not positive.</p>
+</dd>
 </dl>
-
-<span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_voice.VoiceAggregationAgent.contribute" title="Link to this definition">#</a></dt>
-<dd><p>Enqueue one finite response or incremental response fragment.</p>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="xr_ai_voice.VoiceAggregationAgent.stop">
-<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">stop</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_voice.VoiceAggregationAgent.stop" title="Link to this definition">#</a></dt>
-<dd><p>Cancel and await all participant aggregation tasks.</p>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="xr_ai_voice.VoiceAggregationAgent.release">
-<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">release</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">participant_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_voice.VoiceAggregationAgent.release" title="Link to this definition">#</a></dt>
-<dd><p>Cancel and release one departed participant’s aggregation state.</p>
-</dd></dl>
-
 </dd></dl>
 
 <dl class="py class">
@@ -651,6 +627,8 @@ overflow, and shutdown discards queued items that have not been published.</p>
 <dd><em class="sig-param"><span class="n"><span class="pre">participant_left_topic</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../xr_ai_runtime/index.html#xr_ai_runtime.Topic" title="xr_ai_runtime.Topic"><span class="pre">xr_ai_runtime.Topic</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../xr_ai_interaction/index.html#xr_ai_interaction.ParticipantLeft" title="xr_ai_interaction.ParticipantLeft"><span class="pre">xr_ai_interaction.ParticipantLeft</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">interrupted_topic</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../xr_ai_runtime/index.html#xr_ai_runtime.Topic" title="xr_ai_runtime.Topic"><span class="pre">xr_ai_runtime.Topic</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../xr_ai_interaction/index.html#xr_ai_interaction.Interrupted" title="xr_ai_interaction.Interrupted"><span class="pre">xr_ai_interaction.Interrupted</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">interrupt_on_supersede</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">combiner</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="pre">collections.abc.Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">collections.abc.Awaitable</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">stream_idle_timeout_s</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">15.0</span></span></em>,</dd>
 </dl>
 
 <span class="sig-paren">)</span><a class="headerlink" href="#xr_ai_voice.VoiceAgent" title="Link to this definition">#</a></dt>
@@ -678,6 +656,16 @@ configuration is unchanged. Other <code class="docutils literal notranslate"><sp
 ordinary STT and typed input use <code class="docutils literal notranslate"><span class="pre">User</span></code>. This display does not change
 <code class="xref py py-class docutils literal notranslate"><span class="pre">UserQuery</span></code> or require an application subscriber. Delivery uses the
 existing hub transport and retains its backpressure and best-effort semantics.</p>
+<p>Each participant has one voice floor. A reply answers one request and
+supersedes speech for any other request, which is dropped; it waits for a
+playing update. An urgent update cuts current speech and plays next. Other
+updates wait until neither the bot nor the participant is speaking and are
+spoken as one utterance, joined with spaces or rewritten by
+<code class="docutils literal notranslate"><span class="pre">combiner</span></code>, an async callable from the pending update texts to the spoken
+text; a failing combiner falls back to the join. A new user query or a
+barge-in cancels replies but keeps pending updates; speech that was cut is
+never replayed. A streamed reply that receives
+no fragment for <code class="docutils literal notranslate"><span class="pre">stream_idle_timeout_s</span></code> is closed so it cannot hold the floor.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="xr_ai_voice.VoiceAgent.from_models">
 <em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_models</span></span><span class="sig-paren">(</span>
@@ -701,6 +689,8 @@ existing hub transport and retains its backpressure and best-effort semantics.</
 <dd><em class="sig-param"><span class="n"><span class="pre">participant_left_topic</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../xr_ai_runtime/index.html#xr_ai_runtime.Topic" title="xr_ai_runtime.Topic"><span class="pre">xr_ai_runtime.Topic</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../xr_ai_interaction/index.html#xr_ai_interaction.ParticipantLeft" title="xr_ai_interaction.ParticipantLeft"><span class="pre">xr_ai_interaction.ParticipantLeft</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">interrupted_topic</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../xr_ai_runtime/index.html#xr_ai_runtime.Topic" title="xr_ai_runtime.Topic"><span class="pre">xr_ai_runtime.Topic</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../xr_ai_interaction/index.html#xr_ai_interaction.Interrupted" title="xr_ai_interaction.Interrupted"><span class="pre">xr_ai_interaction.Interrupted</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">interrupt_on_supersede</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">combiner</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="pre">collections.abc.Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">collections.abc.Awaitable</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">stream_idle_timeout_s</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">15.0</span></span></em>,</dd>
 </dl>
 
 <span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#xr_ai_voice.VoiceAgent" title="xr_ai_voice.VoiceAgent"><span class="pre">VoiceAgent</span></a></span></span><a class="headerlink" href="#xr_ai_voice.VoiceAgent.from_models" title="Link to this definition">#</a></dt>
@@ -712,8 +702,8 @@ selection retains that real batch client for its startup fallback.
 Other arguments and resource ownership match the normal constructor.</p>
 <p>Raises <code class="xref py py-class docutils literal notranslate"><span class="pre">KeyError</span></code> when the selected batch <code class="docutils literal notranslate"><span class="pre">stt</span></code> role is absent,
 <code class="xref py py-class docutils literal notranslate"><span class="pre">TypeError</span></code> when it names another model role, and
-<code class="xref py py-class docutils literal notranslate"><span class="pre">ValueError</span></code> for an unsupported adapter or non-positive response
-capacity. Caller-created clients and transports remain caller-owned
+<code class="xref py py-class docutils literal notranslate"><span class="pre">ValueError</span></code> for an unsupported adapter, non-positive response
+capacity, or non-positive stream idle timeout. Caller-created clients and transports remain caller-owned
 when construction fails.</p>
 </dd></dl>
 
@@ -880,14 +870,9 @@ when construction fails.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#attributes">Attributes</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#exceptions">Exceptions</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#classes">Classes</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#functions">Functions</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#package-contents">Package Contents</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_voice.VOICE_CONTRIBUTION_TOPIC"><code class="docutils literal notranslate"><span class="pre">VOICE_CONTRIBUTION_TOPIC</span></code></a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_voice.VoiceAggregationAgent"><code class="docutils literal notranslate"><span class="pre">VoiceAggregationAgent</span></code></a><ul class="nav section-nav flex-column">
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_voice.VoiceAggregationAgent.contribute"><code class="docutils literal notranslate"><span class="pre">contribute()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_voice.VoiceAggregationAgent.stop"><code class="docutils literal notranslate"><span class="pre">stop()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_voice.VoiceAggregationAgent.release"><code class="docutils literal notranslate"><span class="pre">release()</span></code></a></li>
-</ul>
-</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_voice.llm_update_combiner"><code class="docutils literal notranslate"><span class="pre">llm_update_combiner()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_voice.VadConfig"><code class="docutils literal notranslate"><span class="pre">VadConfig</span></code></a><ul class="nav section-nav flex-column">
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_voice.VadConfig.silence_duration"><code class="docutils literal notranslate"><span class="pre">silence_duration</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_voice.VadConfig.min_speech"><code class="docutils literal notranslate"><span class="pre">min_speech</span></code></a></li>

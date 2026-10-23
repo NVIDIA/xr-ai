@@ -623,7 +623,7 @@ Use <code class="docutils literal notranslate"><span class="pre">release</span><
 <dl>
 <dd><em class="sig-param"><span class="n"><span class="pre">turn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#xr_ai_routing.AgentTurn" title="xr_ai_routing.AgentTurn"><span class="pre">AgentTurn</span></a></span></em>,</dd>
 <dd><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">started</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">collections.abc.Awaitable</span><span class="p"><span class="pre">[</span></span><span class="pre">bool</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">started</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">collections.abc.Awaitable</span><span class="p"><span class="pre">[</span></span><span class="pre">None</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>,</dd>
 </dl>
 
 <span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#xr_ai_routing.DestinationResult" title="xr_ai_routing.DestinationResult"><span class="pre">DestinationResult</span></a></span></span><a class="headerlink" href="#xr_ai_routing.RoutableAgent.answer" title="Link to this definition">#</a></dt>
@@ -640,11 +640,11 @@ Destination exceptions and task cancellation propagate to the caller.
 Await <code class="docutils literal notranslate"><span class="pre">started()</span></code> immediately before the first meaningful output or
 application action. It suppresses an acknowledgment that is not yet
 committed, waits until a committed one is delivered, supplies the
-first-response timing sample, and returns whether the response
-leads the turn’s output: <code class="docutils literal notranslate"><span class="pre">False</span></code> means router control text such as a
-preamble or acknowledgment already started this turn, so the response
-should follow it instead of interrupting it. Repeated calls return the
-same result, and calls after <code class="docutils literal notranslate"><span class="pre">answer()</span></code> returns have no effect.
+first-response timing sample. Repeated calls wait for the same
+delivery, and calls after <code class="docutils literal notranslate"><span class="pre">answer()</span></code> returns have no effect.
+Output published with the turn’s <code class="docutils literal notranslate"><span class="pre">turn_id</span></code> as its request ID plays in
+order after the router’s own control text; the destination never
+chooses interruption.
 Completion and focus still use the return value, with optional response
 context in <code class="docutils literal notranslate"><span class="pre">DestinationResult.text</span></code> for the router’s history.
 Destinations own output publication and stream finalization. A failure

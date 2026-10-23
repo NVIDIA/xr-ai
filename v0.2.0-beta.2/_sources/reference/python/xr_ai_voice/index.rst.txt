@@ -7,8 +7,8 @@ xr_ai_voice
 
    Public voice runtime for XR agents.
 
-   Applications configure and register :class:`VoiceAgent` and may route
-   concurrent producers through :class:`VoiceAggregationAgent`; media sessions,
+   Applications configure and register :class:`VoiceAgent`, and may pass it an
+   update ``combiner`` such as :func:`llm_update_combiner`; media sessions,
    audio framing, and pipeline processors are implementation details.
 
 
@@ -18,7 +18,6 @@ Attributes
 
 .. autoapisummary::
 
-   xr_ai_voice.VOICE_CONTRIBUTION_TOPIC
    xr_ai_voice.VOICE_OUTPUT_TOPIC
    xr_ai_voice.VOICE_TRANSCRIPT_TOPIC
 
@@ -36,59 +35,38 @@ Classes
 
 .. autoapisummary::
 
-   xr_ai_voice.VoiceAggregationAgent
    xr_ai_voice.VadConfig
    xr_ai_voice.VoiceAgent
    xr_ai_voice.VoiceTranscript
    xr_ai_voice.HubVoiceTransport
 
 
+Functions
+---------
+
+.. autoapisummary::
+
+   xr_ai_voice.llm_update_combiner
+
+
 Package Contents
 ----------------
 
-.. py:data:: VOICE_CONTRIBUTION_TOPIC
+.. py:function:: llm_update_combiner(llm: xr_ai_models.LLMService, *, prompt: str = _DEFAULT_PROMPT, max_tokens: int = 192, timeout_s: float = 5.0) -> collections.abc.Callable[[collections.abc.Sequence[str]], collections.abc.Awaitable[str]]
 
-   Candidate spoken output consumed by :class:`VoiceAggregationAgent`.
+   Return a ``VoiceAgent`` ``combiner`` that rewrites pending updates with ``llm``.
 
+   The combiner rewrites several updates into one spoken utterance. It uses
+   temperature 0 with thinking disabled. It falls back to joining the updates
+   with spaces, and logs why, when the model service fails, the call times
+   out, the model returns no text or tool calls, or the rewrite stops at the
+   token limit. A single update is returned unchanged without a model call.
 
-.. py:class:: VoiceAggregationAgent(*, llm: xr_ai_models.LLMService, prompt: str = _DEFAULT_PROMPT, coalesce_window_s: float = 0.15, queue_capacity: int = 64, max_batch_size: int = 8, max_tokens: int = 192, stream_idle_timeout_s: float = 15.0, participant_idle_timeout_s: float = 60.0, speech_rate_wpm: float = 150.0, minimum_playback_s: float = 0.4, maximum_playback_s: float = 30.0, rewrite_timeout_s: float = 5.0)
-
-
-
-   Serialize and coalesce candidate speech independently per participant.
-
-   A lone finite contribution passes through without a model call after the
-   short coalescing window. Completed text is finalized downstream immediately,
-   while the aggregator independently reserves its estimated spoken duration
-   so later updates wait and coalesce instead of building a speech queue.
-   Multiple pending finite contributions are rewritten into one response. A
-   lone incremental response streams through immediately and uses the same
-   scheduling reservation after its final chunk. An urgent contribution
-   interrupts the active output.
-
-
-   .. py:method:: contribute(output: xr_ai_interaction.ResponseOutput, ctx: xr_ai_runtime.RuntimeContext) -> None
-      :async:
-
-
-      Enqueue one finite response or incremental response fragment.
-
-
-
-   .. py:method:: stop() -> None
-      :async:
-
-
-      Cancel and await all participant aggregation tasks.
-
-
-
-   .. py:method:: release(participant_id: str) -> None
-      :async:
-
-
-      Cancel and release one departed participant's aggregation state.
-
+   :param llm: Model service that rewrites the updates.
+   :param prompt: System prompt for the rewrite.
+   :param max_tokens: Token limit for the rewrite.
+   :param timeout_s: Deadline for one rewrite call, in seconds.
+   :raises ValueError: If ``prompt`` is empty or ``max_tokens`` or ``timeout_s`` is not positive.
 
 
 .. py:class:: VadConfig
@@ -159,7 +137,7 @@ Package Contents
    overflow, and shutdown discards queued items that have not been published.
 
 
-.. py:class:: VoiceAgent(*, query_topic: xr_ai_runtime.Topic[xr_ai_interaction.UserQuery], stt: xr_ai_models.STTService | None, tts: xr_ai_models.TTSService, vad: xr_ai_voice.VadConfig, voice_gate: xr_ai_voicegate.VoiceGateConfig, probes: collections.abc.Mapping[str, collections.abc.Callable[[], collections.abc.Awaitable[bool]]] | None = None, ready_file: pathlib.Path | None = None, closeables: collections.abc.Iterable[Any] = (), text_topic: str = 'agent.response', idle_timeout_secs: float | None = None, transport: xr_ai_voice.HubVoiceTransport | None = None, response_capacity: int = 32, text_input: bool = True, participant_joined_topic: xr_ai_runtime.Topic[xr_ai_interaction.ParticipantJoined] | None = None, participant_left_topic: xr_ai_runtime.Topic[xr_ai_interaction.ParticipantLeft] | None = None, interrupted_topic: xr_ai_runtime.Topic[xr_ai_interaction.Interrupted] | None = None, interrupt_on_supersede: bool = False)
+.. py:class:: VoiceAgent(*, query_topic: xr_ai_runtime.Topic[xr_ai_interaction.UserQuery], stt: xr_ai_models.STTService | None, tts: xr_ai_models.TTSService, vad: xr_ai_voice.VadConfig, voice_gate: xr_ai_voicegate.VoiceGateConfig, probes: collections.abc.Mapping[str, collections.abc.Callable[[], collections.abc.Awaitable[bool]]] | None = None, ready_file: pathlib.Path | None = None, closeables: collections.abc.Iterable[Any] = (), text_topic: str = 'agent.response', idle_timeout_secs: float | None = None, transport: xr_ai_voice.HubVoiceTransport | None = None, response_capacity: int = 32, text_input: bool = True, participant_joined_topic: xr_ai_runtime.Topic[xr_ai_interaction.ParticipantJoined] | None = None, participant_left_topic: xr_ai_runtime.Topic[xr_ai_interaction.ParticipantLeft] | None = None, interrupted_topic: xr_ai_runtime.Topic[xr_ai_interaction.Interrupted] | None = None, interrupt_on_supersede: bool = False, combiner: collections.abc.Callable[[collections.abc.Sequence[str]], collections.abc.Awaitable[str]] | None = None, stream_idle_timeout_s: float = 15.0)
 
 
 
@@ -193,8 +171,19 @@ Package Contents
    :class:`UserQuery` or require an application subscriber. Delivery uses the
    existing hub transport and retains its backpressure and best-effort semantics.
 
+   Each participant has one voice floor. A reply answers one request and
+   supersedes speech for any other request, which is dropped; it waits for a
+   playing update. An urgent update cuts current speech and plays next. Other
+   updates wait until neither the bot nor the participant is speaking and are
+   spoken as one utterance, joined with spaces or rewritten by
+   ``combiner``, an async callable from the pending update texts to the spoken
+   text; a failing combiner falls back to the join. A new user query or a
+   barge-in cancels replies but keeps pending updates; speech that was cut is
+   never replayed. A streamed reply that receives
+   no fragment for ``stream_idle_timeout_s`` is closed so it cannot hold the floor.
 
-   .. py:method:: from_models(*, models: xr_ai_models.ModelsConfig, query_topic: xr_ai_runtime.Topic[xr_ai_interaction.UserQuery], tts: xr_ai_models.TTSService, vad: xr_ai_voice.VadConfig, voice_gate: xr_ai_voicegate.VoiceGateConfig, probes: collections.abc.Mapping[str, collections.abc.Callable[[], collections.abc.Awaitable[bool]]] | None = None, ready_file: pathlib.Path | None = None, closeables: collections.abc.Iterable[Any] = (), text_topic: str = 'agent.response', idle_timeout_secs: float | None = None, transport: xr_ai_voice.HubVoiceTransport | None = None, response_capacity: int = 32, text_input: bool = True, participant_joined_topic: xr_ai_runtime.Topic[xr_ai_interaction.ParticipantJoined] | None = None, participant_left_topic: xr_ai_runtime.Topic[xr_ai_interaction.ParticipantLeft] | None = None, interrupted_topic: xr_ai_runtime.Topic[xr_ai_interaction.Interrupted] | None = None, interrupt_on_supersede: bool = False) -> VoiceAgent
+
+   .. py:method:: from_models(*, models: xr_ai_models.ModelsConfig, query_topic: xr_ai_runtime.Topic[xr_ai_interaction.UserQuery], tts: xr_ai_models.TTSService, vad: xr_ai_voice.VadConfig, voice_gate: xr_ai_voicegate.VoiceGateConfig, probes: collections.abc.Mapping[str, collections.abc.Callable[[], collections.abc.Awaitable[bool]]] | None = None, ready_file: pathlib.Path | None = None, closeables: collections.abc.Iterable[Any] = (), text_topic: str = 'agent.response', idle_timeout_secs: float | None = None, transport: xr_ai_voice.HubVoiceTransport | None = None, response_capacity: int = 32, text_input: bool = True, participant_joined_topic: xr_ai_runtime.Topic[xr_ai_interaction.ParticipantJoined] | None = None, participant_left_topic: xr_ai_runtime.Topic[xr_ai_interaction.ParticipantLeft] | None = None, interrupted_topic: xr_ai_runtime.Topic[xr_ai_interaction.Interrupted] | None = None, interrupt_on_supersede: bool = False, combiner: collections.abc.Callable[[collections.abc.Sequence[str]], collections.abc.Awaitable[str]] | None = None, stream_idle_timeout_s: float = 15.0) -> VoiceAgent
       :classmethod:
 
 
@@ -208,8 +197,8 @@ Package Contents
 
       Raises :class:`KeyError` when the selected batch ``stt`` role is absent,
       :class:`TypeError` when it names another model role, and
-      :class:`ValueError` for an unsupported adapter or non-positive response
-      capacity. Caller-created clients and transports remain caller-owned
+      :class:`ValueError` for an unsupported adapter, non-positive response
+      capacity, or non-positive stream idle timeout. Caller-created clients and transports remain caller-owned
       when construction fails.
 
 

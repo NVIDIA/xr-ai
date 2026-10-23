@@ -509,7 +509,7 @@ accepted speech or typed query         ├─&gt; current frame + generic VLM qu
               ├─&gt; visual monitor controls      v
               ├─&gt; instrument controls   InstrumentMonitorAgent
               └─&gt; current readings             │
-                                               ├─&gt; change event ─┬─&gt; voice aggregation
+                                               ├─&gt; change event ─┬─&gt; voice updates
                                                ├─&gt; lost event ───┤
                                                │                 └─&gt; JSONL/backend
                                                └─&gt; state event ────&gt; JSONL/backend
@@ -556,19 +556,15 @@ does not use NVIDIA Agent Toolkit, PydanticAI, MCP clients, or MCP servers.</p>
 <td><p>Which instrument events become participant voice output</p></td>
 <td><p>Tracking state</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">VoiceAggregationAgent</span></code></p></td>
-<td><p>Participant speech pacing, ordering, and coalescing</p></td>
-<td><p>Instrument or foreground decisions</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">FileOutputAgent</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">FileOutputAgent</span></code></p></td>
 <td><p>Session files, JSONL records, recent visual-history tool</p></td>
 <td><p>Agent decisions</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">WebEventsAdapterAgent</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">WebEventsAdapterAgent</span></code></p></td>
 <td><p>Explicit sample-event projection into browser topics</p></td>
 <td><p>HTTP serving or durable history</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">WebEventsAgent</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">WebEventsAgent</span></code></p></td>
 <td><p>Bounded in-memory history and read-only HTTP page</p></td>
 <td><p>Application topic selection or persistence</p></td>
 </tr>
@@ -580,13 +576,16 @@ runtime delivers typed events; each agent cancels its own participant tasks and
 releases its own state.</p>
 <p>For a <code class="docutils literal notranslate"><span class="pre">current_view</span></code> selection, <code class="docutils literal notranslate"><span class="pre">ForegroundAgent</span></code> uses the same direct path as
 <code class="docutils literal notranslate"><span class="pre">simple-vlm-example</span></code>: <code class="docutils literal notranslate"><span class="pre">CurrentFrameTool</span></code> selects one frame and
-<code class="docutils literal notranslate"><span class="pre">StreamingImageQueryTool</span></code> publishes chunks to participant voice. The tool is a
-direct return, so the completed visual answer does not incur a second language
-model call. A dedicated current-view system prompt applies visible-evidence,
+<code class="docutils literal notranslate"><span class="pre">StreamingImageQueryTool</span></code> streams chunks to participant voice as a reply to the
+query. The tool is a direct return, so the completed visual answer does not
+incur a second language model call. A dedicated current-view system prompt applies visible-evidence,
 plain-speech, and response-length rules directly to the streaming VLM output.
 The default voice gate accepts <code class="docutils literal notranslate"><span class="pre">agent</span></code> and <code class="docutils literal notranslate"><span class="pre">hey</span> <span class="pre">agent</span></code>, plays a listening chime,
 and allows a five-second follow-up. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> mirrors spoken text to the
-client’s <code class="docutils literal notranslate"><span class="pre">agent.response</span></code> topic so the same output can be rendered as captions.</p>
+client’s <code class="docutils literal notranslate"><span class="pre">agent.response</span></code> topic so the same output can be rendered as captions.
+<code class="docutils literal notranslate"><span class="pre">InstrumentAlertAgent</span></code> publishes instrument events as unprompted updates through
+<code class="docutils literal notranslate"><span class="pre">ResponseOutputs</span></code>; <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> combines those that arrive while the participant
+is being spoken to with the <code class="docutils literal notranslate"><span class="pre">llm_update_combiner</span></code> passed to it in <code class="docutils literal notranslate"><span class="pre">app.py</span></code>.</p>
 </section>
 <section id="source-map">
 <h2>Source map<a class="headerlink" href="#source-map" title="Link to this heading">#</a></h2>

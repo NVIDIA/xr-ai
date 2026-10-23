@@ -509,8 +509,9 @@ them from the new <code class="docutils literal notranslate"><span class="pre">x
 </tbody>
 </table>
 </div>
-<p>Fields, validation rules, and the <code class="docutils literal notranslate"><span class="pre">voice.output</span></code> and <code class="docutils literal notranslate"><span class="pre">voice.transcript</span></code> topics are
-unchanged; <code class="docutils literal notranslate"><span class="pre">VOICE_OUTPUT_TOPIC</span></code>, <code class="docutils literal notranslate"><span class="pre">VoiceTranscript</span></code>, and <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> stay in
+<p>Apart from the <code class="docutils literal notranslate"><span class="pre">ResponseOutput</span></code> fields described under <em>Voice output declares
+reply or update</em>, fields, validation rules, and the <code class="docutils literal notranslate"><span class="pre">voice.output</span></code> and
+<code class="docutils literal notranslate"><span class="pre">voice.transcript</span></code> topics are unchanged; <code class="docutils literal notranslate"><span class="pre">VOICE_OUTPUT_TOPIC</span></code>, <code class="docutils literal notranslate"><span class="pre">VoiceTranscript</span></code>, and <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> stay in
 <code class="docutils literal notranslate"><span class="pre">xr_ai_voice</span></code>.</p>
 <p>Two validation error messages now say <code class="docutils literal notranslate"><span class="pre">response</span> <span class="pre">output</span></code> instead of <code class="docutils literal notranslate"><span class="pre">voice</span> <span class="pre">output</span></code>: <code class="docutils literal notranslate"><span class="pre">non-final</span> <span class="pre">response</span> <span class="pre">output</span> <span class="pre">needs</span> <span class="pre">a</span> <span class="pre">response_id</span></code> and <code class="docutils literal notranslate"><span class="pre">complete</span> <span class="pre">response</span> <span class="pre">output</span> <span class="pre">must</span> <span class="pre">contain</span> <span class="pre">text</span></code>. Update tests or callers that match the previous
 wording.</p>
@@ -553,6 +554,46 @@ to <code class="docutils literal notranslate"><span class="pre">version</span> <
 LLM execution intercepts must accept the new codec context parameter. Refer to the
 <a class="reference external" href="https://github.com/NVIDIA/NeMo-Relay/releases/tag/0.10.0">Relay 0.10.0 migration notes</a>
 for the configuration and intercept changes.</p>
+</section>
+<section id="voice-output-declares-reply-or-update">
+<h3>Voice output declares reply or update<a class="headerlink" href="#voice-output-declares-reply-or-update" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">ResponseOutput</span></code> replaces <code class="docutils literal notranslate"><span class="pre">interrupt</span></code> with <code class="docutils literal notranslate"><span class="pre">kind</span></code>, <code class="docutils literal notranslate"><span class="pre">request_id</span></code>, and <code class="docutils literal notranslate"><span class="pre">urgent</span></code>.
+<code class="docutils literal notranslate"><span class="pre">kind</span></code> is required: a <code class="docutils literal notranslate"><span class="pre">reply</span></code> answers <code class="docutils literal notranslate"><span class="pre">request_id</span></code>, and an <code class="docutils literal notranslate"><span class="pre">update</span></code> is unprompted
+and may set <code class="docutils literal notranslate"><span class="pre">urgent=True</span></code> to cut current speech. Updates are finite and have no
+<code class="docutils literal notranslate"><span class="pre">response_id</span></code>. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> now decides when each message is spoken, so
+<code class="docutils literal notranslate"><span class="pre">VoiceAggregationAgent</span></code> and <code class="docutils literal notranslate"><span class="pre">VOICE_CONTRIBUTION_TOPIC</span></code> are removed. Publish
+updates straight to <code class="docutils literal notranslate"><span class="pre">VOICE_OUTPUT_TOPIC</span></code>, and pass
+<code class="docutils literal notranslate"><span class="pre">combiner=llm_update_combiner(llm)</span></code> to <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> to have pending updates
+rewritten into one utterance. <code class="docutils literal notranslate"><span class="pre">ResponseOutputs</span></code>, exported from
+<code class="docutils literal notranslate"><span class="pre">xr_ai_interaction</span></code>, builds these messages and frames streamed replies. A
+producer whose queued updates became stale can drop them with
+<code class="docutils literal notranslate"><span class="pre">outputs.withdraw(participant_id)</span></code>, which publishes <code class="docutils literal notranslate"><span class="pre">kind=&quot;withdraw&quot;</span></code>.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Before</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_voice</span><span class="w"> </span><span class="kn">import</span> <span class="n">VOICE_CONTRIBUTION_TOPIC</span><span class="p">,</span> <span class="n">VoiceAggregationAgent</span><span class="p">,</span> <span class="n">VoiceOutput</span>
+
+<span class="n">runtime</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">"voice-aggregation"</span><span class="p">,</span> <span class="n">VoiceAggregationAgent</span><span class="p">(</span><span class="n">llm</span><span class="o">=</span><span class="n">llm</span><span class="p">))</span>
+<span class="k">await</span> <span class="n">ctx</span><span class="o">.</span><span class="n">publish</span><span class="p">(</span><span class="n">VOICE_CONTRIBUTION_TOPIC</span><span class="p">,</span> <span class="n">VoiceOutput</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="s2">"Timer done."</span><span class="p">,</span> <span class="n">interrupt</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+
+<span class="c1"># After</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_interaction</span><span class="w"> </span><span class="kn">import</span> <span class="n">ResponseOutputs</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_voice</span><span class="w"> </span><span class="kn">import</span> <span class="n">VOICE_OUTPUT_TOPIC</span><span class="p">,</span> <span class="n">VoiceAgent</span><span class="p">,</span> <span class="n">llm_update_combiner</span>
+
+<span class="n">voice</span> <span class="o">=</span> <span class="n">VoiceAgent</span><span class="p">(</span><span class="o">...</span><span class="p">,</span> <span class="n">combiner</span><span class="o">=</span><span class="n">llm_update_combiner</span><span class="p">(</span><span class="n">llm</span><span class="p">))</span>
+<span class="n">outputs</span> <span class="o">=</span> <span class="n">ResponseOutputs</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">VOICE_OUTPUT_TOPIC</span><span class="p">)</span>
+<span class="k">await</span> <span class="n">outputs</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">participant_id</span><span class="p">,</span> <span class="s2">"Timer done."</span><span class="p">,</span> <span class="n">urgent</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">async</span> <span class="k">with</span> <span class="n">outputs</span><span class="o">.</span><span class="n">reply</span><span class="p">(</span><span class="n">participant_id</span><span class="p">,</span> <span class="n">request_id</span><span class="o">=</span><span class="n">query_id</span><span class="p">)</span> <span class="k">as</span> <span class="n">reply</span><span class="p">:</span>
+    <span class="k">await</span> <span class="n">reply</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="s2">"Here is the answer."</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The aggregation tuning parameters have no replacement: coalescing follows real
+playback state, and <code class="docutils literal notranslate"><span class="pre">llm_update_combiner</span></code> takes only <code class="docutils literal notranslate"><span class="pre">prompt</span></code>, <code class="docutils literal notranslate"><span class="pre">max_tokens</span></code>,
+and <code class="docutils literal notranslate"><span class="pre">timeout_s</span></code>.</p>
+<p>Scheduling changes too. A reply for a different request than the one being
+spoken now cuts that reply and flushes queued audio; a playing update is never
+cut by a reply and finishes first. Non-urgent updates wait while the
+participant is speaking, and speech that is cut is never replayed. A streamed reply that publishes no
+fragment for 15 seconds is closed and its later fragments are dropped; set
+<code class="docutils literal notranslate"><span class="pre">stream_idle_timeout_s</span></code> on <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> for producers that pause longer.</p>
 </section>
 <section id="persistent-services-after-startup-failure">
 <h3>Persistent services after startup failure<a class="headerlink" href="#persistent-services-after-startup-failure" title="Link to this heading">#</a></h3>
@@ -917,6 +958,7 @@ and <a class="reference internal" href="agent-sdk-conversation.html"><span class
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#interaction-messages-move-to-xr-ai-interaction">Interaction messages move to xr-ai-interaction</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#coding-agent-setup-skill-rename">Coding-agent setup skill rename</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#dependency-refresh-and-native-tool-callback-exceptions">Dependency refresh and native tool callback exceptions</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#voice-output-declares-reply-or-update">Voice output declares reply or update</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#persistent-services-after-startup-failure">Persistent services after startup failure</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nemotron-3-embedding-model">Nemotron 3 embedding model</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#embedding-sdk-identity-and-rag-cache-contract">Embedding SDK identity and RAG cache contract</a></li>

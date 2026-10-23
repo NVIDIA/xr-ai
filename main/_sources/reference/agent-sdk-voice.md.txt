@@ -87,19 +87,68 @@ processor. `VoiceAgent` cancels and awaits all owned delivery tasks on shutdown.
 (voice-tuning-and-data-echo)=
 ## Voice output and interruption
 
-Applications publish finite or incremental `ResponseOutput` values. Chunks in one
-stream share `response_id` and end with `final=True`. Output is serialized per
-participant; `interrupt=True` flushes queued hub audio and replaces active
-speech. Without aggregation, producer identity is part of the stream key so
+Applications publish `ResponseOutput` values with `kind="reply"` or
+`kind="update"`; {doc}`agent-sdk-interaction` defines the messages and the
+`ResponseOutputs` helper. Chunks in one streamed reply share `response_id` and
+end with `final=True`. Producer identity is part of the stream key so
 independent agents cannot merge accidentally.
 
 Each running `VoiceAgent` remembers its 1,024 most recently closed stream keys.
 Output that reuses one of those keys is ignored, and the runtime logs one
-warning for that participant, producer, and `response_id`. Streams close by
-finalization, cancellation, or eviction; waiting does not reopen a retained
-key. Use one identifier per inbound query, such as
-`ctx.metadata.message_id`, or omit `response_id` when publishing a finite
-response in one `ResponseOutput`.
+warning for that participant, producer, and `response_id`. An empty terminator
+for a closed stream, such as a reply's terminator after a barge-in, is ignored
+without a warning. Streams close by finalization, cancellation, or eviction;
+waiting does not reopen a retained key. Use one identifier per inbound query,
+such as `ctx.metadata.message_id`, or omit `response_id` when publishing a
+finite response in one `ResponseOutput`.
+
+(multiple-voice-producers)=
+### Multiple speech producers
+
+Several agents can publish to the same participant. Each participant has one
+voice floor that decides what is spoken and when:
+
+- One output holds the floor at a time, from when its text starts until its
+  last audio has been sent to the hub, including while TTS is still
+  synthesizing it and across pauses in playback. The next output starts after
+  it, so cutting the current output never cuts output queued behind it.
+- Output is never replayed. Once any of it reaches TTS it is spent, whether it
+  plays to the end or is cut; only output that has made no sound yet stays
+  pending. A producer that must not lose a notice marks it urgent.
+- A reply for request R plays in order with other replies for R. A reply for a
+  different request supersedes the previous request, even when nothing is
+  playing, cancels that request's current output and queued replies, and
+  flushes queued hub audio. Later output for a superseded request is dropped.
+  A reply never cuts an update: it waits for a playing update to finish, and
+  an update still being prepared waits for the reply.
+- An urgent update cancels current output unless that is itself urgent,
+  supersedes the cancelled reply's request, flushes queued hub audio, and plays
+  next. Urgent updates play in order without cutting each other.
+- Other updates wait until neither the bot nor the participant is speaking, then
+  all pending updates are spoken as one utterance. If the participant starts
+  speaking or one of its updates is withdrawn before the utterance reaches TTS,
+  including while the combiner runs, it is dropped at once and rebuilt from
+  the updates still pending when it may speak again. `VoiceAgent` learns playback state from the media
+  output, not from a duration estimate. By default the texts are joined with
+  spaces; pass `combiner`, an async callable from the pending texts to one
+  spoken text, to rewrite them. `llm_update_combiner(llm)` returns a combiner
+  that rewrites them with an `LLMService` and falls back to the join on failure
+  or when the rewrite stops at its token limit.
+  A failing combiner, or one that returns no text, also falls back to the join. At most 64 updates wait per
+  participant; the oldest is dropped with a warning.
+- A new user query or a barge-in cancels replies and the response in flight and
+  supersedes the active request. Pending and queued urgent updates are kept,
+  including an urgent update cancelled before any of it reached TTS; output
+  that was playing is not replayed.
+- A `withdraw` from a producer drops that producer's pending updates and urgent
+  updates that have not started. Output already playing is not cut; a batch being combined
+  that contains a withdrawn update is dropped at once and rebuilt from the
+  remaining updates. Other producers' updates are kept.
+- A streamed reply that receives no fragment for `stream_idle_timeout_s`
+  (default 15 s) is closed so a stalled producer cannot hold the floor. The
+  producer is not told: its later fragments are dropped, and its terminator is
+  still accepted, so `Reply.delivered` can be true for text that was never
+  spoken.
 
 `text_topic` controls the completed-response data echo and defaults to
 `agent.response`. Set it to an empty string when the application owns its own
@@ -115,46 +164,6 @@ downstream reserve to absorb ordinary event-loop and IPC jitter. It sends
 initial chunks immediately rather than waiting to fill the reserve, and
 interruption flushes participant-scoped queued audio. The hub setting
 `return_audio_max_buffer_s` must be at least `0.12` for built-in voice output.
-
-(multiple-voice-producers)=
-## Multiple speech producers
-
-Applications with foreground replies, background monitors, and alerts may
-register one `VoiceAggregationAgent`. Producers publish to
-`VOICE_CONTRIBUTION_TOPIC`; only the aggregator publishes to
-`VOICE_OUTPUT_TOPIC`.
-
-```python
-from xr_ai_interaction import ResponseOutput
-from xr_ai_voice import VOICE_CONTRIBUTION_TOPIC, VoiceAggregationAgent
-
-aggregation = runtime.register(
-    "voice-aggregation",
-    VoiceAggregationAgent(llm=llm),
-)
-
-await ctx.publish(
-    VOICE_CONTRIBUTION_TOPIC,
-    ResponseOutput(text="The timer is done."),
-)
-```
-
-Aggregation is participant-scoped. One finite contribution passes through
-after a short coalescing window; simultaneous finite updates are rewritten into
-one utterance. Completed text is published immediately, while a bounded
-open-loop spoken-duration estimate schedules later speech. Tune its word rate
-and playback bounds for the selected voice; the estimate is not an audio
-acknowledgement.
-
-Rewrite timeout or failure falls back to ordered source text. Urgent output
-bypasses coalescing, cancels a rewrite, and interrupts active speech. Bounded
-queues prefer recent alerts over routine updates and log every drop. Dropping
-or interrupting a streaming contribution quarantines its response ID through
-its terminator or idle expiry so stale fragments cannot reopen speech.
-
-Applications call `release(participant_id)` on departure and `stop()` before
-runtime shutdown. The aggregator logs accepted contributions discarded during
-release or shutdown.
 
 ## Voice-gate configuration reference
 

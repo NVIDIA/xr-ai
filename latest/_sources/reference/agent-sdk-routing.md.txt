@@ -101,13 +101,11 @@ message through the router's output; after that call, the destination owns any
 failure output. Callers should not publish another.
 
 If an acknowledgment is already committed, `started()` waits until it is
-delivered, so direct answer output never precedes it. It returns whether the
-response leads the turn's output. It returns
-`False` when the router already delivered or committed control text for the
-turn, such as an admission preamble or acknowledgment; the destination should
-then follow that output instead of interrupting it. Only the first call changes
-router state, and repeated calls return the same result. After `answer()`
-returns or is interrupted, the signal returns `False` and has no effect.
+delivered, so direct answer output never precedes it. `started()` returns
+`None`; destinations do not choose whether their output interrupts. Router
+control text and destination replies share the turn ID as their request ID, so
+the voice layer plays them in order. Only the first call changes router state.
+After `answer()` returns or is interrupted, the signal has no effect.
 
 `DestinationResult.text` remains optional response context for routing history.
 The router retains supplied text without delivering it as output. A destination

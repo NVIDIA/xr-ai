@@ -526,7 +526,7 @@
 one value for every topic, or a mapping with a value for each configured topic.</p></li>
 <li><p><strong>runtime</strong> – Runtime used to publish answers. The application owns runtime startup and shutdown.</p></li>
 <li><p><strong>output_topic</strong> – Explicit <code class="docutils literal notranslate"><span class="pre">ResponseOutput</span></code> topic for routed answers.
-The conversation publishes with its routing name as source, the turn ID as response ID,
+The conversation publishes replies with its routing name as source, the turn ID as request ID,
 and the originating timestamp. It owns stream framing and finalization.
 No default output or query topic is subscribed.</p></li>
 <li><p><strong>compaction_input_budget_bytes</strong> – UTF-8 byte budget for the summary and entries in one
@@ -563,15 +563,14 @@ must be unique within and across both lists.</p>
 <dl>
 <dd><em class="sig-param"><span class="n"><span class="pre">turn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../xr_ai_routing/index.html#xr_ai_routing.AgentTurn" title="xr_ai_routing.AgentTurn"><span class="pre">xr_ai_routing.AgentTurn</span></a></span></em>,</dd>
 <dd><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">started</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">collections.abc.Awaitable</span><span class="p"><span class="pre">[</span></span><span class="pre">bool</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">started</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">collections.abc.Awaitable</span><span class="p"><span class="pre">[</span></span><span class="pre">None</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>,</dd>
 </dl>
 
 <span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../xr_ai_routing/index.html#xr_ai_routing.DestinationResult" title="xr_ai_routing.DestinationResult"><span class="pre">xr_ai_routing.DestinationResult</span></a></span></span><a class="headerlink" href="#xr_ai_conversation.Conversation.answer" title="Link to this definition">#</a></dt>
 <dd><p>Publish a routed answer directly to the configured output topic.</p>
-<p>Requires <code class="docutils literal notranslate"><span class="pre">runtime</span></code> and <code class="docutils literal notranslate"><span class="pre">output_topic</span></code>. The first nonblank ready chunk
-awaits <code class="docutils literal notranslate"><span class="pre">started()</span></code> before publication. That body frame
-interrupts older output unless router control text already started
-this turn, and an empty final frame closes a completed, failed, or
+<p>Requires <code class="docutils literal notranslate"><span class="pre">runtime</span></code> and <code class="docutils literal notranslate"><span class="pre">output_topic</span></code>. The answer is a reply to the
+turn’s ID. The first nonblank ready chunk awaits <code class="docutils literal notranslate"><span class="pre">started()</span></code> before
+publication, and an empty final frame closes a completed, failed, or
 canceled response once opened. Canceled answers publish no further text,
 and a publication failure publishes no further frames. Failures
 propagate after closing the model iterator; the router reports

@@ -558,13 +558,11 @@ that fails before its destination calls <code class="docutils literal notranslat
 message through the router’s output; after that call, the destination owns any
 failure output. Callers should not publish another.</p>
 <p>If an acknowledgment is already committed, <code class="docutils literal notranslate"><span class="pre">started()</span></code> waits until it is
-delivered, so direct answer output never precedes it. It returns whether the
-response leads the turn’s output. It returns
-<code class="docutils literal notranslate"><span class="pre">False</span></code> when the router already delivered or committed control text for the
-turn, such as an admission preamble or acknowledgment; the destination should
-then follow that output instead of interrupting it. Only the first call changes
-router state, and repeated calls return the same result. After <code class="docutils literal notranslate"><span class="pre">answer()</span></code>
-returns or is interrupted, the signal returns <code class="docutils literal notranslate"><span class="pre">False</span></code> and has no effect.</p>
+delivered, so direct answer output never precedes it. <code class="docutils literal notranslate"><span class="pre">started()</span></code> returns
+<code class="docutils literal notranslate"><span class="pre">None</span></code>; destinations do not choose whether their output interrupts. Router
+control text and destination replies share the turn ID as their request ID, so
+the voice layer plays them in order. Only the first call changes router state.
+After <code class="docutils literal notranslate"><span class="pre">answer()</span></code> returns or is interrupted, the signal has no effect.</p>
 <p><code class="docutils literal notranslate"><span class="pre">DestinationResult.text</span></code> remains optional response context for routing history.
 The router retains supplied text without delivering it as output. A destination
 can return a concise description of an application action, a completed text

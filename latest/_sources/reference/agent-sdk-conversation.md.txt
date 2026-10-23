@@ -46,9 +46,9 @@ The agent answers from its instructions, completed history, and configured
 context sources. Configure the runtime and a `ResponseOutput` topic, such as
 `VOICE_OUTPUT_TOPIC` or a text front end's topic, to use it as a routed
 destination. Conversation
-publishes its own response chunks with its routing name as source and the turn's
-response identity and timestamp. Its first chunk interrupts older speech
-unless router text such as a preamble already started the turn. It finalizes
+publishes its own response chunks as a reply to the turn ID with its routing name
+as source and the turn's timestamp. The voice layer plays them after router text
+such as a preamble for the same turn. It finalizes
 partial responses after model failure; the router reports a failure before the
 first chunk.
 Cancellation drains the model without publishing further response text and
