@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Voice-controlled task capture, packet integrity, and launch configuration."""
+"""Test procedure capture controls, packet integrity, and launch configuration."""
 
 import asyncio
 import importlib.util
@@ -198,7 +198,7 @@ def test_caption_eval_cli_reports_contract_failures(tmp_path, monkeypatch, capsy
     import xr_ai_models
     import yaml
 
-    cases = yaml.safe_load((_SAMPLE / "eval/caption_cases.yaml").read_text())["cases"]
+    cases = yaml.safe_load((_SAMPLE / "evaluation/capture/caption_cases.yaml").read_text())["cases"]
     valid = json.dumps({"activity": "Arrange", "phase": "Place", "caption": "A block", "delta": "Unchanged"})
     replies = [SimpleNamespace(content=valid) for _ in cases]
     if failure == "one_invalid":
@@ -209,9 +209,10 @@ def test_caption_eval_cli_reports_contract_failures(tmp_path, monkeypatch, capsy
                close=AsyncMock())
     monkeypatch.setattr(xr_ai_models, "make_vlm", lambda *args: vlm)
     output = tmp_path / "caption-eval"
-    monkeypatch.setattr(sys, "argv", [str(_SAMPLE / "eval/caption.py"), "--output", str(output)])
+    script = _SAMPLE / "evaluation/capture/evaluate_captions.py"
+    monkeypatch.setattr(sys, "argv", [str(script), "--output", str(output)])
     with pytest.raises(SystemExit) as result:
-        runpy.run_path(str(_SAMPLE / "eval/caption.py"), run_name="__main__")
+        runpy.run_path(str(script), run_name="__main__")
     assert result.value.code == (0 if failure is None else 1)
     vlm.close.assert_awaited_once()
     assert vlm.ask_images.await_count == len(cases)
@@ -222,18 +223,19 @@ def test_caption_eval_cli_reports_contract_failures(tmp_path, monkeypatch, capsy
     assert (output / "prompt.txt").is_file()
 
 
-async def test_capture_voice_gate_does_not_interrupt_or_acknowledge_stop():
+async def test_shared_voice_gate_passes_capture_and_guide_controls_without_generic_stop():
     from xr_ai_voicegate import VoiceGate, load_voice_gate_config
 
     config = load_voice_gate_config(_SAMPLE / "yaml/voice_gate.yaml")
     gate = VoiceGate(config, tts=Mock(), audio_sink=Mock())
     query, stop = AsyncMock(), AsyncMock()
     gate.bind(on_query=query, on_stop=stop)
-    for text in ("stop", "stop capture", "start capture", "be quiet"):
+    utterances = ("stop", "stop capture", "start capture", "stop guide", "start guide", "be quiet")
+    for text in utterances:
         assert not gate._matches_partial_stop(text)
         await gate.feed("user", text)
     stop.assert_not_awaited()
-    assert len(query.await_args_list) == 4
+    assert len(query.await_args_list) == len(utterances)
 
 
 @pytest.fixture

@@ -9,10 +9,32 @@ Record narrated demonstrations with spoken start and stop commands. The sample
 saves sampled frames, visual captions, and narration as local evidence packets.
 Guide mode provides spoken guidance and evidence checks for an approved local guide.
 
-To draft a guide from a captured packet, use the bundled `recording-to-guide`
-and `evaluate-guide` skills. Refer to the
+To generate a guide from a captured packet, start with
+`guide-generation-skills/SKILL.md`, which coordinates drafting, evaluation, and
+revision. Refer to the
 [guide-generation reference](https://nvidia.github.io/xr-ai/latest/reference/procedure-capture-guide.html#generate-a-draft-guide)
 for the authoring request, validation, and human review workflow.
+
+## Directory map
+
+```text
+main.py                         Sample launcher
+worker/                         Capture and guide agents
+yaml/                           Sample configuration
+model-servers/                  Shared local model launcher
+guide-generation-skills/        Coding-agent instructions and references
+evaluation/
+  capture/                      Caption evaluator and cases
+  guide/                        Packet evaluator, shared harness, authoring probes
+example-guides/tea-making/
+  guide.yaml                    Maintained example procedure
+  evaluation/                   Tea runners, fixtures/, and scenarios/
+```
+
+The skills invoke the checkout's evaluation tools; they do not contain a
+separate implementation. Refer to the
+[evaluation reference](https://nvidia.github.io/xr-ai/latest/reference/procedure-capture-guide.html#local-model-guide-evaluation)
+for commands, coverage, and result interpretation.
 
 ## Run
 
@@ -49,16 +71,17 @@ To choose where packets are saved, launch with `uv run main.py --mode capture --
 To test guide mode with the included chamomile tea example:
 
 ```bash
-uv run main.py --mode guide examples/tea-making
+uv run main.py --mode guide example-guides/tea-making/guide.yaml
 ```
 
 Use tea labeled chamomile, boiling water, a five-minute steep, and a kettle
 or thermometer that shows the current water temperature. For another locally
-reviewed guide, pass its YAML file path, such as `guides/my-procedure.guide.yaml`,
+reviewed guide, pass its YAML file path, such as `assemble-toy-guide/guide.yaml`,
 or a directory containing exactly one top-level YAML file.
-The launcher resolves relative paths from this sample directory; absolute paths are also
-supported. Quote paths containing spaces. The `guides/` folder remains available
-for local guides; checked-in examples live under `examples/`.
+Relative paths resolve from this sample directory; absolute paths are also
+supported. Quote paths containing spaces. Generated guides and their review
+artifacts stay in local `<name>-guide/` directories; checked-in examples live
+under `example-guides/`.
 The guide must have `task.status: approved`. Guide mode uses the same model servers;
 say **start guide** to begin and **stop guide** to cancel. Say **start guide**
 again to begin a fresh run of the same command-line-selected guide.
@@ -70,7 +93,7 @@ spoken capture or guide commands, use:
 
 ```bash
 uv run main.py --mode capture --session-recording
-uv run main.py --mode guide examples/tea-making/guide.yaml --session-recording
+uv run main.py --mode guide example-guides/tea-making/guide.yaml --session-recording
 ```
 
 In capture mode, this flag can also be combined with `--output-root PATH`. Refer to the
@@ -93,8 +116,7 @@ uv run --project model-servers procedure_capture_guide_model_servers --stop
 | `yaml/media_capture.yaml` | Opt-in session recording output and rendering profile |
 | `yaml/models.json` | Client adapters and endpoints for batch STT, LLM, VLM, and acknowledgement TTS |
 | `model-servers/yaml/<gpu-profile>.yaml` | Local model-server GPU placement and workload budgets |
-| `yaml/voice_gate.yaml` | Silent, wake-word-free narration input |
-| `yaml/voice_gate.guide.yaml` | Wake-word-free guide questions and controls |
+| `yaml/voice_gate.yaml` | Shared wake-word-free speech input for capture and guide |
 | `yaml/device_io_hub.yaml` | Room, ports, and web client |
 
 For example, increase the interval between captions in `yaml/capture-agent-config.yaml`:

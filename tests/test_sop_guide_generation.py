@@ -15,40 +15,69 @@ import pytest
 import yaml
 
 _SAMPLE = Path(__file__).resolve().parents[1] / "agent-samples/procedure-capture-guide"
-_REFERENCES = _SAMPLE / "skills/recording-to-guide/references"
+_TEST_DATA = Path(__file__).resolve().parent
+_REFERENCES = _SAMPLE / "guide-generation-skills/draft-guide/references"
 sys.path.insert(0, str(_SAMPLE / "worker"))
 
 from procedure_capture_guide_worker._validate_guide import main  # noqa: E402
 from procedure_capture_guide_worker.guide._workflow_spec import load_workflow, parse_workflow  # noqa: E402
 
 
-def test_installed_skill_pair_resolves_shared_contract_and_references(tmp_path):
-    # The generation package includes both authoring and runtime-evaluation skills.
-    for name in ("recording-to-guide", "evaluate-guide"):
-        shutil.copytree(_SAMPLE / "skills" / name, tmp_path / name)
+def test_installed_skill_workflow_resolves_children_and_shared_references(tmp_path):
+    package = tmp_path / "guide-generation-skills"
+    shutil.copytree(_SAMPLE / "guide-generation-skills", package)
     for path in tmp_path.rglob("*.md"):
         for target in re.findall(r"\[[^\]]+\]\(([^)]+)\)", path.read_text()):
             if "://" not in target and not target.startswith("#"):
                 assert (path.parent / target.split("#", 1)[0]).is_file(), (path, target)
     contracts = list(tmp_path.rglob("packet-and-guide-schema.md"))
     assert len(contracts) == 1
-    for name in ("recording-to-guide", "evaluate-guide"):
-        skill = tmp_path / name
+    for skill in (package, package / "draft-guide", package / "evaluate-guide"):
+        name = skill.name
         metadata = yaml.safe_load((skill / "SKILL.md").read_text().split("---", 2)[1])
         assert metadata["name"] == name
         interface = yaml.safe_load((skill / "agents/openai.yaml").read_text())["interface"]
         assert f"${name}" in interface["default_prompt"]
+    entrypoint = (package / "SKILL.md").read_text()
+    for child in ("draft-guide", "evaluate-guide"):
+        assert f"]({child}/SKILL.md)" in entrypoint
+
+
+def test_packet_entry_point_imports_without_example_or_test_helpers(tmp_path):
+    scripts = tmp_path / "sample/evaluation/guide"
+    shutil.copytree(_SAMPLE / "evaluation/guide", scripts)
+    result = subprocess.run(
+        [sys.executable, str(scripts / "evaluate_recorded_packet.py"), "--help"],
+        cwd=tmp_path, env={**os.environ, "PYTHONPATH": str(_SAMPLE / "worker")},
+        capture_output=True, text=True, timeout=30,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "--packet" in result.stdout and "--guide" in result.stdout
+    assert "--manifest" not in result.stdout
+
+
+def test_generated_guide_packages_are_local_but_example_guides_are_tracked():
+    result = subprocess.run(
+        ["git", "check-ignore", "--stdin"], cwd=_SAMPLE, text=True, capture_output=True,
+        input="assemble-toy-guide/guide.yaml\nassemble-toy-guide/review.md\n"
+              "assemble-toy-guide/evaluation.md\nexample-guides/tea-making/guide.yaml\n",
+        check=True,
+    )
+    assert result.stdout.splitlines() == [
+        "assemble-toy-guide/guide.yaml", "assemble-toy-guide/review.md", "assemble-toy-guide/evaluation.md",
+    ]
 
 
 def test_validator_accepts_examples_and_shipped_guides_without_a_schema_fork(capsys):
     from procedure_capture_guide_worker import _validate_guide
 
     assert _validate_guide.load_workflow is load_workflow
-    paths = (sorted(_REFERENCES.glob("*.guide.yaml"))
-             + sorted((_SAMPLE / "examples").glob("*/guide.yaml"))
-             + sorted((_SAMPLE / "eval/fixtures").glob("*.guide.yaml")))
+    paths = (sorted(_REFERENCES.glob("*.yaml"))
+             + sorted((_SAMPLE / "example-guides").glob("*/guide.yaml"))
+             + [_TEST_DATA / "test_procedure_indicator_guide.yaml"])
     assert len(paths) >= 5
-    assert _SAMPLE / "examples/tea-making/guide.yaml" in paths
+    assert _SAMPLE / "example-guides/tea-making/guide.yaml" in paths
+    assert _TEST_DATA / "test_procedure_indicator_guide.yaml" in paths
     originals = {path: path.read_bytes() for path in paths}
     assert main([str(path) for path in paths]) == 0
     assert not capsys.readouterr().err
@@ -57,11 +86,11 @@ def test_validator_accepts_examples_and_shipped_guides_without_a_schema_fork(cap
 
 @pytest.fixture
 def visual():
-    return yaml.safe_load((_REFERENCES / "example.guide.yaml").read_text())
+    return yaml.safe_load((_REFERENCES / "example.yaml").read_text())
 
 
 def test_visual_example_uses_same_writable_boolean_and_closed_answers():
-    workflow = load_workflow(_REFERENCES / "example.guide.yaml")
+    workflow = load_workflow(_REFERENCES / "example.yaml")
     step = workflow.steps[workflow.start_step]
     assert workflow.status == "draft"
     assert not workflow.runnable
@@ -77,7 +106,7 @@ def test_visual_example_uses_same_writable_boolean_and_closed_answers():
 
 
 def test_visual_example_requires_fresh_evidence_for_each_linked_step():
-    workflow = load_workflow(_REFERENCES / "example.guide.yaml")
+    workflow = load_workflow(_REFERENCES / "example.yaml")
     state = workflow.initial_state()
     visited = []
     step_id = workflow.start_step
@@ -97,7 +126,7 @@ def test_visual_example_requires_fresh_evidence_for_each_linked_step():
 
 
 def test_timer_example_requires_live_setup_before_elapsed_only_wait():
-    workflow = load_workflow(_REFERENCES / "timer.guide.yaml")
+    workflow = load_workflow(_REFERENCES / "timer.yaml")
     setup = workflow.steps[workflow.start_step]
     wait = workflow.steps[setup.next_step]
     assert setup.trigger.function == "current_view"
@@ -150,7 +179,7 @@ def test_direct_commit_must_satisfy_completion(visual):
 
 
 def test_unresolved_identity_example_preserves_action_without_false_success():
-    workflow = load_workflow(_REFERENCES / "review-blocked.guide.yaml")
+    workflow = load_workflow(_REFERENCES / "review-blocked.yaml")
     step = workflow.steps[workflow.start_step]
     assert workflow.status == "draft"
     assert not workflow.runnable
@@ -232,7 +261,7 @@ def test_actual_string_regex_and_whitespace_preserve_existing_meaning(visual):
     (lambda source: source.replace("    initial: false", "    initial: false\n    \"initial\": true"), "initial"),
 ])
 def test_duplicate_keys_rejected_at_every_level(edit, key):
-    source = (_REFERENCES / "example.guide.yaml").read_text()
+    source = (_REFERENCES / "example.yaml").read_text()
     changed = edit(source)
     assert changed != source
     with pytest.raises(yaml.constructor.ConstructorError, match=f"duplicate mapping key '{key}'") as error:
@@ -241,7 +270,7 @@ def test_duplicate_keys_rejected_at_every_level(edit, key):
 
 
 def test_safe_aliases_and_non_overlapping_merges_remain_supported():
-    source = (_REFERENCES / "example.guide.yaml").read_text()
+    source = (_REFERENCES / "example.yaml").read_text()
     source = source.replace("    type: boolean\n    description:", "    <<: {type: boolean}\n    description:")
     source = source.replace("    agent:\n", "    agent: &policy\n", 1)
     # Sharing a policy is not a duplicate key in the receiving step.
@@ -255,14 +284,14 @@ def test_safe_aliases_and_non_overlapping_merges_remain_supported():
 
 
 def test_merge_cannot_override_an_existing_requirement():
-    source = (_REFERENCES / "example.guide.yaml").read_text()
+    source = (_REFERENCES / "example.yaml").read_text()
     source = source.replace("    initial: false", "    <<: {initial: false}\n    initial: true")
     with pytest.raises(yaml.constructor.ConstructorError, match="duplicate mapping key 'initial'"):
         parse_workflow(source)
 
 
 def test_repeated_merge_keys_are_rejected_before_expansion():
-    source = (_REFERENCES / "example.guide.yaml").read_text()
+    source = (_REFERENCES / "example.yaml").read_text()
     source = source.replace("    type: boolean", "    <<: {type: boolean}\n    <<: {initial: false}")
     source = source.replace("    initial: false\n", "")
     with pytest.raises(yaml.constructor.ConstructorError, match="duplicate mapping key '<<'"):
@@ -277,7 +306,7 @@ def test_guide_loader_is_local_and_still_safe():
 
 
 def test_duplicate_diagnostic_is_reported_by_read_only_cli(tmp_path, capsys):
-    source = (_REFERENCES / "example.guide.yaml").read_text()
+    source = (_REFERENCES / "example.yaml").read_text()
     source = source.replace("    initial: false", "    initial: false\n    initial: true")
     path = tmp_path / "duplicate.guide.yaml"
     path.write_text(source)
@@ -294,7 +323,7 @@ def test_duplicate_diagnostic_is_reported_by_read_only_cli(tmp_path, capsys):
     ("started_at_us", "$state.undeclared"),
 ])
 def test_timer_request_errors(argument, value):
-    raw = yaml.safe_load((_REFERENCES / "timer.guide.yaml").read_text())
+    raw = yaml.safe_load((_REFERENCES / "timer.yaml").read_text())
     raw["steps"][1]["trigger"]["arguments"][argument] = value
     with pytest.raises(ValueError):
         parse_workflow(yaml.safe_dump(raw))
@@ -323,7 +352,7 @@ def test_snapshot_parsing_and_state_are_independent(visual):
 
 
 def test_validator_checks_all_inputs_without_modifying_any(tmp_path, visual, capsys):
-    good = tmp_path / "draft.guide.yaml"
+    good = tmp_path / "draft.yaml"
     good.write_text(yaml.safe_dump(visual))
     approved = tmp_path / "approved.guide.yaml"
     other = copy.deepcopy(visual)

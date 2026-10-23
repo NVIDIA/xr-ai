@@ -1,0 +1,44 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Evaluation scenario for run_scenario.py, not a procedure guide definition.
+# Present incorrect scenes before correct ones for each visual step, checking
+# that advancement is blocked until verification succeeds. Stop before the timer;
+# scenarios/full_run.yaml covers timed completion, restart, and post-stop silence.
+guide_path: ../../guide.yaml
+fail_fast: true
+scenes_file: ../fixtures/image_scenes.yaml
+visual_cases_file: ../fixtures/visual_expectations.yaml
+actions:
+  - {action: image, scene: breakfast}
+  - {action: say, text: 'What is my status?', expect: inactive, tools: [workflow__status]}
+  - {action: say, text: Start guide, expect: Show the tea packet, tools: [workflow__restart]}
+  - {action: observe, case: breakfast}
+  - {action: say, text: Next, expect: not complete, tools: [workflow__advance], arguments: [{skip: false}]}
+  - {action: image, scene: green}
+  - {action: observe, case: green}
+  - {action: image, scene: mint}
+  - {action: observe, case: mint}
+  - {action: image, scene: chamomile}
+  - {action: wait_speech, expect: The packet identifies chamomile}
+  - {action: image, scene: current65}
+  - {action: say, text: Next, expect: Heat fresh water, tools: [workflow__advance], arguments: [{skip: false}]}
+  - {action: observe, case: current65}
+  - {action: say, text: 'Could I continue?', expect: not complete, tools: [workflow__advance], arguments: [{skip: false}]}
+  - {action: image, scene: target100}
+  - {action: observe, case: target100}
+  - {action: say, text: 'What is my status?', expect: 'current step: Verify the brewing temperature\.$', tools: [workflow__status]}
+  - {action: image, scene: unlabeled100}
+  - {action: observe, case: unlabeled100}
+  - {action: image, scene: current100}
+  - {action: wait_speech, expect: The displayed current water temperature is at the brewing target}
+  - {action: image, scene: dry_bag}
+  - {action: say, text: Next, expect: Carefully put the chamomile, tools: [workflow__advance], arguments: [{skip: false}]}
+  - {action: observe, case: dry_bag}
+  - {action: say, text: Next, expect: not complete, tools: [workflow__advance], arguments: [{skip: false}]}
+  - {action: image, scene: above}
+  - {action: observe, case: above}
+  - {action: image, scene: immersed}
+  - {action: wait_speech, expect: The tea bag is visibly in the water}
+  - {action: say, text: Stop guide, expect: Guide stopped, tools: [workflow__reset]}
+  - {action: say, text: 'What is my status?', expect: inactive, tools: [workflow__status]}

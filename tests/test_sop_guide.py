@@ -28,6 +28,8 @@ from xr_ai_tools.vision import ImageQueryResult
 from xr_ai_voice import VOICE_OUTPUT_TOPIC, VoiceAggregationAgent
 
 _SAMPLE = Path(__file__).resolve().parents[1] / "agent-samples/procedure-capture-guide"
+_TEST_DATA = Path(__file__).resolve().parent
+_TEA_EVAL = _SAMPLE / "example-guides/tea-making/evaluation"
 sys.path.insert(0, str(_SAMPLE / "worker"))
 
 from procedure_capture_guide_worker.config import WorkerConfig, load_config  # noqa: E402
@@ -119,9 +121,25 @@ def write_guide(directory, document, name="test.guide.yaml"):
     return path
 
 
+def test_checked_in_eval_manifests_load_their_selected_guides():
+    selected = set()
+    for path in sorted((_SAMPLE / "example-guides").rglob("*.yaml")):
+        manifest = yaml.safe_load(path.read_text())
+        if not isinstance(manifest, dict) or not {"guide_path", "guides_dir"}.intersection(manifest):
+            continue
+        assert "guide_path" in manifest, path
+        guide = load_guide(path.parent / manifest["guide_path"])
+        assert guide.workflow.runnable, path
+        selected.add(path)
+    assert {_TEA_EVAL / name for name in (
+        "scenarios/routing.yaml", "scenarios/step_verification.yaml", "scenarios/full_run.yaml",
+        "scenarios/label_reading.yaml", "fixtures/visual_expectations.yaml",
+    )} <= selected
+
+
 def test_shipped_tea_guide_is_selectable_by_example_path():
-    guide = load_guide(_SAMPLE / "examples/tea-making/guide.yaml")
-    assert guide.path == _SAMPLE / "examples/tea-making/guide.yaml"
+    guide = load_guide(_SAMPLE / "example-guides/tea-making/guide.yaml")
+    assert guide.path == _SAMPLE / "example-guides/tea-making/guide.yaml"
     assert guide.workflow.runnable
     workflow = guide.workflow
     chain = []
@@ -160,16 +178,16 @@ def test_shipped_tea_guide_is_selectable_by_example_path():
     ("YES, CHAMOMILE", False), ("YES\nNO", False),
 ])
 def test_shipped_tea_identification_requires_an_affirmative_answer(answer, should_match):
-    guide = load_guide(_SAMPLE / "examples/tea-making/guide.yaml")
+    guide = load_guide(_SAMPLE / "example-guides/tea-making/guide.yaml")
     pattern = guide.workflow.steps["identify"].evidence.pattern
     assert (re.fullmatch(pattern, answer.strip()) is not None) == should_match
 
 
 def test_tea_identification_eval_uses_the_shipped_guide():
-    path = _SAMPLE / "eval/tea_identification.yaml"
+    path = _SAMPLE / "example-guides/tea-making/evaluation/scenarios/label_reading.yaml"
     manifest = yaml.safe_load(path.read_text())
     guide = load_guide(path.parent / manifest["guide_path"])
-    assert guide.path == _SAMPLE / "examples/tea-making/guide.yaml"
+    assert guide.path == _SAMPLE / "example-guides/tea-making/guide.yaml"
     scenes = manifest["scenes"]
     assert all(action["scene"] in scenes for action in manifest["actions"] if action["action"] == "image")
     assert any(action.get("answers") == ["UNKNOWN", "Unknown", "unknown"] for action in manifest["actions"])
@@ -181,7 +199,7 @@ async def test_shipped_tea_guide_verification_and_runtime_timer(engine, monkeypa
     now = 1000.0
     monkeypatch.setattr(guiding, "time", SimpleNamespace(monotonic=lambda: now))
     backend = engine._backend
-    backend._guide = load_guide(_SAMPLE / "examples/tea-making/guide.yaml")
+    backend._guide = load_guide(_SAMPLE / "example-guides/tea-making/guide.yaml")
     await engine.participant_left(None, context())
     await engine.participant_joined(None, context())
     session = backend._sessions["alice"]
@@ -252,7 +270,7 @@ async def test_shipped_tea_guide_verification_and_runtime_timer(engine, monkeypa
 @pytest.mark.parametrize("step_id", ["identify", "heat_water", "start_steeping", "steep_timer"])
 async def test_shipped_tea_guide_skip_never_claims_verified_completion(engine, step_id):
     backend = engine._backend
-    backend._guide = load_guide(_SAMPLE / "examples/tea-making/guide.yaml")
+    backend._guide = load_guide(_SAMPLE / "example-guides/tea-making/guide.yaml")
     backend._start("alice")
     session = backend._sessions["alice"]
     session.step_id = step_id
@@ -1406,7 +1424,7 @@ async def test_timer_unavailability_is_a_tool_result(engine, document, missing):
     ("Target 100 C", False), ("UNKNOWN", False), ("100 C or 212 F", False),
 ])
 def test_tea_temperature_accepts_formatting_not_different_measurements(text, accepted):
-    step = load_guide(_SAMPLE / "examples/tea-making/guide.yaml").workflow.steps["heat_water"]
+    step = load_guide(_SAMPLE / "example-guides/tea-making/guide.yaml").workflow.steps["heat_water"]
     for source in ("CURRENT", "ACTUAL", "THERMOMETER"):
         assert bool(re.fullmatch(step.evidence.pattern, f"{source} | {text}")) is accepted
     for source in ("TARGET", "SET", "PRESET", "UNKNOWN"):
@@ -1414,10 +1432,15 @@ def test_tea_temperature_accepts_formatting_not_different_measurements(text, acc
     assert not re.fullmatch(step.evidence.pattern, text)
 
 
-@pytest.mark.parametrize("timer", [False, True])
-@pytest.mark.parametrize("failed_probe", [None, "say", "observe"])
-def test_guide_eval_cli_runs_public_runtime_scenario(tmp_path, monkeypatch, timer, failed_probe):
-    monkeypatch.syspath_prepend(str(_SAMPLE / "eval"))
+@pytest.mark.parametrize("failed_probe,fail_fast", [
+    (None, None),
+    ("say", None),
+    ("observe", False),
+    ("say", True),
+    ("observe", True),
+])
+def test_scenario_cli_reports_failures_and_continues_independent_probes(tmp_path, monkeypatch, failed_probe, fail_fast):
+    monkeypatch.syspath_prepend(str(_TEA_EVAL))
 
     import io
     import runpy
@@ -1425,38 +1448,38 @@ def test_guide_eval_cli_runs_public_runtime_scenario(tmp_path, monkeypatch, time
     import xr_ai_models
     from PIL import Image
 
-    guide = yaml.safe_load((_SAMPLE / "eval/fixtures/indicator.guide.yaml").read_text())
-    manifest = yaml.safe_load((_SAMPLE / "eval/guide_cases.yaml").read_text())
-    if timer:
-        guide["steps"][1]["trigger"]["arguments"]["duration_s"] = 1
-    else:
-        guide["steps"] = guide["steps"][:1]
-        guide["steps"][0]["next"] = None
-        manifest["actions"] = [item for item in manifest["actions"]
-                               if item.get("text") != "How much time remains?"]
-        next_action = next(item for item in manifest["actions"] if item.get("text") == "Next")
-        next_action["expect"] = "Indicator check finished"
+    guide = yaml.safe_load((_TEST_DATA / "test_procedure_indicator_guide.yaml").read_text())
+    # Deliberately inject scoring failures; this tests the evaluator, not a
+    # second end-to-end procedure alongside the tea scenarios.
+    manifest = {
+        "guide_path": "test_procedure_indicator_guide.yaml",
+        "scenes": {"red": {"rectangle": "red"}},
+        "actions": [
+            {"action": "image", "scene": "red"},
+            {"action": "say", "text": "What is my status?", "expect": "inactive", "tools": ["workflow__status"]},
+            {"action": "say", "text": "Start guide", "expect": "Show a blue indicator", "tools": ["workflow__restart"]},
+            {"action": "observe", "answers": ["NO"], "count": 2},
+            {"action": "say", "text": "What is my status?", "expect": "current step: Check indicator\\.$",
+             "tools": ["workflow__status"]},
+        ],
+    }
+    if fail_fast is not None:
+        manifest["fail_fast"] = fail_fast
     if failed_probe == "say":
         first_status = next(item for item in manifest["actions"] if item.get("text") == "What is my status?")
         first_status["expect"] = "unexpected answer"
     elif failed_probe == "observe":
         observation = next(item for item in manifest["actions"] if item["action"] == "observe")
         observation["answers"] = ["YES"]
-    manifest["guide_path"] = "indicator.guide.yaml"
-    (tmp_path / "indicator.guide.yaml").write_text(yaml.safe_dump(guide))
+    (tmp_path / "test_procedure_indicator_guide.yaml").write_text(yaml.safe_dump(guide))
     manifest_path = tmp_path / "scenario.yaml"
     manifest_path.write_text(yaml.safe_dump(manifest))
 
     async def chat(messages, **kwargs):
-        if messages[-1].role == "tool":
-            return ChatResponse("The timer is running.", None, None, "stop", {})
         query = json.loads(messages[1].content)["request"]
         tool, arguments = {
-            "Start guide": ("workflow__restart", {}), "Stop guide": ("workflow__reset", {}),
+            "Start guide": ("workflow__restart", {}),
             "What is my status?": ("workflow__status", {}),
-            "Could I continue?": ("workflow__advance", {"skip": False}),
-            "Next": ("workflow__advance", {"skip": False}),
-            "How much time remains?": ("clock__timer", {}),
         }[query]
         return ChatResponse("", None, [ToolCall(id="eval", name=tool, arguments=json.dumps(arguments))],
                             "tool_calls", {})
@@ -1476,19 +1499,28 @@ def test_guide_eval_cli_runs_public_runtime_scenario(tmp_path, monkeypatch, time
     output = tmp_path / "results"
     monkeypatch.setattr(sys, "argv", ["guide.py", "--manifest", str(manifest_path), "--output", str(output)])
     with pytest.raises(SystemExit) as result:
-        runpy.run_path(str(_SAMPLE / "eval/guide.py"), run_name="__main__")
+        runpy.run_path(str(_TEA_EVAL / "run_scenario.py"), run_name="__main__")
     assert result.value.code == (0 if failed_probe is None else 1)
     report = json.loads((output / "result.json").read_text())
     assert report["passed"] is (failed_probe is None)
-    assert report["checks_passed"] == len(manifest["actions"]) - (failed_probe is not None)
-    assert report["checks_not_scored"] == 0
+    assert report["fail_fast"] is bool(fail_fast)
+    stopped_early = failed_probe is not None and fail_fast
+    scored = len(manifest["actions"])
+    if stopped_early:
+        failed_action = first_status if failed_probe == "say" else observation
+        scored = manifest["actions"].index(failed_action) + 1
+    assert report["checks_passed"] == scored - (failed_probe is not None)
+    assert report["checks_not_scored"] == len(manifest["actions"]) - scored
     events = [json.loads(line) for line in (output / "events.jsonl").read_text().splitlines()]
     checks = [event for event in events if event["kind"] == "check"]
-    assert len(checks) == len(manifest["actions"])
-    assert checks[-1]["passed"]  # A mismatch must not hide later independent probes.
+    assert len(checks) == scored
+    assert checks[-1]["passed"] is not bool(stopped_early)
     llm.close.assert_awaited_once()
     vlm.close.assert_awaited_once()
-    assert vlm.ask_images.await_count >= 4
+    if stopped_early and failed_probe == "say":
+        assert vlm.ask_images.await_count == 0
+    else:
+        assert vlm.ask_images.await_count >= 2
 
 
 @pytest.mark.parametrize("session_recording", [False, True])
@@ -1504,7 +1536,7 @@ def test_cli_selects_guide_with_independent_session_recording(
     extra = ["--session-recording"] if session_recording else []
     expected = ["hub", "capture", "worker"] if session_recording else ["hub", "worker"]
     selected = (str(write_guide(tmp_path, document, "external guide.yaml")) if external
-                else "examples/tea-making/guide.yaml")
+                else "example-guides/tea-making/guide.yaml")
     expected_path = Path(selected) if external else _SAMPLE / selected
     if directory:
         selected = str(Path(selected).parent)
@@ -1520,7 +1552,7 @@ def test_cli_selects_guide_with_independent_session_recording(
         assert config.mode == "guide" and config.capture is None
         assert config.guide.guide_path == configured_path
         assert load_guide(config.guide.guide_path).path == expected_path
-        assert config.voice_gate_yaml == _SAMPLE / "yaml/voice_gate.guide.yaml"
+        assert config.voice_gate_yaml == _SAMPLE / "yaml/voice_gate.yaml"
         if session_recording:
             recorder = processes[1]
             assert recorder.command == "device_io_capture"
@@ -1581,7 +1613,7 @@ async def test_unapproved_selection_fails_before_model_construction(tmp_path, do
     with pytest.raises(ValueError, match="draft"):
         await app.run_app(WorkerConfig(
             mode="guide", models_config=_SAMPLE / "yaml/models.json",
-            voice_gate_yaml=_SAMPLE / "yaml/voice_gate.guide.yaml",
+            voice_gate_yaml=_SAMPLE / "yaml/voice_gate.yaml",
             guide=GuideConfig(tmp_path / "test.guide.yaml"),
         ))
     models.assert_not_called()
@@ -1593,13 +1625,13 @@ def test_mode_configuration_is_isolated_and_models_are_shared(tmp_path):
     request = tmp_path / "request.json"
     request.write_text(json.dumps({
         "worker_config": str(_SAMPLE / "yaml/worker.yaml"), "mode": "guide",
-        "guide_path": str(_SAMPLE / "examples/tea-making/guide.yaml"),
+        "guide_path": str(_SAMPLE / "example-guides/tea-making/guide.yaml"),
     }))
     guide = load_config(request)
     assert guide.mode == "guide" and guide.capture is None
     assert guide.models_config == capture.models_config
-    assert guide.guide.guide_path == _SAMPLE / "examples/tea-making/guide.yaml"
-    assert guide.voice_gate_yaml == _SAMPLE / "yaml/voice_gate.guide.yaml"
+    assert guide.guide.guide_path == _SAMPLE / "example-guides/tea-making/guide.yaml"
+    assert guide.voice_gate_yaml == _SAMPLE / "yaml/voice_gate.yaml"
 
 
 @pytest.mark.parametrize("mode", ["capture", "guide"])
@@ -1690,7 +1722,7 @@ async def test_guide_app_composition_starts_and_cleans_up(tmp_path, document, mo
     write_guide(tmp_path, document)
     config = WorkerConfig(
         mode="guide", models_config=_SAMPLE / "yaml/models.json",
-        voice_gate_yaml=_SAMPLE / "yaml/voice_gate.guide.yaml", guide=GuideConfig(tmp_path / "test.guide.yaml"),
+        voice_gate_yaml=_SAMPLE / "yaml/voice_gate.yaml", guide=GuideConfig(tmp_path / "test.guide.yaml"),
     )
     llm = Mock(health=AsyncMock(return_value=True), close=AsyncMock())
     for name in ("make_llm", "make_vlm", "make_stt", "make_tts"):
