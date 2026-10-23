@@ -15,6 +15,7 @@ from datetime import UTC, datetime
 
 from xr_ai_conversation import ConversationContextUpdate
 from xr_ai_hub import FrameUnavailable
+from xr_ai_interaction import ResponseOutput
 from xr_ai_routing import (
     Admission,
     AgentTurn,
@@ -25,7 +26,6 @@ from xr_ai_routing import (
 from xr_ai_runtime import AgentRuntime, RuntimeClosedError, Topic
 from xr_ai_tools.current_frame import CurrentFrameRequest, CurrentFrameTool
 from xr_ai_tools.vision import ImageQueryRequest, StreamingImageQueryTool
-from xr_ai_voice import VoiceOutput
 
 _NO_CAMERA = "I couldn't get a current camera frame. Please try again."
 _NO_VISUAL_EVIDENCE = "I couldn't inspect the current view right now. Please try again."
@@ -48,7 +48,7 @@ class VisualObservationAgent(RoutableAgent):
         publish_context: ContextPublisher | None = None,
         *,
         runtime: AgentRuntime,
-        output_topic: Topic[VoiceOutput],
+        output_topic: Topic[ResponseOutput],
     ) -> None:
         self._runtime = runtime
         self._output_topic = output_topic
@@ -94,7 +94,7 @@ class VisualObservationAgent(RoutableAgent):
             try:
                 await self._runtime.publish(
                     self._output_topic,
-                    VoiceOutput(
+                    ResponseOutput(
                         text=text,
                         response_id=turn.turn_id,
                         final=False,
@@ -122,7 +122,7 @@ class VisualObservationAgent(RoutableAgent):
                 with suppress(RuntimeClosedError):
                     await self._runtime.publish(
                         self._output_topic,
-                        VoiceOutput(
+                        ResponseOutput(
                             response_id=turn.turn_id,
                             timestamp_us=turn.timestamp_us,
                         ),

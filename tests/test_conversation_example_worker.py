@@ -25,6 +25,7 @@ from _conversation_output import answer as _answer
 from _conversation_output import handle as _handle
 from loguru import logger
 from xr_ai_hub import FrameData, FrameSignal, FrameUnavailable, PixelFormat, ProcessorEndpoint
+from xr_ai_interaction import Interrupted, ParticipantJoined, ParticipantLeft, ResponseOutput, UserQuery
 from xr_ai_models import (
     ChatResponse,
     ChatStreamEvent,
@@ -34,15 +35,7 @@ from xr_ai_models import (
     load_models_config,
 )
 from xr_ai_runtime import Agent, AgentRuntime, Topic, subscribe
-from xr_ai_voice import (
-    VOICE_OUTPUT_TOPIC,
-    UserQuery,
-    VoiceAgent,
-    VoiceInterrupted,
-    VoiceOutput,
-    VoiceParticipantJoined,
-    VoiceParticipantLeft,
-)
+from xr_ai_voice import VOICE_OUTPUT_TOPIC, VoiceAgent
 from xr_ai_voice import _runtime as voice_runtime_module
 from xr_ai_voice._session import _VoiceSession as VoiceSession
 from xr_ai_voicegate import VoiceGateConfig
@@ -866,7 +859,7 @@ async def test_sample_departure_callback_clears_notes_after_router_release() -> 
     )
     runtime.register("router", router.runtime_subscriber())
     async with runtime:
-        await runtime.publish(PARTICIPANT_LEFT_TOPIC, VoiceParticipantLeft(), participant_id="alice")
+        await runtime.publish(PARTICIPANT_LEFT_TOPIC, ParticipantLeft(), participant_id="alice")
         assert "The demo showed an AR overlay." not in notes.routing_aid("alice").description
         await router.stop()
     await conversation.close()
@@ -1158,8 +1151,9 @@ def test_worker_distribution_declares_runtime_and_console_contracts() -> None:
     assert project["project"]["scripts"]["conversation_example_worker"] == ("conversation_example_worker.__main__:run")
     assert "xr-ai-hub-client" in dependencies
     assert "xr-ai-agent-runtime" in dependencies
-    assert "xr-ai-conversation[voice]" in dependencies
-    assert "xr-ai-routing[voice]" in dependencies
+    assert "xr-ai-conversation" in dependencies
+    assert "xr-ai-interaction" in dependencies
+    assert "xr-ai-routing[runtime]" in dependencies
     assert "xr-ai-tools[frames,vision]" in dependencies
     assert all("[vision" not in dependency for dependency in dependencies)
     assert "xr-ai-voice" in dependencies
@@ -1392,7 +1386,7 @@ async def test_conversation_example_agent_closes_tool_stream_when_publication_fa
 
 
 async def test_conversation_example_agent_reports_relay_wrapped_missing_camera_frame() -> None:
-    published: list[VoiceOutput] = []
+    published: list[ResponseOutput] = []
 
     async def missing_frame(_request: CurrentFrameRequest) -> ImageFrame:
         raise FrameUnavailable("No camera frame available — please try again.")
@@ -1434,7 +1428,7 @@ async def test_conversation_example_agent_reports_relay_wrapped_missing_camera_f
 async def test_cancelled_vlm_turn_closes_its_stream_without_late_text() -> None:
     waiting = asyncio.Event()
     closed = asyncio.Event()
-    published: list[VoiceOutput] = []
+    published: list[ResponseOutput] = []
 
     class Stream:
         def __init__(self) -> None:
@@ -1517,7 +1511,7 @@ async def test_context_updates_apply_after_participant_rejoin() -> None:
     async with runtime:
         await runtime.publish(
             PARTICIPANT_JOINED_TOPIC,
-            VoiceParticipantJoined(),
+            ParticipantJoined(),
             participant_id="alice",
         )
         await runtime.publish(
@@ -1536,12 +1530,12 @@ async def test_context_updates_apply_after_participant_rejoin() -> None:
 
         await runtime.publish(
             PARTICIPANT_LEFT_TOPIC,
-            VoiceParticipantLeft(),
+            ParticipantLeft(),
             participant_id="alice",
         )
         await runtime.publish(
             PARTICIPANT_JOINED_TOPIC,
-            VoiceParticipantJoined(),
+            ParticipantJoined(),
             participant_id="alice",
         )
         await runtime.publish(
@@ -1628,7 +1622,7 @@ async def test_query_initialization_and_response_admission_are_atomic_with_depar
         query = asyncio.create_task(runtime.publish(USER_QUERY_TOPIC, request, participant_id="alice"))
         await initialization_started.wait()
         departure = asyncio.create_task(
-            runtime.publish(PARTICIPANT_LEFT_TOPIC, VoiceParticipantLeft(), participant_id="alice")
+            runtime.publish(PARTICIPANT_LEFT_TOPIC, ParticipantLeft(), participant_id="alice")
         )
         release_initialization.set()
         await asyncio.gather(query, departure)
@@ -1637,7 +1631,7 @@ async def test_query_initialization_and_response_admission_are_atomic_with_depar
             assert events.index("answer.cancelled") < events.index("destination.left")
         await runtime.publish(USER_QUERY_TOPIC, request, participant_id="alice")
         assert initialization_count == 1
-        await runtime.publish(PARTICIPANT_JOINED_TOPIC, VoiceParticipantJoined(), participant_id="alice")
+        await runtime.publish(PARTICIPANT_JOINED_TOPIC, ParticipantJoined(), participant_id="alice")
         assert initialization_count == 2
         await router.stop()
 
@@ -1661,7 +1655,7 @@ async def test_interruption_cancels_query_admitted_after_blocked_context_initial
         )
         await initialization_started.wait()
         interruption = asyncio.create_task(
-            runtime.publish(INTERRUPTED_TOPIC, VoiceInterrupted(), participant_id="alice")
+            runtime.publish(INTERRUPTED_TOPIC, Interrupted(), participant_id="alice")
         )
         release_initialization.set()
         await asyncio.gather(query, interruption)
@@ -1739,7 +1733,7 @@ async def test_acknowledgment_publish_preserves_interrupt_slot(fail_acknowledgme
             await release_answer.wait()
             await runtime.publish(
                 VOICE_OUTPUT_TOPIC,
-                VoiceOutput(
+                ResponseOutput(
                     text="Here is the answer.", response_id=turn.turn_id, interrupt=True, timestamp_us=turn.timestamp_us
                 ),
                 participant_id=turn.participant_id,
@@ -1753,7 +1747,7 @@ async def test_acknowledgment_publish_preserves_interrupt_slot(fail_acknowledgme
 
     class Output(Agent):
         @subscribe(VOICE_OUTPUT_TOPIC)
-        async def output(self, message: VoiceOutput, ctx):
+        async def output(self, message: ResponseOutput, ctx):
             if message.text == "Let me think through that. ":
                 acknowledgment_started.set()
                 await release_acknowledgment.wait()
@@ -1878,7 +1872,7 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
             run_options.update(options)
             await runtimes[0].publish(
                 PARTICIPANT_JOINED_TOPIC,
-                VoiceParticipantJoined(),
+                ParticipantJoined(),
                 participant_id="alice",
             )
             for topic, text, participant_id in (
@@ -2404,7 +2398,7 @@ async def test_conversation_example_agent_handles_global_interruption_event() ->
         await asyncio.wait_for(started.wait(), 1.0)
         await runtime.publish(
             INTERRUPTED_TOPIC,
-            VoiceInterrupted(),
+            Interrupted(),
             source="voice.interruption",
         )
         await asyncio.wait_for(cancelled.wait(), 1.0)

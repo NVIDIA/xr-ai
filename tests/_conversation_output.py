@@ -6,9 +6,10 @@
 from contextvars import ContextVar
 from typing import Any
 
+from xr_ai_interaction import ResponseOutput
 from xr_ai_routing import AgentRouter, AgentTurn
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, subscribe
-from xr_ai_voice import VOICE_OUTPUT_TOPIC, VoiceOutput
+from xr_ai_voice import VOICE_OUTPUT_TOPIC
 
 _output = ContextVar("conversation_test_output", default=None)
 
@@ -51,7 +52,7 @@ async def handle(router, turn, *, emit):
 
 class _OutputCapture(Agent):
     @subscribe(VOICE_OUTPUT_TOPIC)
-    async def receive(self, message: VoiceOutput, ctx: RuntimeContext) -> None:
+    async def receive(self, message: ResponseOutput, ctx: RuntimeContext) -> None:
         if message.text:
             await capture_emit(ctx.metadata.source, message.text)
 
