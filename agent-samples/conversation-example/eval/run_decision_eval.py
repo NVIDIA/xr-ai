@@ -32,6 +32,7 @@ from conversation_example_worker._app import _CONVERSATION_SCOPE  # noqa: E402
 from conversation_example_worker._note_taking import NoteTakingAgent  # noqa: E402
 from conversation_example_worker._visual_agents import VisualObservationAgent  # noqa: E402
 from xr_ai_conversation import (  # noqa: E402
+    ContextManager,
     Conversation,
 )
 from xr_ai_models import DecisionResponse, load_models_config, make_decision  # noqa: E402
@@ -258,20 +259,27 @@ def _destinations(recorder: _DecisionRecorder, context_budget: int):
     async def publish_notes(participant: str, update: Any) -> None:
         context_updates[participant].append({"source": _NOTES_SOURCE, "mode": "summary", "text": update.text})
 
-    conversation = Conversation(
+    manager = ContextManager(
         _NoAnswerModel(),
-        routing=RoutingAid("conversation", _CONVERSATION_SCOPE),
         summary_context_topics=context_sources,
         dialogue_budget_bytes=section_budget,
         topic_budget_bytes=topic_budgets,
         compaction_input_budget_bytes=context_budget,
+    )
+    conversation = Conversation(
+        _NoAnswerModel(),
+        context=manager,
+        routing=RoutingAid("conversation", _CONVERSATION_SCOPE),
         runtime=output_runtime,
         output_topic=VOICE_OUTPUT_TOPIC,
     )
     notes_conversation = Conversation(
         _NoAnswerModel(),
-        dialogue_budget_bytes=context_budget,
-        compaction_input_budget_bytes=context_budget,
+        context=ContextManager(
+            _NoAnswerModel(),
+            dialogue_budget_bytes=context_budget,
+            compaction_input_budget_bytes=context_budget,
+        ),
         runtime=output_runtime,
         output_topic=VOICE_OUTPUT_TOPIC,
     )

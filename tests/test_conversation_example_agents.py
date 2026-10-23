@@ -28,6 +28,7 @@ from conversation_example_worker._visual_agents import (  # noqa: E402
     VisualObservationAgent,
 )
 from xr_ai_conversation import (  # noqa: E402
+    ContextManager,
     Conversation,
     ConversationContextUpdate,
 )
@@ -422,17 +423,21 @@ async def test_note_topic_reaches_general_conversation_after_focus_finishes():
     note_topic = Topic("conversation-example.foreground-notes", ConversationContextUpdate)
     runtime = AgentRuntime()
     llm = CapturingLLM()
-    general_conversation = Conversation(
+    manager = ContextManager(
         llm,
-        instructions="Answer the participant using their conversation and named context.",
         summary_context_topics=(note_topic.name,),
         dialogue_budget_bytes=2048,
         topic_budget_bytes={note_topic.name: 2048},
         compaction_input_budget_bytes=4096,
+    )
+    general_conversation = Conversation(
+        llm,
+        context=manager,
+        instructions="Answer the participant using their conversation and named context.",
         runtime=CaptureRuntime(),
         output_topic=VOICE_OUTPUT_TOPIC,
     )
-    runtime.register("general-context", general_conversation.context_subscriber())
+    runtime.register("general-context", manager.subscriber())
     note_conversation = _Conversation("notes")
 
     published = []

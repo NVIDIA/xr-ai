@@ -62,6 +62,7 @@ from conversation_example_worker._topics import (  # noqa: E402  # pyright: igno
 )
 from conversation_example_worker._visual_agents import VisualObservationAgent  # noqa: E402
 from xr_ai_conversation import (  # noqa: E402  # pyright: ignore[reportMissingImports]
+    ContextManager,
     Conversation,
     ConversationContextUpdate,
 )
@@ -287,10 +288,11 @@ def _make_router(
     include_vision: bool = True,
     summary_context_topics: tuple[str, ...] = (),
 ):
+    manager = ContextManager(llm, summary_context_topics=summary_context_topics)
     conversation = Conversation(
         llm,
+        context=manager,
         instructions=_CONVERSATION_INSTRUCTIONS,
-        summary_context_topics=summary_context_topics,
         runtime=CaptureRuntime(),
         output_topic=VOICE_OUTPUT_TOPIC,
     )  # type: ignore[arg-type]
@@ -308,7 +310,7 @@ def _make_router(
         destinations,
         decisions,  # type: ignore[arg-type]
     )
-    return router, tuple(conversations)
+    return router, tuple(conversations), manager
 
 
 def _make_agent(
@@ -321,8 +323,10 @@ def _make_agent(
     include_vision=True,
     set_status=_ignore_status,
 ):
+    manager = ContextManager(llm)
     conversation = Conversation(
         llm,
+        context=manager,
         instructions=_CONVERSATION_INSTRUCTIONS,
         runtime=runtime,
         output_topic=VOICE_OUTPUT_TOPIC,
@@ -334,7 +338,7 @@ def _make_agent(
         )
 
     async def cleanup(participant_id):
-        await conversation.participant_left(participant_id)
+        await manager.clear(participant_id)
         if frames is not None:
             frames.release(participant_id)
 
@@ -353,7 +357,13 @@ def _make_agent(
 
 async def test_conversation_is_text_only_and_does_not_select_a_frame() -> None:
     llm = _ConversationService()
-    conversation = Conversation(llm, runtime=CaptureRuntime(), output_topic=VOICE_OUTPUT_TOPIC)  # type: ignore[arg-type]
+    manager = ContextManager(llm)
+    conversation = Conversation(
+        llm,
+        context=manager,
+        runtime=CaptureRuntime(),
+        output_topic=VOICE_OUTPUT_TOPIC,
+    )  # type: ignore[arg-type]
 
     answer = await _answer(conversation, AgentTurn("alice", "turn-1", "Say hello"), emit=_ignore_output)
 
@@ -373,8 +383,10 @@ async def test_application_instructions_and_routing_metadata_are_separate_inputs
         description="Questions about museum exhibits and visible exhibit labels",
         priority=3,
     )
+    manager = ContextManager(llm)
     conversation = Conversation(
-        llm,  # type: ignore[arg-type]
+        llm,
+        context=manager,
         instructions=instructions,
         routing=routing,
         runtime=CaptureRuntime(),
@@ -392,8 +404,10 @@ async def test_application_instructions_and_routing_metadata_are_separate_inputs
 @pytest.mark.asyncio
 async def test_conversation_route_uses_the_sdk_conversation_directly() -> None:
     llm = _ConversationService()
+    manager = ContextManager(llm)
     destination = Conversation(
         llm,
+        context=manager,
         routing=RoutingAid(name="conversation", description="General conversation and follow-up help."),
         runtime=CaptureRuntime(),
         output_topic=VOICE_OUTPUT_TOPIC,
@@ -422,13 +436,13 @@ async def test_conversation_route_uses_the_sdk_conversation_directly() -> None:
 @pytest.mark.asyncio
 async def test_conversation_keeps_early_context_after_interleaved_router_history_eviction() -> None:
     llm = _ConversationService()
+    manager = ContextManager(llm, dialogue_budget_bytes=16_000, compaction_input_budget_bytes=32_000)
     conversation = Conversation(
         llm,
+        context=manager,
         routing=RoutingAid(name="conversation", description="General conversation."),
         runtime=CaptureRuntime(),
         output_topic=VOICE_OUTPUT_TOPIC,
-        dialogue_budget_bytes=16_000,
-        compaction_input_budget_bytes=32_000,
     )  # type: ignore[arg-type]
 
     class Detour(RoutableAgent):
@@ -499,8 +513,10 @@ async def test_notes_capture_readback_and_finish_preserve_context_until_departur
             )
 
     llm = _ConversationService()
+    manager = ContextManager(llm)
     conversation = Conversation(
-        llm,  # type: ignore[arg-type]
+        llm,
+        context=manager,
         routing=RoutingAid(name="notes", description="Focused note-taking destination."),
         runtime=CaptureRuntime(),
         output_topic=VOICE_OUTPUT_TOPIC,
@@ -579,8 +595,10 @@ async def test_note_capture_commits_after_acceptance_and_drains_context_publish_
         await finish_publish.wait()
         published.append((participant_id, update))
 
+    manager = ContextManager(_ConversationService())
     conversation = Conversation(
-        _ConversationService(),  # type: ignore[arg-type]
+        _ConversationService(),
+        context=manager,
         routing=RoutingAid(name="notes", description="Focused note-taking destination."),
         runtime=CaptureRuntime(),
         output_topic=VOICE_OUTPUT_TOPIC,
@@ -644,6 +662,7 @@ async def test_note_capture_logs_child_publish_failure_and_preserves_caller_canc
     destination = NoteTakingAgent(
         Conversation(
             _ConversationService(),  # type: ignore[arg-type]
+            context=ContextManager(_ConversationService()),  # type: ignore[arg-type]
             routing=RoutingAid(name="notes", description="Focused note-taking destination."),
             runtime=CaptureRuntime(),
             output_topic=VOICE_OUTPUT_TOPIC,
@@ -699,6 +718,7 @@ async def test_note_capture_propagates_programming_error_from_context_publisher(
     destination = NoteTakingAgent(
         Conversation(
             _ConversationService(),  # type: ignore[arg-type]
+            context=ContextManager(_ConversationService()),  # type: ignore[arg-type]
             routing=RoutingAid(name="notes", description="Focused note-taking destination."),
             runtime=CaptureRuntime(),
             output_topic=VOICE_OUTPUT_TOPIC,
@@ -746,8 +766,10 @@ async def test_note_capture_logs_runtime_publisher_exception_group_and_keeps_not
     async def publish_context(participant_id, update):
         await runtime.publish(note_topic, update, participant_id=participant_id)
 
+    manager = ContextManager(_ConversationService())
     general = Conversation(
-        _ConversationService(),  # type: ignore[arg-type]
+        _ConversationService(),
+        context=manager,
         routing=RoutingAid(name="conversation", description="General conversation and follow-up help."),
         runtime=CaptureRuntime(),
         output_topic=VOICE_OUTPUT_TOPIC,
@@ -755,6 +777,7 @@ async def test_note_capture_logs_runtime_publisher_exception_group_and_keeps_not
     destination = NoteTakingAgent(
         Conversation(
             _ConversationService(),  # type: ignore[arg-type]
+            context=ContextManager(_ConversationService()),  # type: ignore[arg-type]
             routing=RoutingAid(name="notes", description="Focused note-taking destination."),
             runtime=CaptureRuntime(),
             output_topic=VOICE_OUTPUT_TOPIC,
@@ -805,8 +828,10 @@ async def test_over_budget_note_is_refused_without_partial_capture() -> None:
                 raw={},
             )
 
+    manager = ContextManager(_ConversationService())
     conversation = Conversation(
-        _ConversationService(),  # type: ignore[arg-type]
+        _ConversationService(),
+        context=manager,
         routing=RoutingAid(name="notes", description="Focused note-taking destination."),
         runtime=CaptureRuntime(),
         output_topic=VOICE_OUTPUT_TOPIC,
@@ -842,7 +867,13 @@ async def test_over_budget_note_is_refused_without_partial_capture() -> None:
 
 @pytest.mark.asyncio
 async def test_sample_departure_callback_clears_notes_after_router_release() -> None:
-    conversation = Conversation(_ConversationService(), runtime=CaptureRuntime(), output_topic=VOICE_OUTPUT_TOPIC)
+    manager = ContextManager(_ConversationService())
+    conversation = Conversation(
+        _ConversationService(),
+        context=manager,
+        runtime=CaptureRuntime(),
+        output_topic=VOICE_OUTPUT_TOPIC,
+    )
     notes = NoteTakingAgent(
         conversation, object(), runtime=CaptureRuntime(), output_topic=VOICE_OUTPUT_TOPIC, context_budget_bytes=500
     )
@@ -925,7 +956,13 @@ async def test_domain_visual_request_routes_to_direct_observation_agent() -> Non
         runtime=CaptureRuntime(),
         output_topic=VOICE_OUTPUT_TOPIC,
     )
-    general = Conversation(_ConversationService(), runtime=CaptureRuntime(), output_topic=VOICE_OUTPUT_TOPIC)  # type: ignore[arg-type]
+    manager = ContextManager(_ConversationService())
+    general = Conversation(
+        _ConversationService(),
+        context=manager,
+        runtime=CaptureRuntime(),
+        output_topic=VOICE_OUTPUT_TOPIC,
+    )  # type: ignore[arg-type]
     router = AgentRouter(
         {"conversation": general, "observation": observation},
         decisions,  # type: ignore[arg-type]
@@ -971,8 +1008,10 @@ async def test_text_and_visual_destinations_share_router_history_and_output_sour
     llm = LLM()
     frames = _ConversationFrames()
     vision = _StreamingImageQueryTool()
+    manager = ContextManager(llm)
     general = Conversation(
-        llm,  # type: ignore[arg-type]
+        llm,
+        context=manager,
         instructions=_CONVERSATION_INSTRUCTIONS,
         routing=RoutingAid("conversation", "General conversation and recall"),
         runtime=CaptureRuntime(),
@@ -1026,7 +1065,13 @@ async def test_text_and_visual_destinations_share_router_history_and_output_sour
 async def test_conversation_publishes_answer_before_model_stream_finishes() -> None:
     gate = asyncio.Event()
     llm = _ConversationService(stream_gate=gate)
-    conversation = Conversation(llm, runtime=CaptureRuntime(), output_topic=VOICE_OUTPUT_TOPIC)  # type: ignore[arg-type]
+    manager = ContextManager(llm)
+    conversation = Conversation(
+        llm,
+        context=manager,
+        runtime=CaptureRuntime(),
+        output_topic=VOICE_OUTPUT_TOPIC,
+    )  # type: ignore[arg-type]
     first_publication = asyncio.Event()
     published = []
 
@@ -1475,7 +1520,7 @@ async def test_cancelled_vlm_turn_closes_its_stream_without_late_text() -> None:
 @pytest.mark.asyncio
 async def test_context_updates_apply_after_participant_rejoin() -> None:
     llm = _ConversationService()
-    router, conversations = _make_router(
+    router, conversations, manager = _make_router(
         llm,
         None,
         None,
@@ -1488,8 +1533,7 @@ async def test_context_updates_apply_after_participant_rejoin() -> None:
         return None
 
     async def cleanup(participant_id):
-        for item in conversations:
-            await item.participant_left(participant_id)
+        await manager.clear(participant_id)
 
     agent = AgentRouter(
         {"conversation": conversation},
@@ -1503,7 +1547,7 @@ async def test_context_updates_apply_after_participant_rejoin() -> None:
     )
     context_topic = Topic("tea.status", ConversationContextUpdate)
     runtime = AgentRuntime()
-    runtime.register("conversation-context", conversation.context_subscriber())
+    runtime.register("conversation-context", manager.subscriber())
     runtime.register("conversation-example", agent.runtime_subscriber())
 
     async with runtime:
@@ -1692,7 +1736,7 @@ async def test_stop_closes_query_admission_while_context_initialization_is_in_fl
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("fail_acknowledgment_publish", [False, True])
-async def test_acknowledgment_publish_preserves_interrupt_slot(fail_acknowledgment_publish: bool) -> None:
+async def test_acknowledgment_publish_does_not_affect_the_answer(fail_acknowledgment_publish: bool) -> None:
     class Prediction:
         async def decide(self, *_args, **_kwargs):
             return DecisionResponse(
@@ -1730,7 +1774,7 @@ async def test_acknowledgment_publish_preserves_interrupt_slot(fail_acknowledgme
             await runtime.publish(
                 VOICE_OUTPUT_TOPIC,
                 ResponseOutput(
-                    text="Here is the answer.", response_id=turn.turn_id, interrupt=True, timestamp_us=turn.timestamp_us
+                    kind="reply", text="Here is the answer.", request_id=turn.turn_id, timestamp_us=turn.timestamp_us
                 ),
                 participant_id=turn.participant_id,
                 source="conversation",
@@ -1780,7 +1824,6 @@ async def test_acknowledgment_publish_preserves_interrupt_slot(fail_acknowledgme
     body = [(source, message) for source, message in outputs if source == "conversation"]
     assert len(body) == 1
     assert body[0][1].text == "Here is the answer."
-    assert body[0][1].interrupt is True
     assert body[0][1].timestamp_us == 123
     acknowledgments = [message for source, message in outputs if source == "router"]
     assert len(acknowledgments) == (0 if fail_acknowledgment_publish else 1)
@@ -1805,12 +1848,17 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
             await super().close()
 
     class RecordingConversation(Conversation):
-        async def participant_left(self, participant_id: str) -> None:
-            shutdown_order.append("conversation.participant_left")
-            await super().participant_left(participant_id)
-
         async def close(self) -> None:
             shutdown_order.append("conversation.close")
+            await super().close()
+
+    class RecordingContextManager(ContextManager):
+        async def clear(self, participant_id: str) -> None:
+            shutdown_order.append("context.clear")
+            await super().clear(participant_id)
+
+        async def close(self) -> None:
+            shutdown_order.append("context.close")
             await super().close()
 
     llm = RecordingLLM()
@@ -1843,6 +1891,7 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     monkeypatch.setattr(app, "AgentRuntime", RecordingRuntime)
     monkeypatch.setattr(app, "AgentRouter", RecordingRouter)
     monkeypatch.setattr(app, "Conversation", RecordingConversation)
+    monkeypatch.setattr(app, "ContextManager", RecordingContextManager)
 
     worker_log = tmp_path / "logs" / "worker.log"
     worker_log.parent.mkdir()
@@ -1911,22 +1960,22 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
 
             await asyncio.wait_for(wait_until_released(), 1.0)
 
-        async def enqueue_response(
+        async def enqueue_reply(
             participant_id: str,
             response: str | AsyncIterator[str],
             *,
-            interrupt: bool = False,
+            request_id: str,
             pts_us: int | None = None,
         ) -> None:
             async def consume() -> None:
                 text = response if isinstance(response, str) else "".join([chunk async for chunk in response])
-                responses.append((participant_id, text, interrupt, pts_us))
+                responses.append((participant_id, text, request_id, pts_us))
                 response_complete.set()
 
             response_tasks.append(asyncio.create_task(consume()))
 
         session.run = run  # type: ignore[method-assign]
-        session.enqueue_response = enqueue_response  # type: ignore[method-assign]
+        session.enqueue_reply = enqueue_reply  # type: ignore[method-assign]
         return session
 
     monkeypatch.setattr(voice_runtime_module, "_VoiceSession", make_session)
@@ -1973,10 +2022,11 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
         "Frame source time: 1970-01-01 00:00 UTC.\nWhat is in front of me?"
     )
     assert _StreamingImageQueryTool.instances[0].requests[0].image.uri == ("https://example.com/frame.jpg")
-    assert responses == [
-        ("alice", "a blue square", True, 123),
-        ("alice", "Hello there.", True, 124),
+    assert [(participant, text, pts_us) for participant, text, _, pts_us in responses] == [
+        ("alice", "a blue square", 123),
+        ("alice", "Hello there.", 124),
     ]
+    assert len({request_id for _, _, request_id, _ in responses}) == 2
     conversation_prompt = "\n".join(message.content for message in llm.requests[-1][0])
     assert "current view" in conversation_prompt
     assert "Capability: set a one-shot visual alert." in conversation_prompt
@@ -1984,8 +2034,9 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     assert "Bob's private note." not in conversation_prompt
     assert all(task.done() for task in response_tasks)
     assert shutdown_order.index("router.stop") < shutdown_order.index("conversation.close")
-    assert shutdown_order.index("conversation.participant_left") < shutdown_order.index("conversation.close")
-    assert shutdown_order.index("conversation.close") < shutdown_order.index("llm.close")
+    assert shutdown_order.index("context.clear") < shutdown_order.index("context.close")
+    assert shutdown_order.index("conversation.close") < shutdown_order.index("context.close")
+    assert shutdown_order.index("context.close") < shutdown_order.index("llm.close")
     assert run_options["interrupt_on_supersede"] is True
     assert callable(run_options["on_interrupted"])
 
@@ -2251,16 +2302,16 @@ async def test_sample_runtime_streams_vision_through_voice_agent(monkeypatch) ->
             self.started.set()
             await asyncio.Event().wait()
 
-        async def enqueue_response(
+        async def enqueue_reply(
             self,
             participant_id: str,
             response: str | AsyncIterator[str],
             *,
-            interrupt: bool = False,
+            request_id: str,
             pts_us: int | None = None,
         ) -> None:
             assert participant_id == "alice"
-            assert interrupt is True
+            assert request_id
             assert pts_us == 123
 
             async def consume() -> None:

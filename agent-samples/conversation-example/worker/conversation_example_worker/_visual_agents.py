@@ -10,12 +10,11 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
-from contextlib import suppress
 from datetime import UTC, datetime
 
 from xr_ai_conversation import ConversationContextUpdate
 from xr_ai_hub import FrameUnavailable
-from xr_ai_interaction import ResponseOutput
+from xr_ai_interaction import ResponseOutput, ResponseOutputs
 from xr_ai_routing import (
     Admission,
     AgentTurn,
@@ -48,8 +47,9 @@ class VisualObservationAgent(RoutableAgent):
         runtime: AgentRuntime,
         output_topic: Topic[ResponseOutput],
     ) -> None:
-        self._runtime = runtime
-        self._output_topic = output_topic
+        self._outputs = ResponseOutputs(
+            runtime, output_topic, source="observation", closed_errors=(RuntimeClosedError,)
+        )
         self._frames = frames
         self._vision = vision
         self._publish_context = publish_context
@@ -77,56 +77,17 @@ class VisualObservationAgent(RoutableAgent):
         del focused
         return Admission("accept")
 
-    async def answer(self, turn: AgentTurn, *, started: Callable[[], Awaitable[bool]]) -> DestinationResult:
-        opened = False
-        publication_failed = False
-        interrupt = False
-
-        async def emit(text: str) -> None:
-            nonlocal opened, publication_failed, interrupt
-            if not opened:
-                interrupt = await started()
-            task = asyncio.current_task()
-            if task is not None and task.cancelling():
-                raise asyncio.CancelledError
-            try:
-                await self._runtime.publish(
-                    self._output_topic,
-                    ResponseOutput(
-                        text=text,
-                        response_id=turn.turn_id,
-                        final=False,
-                        interrupt=interrupt and not opened,
-                        timestamp_us=turn.timestamp_us,
-                    ),
-                    participant_id=turn.participant_id,
-                    source="observation",
-                )
-            except Exception:
-                publication_failed = True
-                raise
-            opened = True
-
+    async def answer(self, turn: AgentTurn, *, started: Callable[[], Awaitable[None]]) -> DestinationResult:
         try:
-            return await self._answer(turn, emit)
+            async with self._outputs.reply(
+                turn.participant_id, request_id=turn.turn_id, timestamp_us=turn.timestamp_us, started=started
+            ) as reply:
+                return await self._answer(turn, reply.send)
         except Exception:
             task = asyncio.current_task()
             if task is not None and task.cancelling():
                 raise asyncio.CancelledError from None
             raise
-        finally:
-            # Close an opened stream even when canceled so later output does not queue behind it.
-            if opened and not publication_failed:
-                with suppress(RuntimeClosedError):
-                    await self._runtime.publish(
-                        self._output_topic,
-                        ResponseOutput(
-                            response_id=turn.turn_id,
-                            timestamp_us=turn.timestamp_us,
-                        ),
-                        participant_id=turn.participant_id,
-                        source="observation",
-                    )
 
     async def _answer(self, turn: AgentTurn, emit: Callable[[str], Awaitable[None]]) -> DestinationResult:
         try:
@@ -166,7 +127,6 @@ class VisualObservationAgent(RoutableAgent):
 def _frame_time_label(timestamp_us: int) -> str:
     timestamp = datetime.fromtimestamp(timestamp_us / 1_000_000, UTC).replace(second=0, microsecond=0)
     return timestamp.strftime("%Y-%m-%d %H:%M UTC")
-
 
 
 __all__ = ["VisualObservationAgent"]

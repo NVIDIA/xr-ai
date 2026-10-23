@@ -14,10 +14,10 @@ from pathlib import Path
 import nemo_relay
 from loguru import logger
 from xr_ai_conversation import ConversationContextUpdate
-from xr_ai_interaction import ResponseOutput
+from xr_ai_interaction import ResponseOutput, ResponseOutputs
 from xr_ai_models import DecisionQuestion, DecisionService, ImageInput, VLMService
 from xr_ai_routing import Admission, AgentTurn, DestinationResult, RoutableAgent, RoutingAid
-from xr_ai_runtime import AgentRuntime, Topic
+from xr_ai_runtime import AgentRuntime, RuntimeClosedError, Topic
 from xr_ai_tools.current_frame import CurrentFrameRequest, CurrentFrameTool
 from xr_ai_tools.image import ImageRegistry
 from xr_ai_tools.vision import ImageQueryRequest, ImageQueryTool, StreamingImageQueryTool
@@ -75,8 +75,7 @@ class VisualAlertAgent(RoutableAgent):
         self._images = images
         self._decisions = decisions
         self._publish_capability = publish_capability
-        self._runtime = runtime
-        self._output_topic = output_topic
+        self._outputs = ResponseOutputs(runtime, output_topic, source="alerts", closed_errors=(RuntimeClosedError,))
         self._jobs: dict[str, _Job] = {}
         self._locks: dict[str, asyncio.Lock] = {}
         self._pending: dict[str, tuple[str, str]] = {}
@@ -139,7 +138,7 @@ class VisualAlertAgent(RoutableAgent):
         self._pending[turn.participant_id] = (turn.turn_id, action)
         return Admission("accept")
 
-    async def answer(self, turn: AgentTurn, *, started: Callable[[], Awaitable[bool]]) -> DestinationResult:
+    async def answer(self, turn: AgentTurn, *, started: Callable[[], Awaitable[None]]) -> DestinationResult:
         pending = self._pending.pop(turn.participant_id, None)
         if pending is None or pending[0] != turn.turn_id:
             return DestinationResult("answer", "")
@@ -153,15 +152,10 @@ class VisualAlertAgent(RoutableAgent):
                 if action == "cancel"
                 else "I'll alert you once when that condition is visible."
             )
-            interrupt = await started()
-            await self._runtime.publish(
-                self._output_topic,
-                ResponseOutput(
-                    text=text, response_id=turn.turn_id, interrupt=interrupt, timestamp_us=turn.timestamp_us
-                ),
-                participant_id=turn.participant_id,
-                source="alerts",
-            )
+            async with self._outputs.reply(
+                turn.participant_id, request_id=turn.turn_id, timestamp_us=turn.timestamp_us, started=started
+            ) as reply:
+                await reply.send(text)
             if action == "start" and not self._closing:
                 job = _Job(turn.query, f"alert:{turn.turn_id}")
                 self._jobs[turn.participant_id] = job
@@ -387,18 +381,7 @@ class VisualAlertAgent(RoutableAgent):
             if self._jobs.get(participant_id) is not job:
                 return False
             try:
-                await self._runtime.publish(
-                    self._output_topic,
-                    ResponseOutput(
-                        text=text,
-                        response_id=job.response_id,
-                        final=True,
-                        interrupt=True,
-                        timestamp_us=time.time_ns() // 1000,
-                    ),
-                    participant_id=participant_id,
-                    source="alerts",
-                )
+                await self._outputs.update(participant_id, text, urgent=True, timestamp_us=time.time_ns() // 1000)
             except Exception:  # noqa: BLE001 -- log delivery failure without a duplicate publication.
                 # Publication may have partially delivered; never retry or turn it into another message.
                 logger.exception("failed to publish visual alert participant={!r}", participant_id)
@@ -411,26 +394,15 @@ class VisualAlertAgent(RoutableAgent):
         reference = images.put(image)
         tool = StreamingImageQueryTool(images=images, vlm=self._vlm, system_prompt=_DESCRIPTION)
         stream = tool.stream(ImageQueryRequest(image=reference, query=job.condition))
-        response_id = f"{job.response_id}:description"
-        opened = False
-        delivery_failed = False
+        fragments: list[str] = []
         try:
             async for chunk in stream:
                 if self._jobs.get(participant_id) is not job:
                     return
-                if not chunk.text:
-                    continue
-                try:
-                    await self._runtime.publish(
-                        self._output_topic,
-                        ResponseOutput(text=chunk.text, response_id=response_id, final=False),
-                        participant_id=participant_id,
-                        source="alerts",
-                    )
-                except Exception:
-                    delivery_failed = True
-                    raise
-                opened = True
+                if chunk.text:
+                    fragments.append(chunk.text)
+            # An update is finite, so the description is spoken once it is complete.
+            await self._outputs.update(participant_id, "".join(fragments))
         except asyncio.CancelledError:
             raise
         except Exception:  # noqa: BLE001 -- the initial alert has already been delivered.
@@ -440,14 +412,3 @@ class VisualAlertAgent(RoutableAgent):
                 await stream.aclose()
             except Exception:  # noqa: BLE001 -- cleanup must not repeat an already published alert.
                 logger.exception("failed to close alert description participant={!r}", participant_id)
-            if opened and not delivery_failed:
-                # Close a partial response on cancellation without adding more spoken text.
-                try:
-                    await self._runtime.publish(
-                        self._output_topic,
-                        ResponseOutput(response_id=response_id),
-                        participant_id=participant_id,
-                        source="alerts",
-                    )
-                except Exception:  # noqa: BLE001 -- do not retry partial output delivery.
-                    logger.exception("failed to finalize alert description participant={!r}", participant_id)

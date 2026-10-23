@@ -18,6 +18,7 @@ from threading import Lock
 import nemo_relay
 from loguru import logger
 from xr_ai_conversation import (
+    ContextManager,
     Conversation,
     ConversationContextUpdate,
 )
@@ -173,21 +174,32 @@ async def run_app(
     if section_budget_bytes <= 0:
         raise ValueError("context_budget_bytes must provide a positive budget for dialogue and each context topic")
     topic_budgets = {name: section_budget_bytes for name in context_sources}
-    # General answers and focused notes use distinct instructions; AgentRouter supplies shared turn history.
-    conversation = Conversation(
+    # General answers and focused notes use distinct instructions and their own context;
+    # AgentRouter supplies shared turn history. This application owns both context managers.
+    context = ContextManager(
         llm,
-        instructions=_CONVERSATION_INSTRUCTIONS,
-        routing=RoutingAid(name="conversation", description=_CONVERSATION_SCOPE),
-        runtime=runtime,
-        output_topic=VOICE_OUTPUT_TOPIC,
         summary_context_topics=config.summary_context_topics,
         incremental_context_topics=config.incremental_context_topics,
         dialogue_budget_bytes=section_budget_bytes,
         topic_budget_bytes=topic_budgets,
         compaction_input_budget_bytes=config.compaction_input_budget_bytes,
     )
+    notes_context = ContextManager(
+        llm,
+        dialogue_budget_bytes=config.context_budget_bytes,
+        compaction_input_budget_bytes=config.compaction_input_budget_bytes,
+    )
+    conversation = Conversation(
+        llm,
+        context=context,
+        instructions=_CONVERSATION_INSTRUCTIONS,
+        routing=RoutingAid(name="conversation", description=_CONVERSATION_SCOPE),
+        runtime=runtime,
+        output_topic=VOICE_OUTPUT_TOPIC,
+    )
     notes_conversation = Conversation(
         llm,
+        context=notes_context,
         instructions=_NOTES_INSTRUCTIONS,
         routing=RoutingAid(
             name="notes",
@@ -198,8 +210,6 @@ async def run_app(
         ),
         runtime=runtime,
         output_topic=VOICE_OUTPUT_TOPIC,
-        dialogue_budget_bytes=config.context_budget_bytes,
-        compaction_input_budget_bytes=config.compaction_input_budget_bytes,
     )
 
     async def publish_note_context(
@@ -267,9 +277,9 @@ async def run_app(
         # Routes used for turns are also cleaned by the router. These idempotent
         # hooks cover resources initialized at join but never selected for a turn.
         errors: list[Exception] = []
-        for owner in (notes_agent, alerts, conversation, notes_conversation):
+        for cleanup in (notes_agent.participant_left, alerts.participant_left, context.clear, notes_context.clear):
             try:
-                await owner.participant_left(participant_id)
+                await cleanup(participant_id)
             except Exception as error:  # noqa: BLE001 -- retain independent cleanup failures.
                 errors.append(error)
         try:
@@ -300,7 +310,7 @@ async def run_app(
     )
     # Only general conversation consumes the configured shared context sources.
     if config.summary_context_topics or config.incremental_context_topics:
-        runtime.register("conversation-context", conversation.context_subscriber())
+        runtime.register("conversation-context", context.subscriber())
     runtime.register("conversation-example", router.runtime_subscriber())
     runtime.register("voice", voice)
 
@@ -316,6 +326,8 @@ async def run_app(
     finally:
         await conversation.close()
         await notes_conversation.close()
+        await context.close()
+        await notes_context.close()
         await alerts.stop()
         if acknowledgment_llm is not None:
             await acknowledgment_llm.close()

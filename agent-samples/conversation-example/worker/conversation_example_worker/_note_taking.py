@@ -13,7 +13,7 @@ from pathlib import Path
 import nemo_relay
 from loguru import logger
 from xr_ai_conversation import Conversation, ConversationContextUpdate
-from xr_ai_interaction import ResponseOutput
+from xr_ai_interaction import ResponseOutput, ResponseOutputs
 from xr_ai_models import DecisionQuestion, DecisionService
 from xr_ai_routing import Admission, AgentTurn, DestinationResult, RoutableAgent, RoutingAid
 from xr_ai_runtime import AgentRuntime, RuntimeClosedError, Topic
@@ -50,8 +50,7 @@ class NoteTakingAgent(RoutableAgent):
         )
         self._context_budget_bytes = context_budget_bytes
         self._publish_context = publish_context
-        self._runtime = runtime
-        self._output_topic = output_topic
+        self._outputs = ResponseOutputs(runtime, output_topic, source="notes", closed_errors=(RuntimeClosedError,))
         self._decisions = decisions
         self._pending: dict[str, tuple[str, str, bool]] = {}
         self._notes: dict[str, list[str]] = {}
@@ -128,28 +127,17 @@ class NoteTakingAgent(RoutableAgent):
             self._pending.pop(turn.participant_id, None)
             raise
 
-    async def answer(self, turn: AgentTurn, *, started: Callable[[], Awaitable[bool]]) -> DestinationResult:
+    async def answer(self, turn: AgentTurn, *, started: Callable[[], Awaitable[None]]) -> DestinationResult:
         pending = self._pending.pop(turn.participant_id, None)
         if pending is None or pending[0] != turn.turn_id:
             return DestinationResult("answer", "")
         action, was_focused = pending[1:]
 
         async def emit(text: str) -> None:
-            interrupt = await started()
-            task = asyncio.current_task()
-            if task is not None and task.cancelling():
-                raise asyncio.CancelledError
-            await self._runtime.publish(
-                self._output_topic,
-                ResponseOutput(
-                    text=text,
-                    response_id=turn.turn_id,
-                    interrupt=interrupt,
-                    timestamp_us=turn.timestamp_us,
-                ),
-                participant_id=turn.participant_id,
-                source="notes",
-            )
+            async with self._outputs.reply(
+                turn.participant_id, request_id=turn.turn_id, timestamp_us=turn.timestamp_us, started=started
+            ) as reply:
+                await reply.send(text)
 
         return await self._answer_control(turn, action, was_focused, emit)
 
@@ -223,7 +211,6 @@ class NoteTakingAgent(RoutableAgent):
         self._pending.pop(participant_id, None)
         self._notes.pop(participant_id, None)
         self._active_participants.discard(participant_id)
-        await self._conversation.participant_left(participant_id)
 
     # Private note storage and context publication helpers.
     def _append_note(self, participant_id: str, text: str) -> bool:

@@ -74,9 +74,10 @@ loop sends a fresh frame and the condition directly to Clef for the existing
 yes/no decision. In parallel, the backup loop asks Cosmos for visible evidence
 relevant to the condition, then asks Clef whether that written observation
 establishes it. Either loop can claim the alert; the first yes result owns the
-triggering frame and only one complete “Alert” voice response is published.
-The agent then streams a short Cosmos description of relevant evidence from
-that same frame and stops. The description does not interrupt the announcement.
+triggering frame and only one complete “Alert” voice update is published as urgent.
+The agent then asks Cosmos for a short description of relevant evidence from
+that same frame and publishes it as one non-urgent update once the model has
+finished, then stops. The description does not cut the announcement.
 Each loop selects its next frame after its previous model work completes; there
 is no sampling interval or observation history. A failure in one loop leaves
 the other available; if both stop without a match, the job retires with a
@@ -137,8 +138,10 @@ conversation destination state, AgentRouter history, and source-context
 tasks. This is the reference composition for streamed conversation and
 current-view visual questions.
 
-Conversation destinations can subscribe to named runtime context topics
-configured in `yaml/conversation_example_worker.yaml`. The alert agent publishes only a static capability summary. The notes
+The application owns two `ContextManager` instances, one for the general
+conversation and one for the notes conversation, and clears both when a
+participant leaves. The general conversation's manager subscribes to named
+runtime context topics configured in `yaml/conversation_example_worker.yaml`. The alert agent publishes only a static capability summary. The notes
 destination publishes its bounded note list as a replaceable summary.
 Publishers send text-only `ConversationContextUpdate` values. Only the general
 conversation subscribes to the note topic. Incremental sources are compacted in
