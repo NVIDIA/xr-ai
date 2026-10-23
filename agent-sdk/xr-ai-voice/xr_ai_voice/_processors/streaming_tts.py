@@ -4,7 +4,7 @@
 """``StreamingTtsProcessor`` — per-participant sentence-batched TTS.
 
 Consumes ``TextFrame``s (assistant output, one per chunk/token) and emits
-``OutputAudioRawFrame``s. Buffers text per participant until a sentence
+``TTSAudioRawFrame``s. Buffers text per participant until a sentence
 boundary, then emits audio in order so each participant's playback stays
 monotonic. Streaming TTS adapters emit PCM as the model generates it; other
 adapters synthesize sentences in parallel and emit completed WAVs.
@@ -42,8 +42,8 @@ from pipecat.frames.frames import (
     EndFrame,
     Frame,
     InterruptionFrame,
-    OutputAudioRawFrame,
     TextFrame,
+    TTSAudioRawFrame,
     TTSStoppedFrame,
 )
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
@@ -319,7 +319,7 @@ class StreamingTtsProcessor(FrameProcessor):
 
     async def _sender_loop(self, queue: asyncio.Queue) -> None:
         """Await each synth task in FIFO order, observe the WAV, and push the
-        decoded audio downstream as ``OutputAudioRawFrame``s."""
+        decoded audio downstream as ``TTSAudioRawFrame``s."""
         try:
             while True:
                 item = await queue.get()
@@ -381,7 +381,7 @@ class StreamingTtsProcessor(FrameProcessor):
                         marker.transport_destination = pid
                         await self.push_frame(marker)
                     first = False
-                out = OutputAudioRawFrame(
+                out = TTSAudioRawFrame(
                     audio=chunk.data,
                     sample_rate=chunk.sample_rate,
                     num_channels=chunk.channels,

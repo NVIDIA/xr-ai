@@ -35,6 +35,7 @@ from pipecat.frames.frames import (
     OutputAudioRawFrame,
     TextFrame,
     TranscriptionFrame,
+    TTSAudioRawFrame,
     TTSStoppedFrame,
     UserStartedSpeakingFrame,
     UserStoppedSpeakingFrame,
@@ -3707,8 +3708,8 @@ async def test_streaming_tts_publishes_capture_caption_before_first_pcm():
     ]
     assert [type(frame) for frame in capture_frames] == [
         _CaptureTtsCaptionFrame,
-        OutputAudioRawFrame,
-        OutputAudioRawFrame,
+        TTSAudioRawFrame,
+        TTSAudioRawFrame,
     ]
     assert capture_frames[0].text == "Spoken sentence."
     assert capture_frames[0].transport_destination == "alice"

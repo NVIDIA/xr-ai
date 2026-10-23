@@ -11,7 +11,7 @@ import time
 import wave
 
 import numpy as np
-from pipecat.frames.frames import OutputAudioRawFrame
+from pipecat.frames.frames import TTSAudioRawFrame
 
 from xr_ai_hub import AudioChunk
 
@@ -74,17 +74,20 @@ def wav_to_chunks(wav_bytes: bytes, participant_id: str) -> list[AudioChunk]:
     return out
 
 
-def wav_to_output_frames(wav_bytes: bytes, pid: str) -> list[OutputAudioRawFrame]:
-    """Decode a WAV blob into 20 ms int16 ``OutputAudioRawFrame``s for *pid*.
+def wav_to_output_frames(wav_bytes: bytes, pid: str) -> list[TTSAudioRawFrame]:
+    """Decode a WAV blob into 20 ms int16 ``TTSAudioRawFrame``s for *pid*.
+
+    Pipecat's output transport raises bot started/stopped speaking only for
+    ``TTSAudioRawFrame`` audio, which is why plain output frames are not used.
 
     ``wav_to_chunks`` yields float32 ``AudioChunk``s; pipecat's output path
     expects int16 PCM, so each chunk is converted here and stamped with
     ``transport_destination`` so the output transport knows which participant
     to address. Raises on a malformed WAV — callers log and skip.
     """
-    frames: list[OutputAudioRawFrame] = []
+    frames: list[TTSAudioRawFrame] = []
     for c in wav_to_chunks(wav_bytes, pid):
-        out = OutputAudioRawFrame(
+        out = TTSAudioRawFrame(
             audio        = float32_to_int16(c.data),
             sample_rate  = c.sample_rate,
             num_channels = c.channels,

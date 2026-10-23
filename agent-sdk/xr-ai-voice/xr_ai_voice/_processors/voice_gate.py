@@ -146,7 +146,7 @@ class VoiceGateProcessor(FrameProcessor):
         """``AudioSink`` impl — VoiceGate calls this for chime + stop-ack.
 
         We decode the WAV into 20 ms chunks and push them as
-        ``OutputAudioRawFrame``s, matching the same int16 PCM path TTS
+        ``TTSAudioRawFrame``s, matching the same int16 PCM path TTS
         uses. ``transport_destination`` carries the pid so the output
         transport knows which participant to send the audio back to.
         """
