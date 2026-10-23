@@ -392,7 +392,8 @@ When adding, removing, or upgrading a third-party dependency:
    libraries and their native versions, for license and attribution terms.
 4. Update this file and copy the exact upstream license, attribution, and
    native-library source notices into [`third_party_licenses/`](third_party_licenses/).
-5. Run `uv run pytest tests/test_third_party_notices.py` to verify that the
+5. Run `uv --config-file uv.toml run --project tests pytest tests/test_third_party_notices.py`
+   from the repository root to verify that the
    notice versions and bundled texts match the qualified lock.
 
 All updates belong in the same commit.

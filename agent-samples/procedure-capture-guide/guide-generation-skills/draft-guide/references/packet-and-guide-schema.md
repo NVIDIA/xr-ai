@@ -97,12 +97,12 @@ and completion messages; do not copy the worked example's wording.
 | `reads`, `writes` | Lists of declared state fields; `writes` cannot be empty |
 | `trigger` | `function`, positive `interval_s`, `arguments`, optional `result_field` |
 | `agent`, `voice` | Each has a nonempty `prompt` and an allowed `tools` list; `agent` may be omitted with direct `evidence.commit` |
-| `evidence` | Full-match regex `pattern`, positive integer `consecutive`, optional typed `commit` mapping |
+| `evidence` | Optional mapping: full-match regex `pattern`, positive integer `consecutive`, optional typed `commit` mapping |
 | `complete_when` | Nonempty typed mapping using only this step's writable fields |
 | `next` | Next step ID, or `null` for the last step |
-| `complete_on_skip` | Boolean; true ends the run if this incomplete step is skipped |
+| `complete_on_skip` | Optional boolean, default false; true ends the run if this incomplete step is skipped |
 | `finish_on_complete` | Optional boolean, only for a terminal step; true ends the run automatically after verified completion |
-| `state_on_skip` | Typed mapping using only writable fields; normally `{}` |
+| `state_on_skip` | Optional typed mapping using only writable fields; defaults to `{}` |
 | `messages` | Nonempty `enter`, `complete`, and `skip` strings |
 
 `evidence.commit` uses writable fields, not a literal placeholder like

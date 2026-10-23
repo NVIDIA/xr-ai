@@ -1014,6 +1014,7 @@ Python dependency metadata, so they remain curated here.
 | `services/nemotron3-nano-llm/` | `nemotron3-nano-llm-server` | `nemotron3_nano_llm_server` | 8107 | NVIDIA-Nemotron-3-Nano-30B-A3B (GPU-selected quantization) | vLLM (pip or docker) |
 | `services/nemotron-omni-llm/` | `nemotron-omni-llm-server` | `nemotron_omni_llm_server` | 8108 | Nemotron-3-Nano-Omni-30B-A3B-Reasoning | vLLM (pip or docker), multimodal |
 | `services/embedding-server/` | `embedding-server` | `embedding_server` | 8109 | Nemotron-3-Embed-1B-BF16 | vLLM (pip or docker) |
+| `services/clef-server/` | `clef-server` | `clef_server` | 8120 | Cloudflare Clef-Flash 9B | Native SystemOne choice decisions |
 | `services/video-memory-service/` | `xr-video-memory-service` | `video_memory_service` | 8310 | — | Typed RPC using msgpack over ZMQ |
 | `services/ocr-server/` | Container only | Operator-run container | 8000 in container | Nemotron OCR v2 multilingual | Hugging Face in a local CUDA container |
 | `agent-samples/xr-render-demo/scene/` | `xr-render-scene` | `xr_render_scene` | 8320 | — | Sample-local typed scene service |

@@ -21,7 +21,7 @@ class RoutingTurnContext:
     """
 
     exchange_id: object | None
-    """Identity of the current completed exchange, when one is active."""
+    """Identity of the current exchange, when one is active."""
 
     history_exchange_ids: tuple[object | None, ...]
     """Exchange identities aligned with the active bounded history."""

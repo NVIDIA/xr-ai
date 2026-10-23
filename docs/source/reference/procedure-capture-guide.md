@@ -429,7 +429,8 @@ Periodic observations use a fresh camera view or a deterministic elapsed-time
 check. The observer can commit only declared writable fields, with any required
 consecutive evidence. Late observations from a previous step or run cannot
 change current progress. The agent announces step completion once, without
-requiring a user question, but does not automatically advance to the next step.
+requiring a user question. Advancement is explicit unless the terminal step
+sets `finish_on_complete: true`, which ends the run automatically.
 
 | Request | Behavior |
 |---|---|

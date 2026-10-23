@@ -20,14 +20,17 @@ Refer to {doc}`deploying-with-nim` for external NIM endpoints.
 | Lab instrument monitoring | Speaker ASR, TTS, Nemotron Omni, Cosmos VLM |
 | Tea making | Speaker ASR, TTS, Nemotron Omni, Nemotron embedding |
 | XR render demo | Speaker ASR, TTS, Nemotron Omni, Cosmos VLM |
+| Procedure capture and guide | Batch STT, Pocket TTS, Nemotron Omni, Cosmos VLM |
 
 Tea making uses Omni for both language and vision. Its RAG service needs
 embeddings. XR rendering uses one Omni server for its LLM roles and does not
 need embeddings. Hubs, workers, RAG, scene, and rendering processes remain in
 the agent launcher; the model launcher brings up inference servers only.
 
-The shipped workers require speaker ASR on port 8102. They do not contain a
-batch-STT model role or automatically fall back to the batch server on 8103.
+The Simple VLM, lab monitoring, tea making, and XR render workers require
+speaker ASR on port 8102. They do not contain a batch-STT model role or
+automatically fall back to the batch server on 8103. Procedure capture and guide
+uses batch STT on port 8103 with speaker selection disabled.
 For explicit batch speech, replace `speaker-stt` with `stt` in the sample's
 launcher service list and every selected hardware YAML, add the existing
 batch adapter under `models.stt` in the worker profile, and disable

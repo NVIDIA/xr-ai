@@ -30,11 +30,11 @@ files before starting the sample:
 | `yaml/device_io_hub.yaml` | Room, ports, web client, and network behavior |
 | `yaml/media_capture.yaml` | Opt-in session recording output, NVENC, audio, captions, and retention |
 
-For example, change `followup_grace_s` in `yaml/voice_gate.yaml` to control how
-long a second utterance can omit “Hey Agent”:
+For example, set `mode: hybrid` in `yaml/voice_gate.yaml` to accept
+wake-addressed questions while the conversation is closed:
 
 ```yaml
-followup_grace_s: 10.0
+mode: hybrid
 ```
 
 Restart the sample after an edit. If you change a local model server rather
@@ -79,8 +79,10 @@ and camera access, and connect. After the agent reports ready, say
 “Hey agent, let's start talking,” then speak questions without a wake phrase.
 Say “Hey agent, let's stop talking” to close the conversation. Typed questions
 remain available without opening a voice conversation. With `--session-recording`, each connection is recorded under
-`~/.local/share/xr-ai/captures/simple-vlm-example/` and finalized when the
-participant disconnects or the stack stops. The normal command writes no
+`~/.local/share/xr-ai/captures/simple-vlm-example/` and its raw bundle is finalized when the
+participant disconnects or the stack stops. For a captioned MP4, disconnect the
+participant and wait for rendering to finish before stopping the stack; shutdown
+finalizes active raw bundles without starting new renders. The normal command writes no
 session recording.
 
 The local models remain running after the sample stops. From this directory,

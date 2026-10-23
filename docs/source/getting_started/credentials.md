@@ -75,9 +75,9 @@ uv run --project utils/xr-ai-launcher python -c \
   "from xr_ai_launcher import ensure_credentials; ensure_credentials('HF_TOKEN')"
 ```
 
-Get a token at <https://huggingface.co/settings/tokens>. `HF_TOKEN` is also
-written to `~/.cache/huggingface/token` — the standard location
-`huggingface_hub` checks — so child processes (e.g. `vlm-server`) find it even
+Get a token at <https://huggingface.co/settings/tokens>. A token entered through
+`ensure_credentials` is also written to `~/.cache/huggingface/token` — the
+standard location `huggingface_hub` checks — so child processes (e.g. `vlm-server`) find it even
 when env-var inheritance is incomplete, and an existing `huggingface-cli login`
 is reused without any further setup.
 
@@ -139,3 +139,7 @@ p = pathlib.Path.home() / '.config/xr-ai/credentials.json'
 d = json.loads(p.read_text()); d.pop('HF_TOKEN', None); p.write_text(json.dumps(d, indent=2))
 "
 ```
+
+Removing `HF_TOKEN` from the launcher store does not remove a token saved by
+Hugging Face login. Remove `~/.cache/huggingface/token` as well if you want to
+disable that fallback, and unset `HF_TOKEN` in the launch environment.

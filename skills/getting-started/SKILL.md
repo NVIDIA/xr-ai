@@ -28,7 +28,8 @@ the pointers below to the answers.
    the skill and the checkout. For other retrieval failures, stop and ask
    whether to retry. Use `https://nvidia.github.io/xr-ai/main/` for `main`, or
    replace `main` with the selected release tag.
-   <https://nvidia.github.io/xr-ai/> opens the latest published release.
+   <https://nvidia.github.io/xr-ai/> opens the newest complete documentation
+   set and can fall back to `main` when the release lacks current entry points.
 2. **Local or remote GPU?** Models on the local GPU, or a hosted/remote
    endpoint?
    - **Local:** read the matching version of the requirements page at
@@ -47,9 +48,10 @@ the pointers below to the answers.
 - **Repo:** `git clone https://github.com/NVIDIA/xr-ai.git`, then check out
   the ref chosen above (latest release tag, run in the clone:
   `git tag --list 'v*' | python3 .github/scripts/select_latest_docs_release.py`;
-  it prefers stable releases over prereleases, matching what the docs site
-  serves). If the selector prints no tag, remain on `main` and tell the user
-  that no release tag was found.
+  it prefers stable releases over prereleases). Use the selected tag
+  in documentation URLs; the site landing page can fall back to `main`. If the
+  selector prints no tag, remain on `main` and tell the user that no release tag
+  was found.
 - **Working contract:** read `AGENTS.md` first. Every change must satisfy it,
   and its canonical-references table routes deeper topics.
 - **Docs:** `docs/source/`; published versioned site at

@@ -174,7 +174,8 @@ Exact boilerplate — do not add logic here:
 <Name> agent orchestrator.  Runs the process stack for this sample.
 
 How to run (from agent-samples/<name>/):
-    uv sync && uv run <snake_name>
+    uv --config-file ../../uv.toml sync
+    uv --config-file ../../uv.toml run <snake_name>
 """
 from pathlib import Path
 
@@ -280,22 +281,27 @@ class <CamelName>Agent:            # ← FILL IN agent logic
     async def run(self, ready_file: Path | None = None) -> None:
         # ← start any application background tasks before the endpoint task
         self._ep_task = asyncio.create_task(self._ep.run(), name="hub-endpoint")
-        await self._ep.wait_until_running()
-        if ready_file:
-            ready_file.touch()
         try:
+            await self._ep.wait_until_running()
+            if ready_file:
+                ready_file.touch()
             await self._ep_task
         except asyncio.CancelledError:
-            pass
+            if asyncio.current_task().cancelling():
+                raise
+            # ignored: shutdown cancelled the child receive loop.
         finally:
+            self._ep_task.cancel()
+            await asyncio.gather(self._ep_task, return_exceptions=True)
             self._ep_task = None
+            # ← cancel and await application background tasks before closing IPC
+            self._ep.stop()
+            self._ep.close()
 
     def shutdown(self) -> None:
-        # ← cancel any background tasks here first
+        # Closing sockets is deferred until the receive loop has unwound.
         if self._ep_task:
             self._ep_task.cancel()
-        self._ep.stop()
-        self._ep.close()
 
 
 async def main(ready_file: Path | None = None) -> None:

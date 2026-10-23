@@ -471,6 +471,7 @@ ctest --test-dir build --output-on-failure
 | `streamkit_audio_sink_tests` | Audio parameter forwarding and virtual dispatch |
 | `streamkit_session_tests` | Mock-backed connection, media, data, status, and disconnection lifecycle |
 | `streamkit_livekit_backend_tests` | State deduplication, disconnect races, stale metrics, and callback exceptions |
+| `streamkit_byte_stream_tests` | Byte-stream connection admission and stub or SDK-backed send preconditions |
 
 Run one test with CTest, invoke its binary directly, or rerun failures:
 

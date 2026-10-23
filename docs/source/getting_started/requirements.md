@@ -26,6 +26,7 @@ NVDEC.
 | lab-instrument-monitoring (requires model services) | Uses the model-services allocation |
 | tea-making-sample (requires model services) | Uses the model-services allocation |
 | xr-render-demo (requires model services) | Model allocation plus ~2 GB for CloudXR and the hub |
+| procedure-capture-guide (requires model services) | Uses the model-services allocation |
 | Hub only | No model allocation; NVENC and NVDEC are still required |
 
 ## Software

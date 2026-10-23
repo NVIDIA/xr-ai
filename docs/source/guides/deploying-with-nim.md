@@ -45,7 +45,7 @@ and the deployment guide for each selected model and container version.
 
 The example in `deployment/nim/models.yaml` selects Nemotron Omni for LLM
 chat and tool calls, Cosmos3 for vision, Parakeet for recognition, Magpie for
-synthesis, Llama Nemotron Embed for retrieval, and multilingual Nemotron OCR v2
+synthesis, Nemotron 3 Embed for retrieval, and multilingual Nemotron OCR v2
 for text recognition. The OCR entry is available for future integrations; no
 supplied sample consumes it. These are endpoint
 configuration examples, not a claim of production or hardware qualification.
@@ -87,8 +87,9 @@ protocol; hosted NVCF speech additionally needs its model's `function_id`.
 
 Each entry has `deployment.ownership: external`. The deployment remains owned
 by its operator when the sample exits or restarts. This file is a consumer
-profile; do not pass it to `model_servers --models`, which selects the local
-services to start and stop.
+profile; do not pass it to a sample's `model-servers/` launcher. Those launchers
+select local services in their source and accept only `--stop` and
+`--gpu-profile`, besides help.
 
 The checked-in voice workers include the existing `xr-ai-models[riva]` extra.
 Applications copied from an earlier sample must enable that extra in their
@@ -250,10 +251,11 @@ uv run --project agent-samples/simple-vlm-example simple_vlm_example
 | Simple VLM | `yaml/models.json` | `stt`, `vlm`, `tts` |
 | Lab instrument monitoring | `yaml/models.json` | `llm`, `vlm`, `stt`, `tts` |
 | XR render demo | `yaml/models.json` | `llm`, `vlm`, `stt`, `tts` |
+| Procedure capture and guide | `yaml/models.json` | `llm`, `vlm`, `stt`, `tts` |
 | Tea making | `yaml/models.local.json` | `llm`, `vlm`, `stt`, `tts`, `embedding` |
 
-Simple VLM, lab monitoring, and XR render resolve `models.json` beside their
-worker YAML. Tea making's worker and RAG YAML each select `models_config`;
+Simple VLM, lab monitoring, XR render, and procedure capture resolve
+`models.json` beside their worker YAML. Tea making's worker and RAG YAML each select `models_config`;
 update both when choosing a different profile path. Paths are relative to the
 respective YAML. Keep application-specific extra roles when adapting other
 samples. No sample launcher option or model-serving process is needed.

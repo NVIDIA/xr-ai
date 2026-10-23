@@ -278,7 +278,7 @@ NGC vLLM container.
 https://ngc.nvidia.com/setup/api-key and run:
 
 ```bash
-docker login nvcr.io -u '$oauthtoken' -p $NGC_API_KEY
+printf '%s' "$NGC_API_KEY" | docker login nvcr.io -u '$oauthtoken' --password-stdin
 ```
 
 The credential is cached in `~/.docker/config.json` and reused on subsequent
@@ -586,11 +586,12 @@ restarts so model weights stay loaded across worker crashes and debug
 restarts. Refer to {doc}`/components/ai-services` → *vLLM model
 persistence*.
 
-**Fix:** to fully release VRAM:
+**Fix:** from the repository root, stop XR Render's model stack to release its
+VRAM:
 
 ```bash
-cd xr-ai
-uv run --project agent-samples/simple-vlm-example/model-servers simple_vlm_example_model_servers --stop
+cd agent-samples/xr-render-demo
+uv run --project model-servers xr_render_demo_model_servers --stop
 ```
 
 Use the current sample's own model command with `--stop` and the same explicit
@@ -616,8 +617,8 @@ appears to hang at startup the first time.
 **Cause:** model weights are downloading from HuggingFace into `models/` at
 the repository root (gitignored; the Cosmos3 checkpoint alone is tens of GB).
 
-**Fix:** wait. Subsequent runs use the cached weights and start in
-~30–60 s. If the download makes no progress, note that unauthenticated
-downloads are rate-limited and can
-stall indefinitely; set `HF_TOKEN` and restart. Refer to
+**Fix:** wait. Subsequent runs reuse the cached weights, but CUDA graph
+capture and kernel initialization can still take several minutes. If the
+download makes no progress, note that unauthenticated downloads are rate-limited
+and can stall indefinitely; set `HF_TOKEN` and restart. Refer to
 {doc}`Credentials </getting_started/credentials>`.

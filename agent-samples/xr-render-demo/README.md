@@ -89,8 +89,10 @@ uv run xr_render_demo --session-recording
 Open the authenticated client URL printed by DeviceIOHub and connect. Press
 Ctrl+C to stop the demo stack; do not stop its individual child processes.
 With `--session-recording`, each connection is recorded under
-`~/.local/share/xr-ai/captures/xr-render-demo/`. The normal command writes no
-session recording.
+`~/.local/share/xr-ai/captures/xr-render-demo/`. For a captioned MP4, disconnect
+the participant and wait for rendering to finish before stopping the stack;
+shutdown finalizes active raw bundles without starting new renders. The normal
+command writes no session recording.
 
 The local models remain running after the sample stops. From this directory,
 stop them with `uv run --project model-servers xr_render_demo_model_servers --stop`.

@@ -182,13 +182,11 @@ def test_build_your_app_skill_routes_to_versioned_guides() -> None:
     skill = (_ROOT / "skills" / "build-your-app" / "SKILL.md").read_text()
 
     assert (
-        "https://nvidia.github.io/xr-ai/latest/guides/building-your-app.html"
+        "https://nvidia.github.io/xr-ai/<ref>/guides/building-your-app.html"
         in skill
     )
-    assert (
-        "https://nvidia.github.io/xr-ai/main/guides/building-your-app.html"
-        in skill
-    )
+    assert "selected release tag or `main`" in skill
+    assert "do not assume it matches a release checkout" in " ".join(skill.split())
 
 
 def test_latest_docs_alias_contains_complete_rendered_version() -> None:
