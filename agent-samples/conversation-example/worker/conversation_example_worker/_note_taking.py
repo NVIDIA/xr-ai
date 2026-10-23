@@ -12,10 +12,10 @@ from datetime import UTC, datetime
 import nemo_relay
 from loguru import logger
 from xr_ai_conversation import Conversation, ConversationContextUpdate
+from xr_ai_interaction import ResponseOutput
 from xr_ai_models import DecisionQuestion, DecisionService
 from xr_ai_routing import Admission, AgentTurn, DestinationResult, RoutableAgent, RoutingAid
 from xr_ai_runtime import AgentRuntime, RuntimeClosedError, Topic
-from xr_ai_voice import VoiceOutput
 
 ContextPublisher = Callable[[str, ConversationContextUpdate], Awaitable[None]]
 
@@ -29,7 +29,7 @@ class NoteTakingAgent(RoutableAgent):
         decisions: DecisionService,
         *,
         runtime: AgentRuntime,
-        output_topic: Topic[VoiceOutput],
+        output_topic: Topic[ResponseOutput],
         context_budget_bytes: int,
         publish_context: ContextPublisher | None = None,
     ) -> None:
@@ -143,7 +143,7 @@ class NoteTakingAgent(RoutableAgent):
                 raise asyncio.CancelledError
             await self._runtime.publish(
                 self._output_topic,
-                VoiceOutput(
+                ResponseOutput(
                     text=text,
                     response_id=turn.turn_id,
                     interrupt=interrupt,

@@ -20,6 +20,7 @@ from xr_ai_conversation import (
     ConversationContextUpdate,
 )
 from xr_ai_hub import FrameUnavailable
+from xr_ai_interaction import ResponseOutput
 from xr_ai_models import DecisionQuestion, DecisionService
 from xr_ai_routing import (
     Admission,
@@ -31,7 +32,6 @@ from xr_ai_routing import (
 from xr_ai_runtime import AgentRuntime, Topic
 from xr_ai_tools.current_frame import CurrentFrameRequest, CurrentFrameTool
 from xr_ai_tools.vision import ImageQueryRequest, ImageQueryTool
-from xr_ai_voice import VoiceOutput
 
 MONITOR_WINDOW_TOPIC = Topic("conversation-example.monitor-window", ConversationContextUpdate)
 _NEUTRAL_WINDOW = "Background visual monitoring has not been started."
@@ -86,7 +86,7 @@ class VisualMonitorAgent(RoutableAgent):
         publish_window: WindowPublisher,
         *,
         runtime: AgentRuntime,
-        output_topic: Topic[VoiceOutput],
+        output_topic: Topic[ResponseOutput],
         window_size: int,
         context_budget_bytes: int,
     ) -> None:
@@ -196,7 +196,7 @@ class VisualMonitorAgent(RoutableAgent):
                 raise asyncio.CancelledError
             await self._runtime.publish(
                 self._output_topic,
-                VoiceOutput(
+                ResponseOutput(
                     text=text,
                     response_id=turn.turn_id,
                     interrupt=interrupt,

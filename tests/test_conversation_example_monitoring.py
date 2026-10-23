@@ -19,9 +19,10 @@ from _conversation_output import CapturingAgentRouter as AgentRouter
 from _conversation_output import handle as _handle
 from loguru import logger
 from xr_ai_hub import FrameUnavailable
+from xr_ai_interaction import ParticipantJoined, ParticipantLeft, ResponseOutput, UserQuery
 from xr_ai_models import ChatStreamEvent
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, Topic, subscribe
-from xr_ai_voice import VOICE_OUTPUT_TOPIC, UserQuery, VoiceOutput, VoiceParticipantJoined, VoiceParticipantLeft
+from xr_ai_voice import VOICE_OUTPUT_TOPIC
 
 _ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_ROOT / "agent-samples/conversation-example/worker"))
@@ -261,7 +262,7 @@ async def test_initial_agent_summaries_reach_first_query_and_remain_participant_
             self.completed = asyncio.Event()
 
         @subscribe(VOICE_OUTPUT_TOPIC)
-        async def output(self, message: VoiceOutput, _ctx: RuntimeContext):
+        async def output(self, message: ResponseOutput, _ctx: RuntimeContext):
             if message.final:
                 self.completed.set()
 
@@ -355,12 +356,12 @@ async def test_initial_agent_summaries_reach_first_query_and_remain_participant_
         await notes._publish_context_snapshot("alice")  # noqa: SLF001
         await runtime.publish(
             PARTICIPANT_JOINED_TOPIC,
-            VoiceParticipantJoined(),
+            ParticipantJoined(),
             participant_id="alice",
         )
         await runtime.publish(
             PARTICIPANT_JOINED_TOPIC,
-            VoiceParticipantJoined(),
+            ParticipantJoined(),
             participant_id="alice",
         )
         output.completed.clear()
@@ -375,7 +376,7 @@ async def test_initial_agent_summaries_reach_first_query_and_remain_participant_
 
         await runtime.publish(
             PARTICIPANT_JOINED_TOPIC,
-            VoiceParticipantJoined(),
+            ParticipantJoined(),
             participant_id="bob",
         )
         output.completed.clear()
@@ -391,12 +392,12 @@ async def test_initial_agent_summaries_reach_first_query_and_remain_participant_
 
         await runtime.publish(
             PARTICIPANT_LEFT_TOPIC,
-            VoiceParticipantLeft(),
+            ParticipantLeft(),
             participant_id="alice",
         )
         await runtime.publish(
             PARTICIPANT_JOINED_TOPIC,
-            VoiceParticipantJoined(),
+            ParticipantJoined(),
             participant_id="alice",
         )
         output.completed.clear()

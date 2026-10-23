@@ -665,9 +665,10 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Runtime dependencies:
   - `nemo-relay>=0.7.2,<0.8`
   - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
-  - `xr-ai-conversation[voice]` → [`xr-ai-conversation`](agent-sdk/xr-ai-conversation/) (local, editable)
-  - `xr-ai-routing[voice]` → [`xr-ai-routing`](agent-sdk/xr-ai-routing/) (local, editable)
+  - `xr-ai-conversation` → [`xr-ai-conversation`](agent-sdk/xr-ai-conversation/) (local, editable)
+  - `xr-ai-routing[runtime]` → [`xr-ai-routing`](agent-sdk/xr-ai-routing/) (local, editable)
   - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
+  - `xr-ai-interaction` → [`xr-ai-interaction`](agent-sdk/xr-ai-interaction/) (local, editable)
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
   - `xr-ai-models[riva]` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
   - `xr-ai-tools[frames,vision]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)

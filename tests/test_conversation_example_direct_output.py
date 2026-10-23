@@ -12,11 +12,11 @@ from types import SimpleNamespace
 
 import pytest
 from xr_ai_conversation import Conversation
+from xr_ai_interaction import ResponseOutput, UserQuery
 from xr_ai_models import ChatStreamEvent
 from xr_ai_routing import AgentRouter, RoutingAid
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, Topic, subscribe
 from xr_ai_tools.image import ImageReference
-from xr_ai_voice import UserQuery, VoiceOutput
 
 _ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_ROOT / "agent-samples/conversation-example/worker"))
@@ -26,7 +26,7 @@ from conversation_example_worker._note_taking import NoteTakingAgent  # noqa: E4
 from conversation_example_worker._topics import USER_QUERY_TOPIC  # noqa: E402
 from conversation_example_worker._visual_agents import VisualObservationAgent  # noqa: E402
 
-_OUTPUT = Topic("conversation-example.test-output", VoiceOutput)
+_OUTPUT = Topic("conversation-example.test-output", ResponseOutput)
 
 
 class _Decisions:
@@ -105,7 +105,7 @@ class _Output(Agent):
         self.completed = asyncio.Event()
 
     @subscribe(_OUTPUT)
-    async def output(self, message: VoiceOutput, ctx: RuntimeContext):
+    async def output(self, message: ResponseOutput, ctx: RuntimeContext):
         self.messages.append((ctx.metadata, message))
         if message.final:
             self.completed.set()

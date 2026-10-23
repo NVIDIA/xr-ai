@@ -29,7 +29,7 @@ details.
 `AgentRuntime`. The sample configures the router's query, participant lifecycle,
 interruption, and voice output topics. The router owns routing tasks, focus,
 shared turn history, acknowledgments, and route-error responses. Each destination
-publishes its own attributed `VoiceOutput` messages. Conversation and direct
+publishes its own attributed `ResponseOutput` messages. Conversation and direct
 observation stream chunks; note-taking and monitor controls publish complete
 responses.
 
@@ -39,7 +39,7 @@ VoiceAgent
 AgentRouter
   -- route, admit, and answer -->
 Selected destination
-  -- VoiceOutput topic -->
+  -- ResponseOutput topic -->
 VoiceAgent
 ```
 
