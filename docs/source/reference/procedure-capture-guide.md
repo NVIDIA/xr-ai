@@ -46,6 +46,12 @@ and stays silent during narration. After **stop capture**, it says
 saving silently; processing errors are logged. Disconnecting finalizes the packet
 without announcements.
 
+On connection, capture mode says: "Say start capture to start the recording and
+demonstrate your procedure. To finish recording, say stop capture." While idle,
+any utterance other than **start capture** repeats this hint, including **stop
+capture** when no capture is active. The hint is not appended to "Capture
+stopped." and does not interrupt narration during an active capture.
+
 To stop the sample, press Ctrl+C. The shared model servers remain running.
 To stop the services selected by this sample's deployment:
 
