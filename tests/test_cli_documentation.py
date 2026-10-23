@@ -39,7 +39,9 @@ def test_sample_command_catalog_matches_top_level_projects() -> None:
     ]
     for sample in ("simple-vlm-example", "lab-instrument-monitoring", "tea-making-sample", "xr-render-demo"):
         command = commands[sample.replace("-", "_") + "_model_servers"]
-        assert [argument.flags for argument in command.arguments] == [("--stop",), ("--gpu-profile",)]
+        assert [argument.flags for argument in command.arguments] == [
+            ("--stop",), ("--gpu-profile",), ("--state-file",),
+        ]
         assert command.project_dir == Path("agent-samples") / sample / "model-servers"
     assert [argument.flags for argument in commands["simple_vlm_example"].arguments] == [
         ("--session-recording",),
@@ -51,7 +53,7 @@ def test_sample_command_catalog_matches_top_level_projects() -> None:
         ("--health-port",),
     ]
     assert [argument.flags for argument in commands["procedure_capture_guide_model_servers"].arguments] == [
-        ("--stop",), ("--gpu-profile",),
+        ("--stop",), ("--gpu-profile",), ("--state-file",),
     ]
     assert commands["procedure_capture_guide_model_servers"].project_dir == Path(
         "agent-samples/procedure-capture-guide/model-servers"
@@ -73,7 +75,7 @@ def test_catalog_builds_sample_directory_invocation() -> None:
     commands = {command.program: command for command in load_cli_catalog(_ROOT)}
 
     assert commands["simple_vlm_example_model_servers"].invocation == (
-        "uv run simple_vlm_example_model_servers [--stop] [--gpu-profile NAME]"
+        "uv run simple_vlm_example_model_servers [--stop] [--gpu-profile NAME] [--state-file PATH]"
     )
 
 

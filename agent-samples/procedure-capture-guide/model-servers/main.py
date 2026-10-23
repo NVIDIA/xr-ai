@@ -32,9 +32,16 @@ def run() -> None:
         "--gpu-profile", metavar="NAME",
         help="Select a startup hardware profile; with --stop, apply its port overrides without GPU detection.",
     )
+    parser.add_argument(
+        "--state-file", type=Path, metavar="PATH",
+        help="Reconcile this deployment's models using a shared private state file.",
+    )
     args = parser.parse_args()
     try:
-        run_model_stack(_BASE, _SERVICES, stop=args.stop, gpu_profile=args.gpu_profile)
+        run_model_stack(
+            _BASE, _SERVICES, stop=args.stop, gpu_profile=args.gpu_profile,
+            state_file=args.state_file,
+        )
     except (ValueError, RuntimeError) as exc:
         parser.error(str(exc))
 

@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Compose sample configs and delegate lifecycle to existing server utilities."""
+"""Private to xr_ai_model_server_stack: compose configs and delegate lifecycle."""
 from __future__ import annotations
 
 import shutil
@@ -12,6 +12,8 @@ import yaml
 from xr_ai_launcher import Process, detect_gpu_config, require_credentials, run_stack
 from xr_ai_logging import setup_logging
 from xr_ai_vllm import stop_persistent_servers
+
+from ._reconcile import model_state
 
 _SERVICES_DIR = Path(__file__).resolve().parents[3] / "services"
 # The explicit order leaves Omni's compilation ahead of Cosmos initialization.
@@ -96,6 +98,7 @@ def run_model_stack(
     *,
     stop: bool = False,
     gpu_profile: str | None = None,
+    state_file: Path | None = None,
 ) -> None:
     """Start or stop the configured local inference stack for a developer sample.
 
@@ -120,17 +123,47 @@ def run_model_stack(
     servers on those selected ports. It can stop servers used
     by another sample sharing those ports; no launch history is recorded.
 
-    Stop the current stack before switching samples, editing its server
-    settings, or updating the checkout. This convenience API does not read
+    ``state_file`` opts into serialized model reconciliation for one deployment.
+    Share the same file between sample model launchers. Its parent must be an
+    owned private directory. Only ready services with matching resolved config,
+    checkout revision and path, HF token, GPU visibility, and live instance
+    identity are reused. Unused, changed, or unhealthy recorded models stop
+    before new models start. Credentials are hashed, never saved in state.
+    Untracked listeners are not adopted; stop them explicitly first. A partial
+    launch must be stopped with the same state file before retrying. With
+    ``stop=True``, recorded ports are used without GPU detection or credentials.
+    Callers must stop the consuming agent before changing its model stack.
+    Reconciliation supports native services and Docker-backed vLLM. Persistent
+    pip vLLM can escape cancellation before binding its port, so it must use
+    the explicit shutdown workflow without ``state_file``.
+
+    Without ``state_file``, stop the current stack before switching samples,
+    editing its server settings, or updating the checkout. This API does not read
     consumer endpoint profiles or launch independently deployed NIM endpoints.
 
     Raises:
         ValueError: The selected profile or server configuration is invalid.
-        RuntimeError: GPU inventory or configured server cleanup fails.
+        RuntimeError: GPU inventory, private deployment state, or server cleanup fails.
         SystemExit: Required credentials are absent or stack startup aborts.
     """
+    if state_file is not None and not isinstance(state_file, Path):
+        raise TypeError("state_file must be a Path or None")
     base = base.resolve()
     log_file = setup_logging("orchestrator", namespace=f"{base.parent.name}-models")
+    if state_file is not None:
+        if not stop:
+            configs = _configs(base, services, gpu_profile or detect_gpu_config())
+            if any(config.get("vllm_backend") == "pip" for config in configs.values()):
+                raise ValueError("state-file reconciliation requires Docker for vLLM; use explicit shutdown for pip")
+            require_credentials("HF_TOKEN")
+        with model_state(state_file) as state:
+            if stop:
+                state.stop()
+            else:
+                state.prepare(configs, base.parents[2])
+                _launch(base, configs, log_file)
+                state.ready()
+        return
     if stop:
         configs = _configs(base, services, gpu_profile)
         if not stop_persistent_servers([(name, config["port"]) for name, config in configs.items()]):
@@ -138,6 +171,10 @@ def run_model_stack(
         return
     configs = _configs(base, services, gpu_profile or detect_gpu_config())
     require_credentials("HF_TOKEN")
+    _launch(base, configs, log_file)
+
+
+def _launch(base: Path, configs: dict, log_file: Path) -> None:
     # Configs stay available through child initialization and readiness. Services
     # read their config at startup; persistent servers do not reopen it afterward.
     directory = tempfile.mkdtemp(prefix="model-configs-", dir=log_file.parent)

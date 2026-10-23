@@ -82,7 +82,8 @@ profile it uses the selected services' shared default ports. If a hardware
 profile overrides ports, pass that same `--gpu-profile NAME` when stopping;
 this applies its port settings without inspecting the GPU. GPU placement and
 memory budgets do not affect cleanup. Refer to {doc}`/reference/command-line` for each sample's
-command. Each launcher has only `--stop` and `--gpu-profile`, besides help.
+command. Each launcher also accepts an optional `--state-file` for the
+reconciliation workflow below.
 
 If a later model fails to start, or startup is cancelled, servers that had
 signaled readiness when cleanup began stay running. Fix the failure and rerun
@@ -101,6 +102,56 @@ field and never copy environment variables. Treat customized configurations
 and logs as private when sharing diagnostics.
 
 ## Switch samples or update the checkout
+
+For one deployment that switches samples frequently, share a private state file
+between its model launchers. Stop the consuming agent first. For example, from
+the repository root:
+
+```bash
+mkdir -p "$HOME/.cache/xr-ai-models"
+chmod 700 "$HOME/.cache/xr-ai-models"
+uv run --project agent-samples/simple-vlm-example/model-servers \
+  simple_vlm_example_model_servers --state-file "$HOME/.cache/xr-ai-models/state.json"
+# After stopping the Simple VLM agent:
+uv run --project agent-samples/tea-making-sample/model-servers \
+  tea_making_sample_model_servers --state-file "$HOME/.cache/xr-ai-models/state.json"
+```
+
+Reconciliation keeps healthy recorded instances only when their resolved model
+configuration, checkout path and revision, HF token, and GPU visibility match.
+This workflow supports native servers and the samples' Docker-backed vLLM
+defaults. Persistent pip vLLM can escape cancellation before listening; use
+the explicit shutdown workflow below for that backend instead.
+It stops changed, unhealthy, and unused recorded models before starting missing
+ones, freeing their GPU memory. Runtime service wrappers still perform their
+normal readiness checks. Code edits outside committed revisions require an
+explicit stop before restart.
+
+Use the same state file for every model action in that deployment, and serialize
+manual actions with it. Different state files do not create isolated model
+servers: these samples still share ports and identities. Untracked running
+servers are not adopted; use their original stop command before enabling this
+workflow. A changed process or container identity fails closed instead of
+stopping a replacement instance. Keep the state directory private; the file
+stores ports, opaque instance identities and one-way configuration digests,
+not tokens or model configuration contents.
+
+To stop every recorded model, including retained models after failed startup,
+use either sample's model command with the same state file and `--stop`:
+
+```bash
+uv run --project agent-samples/tea-making-sample/model-servers \
+  tea_making_sample_model_servers --state-file "$HOME/.cache/xr-ai-models/state.json" --stop
+```
+
+This reads recorded ports and needs neither GPU detection nor credentials.
+After interrupted or failed model startup, explicitly stop with this state file
+before retrying; partially started models are never assumed compatible. A
+deployment can preserve the state file across a checkout update; revision or
+path changes cause model replacement. It must retain the old checkout until
+its consuming agent has stopped.
+
+### Explicit shutdown without reconciliation
 
 Use this flow whenever the set of models or server settings changes:
 
@@ -122,7 +173,7 @@ models release memory. If any affected service predates your run, obtain its
 operator's authorization before that whole-stack shutdown and switch.
 Starting a stack does not stop services outside its selection.
 
-Launchers read the current configuration; they do not keep a launch history
+Without `--state-file`, launchers read the current configuration; they do not keep a launch history
 or reconcile every older checkout. If you already switched, use the previous
 checkout's stop command and configuration before starting the new stack.
 This explicit workflow is the supported way to apply upgrades and config

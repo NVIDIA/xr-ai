@@ -45,6 +45,9 @@ endpoint configuration validated during setup and skip local model startup.
 Keep the sample alive in a managed terminal task. Record its directory,
 commands, GPU profile, stop handle, logs, and preexisting services, using reuse
 messages and startup logs as evidence. Wait for readiness per the quickstart.
+If the deployment uses `--state-file` for its models, keep that file on every
+model start and stop command. Stop the consuming agent before reconciling a
+different sample; do not adopt untracked services or discard the state file.
 For failures, follow `docs/source/guides/troubleshooting.md` and the model-server
 guide, recording retained services. Report actionable blockers.
 

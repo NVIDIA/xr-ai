@@ -94,9 +94,10 @@ under `apps/<kebab-name>/`. Repository dependency, lint, SPDX, sample catalog,
 and test discovery exclude that top-level directory.
 
 - Model-server convenience stacks start from each service's own YAML under
-  `services/` and apply sample-owned overrides under `model-servers/yaml/`. Stop the current stack before changing its settings,
-  switching samples, or updating the checkout; these launchers need no launch
-  history or cross-version reconciliation. Refer to
+  `services/` and apply sample-owned overrides under `model-servers/yaml/`.
+  Stop the current stack before changing settings, switching samples, or
+  updating the checkout, or opt into model reconciliation with a shared private
+  `--state-file`. Stop the consuming agent before either flow. Refer to
   [Model-server workflow](docs/source/guides/customizing-model-servers.md).
 - Developer samples import public XR AI package APIs. Keep private module and
   symbol imports inside their owning packages or implementation tests.

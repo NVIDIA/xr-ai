@@ -46,6 +46,7 @@ import os
 from pathlib import Path
 
 from . import _docker, _pip
+from ._identity import persistent_server_identity
 from ._config import (
     gpu_compute_major,
     gpu_is_dgx_spark,
@@ -303,6 +304,7 @@ def stop_persistent_servers(
 
 
 __all__ = [
+    "persistent_server_identity",
     "serve",
     "stop_persistent_servers",
     "DEFAULT_IMAGE",
