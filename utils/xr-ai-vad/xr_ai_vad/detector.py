@@ -36,7 +36,7 @@ log = logging.getLogger("xr_ai_vad")
 _SILERO_SR       = 16_000
 _SILERO_WINDOW   = 512    # 32 ms at 16 kHz — silero v5 hard requirement
 _MAX_UTT_S       = 30.0
-_PRE_ROLL_CHUNKS = 10     # ~320 ms pre-roll (10 × 32 ms)
+_PRE_ROLL_WINDOWS = 10    # 320 ms pre-roll (10 × 32 ms)
 
 
 OnUtteranceCb   = Callable[[bytes, int], Awaitable[None]]
@@ -83,13 +83,14 @@ class VadDetector:
         # once between finalizations.
         self._speech_start_fired: bool = False
 
-        # Rolling pre-roll: keep last N raw int16 chunks before speech onset.
+        # Rolling pre-roll contains complete classification windows.
         self._pre_roll: list[bytes] = []
 
         # Silero state.  onnx=True keeps the wheel light; we still need torch
         # because silero's __call__ expects a torch.Tensor.
         self._silero     = load_silero_vad(onnx=True)
-        self._silero_buf = np.zeros(0, np.float32)
+        self._pending_pcm = bytearray()
+        self._window_phase = 0
         log.info("Silero VAD loaded (onnx=True)")
 
     def reset(self) -> None:
@@ -101,19 +102,38 @@ class VadDetector:
         self._speaking           = False
         self._speech_start_fired = False
         self._pre_roll.clear()
-        self._silero_buf = np.zeros(0, np.float32)
+        self._pending_pcm.clear()
+        self._window_phase = 0
         self._silero.reset_states()
 
     async def feed(self, pcm_int16: bytes, sample_rate: int) -> None:
         """Process one chunk of int16 LE PCM audio.
 
         ``pcm_int16``   — raw int16 little-endian PCM bytes (mono).
-        ``sample_rate`` — sample rate in Hz.
+        ``sample_rate`` — sample rate in Hz (constant for this stream).
+
+        Incomplete classification windows remain buffered. Speech and silence
+        durations advance only when a complete 32 ms window is classified,
+        independently of the caller's chunk size.
         """
+        self._pending_pcm.extend(pcm_int16)
+        while True:
+            # Carry fractional source samples so rates such as 44.1 kHz do
+            # not drift relative to Silero's 512-sample classification clock.
+            n_samples, phase = divmod(
+                self._window_phase + sample_rate * _SILERO_WINDOW, _SILERO_SR,
+            )
+            n_bytes = n_samples * 2
+            if n_bytes == 0 or len(self._pending_pcm) < n_bytes:
+                return
+            window = bytes(self._pending_pcm[:n_bytes])
+            del self._pending_pcm[:n_bytes]
+            self._window_phase = phase
+            await self._feed_window(window, sample_rate)
+
+    async def _feed_window(self, pcm_int16: bytes, sample_rate: int) -> None:
         n_samples = len(pcm_int16) // 2
-        if n_samples == 0:
-            return
-        chunk_s = n_samples / max(sample_rate, 1)
+        chunk_s = n_samples / sample_rate
 
         is_speech = self._classify(pcm_int16, sample_rate)
 
@@ -145,7 +165,7 @@ class VadDetector:
                 self._silent_s += chunk_s
             else:
                 self._pre_roll.append(pcm_int16)
-                if len(self._pre_roll) > _PRE_ROLL_CHUNKS:
+                if len(self._pre_roll) > _PRE_ROLL_WINDOWS:
                     self._pre_roll.pop(0)
 
         utt_s = self._buffer_samples / max(sample_rate, 1)
@@ -162,32 +182,17 @@ class VadDetector:
             await self._finalize(sample_rate)
 
     def _classify(self, pcm_int16: bytes, sample_rate: int) -> bool:
-        """Return True if the chunk is speech.
-
-        Silero v5 only accepts 16 kHz or 8 kHz input and requires a fixed
-        window size (512 samples at 16 kHz). Callers commonly hand us
-        48 kHz audio straight from a WebRTC track, so we resample to
-        16 kHz here and always call silero with sample_rate=16000.
-        """
+        """Classify one complete 32 ms window, resampling only for Silero."""
         f32 = np.frombuffer(pcm_int16, dtype=np.int16).astype(np.float32) / 32768.0
-        if sample_rate != _SILERO_SR and f32.size:
-            # Linear resample is adequate for VAD — we only need rough
-            # spectral profile, not audiophile fidelity. Avoids pulling in
-            # scipy just for this single hop.
-            n_out = max(1, int(round(f32.size * _SILERO_SR / sample_rate)))
+        if sample_rate != _SILERO_SR:
+            # Original-rate PCM stays intact for the utterance callback.
             f32 = np.interp(
-                np.linspace(0.0, f32.size - 1, n_out, dtype=np.float32),
+                np.linspace(0.0, f32.size - 1, _SILERO_WINDOW, dtype=np.float32),
                 np.arange(f32.size, dtype=np.float32),
                 f32,
             ).astype(np.float32)
-        self._silero_buf = np.concatenate([self._silero_buf, f32])
-        speech_prob = 0.0
-        while len(self._silero_buf) >= _SILERO_WINDOW:
-            window = self._silero_buf[:_SILERO_WINDOW]
-            self._silero_buf = self._silero_buf[_SILERO_WINDOW:]
-            tensor = torch.from_numpy(np.ascontiguousarray(window))
-            speech_prob = max(speech_prob, float(self._silero(tensor, _SILERO_SR)))
-        return speech_prob > self._silero_threshold
+        tensor = torch.from_numpy(np.ascontiguousarray(f32))
+        return float(self._silero(tensor, _SILERO_SR)) > self._silero_threshold
 
     async def _safe_speech_start(self) -> None:
         try:
@@ -210,7 +215,6 @@ class VadDetector:
         self._speech_start_fired = False
         # Reset Silero's RNN hidden state so the next utterance's silence
         # detection isn't biased by this utterance's speech context.
-        self._silero_buf = np.zeros(0, np.float32)
         self._silero.reset_states()
         dur_s = (len(audio_bytes) // 2) / max(sample_rate, 1)
         log.info("VAD: utterance finalized  dur=%.2fs", dur_s)
