@@ -5,7 +5,7 @@
 
 Build instructions for an initial image or an earlier/current image pair, with
 previous activity and phase names as context. Parse responses into the activity,
-phase, caption, and delta fields used by capturing.py and eval/caption.py.
+phase, caption, and delta fields used by capturing.py and caption regression tests.
 
 Validate responses before saving them so malformed output cannot enter the
 caption history. Format validation does not establish visual accuracy.

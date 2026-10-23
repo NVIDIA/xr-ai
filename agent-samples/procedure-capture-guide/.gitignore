@@ -1,6 +1,5 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 artifacts/
-# Keep user-authored guides local; maintained examples live under examples/.
-guides/*
-!guides/.gitkeep
+# Keep generated guide packages local; maintained examples live under example-guides/.
+/*-guide/
