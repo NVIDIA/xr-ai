@@ -24,14 +24,11 @@ the pointers below to the answers.
    Before giving setup steps, require a copy of this skill from `<ref>`. If
    this copy's source ref differs or is unknown, retrieve it from
    `https://raw.githubusercontent.com/NVIDIA/xr-ai/<ref>/skills/setup/SKILL.md`
-   and continue with that copy. If the file is absent at a release tag, retrieve
-   `https://raw.githubusercontent.com/NVIDIA/xr-ai/<ref>/skills/getting-started/SKILL.md`
-   instead. Older releases use that name: follow only its checkout and
-   prerequisite guidance, stopping before model-server or sample launch.
-   If neither path exists at that tag, ask before using `main` for the skill,
-   checkout, and docs. For other retrieval failures, stop and ask whether to
-   retry. Use `https://nvidia.github.io/xr-ai/main/` for `main`, or
-   replace `main` with the selected release tag.
+   and continue with that copy. If the file is absent at a release tag,
+   explain that `setup` is unavailable at that release and ask before using
+   `main` for the skill, checkout, and docs. For other retrieval failures, stop
+   and ask whether to retry. Use `https://nvidia.github.io/xr-ai/main/` for
+   `main`, or replace `main` with the selected release tag.
    <https://nvidia.github.io/xr-ai/> opens the newest complete documentation
    set and can fall back to `main` when the release lacks current entry points.
 2. **Local or remote GPU?** Models on the local GPU, or a hosted/remote

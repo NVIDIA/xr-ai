@@ -1,9 +1,8 @@
 Set up xr-ai for me: ask me whether to build against the latest release
 (newest stable tag; a prerelease only if no stable exists) or main, then
 fetch skills/setup/SKILL.md at that ref from
-https://raw.githubusercontent.com/NVIDIA/xr-ai/. If it is absent at a release
-tag, use skills/getting-started/SKILL.md at the same tag for preparation
-only. If neither exists there, get my OK to use main for the skill,
+https://raw.githubusercontent.com/NVIDIA/xr-ai/. If it is absent at the
+selected release, explain that and get my OK to use main for the skill,
 checkout, and docs. Report other retrieval failures. Follow the skill and
 prepare the checkout and prerequisites without launching a sample. Report
 the checkout path, selected ref and model environment, and any setup blockers.
