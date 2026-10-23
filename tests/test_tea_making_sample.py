@@ -1381,7 +1381,7 @@ async def test_foreground_current_view_recovers_only_camera_unavailability(error
     async def fail(_request: CurrentFrameRequest) -> ImageFrame:
         raise error
 
-    async def publish(_topic, message):
+    async def publish(_topic, message, *, participant_id):
         published.append(message)
 
     frames = Tool("camera_failure", "Select a frame.", CurrentFrameRequest, ImageFrame, fail)
