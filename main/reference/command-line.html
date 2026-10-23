@@ -519,12 +519,12 @@ protocols, so they are intentionally excluded from the user-facing catalog.</p>
 <h2>procedure_capture_guide<a class="headerlink" href="#procedure-capture-guide" title="Link to this heading">#</a></h2>
 <p>Capture a demonstrated procedure or guide a participant through approved steps.</p>
 <p>Run from <code class="docutils literal notranslate"><span class="pre">agent-samples/procedure-capture-guide/</span></code>:</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>uv<span class="w"> </span>run<span class="w"> </span>procedure_capture_guide<span class="w"> </span><span class="o">[</span>--mode<span class="w"> </span><span class="o">{</span>capture,guide<span class="o">}]</span><span class="w"> </span><span class="o">[</span>GUIDE_NAME<span class="o">]</span><span class="w"> </span><span class="o">[</span>--output-root<span class="w"> </span>PATH<span class="o">]</span><span class="w"> </span><span class="o">[</span>--session-recording<span class="o">]</span><span class="w"> </span><span class="o">[</span>--hub-config<span class="w"> </span>PATH<span class="o">]</span><span class="w"> </span><span class="o">[</span>--health-port<span class="w"> </span>PORT<span class="o">]</span>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>uv<span class="w"> </span>run<span class="w"> </span>procedure_capture_guide<span class="w"> </span><span class="o">[</span>--mode<span class="w"> </span><span class="o">{</span>capture,guide<span class="o">}]</span><span class="w"> </span><span class="o">[</span>GUIDE_PATH<span class="o">]</span><span class="w"> </span><span class="o">[</span>--output-root<span class="w"> </span>PATH<span class="o">]</span><span class="w"> </span><span class="o">[</span>--session-recording<span class="o">]</span><span class="w"> </span><span class="o">[</span>--hub-config<span class="w"> </span>PATH<span class="o">]</span><span class="w"> </span><span class="o">[</span>--health-port<span class="w"> </span>PORT<span class="o">]</span>
 </pre></div>
 </div>
 <p class="rubric">Positional arguments</p>
 <dl class="simple">
-<dt><code class="docutils literal notranslate"><span class="pre">GUIDE_NAME</span></code></dt><dd><p>exact approved guide name or ID (guide mode only)</p>
+<dt><code class="docutils literal notranslate"><span class="pre">GUIDE_PATH</span></code></dt><dd><p>approved guide YAML file or directory containing exactly one top-level YAML file; absolute or relative to the sample directory (guide mode only)</p>
 </dd>
 </dl>
 <p class="rubric">Options</p>

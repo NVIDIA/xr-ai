@@ -531,7 +531,7 @@ feature described below.</p>
 <h2>Session recording<a class="headerlink" href="#session-recording" title="Link to this heading">#</a></h2>
 <p>To record the whole participant connection in either mode, run:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>main.py<span class="w"> </span>--mode<span class="w"> </span>capture<span class="w"> </span>--session-recording
-uv<span class="w"> </span>run<span class="w"> </span>main.py<span class="w"> </span>--mode<span class="w"> </span>guide<span class="w"> </span><span class="s2">"Tea Making"</span><span class="w"> </span>--session-recording
+uv<span class="w"> </span>run<span class="w"> </span>main.py<span class="w"> </span>--mode<span class="w"> </span>guide<span class="w"> </span>examples/tea-making/guide.yaml<span class="w"> </span>--session-recording
 </pre></div>
 </div>
 <p>The shared recorder starts immediately after DeviceIOHub and records participant
@@ -799,8 +799,8 @@ prove a past action sequence, and elapsed time does not prove continuous contact
 Retain unsupported requirements as review blockers rather than weakening them.</p>
 <p>Review the YAML and evidence notes before manually setting <code class="docutils literal notranslate"><span class="pre">task.status</span></code> to
 <code class="docutils literal notranslate"><span class="pre">approved</span></code>. Resolve every blocker, including any never-matching draft gate.
-Run an approved guide with <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">main.py</span> <span class="pre">--mode</span> <span class="pre">guide</span> <span class="pre">&quot;Guide</span> <span class="pre">Name&quot;</span></code>, then
-say “start guide”.</p>
+Switch to <code class="docutils literal notranslate"><span class="pre">agent-samples/procedure-capture-guide/</span></code> and run an approved guide with
+<code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">main.py</span> <span class="pre">--mode</span> <span class="pre">guide</span> <span class="pre">guides/my-procedure.guide.yaml</span></code>, then say “start guide”.</p>
 </section>
 <section id="check-generation-changes">
 <h3>Check generation changes<a class="headerlink" href="#check-generation-changes" title="Link to this heading">#</a></h3>
@@ -819,14 +819,19 @@ results distinct from sample-level end-to-end regression results.</p>
 </section>
 <section id="follow-an-approved-guide">
 <h2>Follow an approved guide<a class="headerlink" href="#follow-an-approved-guide" title="Link to this heading">#</a></h2>
-<p>Place a reviewed <code class="docutils literal notranslate"><span class="pre">*.guide.yaml</span></code> or <code class="docutils literal notranslate"><span class="pre">*.guide.yml</span></code> file under <code class="docutils literal notranslate"><span class="pre">guides/</span></code> in the
-sample directory. User-created guides remain local and ignored by Git; the
-maintained tea-making example is the only checked-in exception. Set <code class="docutils literal notranslate"><span class="pre">task.status</span></code> to
+<p>Select a reviewed guide YAML file or its containing directory by path. The sample’s <code class="docutils literal notranslate"><span class="pre">guides/</span></code> directory
+remains available for local, Git-ignored guides; maintained examples live under
+<code class="docutils literal notranslate"><span class="pre">examples/</span></code>. Guides can also live outside the sample. Set <code class="docutils literal notranslate"><span class="pre">task.status</span></code> to
 <code class="docutils literal notranslate"><span class="pre">approved</span></code> only after reviewing the instructions, completion checks, timers,
-and safety constraints. The CLI matches an exact, case-insensitive <code class="docutils literal notranslate"><span class="pre">task.name</span></code>
-or <code class="docutils literal notranslate"><span class="pre">task.id</span></code>; it rejects missing, draft, invalid, and ambiguous selections.
-Quote names containing spaces:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>main.py<span class="w"> </span>--mode<span class="w"> </span>guide<span class="w"> </span><span class="s2">"Guide Name"</span>
+and safety constraints. A directory must contain exactly one top-level <code class="docutils literal notranslate"><span class="pre">.yaml</span></code>
+or <code class="docutils literal notranslate"><span class="pre">.yml</span></code> file; otherwise, provide a specific file path.
+The worker loads the selected file and rejects
+missing, draft, or invalid guides. It does not search by <code class="docutils literal notranslate"><span class="pre">task.name</span></code> or <code class="docutils literal notranslate"><span class="pre">task.id</span></code>.
+The launcher resolves relative paths from <code class="docutils literal notranslate"><span class="pre">agent-samples/procedure-capture-guide/</span></code>
+and passes an absolute path to the worker. Symbolic links are supported. Quote paths
+containing spaces. Run from the sample directory:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>main.py<span class="w"> </span>--mode<span class="w"> </span>guide<span class="w"> </span>guides/my-procedure.guide.yaml
+uv<span class="w"> </span>run<span class="w"> </span>main.py<span class="w"> </span>--mode<span class="w"> </span>guide<span class="w"> </span>examples/tea-making
 </pre></div>
 </div>
 <p>Start the shared models first, as for capture. Guide mode uses the LLM, VLM, STT,
@@ -904,12 +909,12 @@ describe observable evidence, including orientation and count where relevant.
 This demo is not a safety interlock. A still image cannot prove a hidden action.</p>
 <section id="included-tea-making-guide">
 <h3>Included tea-making guide<a class="headerlink" href="#included-tea-making-guide" title="Link to this heading">#</a></h3>
-<p><code class="docutils literal notranslate"><span class="pre">guides/tea-making.guide.yaml</span></code> is a hand-authored, approved example with task
+<p><code class="docutils literal notranslate"><span class="pre">examples/tea-making/guide.yaml</span></code> is a hand-authored, approved example with task
 name <strong>Tea Making</strong> and ID <code class="docutils literal notranslate"><span class="pre">tea_making</span></code>. Its four stages guide brewing
 chamomile tea: read the packet, verify the water temperature, put the tea in
 water, and start the steeping timer. It is not generated from a user recording.</p>
 <p>Start the sample’s shared models, then run:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>main.py<span class="w"> </span>--mode<span class="w"> </span>guide<span class="w"> </span><span class="s2">"Tea Making"</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>main.py<span class="w"> </span>--mode<span class="w"> </span>guide<span class="w"> </span>examples/tea-making/guide.yaml
 </pre></div>
 </div>
 <p>Connect and say <strong>start guide</strong>. Say <strong>next</strong> after each verified visual step
@@ -989,8 +994,8 @@ cards: chamomile alone, longer chamomile names, other teas, and an unreadable
 label. It checks real VLM responses, rejection of premature advancement, and
 identification announcements. These cards test the response contract, not
 photographic accuracy.</p>
-<p>A YAML or JSON manifest selects <code class="docutils literal notranslate"><span class="pre">guides_dir</span></code> (relative to the manifest) and
-<code class="docutils literal notranslate"><span class="pre">guide</span></code> (name or ID), and lists ordered <code class="docutils literal notranslate"><span class="pre">actions</span></code>:</p>
+<p>A YAML or JSON manifest selects a <code class="docutils literal notranslate"><span class="pre">guide_path</span></code> (relative to the manifest’s
+directory, or absolute) and lists ordered <code class="docutils literal notranslate"><span class="pre">actions</span></code>:</p>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">image</span></code>: show an image <code class="docutils literal notranslate"><span class="pre">path</span></code>, or a named synthetic <code class="docutils literal notranslate"><span class="pre">scene</span></code>. Optional
 <code class="docutils literal notranslate"><span class="pre">scenes</span></code> map names to a rectangle color or display text.</p></li>
@@ -1149,7 +1154,7 @@ cannot cancel its own response.</p>
 <td><p>Task output directory, sampling rate, and caption interval</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/guide-agent-config.yaml</span></code></p></td>
-<td><p>Local guide directory and visual verification timeout</p></td>
+<td><p>Visual verification timeout</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code></p></td>
 <td><p>Shared batch STT, LLM, VLM, and TTS services and endpoints</p></td>
@@ -1176,10 +1181,11 @@ beside the worker YAML. Absolute configuration and output paths are also support
 The worker loads shared settings into <code class="docutils literal notranslate"><span class="pre">WorkerConfig</span></code> and capture-specific settings
 into <code class="docutils literal notranslate"><span class="pre">CaptureConfig</span></code> under <code class="docutils literal notranslate"><span class="pre">capture/config.py</span></code>; <code class="docutils literal notranslate"><span class="pre">app.py</span></code> supplies each to its
 owning component. Guide mode selects its YAML through <code class="docutils literal notranslate"><span class="pre">guide_config</span></code> and loads
-<code class="docutils literal notranslate"><span class="pre">GuideConfig</span></code> from <code class="docutils literal notranslate"><span class="pre">guide/config.py</span></code>; its guide directory resolves relative to
-that YAML. The required positional <code class="docutils literal notranslate"><span class="pre">GUIDE_NAME</span></code> selects <code class="docutils literal notranslate"><span class="pre">task.name</span></code> or <code class="docutils literal notranslate"><span class="pre">task.id</span></code>,
-not a filesystem path. <code class="docutils literal notranslate"><span class="pre">--output-root</span></code> applies only to capture. Restart after
-configuration edits.
+<code class="docutils literal notranslate"><span class="pre">GuideConfig</span></code> from <code class="docutils literal notranslate"><span class="pre">guide/config.py</span></code>. The required positional <code class="docutils literal notranslate"><span class="pre">GUIDE_PATH</span></code> selects
+a guide file or a directory containing exactly one top-level YAML file. The
+launcher resolves sample-relative paths and passes an absolute path to the worker.
+<code class="docutils literal notranslate"><span class="pre">task.name</span></code> and <code class="docutils literal notranslate"><span class="pre">task.id</span></code> remain guide metadata, not CLI selectors.
+<code class="docutils literal notranslate"><span class="pre">--output-root</span></code> applies only to capture. Restart after configuration edits.
 Refer to <a class="reference internal" href="configuration.html"><span class="doc">Sample configuration reference</span></a> and <a class="reference internal" href="command-line.html"><span class="doc">Command-line reference</span></a> for fields and CLI options.</p>
 </section>
 <section id="guide-regression-tests">
