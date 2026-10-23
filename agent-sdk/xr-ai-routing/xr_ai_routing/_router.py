@@ -78,7 +78,7 @@ class AgentRouter:
     """Route a turn, check admission before speech, and retain explicit focus.
 
     A focused destination receives the participant's next turn first. It can
-    answer, release focus, or decline and return control to ordinary routing.
+    answer, release focus, or decline only this turn while retaining focus.
     Route choices use the typed decision service; a declined route is excluded
     from one bounded reroute. If selected destinations decline through those
     attempts, the configured eligible default gets one final answer attempt
@@ -719,7 +719,8 @@ class AgentRouter:
                 await destination.release(turn.participant_id)
                 if self._generation.get(turn.participant_id) is not generation:
                     raise asyncio.CancelledError()
-                self._focus.pop(turn.participant_id, None)
+                if self._focus.get(turn.participant_id) == destination_name:
+                    self._focus.pop(turn.participant_id, None)
                 if admission.text:
                     await emit(turn, destination_name, admission.text)
                     self._remember(turn, admission.text)
@@ -742,7 +743,6 @@ class AgentRouter:
                 declined.add(destination_name)
                 declined_name = destination_name
                 if destination_name == focused:
-                    self._focus.pop(turn.participant_id, None)
                     focused = None
                     candidates = [item for item in self._destinations if item != destination_name]
                 else:
@@ -758,9 +758,10 @@ class AgentRouter:
                     self._trace_default_fallback(turn, "exhausted_declines", eligible=default_route.eligible)
                     if not default_route.eligible or destination_name in declined:
                         declined_destination = self._destinations[declined_name]
-                        await declined_destination.release(turn.participant_id)
-                        if self._generation.get(turn.participant_id) is not generation:
-                            raise asyncio.CancelledError()
+                        if self._focus.get(turn.participant_id) != declined_name:
+                            await declined_destination.release(turn.participant_id)
+                            if self._generation.get(turn.participant_id) is not generation:
+                                raise asyncio.CancelledError()
                         text = admission.text or "Which part would you like help with?"
                         await emit(turn, destination_name, text)
                         self._remember(turn, text)
@@ -776,9 +777,10 @@ class AgentRouter:
                     focused = None
                     admission = Admission("accept")
                 else:
-                    await destination.release(turn.participant_id)
-                    if self._generation.get(turn.participant_id) is not generation:
-                        raise asyncio.CancelledError()
+                    if self._focus.get(turn.participant_id) != destination_name:
+                        await destination.release(turn.participant_id)
+                        if self._generation.get(turn.participant_id) is not generation:
+                            raise asyncio.CancelledError()
                     continue
 
             if admission.preamble:
@@ -891,7 +893,12 @@ class AgentRouter:
             if result.disposition not in {"answer", "focus", "release"}:
                 raise ValueError("destinations must decline or clarify in admit(), before answer()")
             if result.disposition == "focus":
+                previous_focus = self._focus.get(turn.participant_id)
                 self._focus[turn.participant_id] = destination_name
+                if previous_focus is not None and previous_focus != destination_name:
+                    await self._destinations[previous_focus].release(turn.participant_id)
+                    if self._generation.get(turn.participant_id) is not generation:
+                        raise asyncio.CancelledError()
             elif result.disposition == "release":
                 await destination.release(turn.participant_id)
                 if self._generation.get(turn.participant_id) is not generation:
