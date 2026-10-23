@@ -18,9 +18,10 @@ from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 
 import pytest
-from pipecat.frames.frames import EndFrame, InterruptionFrame
+from pipecat.frames.frames import EndFrame, Frame, InterruptionFrame
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.worker import PipelineWorker
+from pipecat.processors.frame_processor import FrameDirection
 from pipecat.transports import base_output
 from pipecat.transports.base_transport import TransportParams
 from pipecat.workers.runner import WorkerRunner
@@ -220,3 +221,58 @@ async def test_new_request_cancels_reply_audio_still_being_synthesized(monkeypat
 
         await _until(lambda: cancelled == ["Old answer."])
         await _until(lambda: tts.calls == ["New answer."])
+
+
+@pytest.mark.asyncio
+async def test_new_request_cancels_reply_synthesis_after_a_playback_pause(monkeypatch: pytest.MonkeyPatch) -> None:
+    async with _pipeline(monkeypatch) as (io_processor, _worker, tts, endpoint, _gate):
+        endpoint.release.set()
+        second = asyncio.Event()
+        cancelled: list[str] = []
+        synthesize = tts.synthesize
+
+        async def slow_second(text: str, **kwargs: object) -> bytes:
+            if text == "Old two.":
+                try:
+                    await second.wait()
+                except asyncio.CancelledError:
+                    cancelled.append(text)
+                    raise
+            return await synthesize(text, **kwargs)
+
+        tts.synthesize = slow_second  # type: ignore[method-assign]
+        await io_processor.enqueue_reply(_PID, _one_reply("Old one. Old two."), request_id="r1")
+        await _until(lambda: _PID in io_processor._speaking)  # noqa: SLF001
+        # The silence fallback stops speaking while the second sentence synthesizes.
+        await _until(lambda: _PID not in io_processor._speaking)  # noqa: SLF001
+
+        await io_processor.enqueue_reply(_PID, _one_reply("New answer."), request_id="r2")
+
+        await _until(lambda: cancelled == ["Old two."])
+        await _until(lambda: tts.calls == ["Old one.", "New answer."])
+
+
+@pytest.mark.asyncio
+async def test_queued_reply_does_not_let_an_urgent_update_cut_a_playing_one(monkeypatch: pytest.MonkeyPatch) -> None:
+    async with _pipeline(monkeypatch) as (io_processor, _worker, tts, endpoint, _gate):
+        interruptions: list[str | None] = []
+        push_frame = io_processor.push_frame
+
+        async def record(frame: Frame, direction: FrameDirection = FrameDirection.DOWNSTREAM) -> None:
+            if isinstance(frame, InterruptionFrame):
+                interruptions.append(frame.transport_source)
+            await push_frame(frame, direction)
+
+        io_processor.push_frame = record  # type: ignore[method-assign]
+        await io_processor.enqueue_update(_PID, "Fire alarm.", source="alarm", urgent=True)
+        await _until(lambda: _PID in io_processor._speaking)  # noqa: SLF001
+        interruptions.clear()
+
+        await io_processor.enqueue_reply(_PID, _one_reply("Answer."), request_id="r1")
+        await io_processor.enqueue_update(_PID, "Leave now.", source="alarm", urgent=True)
+        await asyncio.sleep(0.1)
+        assert tts.calls == ["Fire alarm."]
+
+        endpoint.release.set()
+        await _until(lambda: tts.calls == ["Fire alarm.", "Leave now.", "Answer."])
+        assert interruptions == []

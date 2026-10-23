@@ -59,6 +59,7 @@ from .._frames import (
     AssistantResponseEndFrame,
     ParticipantLeftFrame,
     TextResponseEndFrame,
+    _OutputDoneFrame,
 )
 
 if TYPE_CHECKING:
@@ -177,6 +178,11 @@ class StreamingTtsProcessor(FrameProcessor):
 
         if isinstance(frame, TextFrame):
             await self._handle_text(frame)
+            return
+
+        if isinstance(frame, _OutputDoneFrame) and direction == FrameDirection.DOWNSTREAM:
+            # Queue behind the output's synthesis so it follows all its audio.
+            await self._ensure_sender(frame.pid).put(frame)
             return
 
         await self.push_frame(frame, direction)
@@ -333,6 +339,9 @@ class StreamingTtsProcessor(FrameProcessor):
                     if st is not None and st.active_responses:
                         st.active_responses -= 1
                     continue
+                if isinstance(item, _OutputDoneFrame):
+                    await self.push_frame(item)
+                    continue
                 if isinstance(item, _TtsStreamRequest):
                     try:
                         await self._send_stream(item.text, pid=item.pid)
@@ -439,7 +448,7 @@ class StreamingTtsProcessor(FrameProcessor):
                     continue
                 if isinstance(item, _TtsResponseBoundary):
                     continue
-                if isinstance(item, _TtsStreamRequest):
+                if isinstance(item, (_TtsStreamRequest, _OutputDoneFrame)):
                     continue
                 synth_task, _ = item
                 synth_task.cancel()

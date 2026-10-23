@@ -32,6 +32,7 @@ from .._frames import (
     GatedQueryFrame,
     ParticipantJoinedFrame,
     ParticipantLeftFrame,
+    _OutputDoneFrame,
     _SpeakerDiagnosticFrame,
     _SpeakerGatedQueryFrame,
 )
@@ -92,11 +93,10 @@ class _VoiceIOProcessor(FrameProcessor):
         self._combiner = combiner
         self._inflight: dict[str, asyncio.Task[None]] = {}
         self._flight: dict[str, _QueuedResponse] = {}
-        # Holds the floor from its start until its audio stops, which can be
-        # after its text finished; output that produced no audio keeps it.
+        # Holds the floor from its start until the output transport returns its
+        # done marker or its audio is interrupted. The next output starts only
+        # then, so an interruption only ever flushes the owner's audio.
         self._owner: dict[str, _QueuedResponse] = {}
-        # The owner whose audio started, so an older stream's stop cannot clear a newer owner.
-        self._heard: dict[str, _QueuedResponse] = {}
         self._input_tasks: set[asyncio.Task[None]] = set()
         self._queued_replies: dict[str, deque[_QueuedResponse]] = {}
         self._queued_urgent: dict[str, deque[_QueuedResponse]] = {}
@@ -211,10 +211,20 @@ class _VoiceIOProcessor(FrameProcessor):
             if pid:
                 logger.info("voice cancel pid={!r} reason=interruption", pid)
                 _ = await self._barge_in(pid)
+                self._owner.pop(pid, None)
             else:
                 await self._barge_in_all()
+                self._owner.clear()
             await self.push_frame(frame, direction)
             await self._notify_interrupted(pid)
+            for waiting in [pid] if pid else [*self._queued_urgent, *self._pending_updates]:
+                await self._start_next(waiting)
+            return
+
+        if isinstance(frame, _OutputDoneFrame):
+            if self._owner.get(frame.pid) is frame.output:
+                del self._owner[frame.pid]
+                await self._start_next(frame.pid)
             return
 
         if isinstance(frame, (EndFrame, CancelFrame)):
@@ -228,14 +238,8 @@ class _VoiceIOProcessor(FrameProcessor):
             if pid:
                 if isinstance(frame, BotStartedSpeakingFrame):
                     self._speaking.add(pid)
-                    if (owner := self._owner.get(pid)) is not None:
-                        self._heard[pid] = owner
                 else:
                     self._speaking.discard(pid)
-                    owner = self._owner.get(pid)
-                    if pid not in self._flight and owner is not None and self._heard.get(pid) is owner:
-                        del self._owner[pid]
-                        del self._heard[pid]
                     await self._start_next(pid)
             return
 
@@ -277,11 +281,8 @@ class _VoiceIOProcessor(FrameProcessor):
         interrupted_response = await self._barge_in(pid)
         if interrupted_response is not None and interrupted_response.done():
             interrupted_response = None
-        interrupt = self._interrupt_on_supersede and pid in self._seen_output
-        if interrupt:
-            frame_to_push = InterruptionFrame()
-            frame_to_push.transport_source = pid
-            await self.push_frame(frame_to_push)
+        if self._interrupt_on_supersede and pid in self._seen_output:
+            await self._interrupt_audio(pid)
         task = asyncio.create_task(
             self._run_query(frame, interrupted_response=interrupted_response),
             name=f"voice-input-{pid}",
@@ -347,7 +348,7 @@ class _VoiceIOProcessor(FrameProcessor):
             self._supersede(pid, previous)
         owner = self._owner.get(pid)
         if owner is not None and not owner.urgent and owner.request_id != request_id:
-            await self._cut(pid, owner)
+            await self._cut(pid, owner, keep=request_id)
         self._active_request[pid] = request_id
         pending = self._queued_replies.setdefault(pid, deque())
         pending.append(item)
@@ -359,7 +360,7 @@ class _VoiceIOProcessor(FrameProcessor):
         self._queued_urgent.setdefault(pid, deque()).append(item)
         owner = self._owner.get(pid)
         if owner is not None and owner.urgent:
-            # TTS plays audio in order, so this follows the urgent output already playing.
+            # Starts once the urgent output holding the floor finishes playing.
             logger.info("voice urgent update queued pid={!r}", pid)
         elif owner is not None:
             await self._cut(pid, owner)
@@ -367,16 +368,19 @@ class _VoiceIOProcessor(FrameProcessor):
             await self._interrupt_audio(pid)
         await self._start_next(pid)
 
-    async def _cut(self, pid: str, owner: _QueuedResponse) -> None:
-        """Cancel the owner's output, supersede its request, and flush its audio."""
+    async def _cut(self, pid: str, owner: _QueuedResponse, *, keep: str | None = None) -> None:
+        """Stop the owner's output, supersede its request, and flush its audio."""
 
-        if pid in self._flight:
-            _ = await self._cancel_output(pid)
-        elif owner.request_id is not None:
+        _ = self._stop_flight(pid)
+        if owner.request_id is not None:
             self._supersede(pid, owner.request_id)
+            await self._drop_queued_replies(pid, keep=keep)
         await self._interrupt_audio(pid)
 
     async def _interrupt_audio(self, pid: str) -> None:
+        """Flush ``pid``'s audio, releasing the floor; no output may be in flight."""
+
+        self._owner.pop(pid, None)
         interruption = InterruptionFrame()
         interruption.transport_source = pid
         await self.push_frame(interruption)
@@ -428,7 +432,16 @@ class _VoiceIOProcessor(FrameProcessor):
                 self._turn_tokens.pop(pid, None)
                 self._inflight.pop(pid, None)
                 self._flight.pop(pid, None)
-                await self._start_next(pid)
+            if self._owner.get(pid) is item:
+                # Its audio may still be synthesizing or playing; the transport
+                # returns this marker once that audio is written, and the next
+                # output starts then.
+                done = _OutputDoneFrame(pid=pid, output=item)
+                done.transport_destination = pid
+                try:
+                    await self.push_frame(done)
+                except Exception:
+                    logger.exception("emit voice output done failed pid={!r}", pid)
 
     async def _consume_response(
         self,
@@ -452,7 +465,7 @@ class _VoiceIOProcessor(FrameProcessor):
             await self._push_text(chunk, pid=pid)
 
     async def _start_next(self, pid: str) -> None:
-        if pid in self._flight:
+        if pid in self._owner:
             return
         if urgent := self._queued_urgent.get(pid):
             item = urgent.popleft()
@@ -538,10 +551,14 @@ class _VoiceIOProcessor(FrameProcessor):
         self._cancel_input_tasks()
 
     async def _cancel_output(self, pid: str) -> asyncio.Task[None] | None:
-        current = self._flight.pop(pid, None)
+        current = self._flight.get(pid)
         if current is not None and current.request_id is not None:
             self._supersede(pid, current.request_id)
         await self._drop_queued_replies(pid)
+        return self._stop_flight(pid)
+
+    def _stop_flight(self, pid: str) -> asyncio.Task[None] | None:
+        self._flight.pop(pid, None)
         self._turn_tokens.pop(pid, None)
         task = self._inflight.pop(pid, None)
         if task is not None and not task.done():
@@ -581,7 +598,6 @@ class _VoiceIOProcessor(FrameProcessor):
         self._superseded.pop(pid, None)
         self._speaking.discard(pid)
         self._owner.pop(pid, None)
-        self._heard.pop(pid, None)
         self._seen_output.discard(pid)
 
     @staticmethod
@@ -621,7 +637,6 @@ class _VoiceIOProcessor(FrameProcessor):
         self._inflight.clear()
         self._flight.clear()
         self._owner.clear()
-        self._heard.clear()
         self._turn_tokens.clear()
         self._cancel_input_tasks()
 

@@ -17,7 +17,7 @@ from pipecat.frames.frames import (
     TextFrame,
 )
 from pipecat.processors.frame_processor import FrameDirection
-from xr_ai_voice._frames import ParticipantLeftFrame
+from xr_ai_voice._frames import ParticipantLeftFrame, _OutputDoneFrame
 from xr_ai_voice._processors.io import _VoiceIOProcessor
 from xr_ai_voice._runtime import _ResponseStream
 from xr_ai_voice._types import VoiceQuery
@@ -29,6 +29,7 @@ class _Floor:
     def __init__(self, **options) -> None:
         self.frames: list[Frame] = []
         self.queries: list[VoiceQuery] = []
+        self.done: list[_OutputDoneFrame] = []
         self.processor = _VoiceIOProcessor(self._input, **options)
         self.processor.push_frame = self._capture  # type: ignore[method-assign]
 
@@ -37,6 +38,8 @@ class _Floor:
 
     async def _capture(self, frame: Frame, _direction: FrameDirection = FrameDirection.DOWNSTREAM) -> None:
         self.frames.append(frame)
+        if isinstance(frame, _OutputDoneFrame):
+            self.done.append(frame)
 
     @property
     def texts(self) -> list[str]:
@@ -55,6 +58,14 @@ class _Floor:
         frame = BotStartedSpeakingFrame() if started else BotStoppedSpeakingFrame()
         frame.transport_destination = pid
         await self.processor.process_frame(frame, FrameDirection.UPSTREAM)
+        await self.settle()
+
+    async def played(self) -> None:
+        """Return the oldest done marker, as the output transport does after its audio."""
+        done = self.done.pop(0)
+        await self.processor.process_frame(
+            _OutputDoneFrame(pid=done.pid, output=done.output), FrameDirection.UPSTREAM,
+        )
         await self.settle()
 
 
@@ -120,7 +131,9 @@ async def test_replies_for_the_same_request_play_in_order_without_interruption()
 
     held.release.set()
     await floor.settle()
+    assert floor.texts == ["one "]
 
+    await floor.played()
     assert floor.texts == ["one ", "two"]
     assert floor.interruptions == []
 
@@ -193,6 +206,7 @@ async def test_withdraw_drops_queued_urgent_updates_but_not_the_one_in_flight() 
     await floor.processor.withdraw_updates("alice", source="guide")
     gate.set()
     await floor.settle()
+    await floor.played()
 
     assert floor.texts == ["playing", "queued timer"]
 
@@ -285,14 +299,26 @@ async def test_reply_for_a_new_request_cuts_audio_still_being_synthesized() -> N
     assert floor.texts == ["old answer", "new answer"]
 
 
-async def test_stop_of_cut_audio_does_not_release_the_new_reply() -> None:
+async def test_playback_pause_does_not_release_the_floor() -> None:
     floor = _Floor()
     await floor.processor.enqueue_reply("alice", "first", request_id="r1")
     await floor.settle()
     await floor.bot(started=True)
+    await floor.bot(started=False)
+
     await floor.processor.enqueue_reply("alice", "second", request_id="r2")
     await floor.settle()
-    await floor.bot(started=False)
+
+    assert floor.interruptions == ["alice"]
+
+
+async def test_done_marker_of_cut_output_does_not_release_the_new_reply() -> None:
+    floor = _Floor()
+    await floor.processor.enqueue_reply("alice", "first", request_id="r1")
+    await floor.settle()
+    await floor.processor.enqueue_reply("alice", "second", request_id="r2")
+    await floor.settle()
+    await floor.played()
 
     await floor.processor.enqueue_reply("alice", "third", request_id="r3")
     await floor.settle()
@@ -305,8 +331,7 @@ async def test_new_request_supersedes_the_previous_one_during_silence() -> None:
     for text, request_id in (("one", "r1"), ("two", "r2")):
         await floor.processor.enqueue_reply("alice", text, request_id=request_id)
         await floor.settle()
-        await floor.bot(started=True)
-        await floor.bot(started=False)
+        await floor.played()
 
     await floor.processor.enqueue_reply("alice", "late", request_id="r1")
     await floor.settle()
@@ -322,7 +347,9 @@ async def test_reply_for_the_same_request_does_not_cut_playing_audio() -> None:
 
     await floor.processor.enqueue_reply("alice", "two", request_id="r1")
     await floor.settle()
+    assert floor.texts == ["one"]
 
+    await floor.played()
     assert floor.interruptions == []
     assert floor.texts == ["one", "two"]
 
@@ -336,6 +363,7 @@ async def test_reply_does_not_cut_a_playing_urgent_update() -> None:
 
     await floor.processor.enqueue_reply("alice", "answer", request_id="r1")
     await floor.settle()
+    await floor.played()
 
     assert floor.interruptions == interruptions
     assert floor.texts == ["Fire alarm.", "answer"]
@@ -389,6 +417,8 @@ async def test_urgent_updates_queue_in_order_and_a_reply_waits_for_them() -> Non
 
     gate.set()
     await floor.settle()
+    for _ in range(3):
+        await floor.played()
 
     assert floor.texts == ["one", "two", "three", "answer"]
     assert floor.interruptions == ["alice"]
@@ -402,9 +432,25 @@ async def test_urgent_update_does_not_cut_a_playing_urgent_update() -> None:
 
     await floor.processor.enqueue_update("alice", "Leave now.", source="producer", urgent=True)
     await floor.settle()
+    assert floor.texts == ["Fire alarm."]
 
+    await floor.played()
     assert floor.interruptions == ["alice"]
     assert floor.texts == ["Fire alarm.", "Leave now."]
+
+
+async def test_queued_reply_does_not_take_the_floor_from_a_playing_urgent_update() -> None:
+    floor = _Floor()
+    await floor.processor.enqueue_update("alice", "Fire alarm.", source="producer", urgent=True)
+    await floor.settle()
+    await floor.processor.enqueue_reply("alice", "answer", request_id="r1")
+    await floor.processor.enqueue_update("alice", "Leave now.", source="producer", urgent=True)
+    await floor.settle()
+    await floor.played()
+    await floor.played()
+
+    assert floor.interruptions == ["alice"]
+    assert floor.texts == ["Fire alarm.", "Leave now.", "answer"]
 
 
 async def test_barge_in_cancels_replies_but_keeps_updates() -> None:

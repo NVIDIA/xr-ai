@@ -28,6 +28,7 @@ from xr_ai_tools.image import ImageReference
 from xr_ai_tools.types import EmptyRequest
 from xr_ai_tools.vision import ImageQueryResult
 from xr_ai_voice import VOICE_OUTPUT_TOPIC
+from xr_ai_voice._frames import _OutputDoneFrame
 from xr_ai_voice._processors.io import _VoiceIOProcessor
 
 _SAMPLE = Path(__file__).resolve().parents[1] / "agent-samples/procedure-capture-guide"
@@ -1876,6 +1877,9 @@ async def test_transition_withdraws_notice_queued_during_foreground_turn(documen
     async def capture(frame, _direction=FrameDirection.DOWNSTREAM):
         if isinstance(frame, TextFrame):
             spoken.append(frame.text)
+        elif isinstance(frame, _OutputDoneFrame):
+            # No audio is queued here, so the output transport would return it at once.
+            await voice.process_frame(_OutputDoneFrame(pid=frame.pid, output=frame.output), FrameDirection.UPSTREAM)
 
     voice.push_frame = capture
 

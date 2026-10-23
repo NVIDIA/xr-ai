@@ -55,6 +55,7 @@ from xr_ai_voice._frames import (
     ParticipantJoinedFrame,
     ParticipantLeftFrame,
     TextResponseEndFrame,
+    _OutputDoneFrame,
 )
 from xr_ai_voice._processors import (
     _VoiceIOProcessor,
@@ -1883,6 +1884,11 @@ async def test_external_responses_preserve_participant_fifo() -> None:
         _direction: FrameDirection = FrameDirection.DOWNSTREAM,
     ) -> None:
         frames.append(frame)
+        if isinstance(frame, _OutputDoneFrame):
+            # No audio is queued here, so the output transport would return it at once.
+            await assistant.process_frame(
+                _OutputDoneFrame(pid=frame.pid, output=frame.output), FrameDirection.UPSTREAM,
+            )
 
     assistant.push_frame = capture  # type: ignore[method-assign]
     await assistant.enqueue_reply("pid-1", first_response(), request_id="r1")

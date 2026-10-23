@@ -99,8 +99,10 @@ independent agents cannot merge accidentally.
 Several agents can publish to the same participant. Each participant has one
 voice floor that decides what is spoken and when:
 
-- Output is current from when its text starts until its audio stops playing,
-  including while TTS is still synthesizing it.
+- One output holds the floor at a time, from when its text starts until its
+  last audio has been sent to the hub, including while TTS is still
+  synthesizing it and across pauses in playback. The next output starts after
+  it, so cutting the current output never cuts output queued behind it.
 - A reply for request R plays in order with other replies for R. A reply for a
   different request supersedes the previous request, even when nothing is
   playing, cancels current output and any queued replies, and flushes queued
