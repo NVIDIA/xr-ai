@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Image descriptions consumed by _scene_rendering.py, not guide steps or answers.
-# Scene content defines the visual distinctions scored by visual_expectations.yaml.
+# Scene content defines the visual distinctions scored by fixtures/visual_expectations.yaml.
 breakfast: {kind: packet, blend: BREAKFAST BLACK, color: '#dea67d'}
 green: {kind: packet, blend: GREEN, color: '#b2ca90'}
 chamomile: {kind: packet, blend: CHAMOMILE, color: '#e5d191'}

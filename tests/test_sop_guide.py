@@ -29,7 +29,7 @@ from xr_ai_voice import VOICE_OUTPUT_TOPIC, VoiceAggregationAgent
 
 _SAMPLE = Path(__file__).resolve().parents[1] / "agent-samples/procedure-capture-guide"
 _TEST_DATA = Path(__file__).resolve().parent
-_TEA_EVAL = _SAMPLE / "example-guides/tea-making/eval"
+_TEA_EVAL = _SAMPLE / "example-guides/tea-making/evaluation"
 sys.path.insert(0, str(_SAMPLE / "worker"))
 
 from procedure_capture_guide_worker.config import WorkerConfig, load_config  # noqa: E402
@@ -132,8 +132,8 @@ def test_checked_in_eval_manifests_load_their_selected_guides():
         assert guide.workflow.runnable, path
         selected.add(path)
     assert {_TEA_EVAL / name for name in (
-        "routing_scenario.yaml", "step_verification_scenario.yaml", "full_run_scenario.yaml",
-        "label_reading_scenario.yaml", "visual_expectations.yaml",
+        "scenarios/routing.yaml", "scenarios/step_verification.yaml", "scenarios/full_run.yaml",
+        "scenarios/label_reading.yaml", "fixtures/visual_expectations.yaml",
     )} <= selected
 
 
@@ -184,7 +184,7 @@ def test_shipped_tea_identification_requires_an_affirmative_answer(answer, shoul
 
 
 def test_tea_identification_eval_uses_the_shipped_guide():
-    path = _SAMPLE / "example-guides/tea-making/eval/label_reading_scenario.yaml"
+    path = _SAMPLE / "example-guides/tea-making/evaluation/scenarios/label_reading.yaml"
     manifest = yaml.safe_load(path.read_text())
     guide = load_guide(path.parent / manifest["guide_path"])
     assert guide.path == _SAMPLE / "example-guides/tea-making/guide.yaml"
@@ -1499,7 +1499,7 @@ def test_scenario_cli_reports_failures_and_continues_independent_probes(tmp_path
     output = tmp_path / "results"
     monkeypatch.setattr(sys, "argv", ["guide.py", "--manifest", str(manifest_path), "--output", str(output)])
     with pytest.raises(SystemExit) as result:
-        runpy.run_path(str(_TEA_EVAL / "scenario.py"), run_name="__main__")
+        runpy.run_path(str(_TEA_EVAL / "run_scenario.py"), run_name="__main__")
     assert result.value.code == (0 if failed_probe is None else 1)
     report = json.loads((output / "result.json").read_text())
     assert report["passed"] is (failed_probe is None)
@@ -1625,7 +1625,7 @@ def test_mode_configuration_is_isolated_and_models_are_shared(tmp_path):
     request = tmp_path / "request.json"
     request.write_text(json.dumps({
         "worker_config": str(_SAMPLE / "yaml/worker.yaml"), "mode": "guide",
-        "guide_path": "example-guides/tea-making/guide.yaml",
+        "guide_path": str(_SAMPLE / "example-guides/tea-making/guide.yaml"),
     }))
     guide = load_config(request)
     assert guide.mode == "guide" and guide.capture is None

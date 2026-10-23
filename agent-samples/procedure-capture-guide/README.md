@@ -15,6 +15,27 @@ revision. Refer to the
 [guide-generation reference](https://nvidia.github.io/xr-ai/latest/reference/procedure-capture-guide.html#generate-a-draft-guide)
 for the authoring request, validation, and human review workflow.
 
+## Directory map
+
+```text
+main.py                         Sample launcher
+worker/                         Capture and guide agents
+yaml/                           Sample configuration
+model-servers/                  Shared local model launcher
+guide-generation-skills/        Coding-agent instructions and references
+evaluation/
+  capture/                      Caption evaluator and cases
+  guide/                        Packet evaluator, shared harness, authoring probes
+example-guides/tea-making/
+  guide.yaml                    Maintained example procedure
+  evaluation/                   Tea runners, fixtures/, and scenarios/
+```
+
+The skills invoke the checkout's evaluation tools; they do not contain a
+separate implementation. Refer to the
+[evaluation reference](https://nvidia.github.io/xr-ai/latest/reference/procedure-capture-guide.html#local-model-guide-evaluation)
+for commands, coverage, and result interpretation.
+
 ## Run
 
 Run all commands from `agent-samples/procedure-capture-guide/`. Start the sample's model
@@ -55,7 +76,8 @@ uv run main.py --mode guide example-guides/tea-making/guide.yaml
 
 Use tea labeled chamomile, boiling water, a five-minute steep, and a kettle
 or thermometer that shows the current water temperature. For another locally
-reviewed guide, pass its YAML file path, such as `assemble-toy-guide/guide.yaml`.
+reviewed guide, pass its YAML file path, such as `assemble-toy-guide/guide.yaml`,
+or a directory containing exactly one top-level YAML file.
 Relative paths resolve from this sample directory; absolute paths are also
 supported. Quote paths containing spaces. Generated guides and their review
 artifacts stay in local `<name>-guide/` directories; checked-in examples live

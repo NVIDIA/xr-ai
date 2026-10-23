@@ -127,7 +127,7 @@ quoted prose. Keep review notes outside the strict guide schema.
 
 For the human-review handoff, after approval run from
 `agent-samples/procedure-capture-guide/` with
-`uv run main.py --mode guide "guides/<slug>.guide.yaml"`; this path is relative
+`uv run main.py --mode guide "<slug>-guide/guide.yaml"`; this path is relative
 to the sample, not the repository root. Use an absolute path for a guide saved elsewhere.
 
 Give each step its own initially false completion boolean. Use the same field

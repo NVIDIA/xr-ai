@@ -16,17 +16,13 @@ import hashlib
 import json
 import math
 import re
-import sys
 from dataclasses import replace
 from pathlib import Path
 
 from _recorded_camera import capture_frames, feed_recording
+from _runtime_harness import EvaluationContext, run_evaluation
 from procedure_capture_guide_worker.guide._workflow_spec import parse_workflow
 from procedure_capture_guide_worker.guide.guides import SelectedGuide
-
-_SAMPLE = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(_SAMPLE / "eval"))
-from guide_runtime import EvaluationContext, run_evaluation  # noqa: E402
 
 
 async def evaluate(packet: Path, guide_path: Path, output: Path, *, tail_s: float = 5) -> bool:

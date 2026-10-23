@@ -41,13 +41,15 @@ Luna, fabricated tool responses, mock commits, or a mental walkthrough.
 
 Ensure the target checkout's configured local LLM and VLM servers are running;
 the evaluator never starts, stops, or substitutes model servers. Validate the
-YAML, then run [scripts/evaluate.py](scripts/evaluate.py) from the repository
-root, replacing the packet and guide paths and choosing a new output directory:
+YAML, then run the target checkout's
+`agent-samples/procedure-capture-guide/evaluation/guide/evaluate_recorded_packet.py`
+from the repository root, replacing the packet and guide paths and choosing a
+new output directory:
 
 ```bash
 PYTHONPATH=agent-samples/procedure-capture-guide/worker \
 uv run --project agent-samples/procedure-capture-guide/worker python \
-  agent-samples/procedure-capture-guide/guide-generation-skills/evaluate-guide/scripts/evaluate.py \
+  agent-samples/procedure-capture-guide/evaluation/guide/evaluate_recorded_packet.py \
   --packet /path/to/packet.json \
   --guide "agent-samples/procedure-capture-guide/<slug>-guide/guide.yaml" \
   --output "agent-samples/procedure-capture-guide/<slug>-guide/evaluation/run-001"
@@ -57,9 +59,10 @@ Use the script from the target checkout even if the skills were installed
 elsewhere: it locates that checkout's sample configuration from its own path.
 The runner imports the runtime's YAML parser and uses the worker's model,
 frame-freshness, frame-timeout, and verification-timeout configuration. It
-uses the sample's shared `eval/guide_runtime.py` for camera and speech boundaries,
-agent setup, and traces. Packet playback and checks stay in this skill's scripts;
-they need no tea-example files or regression fixtures from `tests/`.
+uses the sample's shared `evaluation/guide/_runtime_harness.py` for camera and speech boundaries,
+agent setup, and traces. Packet playback and checks also belong to the sample's
+`evaluation/guide/` implementation; this skill supplies instructions, not runtime
+code. The evaluator needs no tea-example files or regression fixtures from `tests/`.
 The source guide stays draft; test eligibility exists only in memory.
 The command never generates YAML or approves a guide.
 
@@ -189,7 +192,7 @@ controls, visual evidence deduplication, elapsed timers, automatic and explicit
 completion, draft preservation and artifacts. They test plumbing, not local
 model perception. Live-model failures must be reported separately.
 
-`agent-samples/procedure-capture-guide/eval/guide_generation_cases.yaml` holds seven text-only authoring
+`agent-samples/procedure-capture-guide/evaluation/guide/authoring_cases.yaml` holds seven text-only authoring
 probes. Give the author only each case's `input` and the documented authoring
 prompt, skills and examples. Keep `checks` in an independent reviewer context.
 Save package hashes, prompt, raw model/tool trace, YAML, validation results,

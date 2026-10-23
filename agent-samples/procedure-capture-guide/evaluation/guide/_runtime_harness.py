@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Run guide evaluations through the production agents, tools, and local models.
+"""Provide a shared evaluation harness around the production guide agents.
 
 Provide camera and speech boundaries plus trace collection shared by recorded
 packet evaluation and example scenarios. Callers own their inputs and checks;
@@ -31,13 +31,14 @@ from procedure_capture_guide_worker.guide.agent import GuideAgent
 from procedure_capture_guide_worker.guide.events import PARTICIPANT_JOINED_TOPIC, USER_QUERY_TOPIC
 from procedure_capture_guide_worker.guide.guides import SelectedGuide
 from xr_ai_hub import FrameData, FrameSignal, PixelFormat
+from xr_ai_interaction import ParticipantJoined, ResponseOutput, UserQuery
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, subscribe
 from xr_ai_tools.current_frame import CurrentFrameTool
 from xr_ai_tools.image import ImageRegistry
 from xr_ai_tools.vision import ImageQueryTool
-from xr_ai_voice import VOICE_OUTPUT_TOPIC, UserQuery, VoiceAggregationAgent, VoiceOutput, VoiceParticipantJoined
+from xr_ai_voice import VOICE_OUTPUT_TOPIC, VoiceAggregationAgent
 
-_SAMPLE = Path(__file__).resolve().parents[1]
+_SAMPLE = Path(__file__).resolve().parents[2]
 _PID = "guide-eval"
 
 
@@ -49,7 +50,7 @@ def _runtime_hashes(models_config: Path, sources: tuple[Path, ...] = ()) -> dict
     package = _SAMPLE / "worker/procedure_capture_guide_worker"
     for pattern in ("*.py", "*.txt"):
         paths.update(package.rglob(pattern))
-    sdk_packages = {"xr_ai_runtime", "xr_ai_hub", "xr_ai_models", "xr_ai_tools", "xr_ai_voice"}
+    sdk_packages = {"xr_ai_runtime", "xr_ai_hub", "xr_ai_models", "xr_ai_tools", "xr_ai_voice", "xr_ai_interaction"}
     for name, module in tuple(sys.modules.items()):
         source = getattr(module, "__file__", None)
         if name.split(".", 1)[0] in sdk_packages and source and Path(source).suffix == ".py":
@@ -105,7 +106,7 @@ class Speech(Agent):
         self.log = log
 
     @subscribe(VOICE_OUTPUT_TOPIC)
-    async def receive(self, output: VoiceOutput, _ctx: RuntimeContext):
+    async def receive(self, output: ResponseOutput, _ctx: RuntimeContext):
         self.outputs.append(output)
         self.log("speech", text=output.text, timestamp_us=output.timestamp_us)
 
@@ -287,7 +288,7 @@ async def run_evaluation(
     nemo_relay.subscribers.register(subscription, relay_event)
     try:
         async with runtime:
-            await runtime.publish(PARTICIPANT_JOINED_TOPIC, VoiceParticipantJoined(), participant_id=_PID)
+            await runtime.publish(PARTICIPANT_JOINED_TOPIC, ParticipantJoined(), participant_id=_PID)
             await wait_until(lambda: bool(speech.outputs))
             if duration_s is not None:
                 deadline = time.monotonic() + duration_s

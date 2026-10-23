@@ -1,10 +1,10 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Evaluation scenario for scenario.py covering the tea-identification step.
+# Evaluation scenario for run_scenario.py covering the tea-identification step.
 # Generated label cards exercise the real VLM and guide, not photographic accuracy.
 # Expected responses are assertions; they are never supplied to the VLM.
-guide_path: ../guide.yaml
+guide_path: ../../guide.yaml
 scenes:
   green: {text: "TEA PACKET\nGREEN"}
   breakfast: {text: "TEA PACKET\nBREAKFAST BLACK"}

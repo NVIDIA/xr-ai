@@ -44,13 +44,10 @@ def test_installed_skill_workflow_resolves_children_and_shared_references(tmp_pa
 
 
 def test_packet_entry_point_imports_without_example_or_test_helpers(tmp_path):
-    scripts = tmp_path / "sample/guide-generation-skills/evaluate-guide/scripts"
-    shutil.copytree(_SAMPLE / "guide-generation-skills/evaluate-guide/scripts", scripts)
-    support = tmp_path / "sample/eval"
-    support.mkdir()
-    shutil.copy2(_SAMPLE / "eval/guide_runtime.py", support / "guide_runtime.py")
+    scripts = tmp_path / "sample/evaluation/guide"
+    shutil.copytree(_SAMPLE / "evaluation/guide", scripts)
     result = subprocess.run(
-        [sys.executable, str(scripts / "evaluate.py"), "--help"],
+        [sys.executable, str(scripts / "evaluate_recorded_packet.py"), "--help"],
         cwd=tmp_path, env={**os.environ, "PYTHONPATH": str(_SAMPLE / "worker")},
         capture_output=True, text=True, timeout=30,
     )

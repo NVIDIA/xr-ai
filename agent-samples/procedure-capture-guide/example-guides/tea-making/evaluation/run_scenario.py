@@ -25,8 +25,8 @@ from _visual_expectations import matches_answer, visual_cases
 from procedure_capture_guide_worker.guide.guides import load_guide
 
 _SAMPLE = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(_SAMPLE / "eval"))
-import guide_runtime as runtime  # noqa: E402
+sys.path.insert(0, str(_SAMPLE / "evaluation/guide"))
+import _runtime_harness as runtime  # noqa: E402
 
 
 def validate_actions(manifest: dict, cases: dict) -> None:

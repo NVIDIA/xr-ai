@@ -5,7 +5,7 @@
 
 Run each step independently so an early recognition failure cannot hide later
 cases. Save image and prompt provenance, raw responses, and separate recognition
-and evidence-gate scores. Use the adjacent scenario.py for conversational and execution coverage.
+and evidence-gate scores. Use the adjacent run_scenario.py for conversational and execution coverage.
 No model server processes are started or stopped here.
 """
 

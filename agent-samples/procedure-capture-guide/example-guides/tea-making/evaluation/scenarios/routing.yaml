@@ -3,9 +3,9 @@
 
 # Independent conversation probes; restart before each probe to isolate intent.
 # Visual progress and timed completion are covered by the other tea scenarios.
-guide_path: ../guide.yaml
+guide_path: ../../guide.yaml
 fail_fast: false
-scenes_file: image_scenes.yaml
+scenes_file: ../fixtures/image_scenes.yaml
 actions:
   - {"action":"image","scene":"breakfast"}
   - {"action":"say","text":"Read me the start of the guide","tools":[]}

@@ -241,7 +241,7 @@ With the configured VLM running, run the synthetic visual controls from the
 sample directory. Choose a new output directory for each evaluation:
 
 ```bash
-PYTHONPATH=worker uv run --project worker python eval/caption_eval.py --output artifacts/caption-eval
+PYTHONPATH=worker uv run --project worker python evaluation/capture/evaluate_captions.py --output artifacts/caption-eval
 ```
 
 The cases exercise initial observations, chronological direction, unchanged
@@ -305,7 +305,7 @@ your own visual answers, or invent successful tests when models are unavailable.
 
 No installation is required for this explicit-file request. To install the
 workflow, copy the entire `guide-generation-skills/` directory, preserving its
-top-level `SKILL.md`, child skills, references, scripts, and metadata. Start with
+top-level `SKILL.md`, child skills, references, and metadata. Start with
 the top-level skill, which links to the child instructions; do not depend on
 nested skills being independently discovered. Keep the target checkout and
 packet paths explicit; the evaluator runs that checkout's implementation.
@@ -339,7 +339,7 @@ A schema-valid guide can still omit an action or accept an incorrect result.
 With this sample's configured model servers running, evaluate a fixed draft:
 
 ```bash
-PYTHONPATH=agent-samples/procedure-capture-guide/worker uv run --project agent-samples/procedure-capture-guide/worker python agent-samples/procedure-capture-guide/guide-generation-skills/evaluate-guide/scripts/evaluate.py --packet /path/to/packet.json --guide agent-samples/procedure-capture-guide/<slug>-guide/guide.yaml --output agent-samples/procedure-capture-guide/<slug>-guide/evaluation/run-001
+PYTHONPATH=agent-samples/procedure-capture-guide/worker uv run --project agent-samples/procedure-capture-guide/worker python agent-samples/procedure-capture-guide/evaluation/guide/evaluate_recorded_packet.py --packet /path/to/packet.json --guide agent-samples/procedure-capture-guide/<slug>-guide/guide.yaml --output agent-samples/procedure-capture-guide/<slug>-guide/evaluation/run-001
 ```
 
 The existing runtime evaluator supplies each captured frame once at its original
@@ -373,7 +373,7 @@ Switch to `agent-samples/procedure-capture-guide/` and run an approved guide wit
 
 ### Check generation changes
 
-The sample's `eval/guide_generation_cases.yaml` contains text-only authoring probes with
+The sample's `evaluation/guide/authoring_cases.yaml` contains text-only authoring probes with
 separate inputs and withheld review criteria. They are not image-based runtime
 tests. This data stays in YAML so an external authoring model can receive each
 capture excerpt without executing test code or seeing the separate reviewer criteria.
@@ -392,7 +392,7 @@ results distinct from sample-level end-to-end regression results.
 
 ## Follow an approved guide
 
-Select a reviewed guide YAML file by path. Generated guide packages live in
+Select a reviewed guide YAML file or its containing directory by path. Generated guide packages live in
 local, Git-ignored `<name>-guide/` directories; maintained examples live under
 `example-guides/`. Guides can also live outside the sample. Set `task.status` to
 `approved` only after reviewing the instructions, completion checks, timers,
@@ -406,6 +406,7 @@ containing spaces. Run from the sample directory:
 
 ```bash
 uv run main.py --mode guide my-procedure-guide/guide.yaml
+uv run main.py --mode guide example-guides/tea-making
 ```
 
 Start the shared models first, as for capture. Guide mode uses the LLM, VLM, STT,
@@ -527,7 +528,7 @@ Those tests do not establish accuracy on real tea-making images or appliances.
 
 #### Local-model guide evaluation
 
-`example-guides/tea-making/eval/scenario.py` exercises a manifest's selected guide through
+`example-guides/tea-making/evaluation/run_scenario.py` exercises a manifest's selected guide through
 the actual guide agent, runtime, voice aggregation, frame selection, and model
 tools. It uses the sample's configured LLM and VLM. Fixture images replace the
 hub camera endpoint, and typed requests enter the same runtime topic as
@@ -542,7 +543,7 @@ mismatch unless `fail_fast: true`; a runtime exception or timeout still ends the
 after a failed check because later steps depend on that progress.
 
 The tea step-verification and full-run scenarios cover visual progress, timers,
-completion, and start/stop behavior. `example-guides/tea-making/eval/routing_scenario.yaml`
+completion, and start/stop behavior. `example-guides/tea-making/evaluation/scenarios/routing.yaml`
 exercises the composed foreground prompt with controls, polite requests,
 quoted commands, negation, requests to explain guide content, unsupported capture
 requests, and visual questions.
@@ -553,7 +554,7 @@ Routing assertions check only calls belonging to the simulated user turn;
 concurrent background observation calls remain in the trace but cannot count
 as foreground routing successes or failures.
 
-`example-guides/tea-making/eval/label_reading_scenario.yaml` tests the included tea guide with generated label
+`example-guides/tea-making/evaluation/scenarios/label_reading.yaml` tests the included tea guide with generated label
 cards: chamomile alone, longer chamomile names, other teas, and an unreadable
 label. It checks real VLM responses, rejection of premature advancement, and
 identification announcements. These cards test the response contract, not
@@ -596,12 +597,12 @@ ones and explicitly test early advance, completion, stop, and restart as needed.
 From the sample directory, with its model servers already running:
 
 ```bash
-uv run --project worker python example-guides/tea-making/eval/scenario.py \
-  --manifest example-guides/tea-making/eval/step_verification_scenario.yaml --output artifacts/tea-verification-eval
-uv run --project worker python example-guides/tea-making/eval/scenario.py \
-  --manifest example-guides/tea-making/eval/routing_scenario.yaml --output artifacts/tea-routing-eval
-uv run --project worker python example-guides/tea-making/eval/scenario.py \
-  --manifest example-guides/tea-making/eval/label_reading_scenario.yaml --output artifacts/tea-identification-eval
+uv run --project worker python example-guides/tea-making/evaluation/run_scenario.py \
+  --manifest example-guides/tea-making/evaluation/scenarios/step_verification.yaml --output artifacts/tea-verification-eval
+uv run --project worker python example-guides/tea-making/evaluation/run_scenario.py \
+  --manifest example-guides/tea-making/evaluation/scenarios/routing.yaml --output artifacts/tea-routing-eval
+uv run --project worker python example-guides/tea-making/evaluation/run_scenario.py \
+  --manifest example-guides/tea-making/evaluation/scenarios/label_reading.yaml --output artifacts/tea-identification-eval
 ```
 
 Use a new output directory for each run. Supply `--manifest /path/to/scenario.yaml`
@@ -611,7 +612,7 @@ answers, speech text, and result JSON. Synthetic controls can isolate label or
 setpoint mistakes but do not establish accuracy on a user's actual camera views.
 The manifest's optional boolean `fail_fast` defaults to `false`: mismatched
 answers or tool calls fail the run but do not hide later independent probes.
-`routing_scenario.yaml` uses this continuation policy and restarts between probes.
+`scenarios/routing.yaml` uses this continuation policy and restarts between probes.
 The dependent tea scenarios set `fail_fast: true`, so a failed
 check stops the scenario and later actions are reported as not scored rather
 than run against an assumed successful history. Runtime exceptions and timeouts
@@ -619,40 +620,43 @@ stop either mode; they do not count as ordinary answer mismatches.
 
 #### Generated tea-image evaluation
 
-Tea-specific evaluation data lives under `example-guides/tea-making/eval/`. The executable procedure is
+Tea-specific evaluation data lives under `example-guides/tea-making/evaluation/`. The executable procedure is
 `example-guides/tea-making/guide.yaml`; the YAML files below describe test inputs and
 assertions, not additional guides.
 
-| File under `example-guides/tea-making/eval/` | Purpose |
+| File under `example-guides/tea-making/evaluation/` | Purpose |
 |---|---|
-| `step_verification_scenario.yaml` | Presents incorrect then correct scenes for each visual step; checks blocked advancement and verified completion, then stops before the timer |
-| `full_run_scenario.yaml` | Independent successful run through the five-minute timer, completion, restart, and stop |
-| `label_reading_scenario.yaml` | Checks chamomile name variations, other tea names, and unreadable labels in the identification step |
-| `routing_scenario.yaml` | Independent conversation probes for controls, negation, quoted instructions, and visual questions; restarts before each probe |
-| `visual_expectations.yaml` | Expected recognition answers and acceptance decisions for isolated and multi-turn visual checks |
-| `image_scenes.yaml` | Image descriptions for packets, kettle readings, and tea-bag placement |
+| `scenarios/step_verification.yaml` | Presents incorrect then correct scenes for each visual step; checks blocked advancement and verified completion, then stops before the timer |
+| `scenarios/full_run.yaml` | Independent successful run through the five-minute timer, completion, restart, and stop |
+| `scenarios/label_reading.yaml` | Checks chamomile name variations, other tea names, and unreadable labels in the identification step |
+| `scenarios/routing.yaml` | Independent conversation probes for controls, negation, quoted instructions, and visual questions; restarts before each probe |
+| `fixtures/visual_expectations.yaml` | Expected recognition answers and acceptance decisions for isolated and multi-turn visual checks |
+| `fixtures/image_scenes.yaml` | Image descriptions for packets, kettle readings, and tea-bag placement |
 
-The adjacent `scenario.py` executes the scenario files; `visual.py` runs isolated
+The adjacent `run_scenario.py` executes the scenario files; `evaluate_visual_checks.py` runs isolated
 VLM checks selected by `--manifest`. `_scene_rendering.py` draws their fixtures,
 and `_visual_expectations.py` supplies shared scoring. Automated runtime and
 evaluator regressions live directly under the repository's `tests/`.
 `tests/test_procedure_indicator_guide.yaml` supplies a minimal visual-and-timer
 guide for isolated evidence, timing, and failure-reporting checks, not a second
 end-to-end scenario.
-The sample's standalone `eval/caption_eval.py` loads synthetic caption inputs
-from `eval/caption_cases.yaml`. `eval/guide_generation_cases.yaml` contains the
+The sample's standalone `evaluation/capture/evaluate_captions.py` loads synthetic caption inputs
+from `evaluation/capture/caption_cases.yaml`. `evaluation/guide/authoring_cases.yaml` contains the
 text-only authoring probes described above; `tests/test_procedure_indicator_guide.yaml`
 is the only procedure-specific YAML fixture left in `tests/`.
 
-The sample-level `eval/guide_runtime.py` provides shared camera and speech
+The sample-owned `evaluation/guide/_runtime_harness.py` is an evaluation harness,
+not the production guide runtime. It provides simulated camera and speech
 boundaries, production agent and tool setup, and trace collection. Both the
 recorded-packet runner and tea scenario runner consume this harness.
 Recorded-packet playback and orchestration stay in
-`guide-generation-skills/evaluate-guide/scripts/`; tea-specific scene rendering,
+`evaluation/guide/`; tea-specific scene rendering,
 scripted actions, and assertions stay with the example guide. Neither runner
-imports the other's implementation or regression fixtures. The sample-level
-`eval/` directory also contains the live caption evaluator, its cases, and the
-guide-generation probes.
+imports the other's implementation or regression fixtures. The coding-agent
+skill invokes `evaluation/guide/evaluate_recorded_packet.py` from the target
+checkout rather than maintaining executable evaluation code inside the skill.
+Capture evaluation and its cases live in `evaluation/capture/`; text-only
+guide-authoring probes live in `evaluation/guide/authoring_cases.yaml`.
 
 Keep the full run independent of step-verification failures so timer and
 lifecycle checks remain reachable. Label-reading has its own scenario because
@@ -662,10 +666,10 @@ evaluators share the same fixtures and scoring contract without supplying
 expected answers to the renderer or model.
 
 The tea evaluation separates visual recognition from guide execution. All images
-are schematic drawings generated by `example-guides/tea-making/eval/_scene_rendering.py` from
-`example-guides/tea-making/eval/image_scenes.yaml`. Packet labels contain only tea names and a generic TEA heading,
+are schematic drawings generated by `example-guides/tea-making/evaluation/_scene_rendering.py` from
+`example-guides/tea-making/evaluation/fixtures/image_scenes.yaml`. Packet labels contain only tea names and a generic TEA heading,
 without brand names or logos. Inspect the drawings before interpreting model scores.
-The manifests use `guide_path: ../guide.yaml`, relative to their own directory,
+The manifests use `guide_path: ../../guide.yaml`, relative to their own directory,
 loading `example-guides/tea-making/guide.yaml` through the production guide runtime.
 They exercise the same procedure, prompts, and verification rules that users run,
 without a separate copy of the tea guide. The purpose-built
@@ -682,8 +686,8 @@ using the shipped guide's YES, NO, or UNKNOWN contract.
 From the sample directory, generate images for inspection without model calls:
 
 ```bash
-uv run --project worker python example-guides/tea-making/eval/visual.py \
-  --manifest example-guides/tea-making/eval/visual_expectations.yaml \
+uv run --project worker python example-guides/tea-making/evaluation/evaluate_visual_checks.py \
+  --manifest example-guides/tea-making/evaluation/fixtures/visual_expectations.yaml \
   --render-only --output artifacts/tea-preview
 ```
 
@@ -691,13 +695,13 @@ With the existing model servers running, evaluate the 25 visual cases three
 times each, then run the complete conversational scenario:
 
 ```bash
-uv run --project worker python example-guides/tea-making/eval/visual.py \
-  --manifest example-guides/tea-making/eval/visual_expectations.yaml \
+uv run --project worker python example-guides/tea-making/evaluation/evaluate_visual_checks.py \
+  --manifest example-guides/tea-making/evaluation/fixtures/visual_expectations.yaml \
   --repeats 3 --output artifacts/tea-visual
-uv run --project worker python example-guides/tea-making/eval/scenario.py \
-  --manifest example-guides/tea-making/eval/step_verification_scenario.yaml --output artifacts/tea-step-verification
-uv run --project worker python example-guides/tea-making/eval/scenario.py \
-  --manifest example-guides/tea-making/eval/full_run_scenario.yaml --output artifacts/tea-full-run
+uv run --project worker python example-guides/tea-making/evaluation/run_scenario.py \
+  --manifest example-guides/tea-making/evaluation/scenarios/step_verification.yaml --output artifacts/tea-step-verification
+uv run --project worker python example-guides/tea-making/evaluation/run_scenario.py \
+  --manifest example-guides/tea-making/evaluation/scenarios/full_run.yaml --output artifacts/tea-full-run
 ```
 
 The visual suite covers five tea blends, incomplete and
@@ -892,5 +896,5 @@ They use synthetic fixtures and validate the shipped hand-authored tea guide,
 not private user recordings. Offline CLI tests exercise the evaluation runner
 with controlled model responses, including visual-only and visual-and-timer guides.
 These tests establish runtime behavior, not model accuracy. Run the standalone
-`example-guides/tea-making/eval/scenario.py` scenarios above against existing model servers to measure live
+`example-guides/tea-making/evaluation/run_scenario.py` scenarios above against existing model servers to measure live
 tool routing and visual judgments; the runner never manages their lifecycle.
