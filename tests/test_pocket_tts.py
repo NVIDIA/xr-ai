@@ -979,6 +979,13 @@ async def test_startup_timeout_cancels_server_that_never_starts(
         lambda _cfg, _model_cache: (Mock(), backend),
     )
 
+    async def loaded(_backend: object) -> None:
+        pass
+
+    # Loading runs on a thread whose start-up time varies; skip it so the
+    # timeout always lands while the server is serving.
+    monkeypatch.setattr(module, "_load_backend", loaded)
+
     with pytest.raises(TimeoutError, match="within 0.01 seconds"):
         await module._run(
             {"voice": "bill_boerst", "startup_timeout_s": 0.01},
