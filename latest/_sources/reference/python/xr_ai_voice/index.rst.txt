@@ -93,10 +93,11 @@ Package Contents
 
 .. py:class:: VadConfig
 
-   Tuning knobs for the Silero-VAD utterance detector.
+   Utterance endpointing and Silero-VAD tuning for :class:`VoiceAgent`.
 
-   Mirrors the constructor of :class:`xr_ai_vad.VadDetector`. Default
-   values match the in-tree samples' current behavior.
+   ``silence_duration`` controls finalization for either batch or speaker ASR.
+   The other fields apply only to the batch-STT Silero path and mirror
+   :class:`xr_ai_vad.VadDetector`.
 
    ``stop_probe_after_s`` — cadence in seconds for up to three STT probes of
    the partial audio buffer. This gives STOP commands a fast interruption path
@@ -111,7 +112,10 @@ Package Contents
       :value: 0.8
 
 
-      Seconds of silence that finalize an utterance.
+      Seconds of silence that finalize an utterance with either ASR backend.
+
+      Speaker ASR measures inactivity of the selected speaker and checks it at
+      model-chunk boundaries; this is a threshold, not a response-latency bound.
 
 
 
@@ -177,6 +181,11 @@ Package Contents
    :meth:`from_models` resolves that dependency from an already-loaded model
    profile and the same voice-gate configuration, without application-side
    backend inspection. The normal constructor accepts explicitly owned clients.
+
+   ``vad.silence_duration`` owns utterance finalization for either ASR backend,
+   overriding any ``speaker.silence_duration`` in ``voice_gate`` for this agent.
+   Each agent copies its effective speaker settings; the shared voice-gate
+   configuration is unchanged. Other ``VadConfig`` fields tune batch STT only.
 
    Accepted queries also return participant-routed UTF-8 display text on
    ``voice.user-query``. Speaker ASR includes its session-local speaker label;

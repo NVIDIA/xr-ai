@@ -507,6 +507,13 @@ configuration, then register one <code class="docutils literal notranslate"><spa
 typed text ingress, TTS, signals, pipeline cancellation, and cleanup. Its media
 session remains private. Applications that need a shared public
 <code class="docutils literal notranslate"><span class="pre">HubVoiceTransport</span></code> construct and inject one explicitly.</p>
+<p>Set utterance-ending silence once through <code class="docutils literal notranslate"><span class="pre">VadConfig.silence_duration</span></code> passed
+to <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code>. It controls the active backend: Silero VAD for batch STT, or
+per-speaker inactivity for speaker ASR. This value takes precedence over the
+voice-gate YAML’s <code class="docutils literal notranslate"><span class="pre">speaker.silence_duration</span></code>; direct speaker sessions retain
+their own configuration. Other <code class="docutils literal notranslate"><span class="pre">VadConfig</span></code> fields apply only to batch STT.
+Speaker ASR checks inactivity at model-chunk boundaries, so the threshold is
+not an exact end-to-end latency target. Changes apply to newly opened sessions.</p>
 <p>For the startup probe contract, refer to <a class="reference internal" href="python/xr_ai_voice/index.html#xr_ai_voice.VoiceAgent" title="xr_ai_voice.VoiceAgent"><code class="xref py py-class docutils literal notranslate"><span class="pre">VoiceAgent</span></code></a>.
 For deployment order and model availability requirements, refer to
 <a class="reference internal" href="../components/launcher-and-process-model.html#consumer-model-readiness"><span class="std std-ref">Consumer model readiness</span></a>.</p>
@@ -660,7 +667,8 @@ once against the packaged baseline.</p>
 <span class="w">  </span><span class="nt">diagnostics</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
 <span class="w">  </span><span class="nt">timeout_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10.0</span><span class="w">                 </span><span class="c1"># Positive finite HTTP timeout, in seconds.</span>
 <span class="w">  </span><span class="nt">activity_threshold</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.7</span><span class="w">          </span><span class="c1"># Speaker activity threshold, strictly (0, 1).</span>
-<span class="w">  </span><span class="nt">silence_duration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.6</span><span class="w">            </span><span class="c1"># Per-speaker silence before finalization (s).</span>
+<span class="w">  </span><span class="c1"># Direct speaker-session default only; VoiceAgent uses VadConfig.silence_duration.</span>
+<span class="w">  </span><span class="nt">silence_duration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.6</span>
 <span class="w">  </span><span class="nt">max_utterance_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30.0</span><span class="w">            </span><span class="c1"># Forced segment boundary; must exceed silence.</span>
 </pre></div>
 </div>
