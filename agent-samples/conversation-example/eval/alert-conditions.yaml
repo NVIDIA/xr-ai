@@ -22,6 +22,12 @@
   image: red_left_blue_right
   condition: Alert me when the blue circle moves.
   expected: "no"
+- name: backup_text_judge_motion_not_established_by_one_frame
+  path: cosmos_observation_then_clef_text
+  image: red_left_blue_right
+  condition: Alert me when the blue circle moves.
+  expected: "no"
+  observation_rubric: The single-frame observation cannot establish movement or a previous state.
 
 # Follow-up generation rubric, not an authored model completion.
 - name: triggered_description_is_relevant

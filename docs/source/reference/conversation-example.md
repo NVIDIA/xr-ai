@@ -67,27 +67,33 @@ visual alert controls, and foreground note-taking. General conversation answers
 text questions and recall. Direct observation sends one fresh image and the
 current question to Cosmos, without dialogue history.
 
-A visual alert starts only when the participant explicitly asks to be notified
-when a specific visible condition occurs. For example, “Alert me when the left
-indicator is green.” Each iteration selects a frame and passes the resolved image and condition
-directly to Clef for a yes/no decision. Missing or uncertain evidence means no
-alert. Once
-matched, the alert agent immediately publishes a complete “Alert” voice response.
-It then streams a short Cosmos description of relevant evidence from that exact
-triggering frame and stops. The description does not interrupt the announcement.
-The next observation begins after the previous iteration completes; there is
-no sampling interval or observation history. Only an explicit new alert request
-replaces an existing job. “Cancel the visual alert” cancels it. Ordinary questions
-and fragments are not alert controls. Each participant owns an independent job;
-departure and worker shutdown cancel and drain it. Camera or inference failure
-stops the job with a concise failure message, without sending an alert.
+An alert starts only when the participant explicitly asks to be notified when a
+specific visible condition occurs. For example, “Alert me when the left
+indicator is green.” Each job runs two independent observation loops. The fast
+loop sends a fresh frame and the condition directly to Clef for the existing
+yes/no decision. In parallel, the backup loop asks Cosmos for visible evidence
+relevant to the condition, then asks Clef whether that written observation
+establishes it. Either loop can claim the alert; the first yes result owns the
+triggering frame and only one complete “Alert” voice response is published.
+The agent then streams a short Cosmos description of relevant evidence from
+that same frame and stops. The description does not interrupt the announcement.
+Each loop selects its next frame after its previous model work completes; there
+is no sampling interval or observation history. A failure in one loop leaves
+the other available; if both stop without a match, the job retires with a
+concise failure message. Only an explicit new alert request replaces an
+existing job. “Cancel the visual alert” cancels it. Ordinary questions and
+fragments are not alert controls. Each participant owns an independent job;
+departure and worker shutdown cancel and drain both loops.
+
+The backup judge sees Cosmos's text description rather than the image, so it
+can miss evidence or repeat a description error. Neither path guarantees visual
+recognition accuracy. A single still image cannot establish motion, a change
+over time, or a previous state; conditions requiring that evidence do not
+trigger.
 
 Conversation receives a static description of alert capability, never the
 job's observations or matching state. The alert condition and current image
-stay inside the background job. This separation does not guarantee visual
-recognition accuracy: a confident but wrong visual classification can still produce a false alert. A
-single image cannot establish motion, a change over time, or a previous state;
-conditions requiring that evidence do not trigger.
+stay inside the background job.
 
 Foreground notes start explicitly, capture dictated text, and retain focus until
 a finish. A question handoff declines only that query so another destination can
@@ -115,7 +121,8 @@ participant. When video is off, the same tool asks StreamKit to capture one
 image and return it through a targeted LiveKit byte stream. The fallback is
 invisible to the agent: it receives the same opaque image-reference shape and
 passes it to the configured visual model. Direct visual answers use Cosmos;
-alerts use Clef image decisions followed by a Cosmos description only after a match.
+alerts use direct Clef decisions and a concurrent Cosmos-observation-to-Clef-text
+path, followed by one Cosmos description only after a match.
 Camera bytes remain on the hub path, image locations are redacted from VLM
 telemetry, and the sample has no MCP path.
 
@@ -242,7 +249,8 @@ focus and alert controls follow the actual native control decisions; fixture
 expectations for those states are scored separately. The corpus's
 answer checks are lexical smoke checks; they do not establish semantic answer
 quality. `eval/alert-conditions.yaml` supplies separate yes/no image-condition
-cases, including absent, uncertain, and non-observable motion evidence. Hosted
+cases, including absent, uncertain, and non-observable motion evidence, plus a
+backup text-judge case for motion that one frame cannot establish. Hosted
 tests must supply and inspect the actual image bytes. Model-decision runs do not
 establish camera grounding unless they
 include a completed frame/query result, and the deterministic image fixtures do
