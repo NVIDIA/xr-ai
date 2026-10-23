@@ -344,6 +344,7 @@
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Reference</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-conversation.html">xr-ai-conversation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-hub.html">xr-ai-hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="agent-sdk-interaction.html">xr-ai-interaction</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-models.html">xr-ai-models</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-routing.html">xr-ai-routing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-runtime.html">xr-ai-runtime</a></li>
@@ -402,6 +403,7 @@
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_interaction/index.html">xr_ai_interaction</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_conversation/index.html">xr_ai_conversation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_model_server_stack/index.html">xr_ai_model_server_stack</a></li>
 </ul>
@@ -477,15 +479,16 @@ and defaults.</p>
 configuration, then register one <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> with their runtime:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 
+<span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_interaction</span><span class="w"> </span><span class="kn">import</span> <span class="n">Interrupted</span><span class="p">,</span> <span class="n">UserQuery</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_models</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_models_config</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_runtime</span><span class="w"> </span><span class="kn">import</span> <span class="n">Topic</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_voice</span><span class="w"> </span><span class="kn">import</span> <span class="n">UserQuery</span><span class="p">,</span> <span class="n">VadConfig</span><span class="p">,</span> <span class="n">VoiceAgent</span><span class="p">,</span> <span class="n">VoiceInterrupted</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_voice</span><span class="w"> </span><span class="kn">import</span> <span class="n">VadConfig</span><span class="p">,</span> <span class="n">VoiceAgent</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_voicegate</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_voice_gate_config</span>
 
 <span class="n">models</span> <span class="o">=</span> <span class="n">load_models_config</span><span class="p">(</span><span class="s2">"yaml/models.json"</span><span class="p">)</span>
 <span class="n">voice_gate</span> <span class="o">=</span> <span class="n">load_voice_gate_config</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="s2">"yaml/voice_gate.yaml"</span><span class="p">))</span>
 <span class="n">queries</span> <span class="o">=</span> <span class="n">Topic</span><span class="p">(</span><span class="s2">"my-sample.user-query"</span><span class="p">,</span> <span class="n">UserQuery</span><span class="p">)</span>
-<span class="n">interruptions</span> <span class="o">=</span> <span class="n">Topic</span><span class="p">(</span><span class="s2">"my-sample.interrupted"</span><span class="p">,</span> <span class="n">VoiceInterrupted</span><span class="p">)</span>
+<span class="n">interruptions</span> <span class="o">=</span> <span class="n">Topic</span><span class="p">(</span><span class="s2">"my-sample.interrupted"</span><span class="p">,</span> <span class="n">Interrupted</span><span class="p">)</span>
 <span class="n">voice</span> <span class="o">=</span> <span class="n">VoiceAgent</span><span class="o">.</span><span class="n">from_models</span><span class="p">(</span>
     <span class="n">models</span><span class="o">=</span><span class="n">models</span><span class="p">,</span>
     <span class="n">query_topic</span><span class="o">=</span><span class="n">queries</span><span class="p">,</span>
@@ -530,7 +533,7 @@ processor. <code class="docutils literal notranslate"><span class="pre">VoiceAge
 </section>
 <section id="voice-output-and-interruption">
 <span id="voice-tuning-and-data-echo"></span><h2>Voice output and interruption<a class="headerlink" href="#voice-output-and-interruption" title="Link to this heading">#</a></h2>
-<p>Applications publish finite or incremental <code class="docutils literal notranslate"><span class="pre">VoiceOutput</span></code> values. Chunks in one
+<p>Applications publish finite or incremental <code class="docutils literal notranslate"><span class="pre">ResponseOutput</span></code> values. Chunks in one
 stream share <code class="docutils literal notranslate"><span class="pre">response_id</span></code> and end with <code class="docutils literal notranslate"><span class="pre">final=True</span></code>. Output is serialized per
 participant; <code class="docutils literal notranslate"><span class="pre">interrupt=True</span></code> flushes queued hub audio and replaces active
 speech. Without aggregation, producer identity is part of the stream key so
@@ -541,7 +544,7 @@ warning for that participant, producer, and <code class="docutils literal notran
 finalization, cancellation, or eviction; waiting does not reopen a retained
 key. Use one identifier per inbound query, such as
 <code class="docutils literal notranslate"><span class="pre">ctx.metadata.message_id</span></code>, or omit <code class="docutils literal notranslate"><span class="pre">response_id</span></code> when publishing a finite
-response in one <code class="docutils literal notranslate"><span class="pre">VoiceOutput</span></code>.</p>
+response in one <code class="docutils literal notranslate"><span class="pre">ResponseOutput</span></code>.</p>
 <p><code class="docutils literal notranslate"><span class="pre">text_topic</span></code> controls the completed-response data echo and defaults to
 <code class="docutils literal notranslate"><span class="pre">agent.response</span></code>. Set it to an empty string when the application owns its own
 caption channel. The echo describes intended completed text, not client playback
@@ -562,7 +565,8 @@ interruption flushes participant-scoped queued audio. The hub setting
 register one <code class="docutils literal notranslate"><span class="pre">VoiceAggregationAgent</span></code>. Producers publish to
 <code class="docutils literal notranslate"><span class="pre">VOICE_CONTRIBUTION_TOPIC</span></code>; only the aggregator publishes to
 <code class="docutils literal notranslate"><span class="pre">VOICE_OUTPUT_TOPIC</span></code>.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_voice</span><span class="w"> </span><span class="kn">import</span> <span class="n">VOICE_CONTRIBUTION_TOPIC</span><span class="p">,</span> <span class="n">VoiceAggregationAgent</span><span class="p">,</span> <span class="n">VoiceOutput</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_interaction</span><span class="w"> </span><span class="kn">import</span> <span class="n">ResponseOutput</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_voice</span><span class="w"> </span><span class="kn">import</span> <span class="n">VOICE_CONTRIBUTION_TOPIC</span><span class="p">,</span> <span class="n">VoiceAggregationAgent</span>
 
 <span class="n">aggregation</span> <span class="o">=</span> <span class="n">runtime</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
     <span class="s2">"voice-aggregation"</span><span class="p">,</span>
@@ -571,7 +575,7 @@ register one <code class="docutils literal notranslate"><span class="pre">VoiceA
 
 <span class="k">await</span> <span class="n">ctx</span><span class="o">.</span><span class="n">publish</span><span class="p">(</span>
     <span class="n">VOICE_CONTRIBUTION_TOPIC</span><span class="p">,</span>
-    <span class="n">VoiceOutput</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="s2">"The timer is done."</span><span class="p">),</span>
+    <span class="n">ResponseOutput</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="s2">"The timer is done."</span><span class="p">),</span>
 <span class="p">)</span>
 </pre></div>
 </div>

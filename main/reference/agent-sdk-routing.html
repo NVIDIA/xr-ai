@@ -344,6 +344,7 @@
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Reference</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-conversation.html">xr-ai-conversation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-hub.html">xr-ai-hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="agent-sdk-interaction.html">xr-ai-interaction</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-models.html">xr-ai-models</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">xr-ai-routing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-runtime.html">xr-ai-runtime</a></li>
@@ -402,6 +403,7 @@
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_interaction/index.html">xr_ai_interaction</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_conversation/index.html">xr_ai_conversation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_model_server_stack/index.html">xr_ai_model_server_stack</a></li>
 </ul>
@@ -577,15 +579,15 @@ selection on each turn.</p>
 </section>
 <section id="register-the-router-with-a-runtime">
 <h2>Register the router with a runtime<a class="headerlink" href="#register-the-router-with-a-runtime" title="Link to this heading">#</a></h2>
-<p>Install <code class="docutils literal notranslate"><span class="pre">xr-ai-routing[voice]</span></code> to use the existing typed voice event models.
-The direct <code class="docutils literal notranslate"><span class="pre">handle()</span></code> path uses its configured control callback and does not
-import voice media. Runtime queries need no callback. Configure the query and
+<p>Install <code class="docutils literal notranslate"><span class="pre">xr-ai-routing[runtime]</span></code> to use the typed <code class="docutils literal notranslate"><span class="pre">xr_ai_interaction</span></code> messages.
+The direct <code class="docutils literal notranslate"><span class="pre">handle()</span></code> path uses its configured control callback and imports
+neither the runtime nor those messages. Runtime queries need no callback. Configure the query and
 output topics explicitly, then register the router’s runtime subscriber:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_runtime</span><span class="w"> </span><span class="kn">import</span> <span class="n">AgentRuntime</span><span class="p">,</span> <span class="n">Topic</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_voice</span><span class="w"> </span><span class="kn">import</span> <span class="n">UserQuery</span><span class="p">,</span> <span class="n">VoiceOutput</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_interaction</span><span class="w"> </span><span class="kn">import</span> <span class="n">ResponseOutput</span><span class="p">,</span> <span class="n">UserQuery</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_runtime</span><span class="w"> </span><span class="kn">import</span> <span class="n">AgentRuntime</span><span class="p">,</span> <span class="n">Topic</span>
 
 <span class="n">queries</span> <span class="o">=</span> <span class="n">Topic</span><span class="p">(</span><span class="s2">"my-app.query"</span><span class="p">,</span> <span class="n">UserQuery</span><span class="p">)</span>
-<span class="n">outputs</span> <span class="o">=</span> <span class="n">Topic</span><span class="p">(</span><span class="s2">"my-app.output"</span><span class="p">,</span> <span class="n">VoiceOutput</span><span class="p">)</span>
+<span class="n">outputs</span> <span class="o">=</span> <span class="n">Topic</span><span class="p">(</span><span class="s2">"my-app.output"</span><span class="p">,</span> <span class="n">ResponseOutput</span><span class="p">)</span>
 <span class="n">runtime</span> <span class="o">=</span> <span class="n">AgentRuntime</span><span class="p">()</span>
 <span class="n">router</span> <span class="o">=</span> <span class="n">AgentRouter</span><span class="p">(</span>
     <span class="p">{</span><span class="s2">"conversation"</span><span class="p">:</span> <span class="n">conversation</span><span class="p">,</span> <span class="s2">"scene"</span><span class="p">:</span> <span class="n">scene_destination</span><span class="p">},</span>
@@ -605,12 +607,12 @@ streams. <code class="docutils literal notranslate"><span class="pre">AgentTurn.
 control messages under its own producer identity, so an acknowledgment never
 holds an open stream ahead of a direct answer.</p>
 <p>Optional join, leave, and interruption topics must also be supplied explicitly.
-Each uses the corresponding <code class="docutils literal notranslate"><span class="pre">VoiceParticipantJoined</span></code>, <code class="docutils literal notranslate"><span class="pre">VoiceParticipantLeft</span></code>,
-or <code class="docutils literal notranslate"><span class="pre">VoiceInterrupted</span></code> model. No query or lifecycle topics are subscribed by
+Each uses the corresponding <code class="docutils literal notranslate"><span class="pre">ParticipantJoined</span></code>, <code class="docutils literal notranslate"><span class="pre">ParticipantLeft</span></code>,
+or <code class="docutils literal notranslate"><span class="pre">Interrupted</span></code> model. No query or lifecycle topics are subscribed by
 default. Incorrect payload classes and incomplete topic pairs fail during
 construction. A leave topic requires a join topic, because only a join readmits
 a participant who left.</p>
-<p>Install <code class="docutils literal notranslate"><span class="pre">xr-ai-routing[voice]</span></code> and supply explicit query and output topics to
+<p>Install <code class="docutils literal notranslate"><span class="pre">xr-ai-routing[runtime]</span></code> and supply explicit query and output topics to
 use runtime delivery; optional participant and interruption topics also require
 explicit configuration. Runtime queries use the configured output topic for
 router-owned control text; direct <code class="docutils literal notranslate"><span class="pre">handle(turn)</span></code> calls use the constructor

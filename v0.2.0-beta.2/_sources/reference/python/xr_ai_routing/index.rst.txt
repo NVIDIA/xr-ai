@@ -332,7 +332,7 @@ Package Contents
    an active routed turn, it contains ``None`` and empty history tuples.
 
 
-.. py:class:: AgentRouter(destinations: collections.abc.Mapping[str, xr_ai_routing.RoutableAgent], decisions: xr_ai_models.DecisionService, *, output: collections.abc.Callable[[xr_ai_routing.AgentTurn, str, str], collections.abc.Awaitable[None]] | None = None, default_destination: str = 'conversation', context_budget_bytes: int = _DEFAULT_CONTEXT_BUDGET_BYTES, acknowledgment_llm: xr_ai_models.LLMService | None = None, acknowledgment_delay_secs: float | None = None, query_topic: xr_ai_runtime.Topic[xr_ai_voice.UserQuery] | None = None, output_topic: xr_ai_runtime.Topic[xr_ai_voice.VoiceOutput] | None = None, participant_joined_topic: xr_ai_runtime.Topic[xr_ai_voice.VoiceParticipantJoined] | None = None, participant_left_topic: xr_ai_runtime.Topic[xr_ai_voice.VoiceParticipantLeft] | None = None, interrupted_topic: xr_ai_runtime.Topic[xr_ai_voice.VoiceInterrupted] | None = None, initialize_participant: collections.abc.Callable[[str], collections.abc.Awaitable[None]] | None = None, cleanup_participant: collections.abc.Callable[[str], collections.abc.Awaitable[None]] | None = None, set_status: collections.abc.Callable[[Literal['processing', 'idle'], str], collections.abc.Awaitable[None]] | None = None)
+.. py:class:: AgentRouter(destinations: collections.abc.Mapping[str, xr_ai_routing.RoutableAgent], decisions: xr_ai_models.DecisionService, *, output: collections.abc.Callable[[xr_ai_routing.AgentTurn, str, str], collections.abc.Awaitable[None]] | None = None, default_destination: str = 'conversation', context_budget_bytes: int = _DEFAULT_CONTEXT_BUDGET_BYTES, acknowledgment_llm: xr_ai_models.LLMService | None = None, acknowledgment_delay_secs: float | None = None, query_topic: xr_ai_runtime.Topic[xr_ai_interaction.UserQuery] | None = None, output_topic: xr_ai_runtime.Topic[xr_ai_interaction.ResponseOutput] | None = None, participant_joined_topic: xr_ai_runtime.Topic[xr_ai_interaction.ParticipantJoined] | None = None, participant_left_topic: xr_ai_runtime.Topic[xr_ai_interaction.ParticipantLeft] | None = None, interrupted_topic: xr_ai_runtime.Topic[xr_ai_interaction.Interrupted] | None = None, initialize_participant: collections.abc.Callable[[str], collections.abc.Awaitable[None]] | None = None, cleanup_participant: collections.abc.Callable[[str], collections.abc.Awaitable[None]] | None = None, set_status: collections.abc.Callable[[Literal['processing', 'idle'], str], collections.abc.Awaitable[None]] | None = None)
 
    Route a turn, check admission before speech, and retain explicit focus.
 
@@ -365,8 +365,8 @@ Package Contents
 
    Supply ``query_topic`` and ``output_topic`` together, then register
    ``runtime_subscriber()`` with :class:`xr_ai_runtime.AgentRuntime`. This
-   requires the ``xr-ai-routing[voice]`` extra; ordinary ``handle()`` use never
-   imports the runtime or voice media. No input or lifecycle topic is
+   requires the ``xr-ai-routing[runtime]`` extra; ordinary ``handle()`` use never
+   imports the runtime or interaction messages. No input or lifecycle topic is
    subscribed unless explicitly supplied.
    Runtime queries use their publication identity and originating timestamp.
    Destinations publish their own output; the router publishes only finite
@@ -386,12 +386,12 @@ Package Contents
    :param acknowledgment_llm: Optional non-reasoning client for intention acknowledgments and duration prediction.
    :param acknowledgment_delay_secs: Finite positive delay before fallback
        acknowledgment; requires ``acknowledgment_llm``.
-   :param query_topic: Explicit runtime input topic carrying ``xr_ai_voice.UserQuery``.
-   :param output_topic: Explicit topic carrying ``xr_ai_voice.VoiceOutput`` for router control output.
-   :param participant_joined_topic: Optional explicit ``VoiceParticipantJoined`` topic reopening admission.
-   :param participant_left_topic: Optional explicit ``VoiceParticipantLeft`` topic for departure cleanup;
+   :param query_topic: Explicit runtime input topic carrying ``xr_ai_interaction.UserQuery``.
+   :param output_topic: Explicit topic carrying ``xr_ai_interaction.ResponseOutput`` for router control output.
+   :param participant_joined_topic: Optional explicit ``ParticipantJoined`` topic reopening admission.
+   :param participant_left_topic: Optional explicit ``ParticipantLeft`` topic for departure cleanup;
        requires ``participant_joined_topic`` so a departed participant can be readmitted.
-   :param interrupted_topic: Optional explicit ``VoiceInterrupted`` topic for participant or global interruption.
+   :param interrupted_topic: Optional explicit ``Interrupted`` topic for participant or global interruption.
    :param initialize_participant: Optional initialization, awaited once before the participant's first turn,
        whether called directly or published. An interrupted initialization runs again on the next turn.
    :param cleanup_participant: Optional idempotent application cleanup after destination work is drained.
@@ -402,7 +402,7 @@ Package Contents
 
    Topic payload classes must match exactly and configured topic names must be
    distinct. Incomplete runtime configuration raises ``ValueError``; a wrong
-   payload class raises ``TypeError``. Missing optional voice support raises
+   payload class raises ``TypeError``. A missing ``runtime`` extra raises
    ``ImportError`` when runtime configuration is supplied. The application must
    await ``stop()`` before stopping its runtime or closing destination resources.
 

@@ -35,7 +35,7 @@ Package Contents
 
 
 
-.. py:class:: Conversation(llm: xr_ai_models.LLMService, *, instructions: str = '', routing: xr_ai_routing.RoutingAid | None = None, summary_context_topics: collections.abc.Sequence[str] = (), incremental_context_topics: collections.abc.Sequence[str] = (), dialogue_budget_bytes: int = _DEFAULT_DIALOGUE_BUDGET_BYTES, topic_budget_bytes: int | collections.abc.Mapping[str, int] = _DEFAULT_TOPIC_BUDGET_BYTES, compaction_input_budget_bytes: int = _DEFAULT_COMPACTION_INPUT_BUDGET_BYTES, runtime: xr_ai_runtime.AgentRuntime, output_topic: xr_ai_runtime.Topic[xr_ai_voice.VoiceOutput])
+.. py:class:: Conversation(llm: xr_ai_models.LLMService, *, instructions: str = '', routing: xr_ai_routing.RoutingAid | None = None, summary_context_topics: collections.abc.Sequence[str] = (), incremental_context_topics: collections.abc.Sequence[str] = (), dialogue_budget_bytes: int = _DEFAULT_DIALOGUE_BUDGET_BYTES, topic_budget_bytes: int | collections.abc.Mapping[str, int] = _DEFAULT_TOPIC_BUDGET_BYTES, compaction_input_budget_bytes: int = _DEFAULT_COMPACTION_INPUT_BUDGET_BYTES, runtime: xr_ai_runtime.AgentRuntime, output_topic: xr_ai_runtime.Topic[xr_ai_interaction.ResponseOutput])
 
 
 
@@ -50,7 +50,7 @@ Package Contents
    :param topic_budget_bytes: UTF-8 byte budget for each topic's context rendered into a request:
        one value for every topic, or a mapping with a value for each configured topic.
    :param runtime: Runtime used to publish answers. The application owns runtime startup and shutdown.
-   :param output_topic: Explicit ``VoiceOutput`` topic for routed answers; requires ``xr-ai-conversation[voice]``.
+   :param output_topic: Explicit ``ResponseOutput`` topic for routed answers.
        The conversation publishes with its routing name as source, the turn ID as response ID,
        and the originating timestamp. It owns stream framing and finalization.
        No default output or query topic is subscribed.
@@ -79,7 +79,7 @@ Package Contents
       :async:
 
 
-      Publish a routed answer directly to the configured voice output topic.
+      Publish a routed answer directly to the configured output topic.
 
       Requires ``runtime`` and ``output_topic``. The first nonblank ready chunk
       awaits ``started()`` before publication. That body frame

@@ -43,8 +43,9 @@ await conversation.close()
 ```
 
 The agent answers from its instructions, completed history, and configured
-context sources. Install `xr-ai-conversation[voice]` and configure the runtime
-and a typed voice output topic to use it as a routed destination. Conversation
+context sources. Configure the runtime and a `ResponseOutput` topic, such as
+`VOICE_OUTPUT_TOPIC` or a text front end's topic, to use it as a routed
+destination. Conversation
 publishes its own response chunks with its routing name as source and the turn's
 response identity and timestamp. Its first chunk interrupts older speech
 unless router text such as a preamble already started the turn. It finalizes

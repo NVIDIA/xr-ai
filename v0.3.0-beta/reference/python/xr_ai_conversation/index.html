@@ -60,7 +60,7 @@
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" />
     <link rel="next" title="xr_ai_model_server_stack" href="../xr_ai_model_server_stack/index.html" />
-    <link rel="prev" title="xr_ai_web_events" href="../xr_ai_web_events/index.html" />
+    <link rel="prev" title="xr_ai_interaction" href="../xr_ai_interaction/index.html" />
 
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -392,6 +392,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../xr_ai_launcher/index.html">xr_ai_launcher</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../xr_ai_interaction/index.html">xr_ai_interaction</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">xr_ai_conversation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../xr_ai_model_server_stack/index.html">xr_ai_model_server_stack</a></li>
 </ul>
@@ -496,7 +497,7 @@
 <dd><em class="sig-param"><span class="n"><span class="pre">topic_budget_bytes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">collections.abc.Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">_DEFAULT_TOPIC_BUDGET_BYTES</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">compaction_input_budget_bytes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">_DEFAULT_COMPACTION_INPUT_BUDGET_BYTES</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">runtime</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../xr_ai_runtime/index.html#xr_ai_runtime.AgentRuntime" title="xr_ai_runtime.AgentRuntime"><span class="pre">xr_ai_runtime.AgentRuntime</span></a></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">output_topic</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../xr_ai_runtime/index.html#xr_ai_runtime.Topic" title="xr_ai_runtime.Topic"><span class="pre">xr_ai_runtime.Topic</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../xr_ai_voice/index.html#xr_ai_voice.VoiceOutput" title="xr_ai_voice.VoiceOutput"><span class="pre">xr_ai_voice.VoiceOutput</span></a><span class="p"><span class="pre">]</span></span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">output_topic</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../xr_ai_runtime/index.html#xr_ai_runtime.Topic" title="xr_ai_runtime.Topic"><span class="pre">xr_ai_runtime.Topic</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../xr_ai_interaction/index.html#xr_ai_interaction.ResponseOutput" title="xr_ai_interaction.ResponseOutput"><span class="pre">xr_ai_interaction.ResponseOutput</span></a><span class="p"><span class="pre">]</span></span></span></em>,</dd>
 </dl>
 
 <span class="sig-paren">)</span><a class="headerlink" href="#xr_ai_conversation.Conversation" title="Link to this definition">#</a></dt>
@@ -513,7 +514,7 @@
 <li><p><strong>topic_budget_bytes</strong> – UTF-8 byte budget for each topic’s context rendered into a request:
 one value for every topic, or a mapping with a value for each configured topic.</p></li>
 <li><p><strong>runtime</strong> – Runtime used to publish answers. The application owns runtime startup and shutdown.</p></li>
-<li><p><strong>output_topic</strong> – Explicit <code class="docutils literal notranslate"><span class="pre">VoiceOutput</span></code> topic for routed answers; requires <code class="docutils literal notranslate"><span class="pre">xr-ai-conversation[voice]</span></code>.
+<li><p><strong>output_topic</strong> – Explicit <code class="docutils literal notranslate"><span class="pre">ResponseOutput</span></code> topic for routed answers.
 The conversation publishes with its routing name as source, the turn ID as response ID,
 and the originating timestamp. It owns stream framing and finalization.
 No default output or query topic is subscribed.</p></li>
@@ -555,7 +556,7 @@ must be unique within and across both lists.</p>
 </dl>
 
 <span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../xr_ai_routing/index.html#xr_ai_routing.DestinationResult" title="xr_ai_routing.DestinationResult"><span class="pre">xr_ai_routing.DestinationResult</span></a></span></span><a class="headerlink" href="#xr_ai_conversation.Conversation.answer" title="Link to this definition">#</a></dt>
-<dd><p>Publish a routed answer directly to the configured voice output topic.</p>
+<dd><p>Publish a routed answer directly to the configured output topic.</p>
 <p>Requires <code class="docutils literal notranslate"><span class="pre">runtime</span></code> and <code class="docutils literal notranslate"><span class="pre">output_topic</span></code>. The first nonblank ready chunk
 awaits <code class="docutils literal notranslate"><span class="pre">started()</span></code> before publication. That body frame
 interrupts older output unless router control text already started
@@ -617,12 +618,12 @@ topic before calling this method.</p>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="../xr_ai_web_events/index.html"
+       href="../xr_ai_interaction/index.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">xr_ai_web_events</p>
+        <p class="prev-next-title">xr_ai_interaction</p>
       </div>
     </a>
     <a class="right-next"

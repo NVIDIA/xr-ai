@@ -17,6 +17,43 @@ before updating the checkout. Start the updated services before restarting
 workers; launchers can reuse a running service whose identity matches even when
 its application code predates the update.
 
+### Interaction messages move to xr-ai-interaction
+
+Code that imports `UserQuery`, `VoiceOutput`, `VoiceParticipantJoined`,
+`VoiceParticipantLeft`, or `VoiceInterrupted` from `xr_ai_voice` must import
+them from the new `xr-ai-interaction` package under their new names, and add
+`xr-ai-interaction` to its dependencies:
+
+| Before (`xr_ai_voice`) | After (`xr_ai_interaction`) |
+|---|---|
+| `UserQuery` | `UserQuery` |
+| `VoiceOutput` | `ResponseOutput` |
+| `VoiceParticipantJoined` | `ParticipantJoined` |
+| `VoiceParticipantLeft` | `ParticipantLeft` |
+| `VoiceInterrupted` | `Interrupted` |
+
+Fields, validation rules, and the `voice.output` and `voice.transcript` topics are
+unchanged; `VOICE_OUTPUT_TOPIC`, `VoiceTranscript`, and `VoiceAgent` stay in
+`xr_ai_voice`.
+
+Two validation error messages now say `response output` instead of `voice
+output`: `non-final response output needs a response_id` and `complete response
+output must contain text`. Update tests or callers that match the previous
+wording.
+
+```python
+# Before
+from xr_ai_voice import VOICE_OUTPUT_TOPIC, UserQuery, VoiceOutput
+
+# After
+from xr_ai_interaction import ResponseOutput, UserQuery
+from xr_ai_voice import VOICE_OUTPUT_TOPIC
+```
+
+Replace `xr-ai-routing[voice]` with `xr-ai-routing[runtime]`. Remove the
+`[voice]` extra from `xr-ai-conversation`, which now depends on
+`xr-ai-interaction` directly.
+
 ### Routed agents publish their own output
 
 `RoutableAgent.answer()` now accepts `turn` and a keyword-only `started`
@@ -36,8 +73,7 @@ messages, and the failure message for a turn that fails before its destination
 calls `started()`; it never receives destination answer text.
 
 Construct `Conversation(runtime=runtime, output_topic=voice_output_topic)` with
-both required arguments, and install `xr-ai-conversation[voice]`.
-Conversation now publishes directly and owns stream finalization. The router
+both required arguments. Conversation now publishes directly and owns stream finalization. The router
 reports failures before the first chunk. `Conversation.stream()` has been
 removed. Route requests through `AgentRouter`, or call
 `await conversation.answer(AgentTurn(participant_id, turn_id, request), started=started)`
