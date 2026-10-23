@@ -17,7 +17,7 @@ from _routing_test_output import emit_control as _emit_control
 from _routing_test_output import publish_output as _publish_output
 from _routing_test_output import route as _route
 from _routing_test_output import standalone_started as _standalone_started
-from xr_ai_conversation import Conversation, ConversationContextUpdate
+from xr_ai_conversation import ContextManager, Conversation, ConversationContextUpdate
 from xr_ai_conversation._context import (
     _BackgroundSection,
     _ContextRecord,
@@ -54,8 +54,14 @@ def test_conversation_explicitly_implements_routable_agent():
     assert all(callable(Conversation.__dict__.get(method)) for method in ("routing_aid", "admit", "answer", "release"))
 
 
-def test_conversation_package_exports_only_engine_types():
-    assert conversation_package.__all__ == ["Conversation", "ConversationContextUpdate"]
+def test_conversation_package_exports_only_conversation_and_context_types():
+    assert conversation_package.__all__ == [
+        "CompactionPrompts",
+        "ContextBlock",
+        "ContextManager",
+        "Conversation",
+        "ConversationContextUpdate",
+    ]
 
 
 def test_conversation_has_no_tool_or_vision_parameters():
@@ -94,8 +100,8 @@ class _LLM:
         return _response("Compacted source facts.")
 
 
-async def _settle(conversation, participant):
-    memory = conversation._store._context._participants.get(participant)
+async def _settle(manager, participant):
+    memory = manager._context._participants.get(participant)
     while memory is not None and (
         jobs := [job for job in (memory.dialogue_job, *memory.context_jobs.values()) if job is not None]
     ):
@@ -137,7 +143,8 @@ async def _drain(context, participant="alice"):
 @pytest.mark.asyncio
 async def test_conversation_is_a_normal_front_end_destination_with_completed_history():
     llm = _LLM()
-    conversation = Conversation(llm, runtime=_ConversationRuntime(), output_topic=_OUTPUT_TOPIC)  # type: ignore[arg-type]
+    manager = ContextManager(llm)
+    conversation = Conversation(llm, context=manager, runtime=_ConversationRuntime(), output_topic=_OUTPUT_TOPIC)  # type: ignore[arg-type]
     front_end = AgentRouter({"conversation": conversation}, _Decisions(), output=_emit_control)  # type: ignore[arg-type]
     output = []
 
@@ -180,7 +187,9 @@ async def test_conversation_notifies_before_delivery_and_preserves_answer_contex
     async def emit(source, text):
         events.append((source, text))
 
-    conversation = Recording(LLM(), runtime=_ConversationRuntime(), output_topic=_OUTPUT_TOPIC)
+    conversation = Recording(
+        LLM(), context=ContextManager(LLM()), runtime=_ConversationRuntime(), output_topic=_OUTPUT_TOPIC
+    )
     router = AgentRouter({"conversation": conversation}, _Decisions(), output=_emit_control)
     result = await _route(router, AgentTurn("alice", "turn-1", "Hello."), emit=emit)
 
@@ -231,9 +240,8 @@ async def test_conversation_reconciles_recent_front_end_window_after_another_des
             pass
 
     llm = _LLM()
-    conversation = Conversation(
-        llm, dialogue_budget_bytes=4_000, runtime=_ConversationRuntime(), output_topic=_OUTPUT_TOPIC,
-    )  # type: ignore[arg-type]
+    manager = ContextManager(llm, dialogue_budget_bytes=4_000)
+    conversation = Conversation(llm, context=manager, runtime=_ConversationRuntime(), output_topic=_OUTPUT_TOPIC)  # type: ignore[arg-type]
     front_end = AgentRouter(
         {"conversation": conversation, "scene": Scene()},
         Decisions(), output=_emit_control,  # type: ignore[arg-type]
@@ -301,9 +309,8 @@ async def test_unknown_seed_does_not_mask_a_later_identical_routed_exchange():
             pass
 
     llm = _LLM()
-    conversation = Conversation(
-        llm, dialogue_budget_bytes=4_000, runtime=_ConversationRuntime(), output_topic=_OUTPUT_TOPIC,
-    )  # type: ignore[arg-type]
+    manager = ContextManager(llm, dialogue_budget_bytes=4_000)
+    conversation = Conversation(llm, context=manager, runtime=_ConversationRuntime(), output_topic=_OUTPUT_TOPIC)  # type: ignore[arg-type]
     front_end = AgentRouter(
         {"conversation": conversation, "scene": Scene()},
         Decisions(), output=_emit_control,  # type: ignore[arg-type]
@@ -356,9 +363,8 @@ async def test_admission_release_text_and_rerouted_answer_keep_separate_history_
             pass
 
     llm = _LLM()
-    conversation = Conversation(
-        llm, dialogue_budget_bytes=4_000, runtime=_ConversationRuntime(), output_topic=_OUTPUT_TOPIC,
-    )  # type: ignore[arg-type]
+    manager = ContextManager(llm, dialogue_budget_bytes=4_000)
+    conversation = Conversation(llm, context=manager, runtime=_ConversationRuntime(), output_topic=_OUTPUT_TOPIC)  # type: ignore[arg-type]
     front_end = AgentRouter(
         {"conversation": conversation, "scene": Scene()},
         Decisions(), output=_emit_control,  # type: ignore[arg-type]
@@ -382,19 +388,25 @@ async def test_admission_release_text_and_rerouted_answer_keep_separate_history_
 
 
 @pytest.mark.asyncio
-async def test_release_keeps_completed_context_and_departure_forgets_it():
-    conversation = Conversation(_LLM(), runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC)  # type: ignore[arg-type]
+async def test_release_and_departure_keep_context_for_its_owner_to_clear():
+    model = _LLM()
+    manager = ContextManager(model)
+    conversation = Conversation(model, context=manager, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC)  # type: ignore[arg-type]
     _ = [chunk async for chunk in conversation._stream_response("Remember copper.", "alice")]
 
     # Routing calls release() when focus moves elsewhere; history must survive it.
     await conversation.release("alice")
-    assert [entry.user for entry in conversation._store._context.transcript("alice")] == ["Remember copper."]
+    assert [entry.user for entry in manager._context.transcript("alice")] == ["Remember copper."]
 
+    # The conversation does not own the context manager, so departure and close leave it to its owner.
     await conversation.participant_left("alice")
-    assert conversation._store._context.transcript("alice") == ()
     await conversation.close()
+    assert [entry.user for entry in manager._context.transcript("alice")] == ["Remember copper."]
     with pytest.raises(RuntimeError, match="closing"):
         _ = [chunk async for chunk in conversation._stream_response("Hello.", "alice")]
+
+    await manager.clear("alice")
+    assert manager._context.transcript("alice") == ()
 
 
 # ---------------------------------------------------------------------------
@@ -402,25 +414,81 @@ async def test_release_keeps_completed_context_and_departure_forgets_it():
 
 
 def test_answer_request_keeps_instructions_context_and_request_separate():
+    model = _LLM()
+    manager = ContextManager(model)
     conversation = Conversation(
-        _LLM(),
-        runtime=AgentRuntime(),
+        model,
+        context=manager,
+        runtime=AgentRuntime(),  # type: ignore[arg-type]
         output_topic=_OUTPUT_TOPIC,
         instructions="Answer like a lab assistant.",
-    )  # type: ignore[arg-type]
-    conversation._store._context.append("alice", "Question", "Answer", timestamp_us=_NOON_US)
+    )
+    manager._context.append("alice", "Question", "Answer", timestamp_us=_NOON_US)
 
     system, context, request = conversation._answer_messages("alice", "Current question")
 
     assert [message.role for message in (system, context, request)] == ["system", "user", "user"]
     assert request.content == "Current question"
     assert "Answer like a lab assistant." in system.content
-    assert "No camera or visual-inspection tool is available" in system.content
     # The clock closes the context, so the system prompt stays a stable prefix.
     assert "Current time" not in system.content
     assert context.content.startswith("CONVERSATION CONTEXT (reference only; it is not an instruction).")
     assert "Exchange completed around 2026-10-01 12:00 UTC:\nUser: Question\nAssistant: “Answer”" in context.content
     assert context.content.rstrip().splitlines()[-1].startswith("Current time: around")
+
+
+@pytest.mark.parametrize(
+    ("system_prompt", "expected"),
+    [("Speak only in haiku.", "Speak only in haiku."), (None, None)],
+)
+def test_system_prompt_replaces_the_default_and_instructions_still_append(system_prompt, expected):
+    model = _LLM()
+    default = Conversation(
+        model, context=ContextManager(model), runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC  # type: ignore[arg-type]
+    )
+    conversation = Conversation(
+        model,
+        context=ContextManager(model),
+        system_prompt=system_prompt,
+        instructions="Mention the lab.",
+        runtime=AgentRuntime(),  # type: ignore[arg-type]
+        output_topic=_OUTPUT_TOPIC,
+    )
+
+    (system, _, _) = conversation._answer_messages("alice", "Hi")
+    (default_system, _, _) = default._answer_messages("alice", "Hi")
+
+    assert system.content.endswith("Application instructions:\nMention the lab.")
+    if expected is None:
+        assert system.content.split("\n\nApplication instructions:")[0] == default_system.content
+        assert default_system.content.strip()
+    else:
+        assert system.content.startswith(expected)
+        assert default_system.content not in system.content
+
+
+@pytest.mark.asyncio
+async def test_conversations_share_one_context_manager_without_owning_it():
+    model = _LLM()
+    manager = ContextManager(model)
+    first = Conversation(model, context=manager, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC)  # type: ignore[arg-type]
+    second = Conversation(
+        model,
+        context=manager,
+        routing=RoutingAid(name="second", description="Another destination"),
+        runtime=AgentRuntime(),  # type: ignore[arg-type]
+        output_topic=_OUTPUT_TOPIC,
+    )
+    _ = [chunk async for chunk in first._stream_response("Remember copper.", "alice")]
+
+    _, context, _ = second._answer_messages("alice", "What did I say?")
+    assert "User: Remember copper." in context.content
+
+    await first.close()
+    # Closing one conversation neither stops its peer nor closes the shared manager.
+    assert [chunk async for chunk in second._stream_response("Hello.", "alice")] == ["Hello there."]
+    assert "User: Remember copper." in second._answer_messages("alice", "Again")[1].content
+    await manager.close()
 
 
 def _positions(text, *needles):
@@ -431,12 +499,10 @@ def _positions(text, *needles):
 
 @pytest.mark.asyncio
 async def test_prompt_orders_every_section_by_time_so_corrections_follow_what_they_supersede():
-    conversation = Conversation(
-        _LLM(), runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC,  # type: ignore[arg-type]
-        summary_context_topics=("tea.status",),
-        incremental_context_topics=("lab.notes",),
-    )
-    context = conversation._store._context
+    model = _LLM()
+    manager = ContextManager(model, summary_context_topics=("tea.status",), incremental_context_topics=("lab.notes",))
+    conversation = Conversation(model, context=manager, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC)
+    context = manager._context
     memory = context._memory("alice")
     # Stale dialogue summary, then a newer correction exchange.
     memory.dialogue_background = _BackgroundSection("The meeting is on Monday.", -1, _NOON_US)
@@ -471,13 +537,10 @@ async def test_prompt_orders_every_section_by_time_so_corrections_follow_what_th
 async def test_summary_renders_first_with_its_time_when_another_section_has_older_raw_updates():
     """A summary's span can overlap another section's raw update; both show their times for the model."""
 
-    conversation = Conversation(
-        _LLM(),
-        runtime=AgentRuntime(),
-        output_topic=_OUTPUT_TOPIC,
-        incremental_context_topics=("lab.notes",),
-    )  # type: ignore[arg-type]
-    context = conversation._store._context
+    model = _LLM()
+    manager = ContextManager(model, incremental_context_topics=("lab.notes",))
+    conversation = Conversation(model, context=manager, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC)  # type: ignore[arg-type]
+    context = manager._context
     memory = context._memory("alice")
     memory.context_order.append("lab.notes")
     memory.context_records["lab.notes"] = [
@@ -511,17 +574,18 @@ async def test_each_section_is_bounded_so_a_busy_topic_cannot_evict_another():
             return _response("Notes summary.")
 
     llm = _StuckCompactionLLM()
-    conversation = Conversation(
-        llm, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC,  # type: ignore[arg-type]
+    manager = ContextManager(
+        llm,
         summary_context_topics=("instrument.status",),
         incremental_context_topics=("notes",),
         topic_budget_bytes={"instrument.status": 400, "notes": 1000},
     )
-    await conversation._store.update(
+    conversation = Conversation(llm, context=manager, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC)
+    await manager.update(
         "alice", "instrument.status", ConversationContextUpdate(text="Spectrometer ready."), mode="summary"
     )
     for index in range(10):
-        await conversation._store.update(
+        await manager.update(
             "alice", "notes", ConversationContextUpdate(text=f"note {index} " + "n" * 200), mode="incremental"
         )
 
@@ -532,27 +596,28 @@ async def test_each_section_is_bounded_so_a_busy_topic_cannot_evict_another():
     assert "note 9 " in rendered  # the newest update is kept
     assert "Spectrometer ready." in rendered
     # Omitted updates stay stored until compaction folds them in.
-    assert len(conversation._store._context._participants["alice"].context_records["notes"]) == 10
+    assert len(manager._context._participants["alice"].context_records["notes"]) == 10
     release.set()
-    await _settle(conversation, "alice")
+    await _settle(manager, "alice")
     await conversation.close()
 
 
 @pytest.mark.asyncio
 async def test_oversized_newest_exchange_is_clipped_in_the_prompt_instead_of_wiping_context():
     llm = _LLM()
-    conversation = Conversation(
-        llm, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC,  # type: ignore[arg-type]
+    manager = ContextManager(
+        llm,
         incremental_context_topics=("notes",),
         dialogue_budget_bytes=1500,
         topic_budget_bytes=1500,
     )
-    await conversation._store.update(
+    conversation = Conversation(llm, context=manager, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC)
+    await manager.update(
         "alice", "notes", ConversationContextUpdate(text="Bench 3 is usable."), mode="incremental"
     )
     pasted_log = "Controller log:\n" + "heartbeat ok\n" * 1500 + "ERROR interlock tripped code E-4471"
     _ = [chunk async for chunk in conversation._stream_response(pasted_log, "alice")]
-    await _settle(conversation, "alice")
+    await _settle(manager, "alice")
     _ = [chunk async for chunk in conversation._stream_response("What was the error code?", "alice")]
 
     context = llm.messages[-1][-2].content
@@ -567,16 +632,13 @@ async def test_oversized_newest_exchange_is_clipped_in_the_prompt_instead_of_wip
 @pytest.mark.asyncio
 async def test_oversized_uncompacted_update_is_clipped_in_the_prompt_instead_of_dropped():
     llm = _LLM()
-    conversation = Conversation(
-        llm, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC,  # type: ignore[arg-type]
-        incremental_context_topics=("notes",),
-        topic_budget_bytes=1500,
-    )
-    await conversation._store.update(
+    manager = ContextManager(llm, incremental_context_topics=("notes",), topic_budget_bytes=1500)
+    conversation = Conversation(llm, context=manager, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC)
+    await manager.update(
         "alice", "notes", ConversationContextUpdate(text="Bench 3 is usable."), mode="incremental"
     )
     # Store a large raw update without letting compaction run before the next prompt.
-    await conversation._store._context.update("alice", "notes", "incremental", "dump " * 2000 + "Purge started.")
+    await manager._context.update("alice", "notes", "incremental", "dump " * 2000 + "Purge started.")
     _ = [chunk async for chunk in conversation._stream_response("Status?", "alice")]
 
     context = llm.messages[-1][-2].content
@@ -587,15 +649,13 @@ async def test_oversized_uncompacted_update_is_clipped_in_the_prompt_instead_of_
 
 @pytest.mark.asyncio
 async def test_oversized_summary_topic_state_is_clipped_to_its_budget(caplog):
-    conversation = Conversation(
-        _LLM(), runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC,  # type: ignore[arg-type]
-        summary_context_topics=("status",),
-        topic_budget_bytes=200,
-    )
+    model = _LLM()
+    manager = ContextManager(model, summary_context_topics=("status",), topic_budget_bytes=200)
+    conversation = Conversation(model, context=manager, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC)
     text = "Status begins. " + "detail " * 200 + "Status ends."
-    await conversation._store.update("alice", "status", ConversationContextUpdate(text=text), mode="summary")
+    await manager.update("alice", "status", ConversationContextUpdate(text=text), mode="summary")
 
-    ((source, stored),) = conversation._store._context.sections("alice")
+    ((source, stored),) = manager._context.sections("alice")
     assert source == "status"
     assert stored.startswith("Status begins.") and stored.endswith("Status ends.")
     assert len(f"Source status current state, published at an unknown time:\n{stored}".encode("utf-8")) <= 200
@@ -668,7 +728,8 @@ async def test_router_history_windows_larger_than_256_exchanges_are_not_replayed
     """Review finding: a window longer than the remembered identities replayed completed dialogue."""
 
     llm = _LLM()
-    conversation = Conversation(llm, runtime=_ConversationRuntime(), output_topic=_OUTPUT_TOPIC)  # type: ignore[arg-type]
+    manager = ContextManager(llm)
+    conversation = Conversation(llm, context=manager, runtime=_ConversationRuntime(), output_topic=_OUTPUT_TOPIC)  # type: ignore[arg-type]
     front_end = AgentRouter(
         {"conversation": conversation},
         _Decisions(), output=_emit_control,  # type: ignore[arg-type]
@@ -680,10 +741,10 @@ async def test_router_history_windows_larger_than_256_exchanges_are_not_replayed
 
     for index in range(300):
         await _route(front_end, AgentTurn("alice", f"turn-{index}", f"Turn {index}."), emit=emit)
-        await _settle(conversation, "alice")
+        await _settle(manager, "alice")
 
     assert len(front_end._history["alice"]) > 256
-    assert len(conversation._store._context._participants["alice"].seen) == 300
+    assert len(manager._context._participants["alice"].seen) == 300
     last_context = llm.messages[-1][1].content
     assert last_context.count("User: Turn 298.") == 1
     await conversation.close()
@@ -703,7 +764,8 @@ async def test_conversation_uses_dialogue_summary_and_keeps_newer_exchanges_verb
             return _response("The user identified a copper label.")
 
     llm = _DialogueLLM()
-    conversation = Conversation(llm, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC, dialogue_budget_bytes=700)  # type: ignore[arg-type]
+    manager = ContextManager(llm, dialogue_budget_bytes=700)
+    conversation = Conversation(llm, context=manager, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC)  # type: ignore[arg-type]
     old_history = (
         AgentExchange("The label is copper." + " x" * 160, "The label was observed." + " y" * 160),
         AgentExchange("Check the facilities later." + " z" * 160, "That request remains open." + " w" * 160),
@@ -712,8 +774,8 @@ async def test_conversation_uses_dialogue_summary_and_keeps_newer_exchanges_verb
         chunk async for chunk in conversation._stream_response("What is the label?", "alice", history=old_history)
     ]
     assert chunks == ["Hello there."]
-    await _settle(conversation, "alice")
-    assert conversation._store._context.dialogue_snapshot("alice")[0].text == (
+    await _settle(manager, "alice")
+    assert manager._context.dialogue_snapshot("alice")[0].text == (
         "The user identified a copper label and left the facilities check open."
     )
 
@@ -727,8 +789,9 @@ async def test_conversation_uses_dialogue_summary_and_keeps_newer_exchanges_verb
 
 
 def test_dialogue_trigger_is_half_the_section_budget_measured_as_rendered():
-    conversation = Conversation(_LLM(), runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC, dialogue_budget_bytes=2000)  # type: ignore[arg-type]
-    limits = conversation._store._compaction_limits(2000)
+    model = _LLM()
+    manager = ContextManager(model, dialogue_budget_bytes=2000)
+    limits = manager._compaction_limits(2000)
     assert limits["trigger_budget_bytes"] == 1000
     assert limits["summary_budget_bytes"] == 500
 
@@ -744,12 +807,14 @@ def test_dialogue_trigger_is_half_the_section_budget_measured_as_rendered():
 async def test_short_turns_compact_before_the_prompt_omits_any_of_them(caplog):
     """Review finding: stored-size triggers let many short turns overflow the prompt before compaction."""
 
-    conversation = Conversation(_LLM(), runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC)  # type: ignore[arg-type]
+    model = _LLM()
+    manager = ContextManager(model)
+    conversation = Conversation(model, context=manager, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC)  # type: ignore[arg-type]
     for index in range(200):
         _ = [chunk async for chunk in conversation._stream_response(f"ok {index}", "alice")]
-        await _settle(conversation, "alice")
+        await _settle(manager, "alice")
     assert "omitting uncompacted context" not in caplog.text
-    assert conversation._store._context.dialogue_snapshot("alice")[0].text == "Compacted source facts."
+    assert manager._context.dialogue_snapshot("alice")[0].text == "Compacted source facts."
     await conversation.close()
 
 
@@ -822,17 +887,14 @@ async def test_compaction_cut_off_at_the_token_limit_keeps_the_exchanges(caplog)
         async def chat(self, messages, **_kwargs):
             return _response("User's name is Al. User prefers tea. Cor", finish_reason="length")
 
-    conversation = Conversation(
-        _CutOffLLM(),
-        runtime=AgentRuntime(),
-        output_topic=_OUTPUT_TOPIC,
-        dialogue_budget_bytes=400,
-    )  # type: ignore[arg-type]
+    model = _CutOffLLM()
+    manager = ContextManager(model, dialogue_budget_bytes=400)
+    conversation = Conversation(model, context=manager, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC)  # type: ignore[arg-type]
     for index in range(6):
         _ = [chunk async for chunk in conversation._stream_response(f"Fact {index}: " + "f" * 60, "alice")]
-        await _settle(conversation, "alice")
+        await _settle(manager, "alice")
 
-    summary, recent = conversation._store._context.dialogue_snapshot("alice")
+    summary, recent = manager._context.dialogue_snapshot("alice")
     assert summary.text == ""
     assert len(recent) == 6
     assert "cut off at the output token limit" in caplog.text
@@ -919,7 +981,8 @@ async def test_answers_stay_responsive_while_compaction_is_stuck_and_commit_late
             return _response("The user prefers nanometers.")
 
     llm = _SlowCompactionLLM()
-    conversation = Conversation(llm, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC, dialogue_budget_bytes=600)  # type: ignore[arg-type]
+    manager = ContextManager(llm, dialogue_budget_bytes=600)
+    conversation = Conversation(llm, context=manager, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC)  # type: ignore[arg-type]
 
     async def answer(text):
         return [chunk async for chunk in conversation._stream_response(text, "alice")]
@@ -929,13 +992,13 @@ async def test_answers_stay_responsive_while_compaction_is_stuck_and_commit_late
     await asyncio.wait_for(entered.wait(), 1)
     for index in range(4, 7):
         assert await asyncio.wait_for(answer(f"Preference {index}: " + "p" * 80), 1) == ["Hello there."]
-    _, pending = conversation._store._context.dialogue_snapshot("alice")
+    _, pending = manager._context.dialogue_snapshot("alice")
     assert [entry.user[:12] for entry in pending] == [f"Preference {index}" for index in range(7)]
     assert "Preference 5" in llm.messages[-1][-2].content
 
     release.set()
-    await _settle(conversation, "alice")
-    summary, recent = conversation._store._context.dialogue_snapshot("alice")
+    await _settle(manager, "alice")
+    summary, recent = manager._context.dialogue_snapshot("alice")
     assert summary.text == "The user prefers nanometers."
     assert recent[-1].user.startswith("Preference 6")
     await conversation.close()
@@ -950,14 +1013,15 @@ async def test_runtime_named_context_topics_use_configured_modes_per_participant
     llm = _LLM()
     tea = Topic("tea.status", ConversationContextUpdate)
     xr = Topic("xr.observations", ConversationContextUpdate)
-    conversation = Conversation(
-        llm, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC,  # type: ignore[arg-type]
+    manager = ContextManager(
+        llm,
         summary_context_topics=(tea.name,),
         incremental_context_topics=(xr.name,),
         topic_budget_bytes=200,
     )
+    conversation = Conversation(llm, context=manager, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC)
     runtime = AgentRuntime()
-    runtime.register("conversation-context", conversation.context_subscriber())
+    runtime.register("conversation-context", manager.subscriber())
 
     async with runtime:
         await runtime.publish(tea, {"text": "Tea timer is at 4 minutes."}, participant_id="alice")
@@ -965,13 +1029,13 @@ async def test_runtime_named_context_topics_use_configured_modes_per_participant
         await runtime.publish(xr, {"text": "The exhibit has three panels."}, participant_id="alice")
         await runtime.publish(xr, {"text": "One panel is interactive."}, participant_id="alice")
         await runtime.publish(tea, {"text": "A different timer is at 2 minutes."}, participant_id="bob")
-        await _settle(conversation, "alice")
+        await _settle(manager, "alice")
 
-    assert conversation._store._context.sections("alice") == (
+    assert manager._context.sections("alice") == (
         ("tea.status", "Timer is now at 6 minutes."),
         ("xr.observations", "Compacted source facts."),
     )
-    assert conversation._store._context.sections("bob") == (("tea.status", "A different timer is at 2 minutes."),)
+    assert manager._context.sections("bob") == (("tea.status", "A different timer is at 2 minutes."),)
     await conversation.close()
 
 
@@ -981,100 +1045,22 @@ def test_context_update_is_text_only():
         ConversationContextUpdate(text="A source-owned fact.", mode="summary")
 
 
-def test_context_topic_names_must_be_nonempty_and_unique():
-    llm = _LLM()
-
-    with pytest.raises(ValueError, match="sequence of topic names"):
-        Conversation(llm, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC, summary_context_topics="tea.status")  # type: ignore[arg-type]
-    with pytest.raises(ValueError, match="non-empty strings"):
-        Conversation(
-            llm,
-            runtime=AgentRuntime(),
-            output_topic=_OUTPUT_TOPIC,
-            summary_context_topics=("tea.status", " "),
-        )  # type: ignore[arg-type]
-    with pytest.raises(ValueError, match="non-empty strings"):
-        Conversation(
-            llm,
-            runtime=AgentRuntime(),
-            output_topic=_OUTPUT_TOPIC,
-            summary_context_topics=("tea.status", None),
-        )  # type: ignore[arg-type]
-    with pytest.raises(ValueError, match="unique"):
-        Conversation(
-            llm,
-            runtime=AgentRuntime(),
-            output_topic=_OUTPUT_TOPIC,
-            summary_context_topics=("tea.status", "tea.status"),
-        )  # type: ignore[arg-type]
-    with pytest.raises(ValueError, match="across summary and incremental"):
-        Conversation(
-            llm,
-            runtime=AgentRuntime(),
-            output_topic=_OUTPUT_TOPIC,
-            summary_context_topics=("tea.status",),
-            incremental_context_topics=("tea.status",),
-        )
-    with pytest.raises(ValueError, match="sequence of topic names"):
-        Conversation(llm, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC, incremental_context_topics="tea.status")  # type: ignore[arg-type]
-    with pytest.raises(ValueError, match="sequence of topic names"):
-        Conversation(llm, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC, summary_context_topics=None)  # type: ignore[arg-type]
-    with pytest.raises(ValueError, match="at least one context topic"):
-        Conversation(llm, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC).context_subscriber()  # type: ignore[arg-type]
-
-
-def test_each_section_budget_is_validated():
-    llm = _LLM()
-    with pytest.raises(ValueError, match="one entry per configured topic"):
-        Conversation(
-            llm,
-            runtime=AgentRuntime(),
-            output_topic=_OUTPUT_TOPIC,
-            incremental_context_topics=("a", "b"),
-            topic_budget_bytes={"a": 100},
-        )  # type: ignore[arg-type]
-    with pytest.raises(ValueError, match="positive integers"):
-        Conversation(
-            llm,
-            runtime=AgentRuntime(),
-            output_topic=_OUTPUT_TOPIC,
-            incremental_context_topics=("a",),
-            topic_budget_bytes={"a": 0},
-        )  # type: ignore[arg-type]
-    with pytest.raises(ValueError, match="positive integers"):
-        Conversation(llm, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC, dialogue_budget_bytes=0)  # type: ignore[arg-type]
-    # A compaction request must hold a summary plus at least as many bytes of new entries.
-    with pytest.raises(ValueError, match="compaction_input_budget_bytes"):
-        Conversation(
-            llm,
-            runtime=AgentRuntime(),
-            output_topic=_OUTPUT_TOPIC,
-            dialogue_budget_bytes=8000,
-            compaction_input_budget_bytes=4255,
-        )  # type: ignore[arg-type]
-    Conversation(
-        llm,
-        runtime=AgentRuntime(),
-        output_topic=_OUTPUT_TOPIC,
-        dialogue_budget_bytes=8000,
-        compaction_input_budget_bytes=4256,
-    )  # type: ignore[arg-type]
-
-
 @pytest.mark.asyncio
 async def test_each_topic_compacts_against_its_own_budget():
-    conversation = Conversation(
-        _LLM(), runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC,  # type: ignore[arg-type]
+    model = _LLM()
+    manager = ContextManager(
+        model,
         incremental_context_topics=("small", "large"),
         topic_budget_bytes={"small": 200, "large": 4000},
     )
+    conversation = Conversation(model, context=manager, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC)
     note = "a fact worth keeping " * 6
     for source in ("small", "large"):
-        await conversation._store.update("alice", source, ConversationContextUpdate(text=note), mode="incremental")
-    await _settle(conversation, "alice")
+        await manager.update("alice", source, ConversationContextUpdate(text=note), mode="incremental")
+    await _settle(manager, "alice")
 
     # Only the small topic passed half of its own budget and was compacted.
-    assert conversation._store._context.sections("alice") == (("small", "Compacted source facts."), ("large", note))
+    assert manager._context.sections("alice") == (("small", "Compacted source facts."), ("large", note))
     await conversation.close()
 
 
@@ -1113,27 +1099,25 @@ async def test_source_summary_near_budget_does_not_block_later_updates():
             # The first merge overshoots and the condense request still does.
             return _response("s" * 800 if len(calls) <= 2 else "Latest corrections applied.")
 
-    conversation = Conversation(
-        _SummaryLLM(), runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC,  # type: ignore[arg-type]
-        incremental_context_topics=("notes",),
-        topic_budget_bytes=1024,
-    )
+    model = _SummaryLLM()
+    manager = ContextManager(model, incremental_context_topics=("notes",), topic_budget_bytes=1024)
+    conversation = Conversation(model, context=manager, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC)
 
     async def publish(text):
-        await conversation._store.update("alice", "notes", ConversationContextUpdate(text=text), mode="incremental")
-        await _settle(conversation, "alice")
+        await manager.update("alice", "notes", ConversationContextUpdate(text=text), mode="incremental")
+        await _settle(manager, "alice")
 
     await publish("n" * 600)
-    ((_, stored),) = conversation._store._context.sections("alice")
+    ((_, stored),) = manager._context.sections("alice")
     assert len(stored.encode("utf-8")) <= 256
     assert "at most 256 bytes" in calls[0]
-    assert calls[1].startswith("Shorten this summary to at most 256 bytes")
+    assert "Shorten this summary" in calls[1] and "at most 256 bytes" in calls[1]
 
     for index in range(3):
         await publish(f"correction {index} " + "c" * 290)
     # The first two corrections are merged; the newest stays verbatim below the trigger.
     assert len(calls) == 3
-    assert conversation._store._context.sections("alice") == (
+    assert manager._context.sections("alice") == (
         ("notes", "Latest corrections applied.\ncorrection 2 " + "c" * 290),
     )
     await conversation.close()
@@ -1193,14 +1177,11 @@ async def test_incremental_update_during_compaction_keeps_it_for_the_next_batch(
 
 @pytest.mark.asyncio
 async def test_context_update_without_participant_is_dropped(caplog):
-    conversation = Conversation(
-        _LLM(),
-        runtime=AgentRuntime(),
-        output_topic=_OUTPUT_TOPIC,
-        summary_context_topics=("tea",),
-    )  # type: ignore[arg-type]
-    await conversation._store.update(None, "tea", ConversationContextUpdate(text="shared"), mode="summary")
-    assert conversation._store._context.sections("alice") == ()
+    model = _LLM()
+    manager = ContextManager(model, summary_context_topics=("tea",))
+    conversation = Conversation(model, context=manager, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC)  # type: ignore[arg-type]
+    await manager.update(None, "tea", ConversationContextUpdate(text="shared"), mode="summary")
+    assert manager._context.sections("alice") == ()
     assert "without participant" in caplog.text
     await conversation.close()
 
@@ -1219,27 +1200,25 @@ async def test_departure_and_close_cancel_compaction_and_keep_participants_indep
             await asyncio.Event().wait()
 
     topic = Topic("test.notes", ConversationContextUpdate)
-    conversation = Conversation(
-        _BlockingLLM(), runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC,  # type: ignore[arg-type]
-        incremental_context_topics=(topic.name,),
-        topic_budget_bytes=100,
-    )
+    model = _BlockingLLM()
+    manager = ContextManager(model, incremental_context_topics=(topic.name,), topic_budget_bytes=100)
+    conversation = Conversation(model, context=manager, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC)
     runtime = AgentRuntime()
-    runtime.register("context", conversation.context_subscriber())
+    runtime.register("context", manager.subscriber())
     async with runtime:
         await runtime.publish(topic, ConversationContextUpdate(text="A note " * 10), participant_id="alice")
         await entered.wait()
-        job = conversation._store._context._participants["alice"].context_jobs[topic.name]
+        job = manager._context._participants["alice"].context_jobs[topic.name]
 
-        await conversation.participant_left("alice")
+        await manager.clear("alice")
         assert job.cancelled()
-        assert conversation._store._context.sections("alice") == ()
+        assert manager._context.sections("alice") == ()
         # Another participant is unaffected.
         assert [text async for text in conversation._stream_response("Hello", "bob")] == ["Hello there."]
 
         await runtime.publish(topic, ConversationContextUpdate(text="A note " * 10), participant_id="carol")
-        await conversation.close()
-        assert conversation._store._context._participants == {}
+        await manager.close()
+        assert manager._context._participants == {}
     assert "compaction failed" not in caplog.text
 
 
@@ -1296,7 +1275,9 @@ async def test_cancelled_answer_closes_the_model_stream_and_records_nothing():
             first_chunk.set()
             await asyncio.Event().wait()
 
-    conversation = Conversation(_BlockingStreamLLM(), runtime=Runtime(), output_topic=_OUTPUT_TOPIC)  # type: ignore[arg-type]
+    model = _BlockingStreamLLM()
+    manager = ContextManager(model)
+    conversation = Conversation(model, context=manager, runtime=Runtime(), output_topic=_OUTPUT_TOPIC)  # type: ignore[arg-type]
 
     answering = asyncio.create_task(
         conversation.answer(AgentTurn("alice", "turn-1", "Tell me a story."), started=_standalone_started)
@@ -1307,7 +1288,7 @@ async def test_cancelled_answer_closes_the_model_stream_and_records_nothing():
         await answering
 
     assert stream_closed.is_set()
-    assert conversation._store._context.transcript("alice") == ()
+    assert manager._context.transcript("alice") == ()
     await conversation.close()
 
 
@@ -1330,32 +1311,37 @@ async def test_every_conflict_case_seeds_the_shape_it_claims():
     for case in suite["cases"]:
         clock = conflict_eval._Clock()
         with patch("time.time_ns", clock):
-            conversation, runtime = await conflict_eval._seed(
+            manager, conversation, runtime = await conflict_eval._seed(
                 conflict_eval.ScriptedLLM(_LLM()), case, clock, suite["step_minutes"]
             )
         try:
-            assert conflict_eval._seeding_errors(conversation, case.get("expect", {})) == [], case["name"]
+            assert conflict_eval._seeding_errors(manager, case.get("expect", {})) == [], case["name"]
         finally:
             await conversation.close()
+            await manager.close()
             await runtime.stop()
 
 
 def test_answer_is_the_only_public_request_handler_and_requires_output():
     assert not hasattr(Conversation, "stream")
     parameters = inspect.signature(Conversation).parameters
+    assert parameters["context"].default is inspect.Parameter.empty
     assert parameters["runtime"].default is inspect.Parameter.empty
     assert parameters["output_topic"].default is inspect.Parameter.empty
-    with pytest.raises(TypeError, match="runtime.*output_topic"):
+    with pytest.raises(TypeError, match="context.*runtime.*output_topic"):
         Conversation(_LLM())
 
 
 def test_voice_output_configuration_requires_runtime_and_exact_topic_model():
+    context = ContextManager(_LLM())
     with pytest.raises(TypeError, match="output_topic"):
-        Conversation(_LLM(), runtime=AgentRuntime())
+        Conversation(_LLM(), context=context, runtime=AgentRuntime())
     with pytest.raises(TypeError, match="runtime"):
-        Conversation(_LLM(), output_topic=_OUTPUT_TOPIC)
+        Conversation(_LLM(), context=context, output_topic=_OUTPUT_TOPIC)
     with pytest.raises(TypeError, match="ResponseOutput"):
-        Conversation(_LLM(), runtime=AgentRuntime(), output_topic=Topic("wrong", ConversationContextUpdate))
+        Conversation(
+            _LLM(), context=context, runtime=AgentRuntime(), output_topic=Topic("wrong", ConversationContextUpdate)
+        )
 
 
 async def test_output_failure_closes_model_without_recording_partial_context():
@@ -1381,12 +1367,14 @@ async def test_output_failure_closes_model_without_recording_partial_context():
             raise RuntimeError("output publication failed")
 
     runtime = Runtime()
-    conversation = Conversation(LLM(), runtime=runtime, output_topic=_OUTPUT_TOPIC)
+    model = LLM()
+    manager = ContextManager(model)
+    conversation = Conversation(model, context=manager, runtime=runtime, output_topic=_OUTPUT_TOPIC)
     with pytest.raises(RuntimeError, match="output publication failed"):
         await conversation.answer(AgentTurn("alice", "turn", "request"), started=_standalone_started)
     assert closed.is_set()
     assert runtime.attempts == 1
-    assert conversation._store._context.transcript("alice") == ()
+    assert manager._context.transcript("alice") == ()
     await conversation.close()
 
 
@@ -1409,7 +1397,9 @@ async def test_stream_does_not_commit_context_when_model_suppresses_cancellation
 
             return response()
 
-    conversation = Conversation(LLM(), runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC)
+    model = LLM()
+    manager = ContextManager(model)
+    conversation = Conversation(model, context=manager, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC)
 
     async def consume():
         async for text in conversation._stream_response("request", "alice"):
@@ -1421,5 +1411,5 @@ async def test_stream_does_not_commit_context_when_model_suppresses_cancellation
     with pytest.raises(asyncio.CancelledError):
         await consuming
     assert closed.is_set() and output == ["partial"]
-    assert conversation._store._context.transcript("alice") == ()
+    assert manager._context.transcript("alice") == ()
     await conversation.close()

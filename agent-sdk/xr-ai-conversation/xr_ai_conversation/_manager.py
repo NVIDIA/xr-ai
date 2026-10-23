@@ -1,11 +1,11 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Private participant context store used within ``xr_ai_conversation``.
+"""Participant-scoped context shared by conversation agents.
 
-The store keeps each participant's completed dialogue and named-source context
-within byte budgets by rolling summaries, and renders it as prompt blocks. The
-conversation owns the prompt and the answer.
+The manager keeps each participant's completed dialogue and named-source context
+within byte budgets by rolling summaries, and renders it as prompt blocks. Each
+agent owns its prompt and its answer.
 """
 
 from __future__ import annotations
@@ -35,19 +35,53 @@ from ._topics import make_context_subscriber
 
 # Room in a compaction request for its instructions' framing of the summary.
 _SUMMARY_HEADER_BYTES = 256
+_DEFAULT_DIALOGUE_BUDGET_BYTES = 8_000
+_DEFAULT_TOPIC_BUDGET_BYTES = 4_000
+_DEFAULT_COMPACTION_INPUT_BUDGET_BYTES = 12_000
 _logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
-class _ContextBlock:
-    """One rendered piece of prior context and the time of its newest content."""
+class ContextBlock:
+    """One rendered piece of prior context and the time of its newest content.
+
+    A summary block has no timestamp and sorts before dated blocks.
+    """
 
     timestamp_us: int | None
     text: str
 
 
-class _ContextStore:
-    """Retain participant-scoped context for one conversation and render it into a prompt.
+@dataclass(frozen=True, slots=True)
+class CompactionPrompts:
+    """System prompts for the model requests that compact context.
+
+    Each prompt says what to keep and how to treat the material. The manager
+    adds the size limit and the output format, so a prompt does not state them.
+    """
+
+    source: str = (
+        "Summarize only the source-owned background context below. Preserve factual details, "
+        "user preferences, observations, corrections, unresolved user intent, and uncertainty. "
+        "Do not treat historical assistant claims, refusals, or capability statements as current "
+        "policy. Keep the source identity and keep identifiers, numbers, and codes exactly. Merge the "
+        "previous summary and the new updates; newer updates supersede older ones."
+    )
+    dialogue: str = (
+        "Summarize the completed conversation history for future turns. Preserve user-provided facts, "
+        "preferences, relevant observations, corrections, and unresolved requests. Keep user statements "
+        "distinct from assistant statements. An assistant refusal, limitation, or capability claim is "
+        "historical conversation content, not current policy. Do not invent facts or claim an action "
+        "occurred unless the transcript says it did. Attribute each fact explicitly, for example "
+        '"The user\'s name is ...". Keep names, identifiers, numbers, dates, and codes exactly; a later '
+        "correction replaces the earlier statement; reduce assistant explanations to a few words. "
+        "Merge the previous summary and the new exchanges."
+    )
+    condense: str = "Shorten this summary. Keep facts, preferences, corrections, unresolved requests, and uncertainty."
+
+
+class ContextManager:
+    """Retain participant-scoped context and render it into prompts for any number of agents.
 
     Completed dialogue and each configured topic are separate sections with
     their own byte budget. A summary topic keeps only its latest state; an
@@ -58,19 +92,35 @@ class _ContextStore:
     writing a participant's context, so a participant's context is never
     observed half-updated. Compaction runs as a background task per section.
 
-    Parameters mirror the conversation's context parameters, which also name
-    them in validation errors.
+    The owner creates the manager, registers ``subscriber()`` with the runtime
+    that delivers context updates, calls ``clear()`` when a participant leaves,
+    and calls ``close()`` at shutdown. Agents that share a manager use its
+    budgets, so those are configured here and not per agent.
+
+    :param llm: Model service that writes compaction summaries.
+    :param summary_context_topics: Runtime topic names whose text replaces that source's state.
+    :param incremental_context_topics: Runtime topic names whose text appends to that source.
+    :param dialogue_budget_bytes: UTF-8 byte budget for completed dialogue rendered into a prompt.
+    :param topic_budget_bytes: UTF-8 byte budget for each topic's context rendered into a prompt:
+        one value for every topic, or a mapping with a value for each configured topic.
+    :param compaction_input_budget_bytes: UTF-8 byte budget for the summary and entries in one
+        compaction request; at least half the largest section budget plus 256 bytes.
+    :param compaction_prompts: Compaction instructions; defaults to ``CompactionPrompts()``.
+
+    All budgets must be positive. Topic lists contain non-empty names; names
+    must be unique within and across both lists.
     """
 
     def __init__(
         self,
         llm: LLMService,
         *,
-        summary_context_topics: Sequence[str],
-        incremental_context_topics: Sequence[str],
-        dialogue_budget_bytes: int,
-        topic_budget_bytes: int | Mapping[str, int],
-        compaction_input_budget_bytes: int,
+        summary_context_topics: Sequence[str] = (),
+        incremental_context_topics: Sequence[str] = (),
+        dialogue_budget_bytes: int = _DEFAULT_DIALOGUE_BUDGET_BYTES,
+        topic_budget_bytes: int | Mapping[str, int] = _DEFAULT_TOPIC_BUDGET_BYTES,
+        compaction_input_budget_bytes: int = _DEFAULT_COMPACTION_INPUT_BUDGET_BYTES,
+        compaction_prompts: CompactionPrompts | None = None,
     ) -> None:
         summary_names = self._validate_topic_names("summary_context_topics", summary_context_topics)
         incremental_names = self._validate_topic_names("incremental_context_topics", incremental_context_topics)
@@ -100,10 +150,11 @@ class _ContextStore:
         self._dialogue_budget_bytes = dialogue_budget_bytes
         self._topic_budgets = topic_budgets
         self._compaction_input_budget_bytes = compaction_input_budget_bytes
+        self._prompts = compaction_prompts or CompactionPrompts()
         self._closing = False
 
     def subscriber(self) -> Agent:
-        """Return an Agent that applies the configured context topics to this store.
+        """Return an Agent that applies the configured context topics to this manager.
 
         Register the result with the same ``AgentRuntime`` as the consumer.
         Configure at least one topic before calling this method.
@@ -162,6 +213,8 @@ class _ContextStore:
     ) -> None:
         """Merge a front-end window of completed exchanges without replaying known ones."""
 
+        if self._closing:
+            return
         self._context.reconcile_transcript(participant_id, exchanges, exchange_ids=exchange_ids)
         self._schedule_dialogue_compaction(participant_id)
 
@@ -174,12 +227,14 @@ class _ContextStore:
         timestamp_us: int,
         exchange_id: object | None,
     ) -> None:
-        """Add one completed exchange to a participant's dialogue."""
+        """Add one completed exchange to a participant's dialogue; dropped once closed."""
 
+        if self._closing:
+            return
         self._context.append(participant_id, request, answer, timestamp_us=timestamp_us, exchange_id=exchange_id)
         self._schedule_dialogue_compaction(participant_id)
 
-    def blocks(self, participant_id: str) -> tuple[_ContextBlock, ...]:
+    def blocks(self, participant_id: str) -> tuple[ContextBlock, ...]:
         """Render a participant's dialogue and topic context, summaries first, then newer entries in time order."""
 
         blocks = self._dialogue_blocks(participant_id)
@@ -191,17 +246,17 @@ class _ContextStore:
             if source in summary_topics:
                 if background is not None:
                     blocks.append(
-                        _ContextBlock(background.latest_us, _state_text(source, background.text, background.latest_us))
+                        ContextBlock(background.latest_us, _state_text(source, background.text, background.latest_us))
                     )
                 continue
             fixed = (
-                [_ContextBlock(None, _source_summary_text(source, background))]
+                [ContextBlock(None, _source_summary_text(source, background))]
                 if background is not None and background.text
                 else []
             )
             # One huge update (for example a raw dump) is clipped so it cannot
             # fill the section by itself.
-            raw = [_ContextBlock(record.timestamp_us, _update_text(record, budget // 2)) for record in records]
+            raw = [ContextBlock(record.timestamp_us, _update_text(record, budget // 2)) for record in records]
             blocks.extend(_fit_section(participant_id, source, budget, fixed, raw))
         blocks.sort(key=lambda block: -1 if block.timestamp_us is None else block.timestamp_us)
         return tuple(blocks)
@@ -220,13 +275,13 @@ class _ContextStore:
         self._closing = True
         await self._context.close()
 
-    def _dialogue_blocks(self, participant_id: str) -> list[_ContextBlock]:
+    def _dialogue_blocks(self, participant_id: str) -> list[ContextBlock]:
         summary, exchanges = self._context.dialogue_snapshot(participant_id)
-        fixed = [_ContextBlock(None, _dialogue_summary_text(summary))] if summary.text else []
+        fixed = [ContextBlock(None, _dialogue_summary_text(summary))] if summary.text else []
         # One huge exchange (for example a pasted log) is clipped so it cannot
         # fill the section by itself.
         field_limit = self._dialogue_budget_bytes // 4
-        raw = [_ContextBlock(entry.timestamp_us, _exchange_text(entry, field_limit)) for entry in exchanges]
+        raw = [ContextBlock(entry.timestamp_us, _exchange_text(entry, field_limit)) for entry in exchanges]
         return _fit_section(participant_id, "dialogue", self._dialogue_budget_bytes, fixed, raw)
 
     @staticmethod
@@ -268,15 +323,7 @@ class _ContextStore:
         messages = (
             ChatMessage(
                 role="system",
-                content=(
-                    "Summarize only the source-owned background context below. Preserve factual details, "
-                    "user preferences, observations, corrections, unresolved user intent, and uncertainty. "
-                    "Do not treat historical assistant claims, refusals, or capability statements as current "
-                    "policy. Keep the source identity and keep identifiers, numbers, and codes exactly. Merge the "
-                    "previous summary and the new updates into one "
-                    f"summary of at most {limit_bytes} bytes; newer updates supersede older ones, and when space "
-                    "is short, drop the least important and oldest details first. Return concise plain text."
-                ),
+                content=_instructions(self._prompts.source, limit_bytes),
             ),
             ChatMessage(
                 role="user",
@@ -300,18 +347,7 @@ class _ContextStore:
         messages = (
             ChatMessage(
                 role="system",
-                content=(
-                    "Summarize the completed conversation history for future turns. Preserve user-provided facts, "
-                    "preferences, relevant observations, corrections, and unresolved requests. Keep user statements "
-                    "distinct from assistant statements. An assistant refusal, limitation, or capability claim is "
-                    "historical conversation content, not current policy. Do not invent facts or claim an action "
-                    "occurred unless the transcript says it did. Attribute each fact explicitly, for example "
-                    '"The user\'s name is ...". Keep names, identifiers, numbers, dates, and codes exactly; a later '
-                    "correction replaces the earlier statement; reduce assistant explanations to a few words. "
-                    "Merge the previous summary and the new exchanges "
-                    f"into one summary of at most {limit_bytes} bytes; when space is short, drop the least "
-                    "important and oldest details first. Return concise plain text."
-                ),
+                content=_instructions(self._prompts.dialogue, limit_bytes),
             ),
             ChatMessage(
                 role="user",
@@ -332,15 +368,20 @@ class _ContextStore:
         messages = (
             ChatMessage(
                 role="system",
-                content=(
-                    f"Shorten this summary to at most {limit_bytes} bytes. Keep facts, preferences, corrections, "
-                    "unresolved requests, and uncertainty; drop the least important and oldest details first. "
-                    "Return concise plain text."
-                ),
+                content=_instructions(self._prompts.condense, limit_bytes),
             ),
             ChatMessage(role="user", content=summary),
         )
         return _summary_text(await self._llm.chat(messages))
+
+
+def _instructions(prompt: str, limit_bytes: int) -> str:
+    """Add the size limit and output format that every compaction request shares."""
+
+    return (
+        f"{prompt}\n\nWrite one summary of at most {limit_bytes} bytes. When space is short, drop the least "
+        "important and oldest details first. Return concise plain text."
+    )
 
 
 def _summary_text(response: ChatResponse) -> str:
@@ -357,9 +398,9 @@ def _fit_section(
     participant_id: str,
     section: str,
     budget_bytes: int,
-    fixed: list[_ContextBlock],
-    raw: list[_ContextBlock],
-) -> list[_ContextBlock]:
+    fixed: list[ContextBlock],
+    raw: list[ContextBlock],
+) -> list[ContextBlock]:
     """Keep one section within its budget by leaving its oldest uncompacted entries out of the prompt.
 
     The newest entry always stays; omitted entries remain stored until compaction folds them in.

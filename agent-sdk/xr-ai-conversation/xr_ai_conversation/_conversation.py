@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable
 from pathlib import Path
 
 from xr_ai_interaction import ResponseOutput, ResponseOutputs
@@ -24,69 +24,55 @@ from xr_ai_routing import (
     RoutingAid,
     current_turn_context,
 )
-from xr_ai_runtime import Agent, AgentRuntime, RuntimeClosedError, Topic
+from xr_ai_runtime import AgentRuntime, RuntimeClosedError, Topic
 
 from ._context import _format_minute
-from ._store import _ContextBlock, _ContextStore
+from ._manager import ContextBlock, ContextManager
 
-_CORE_PROMPT = (Path(__file__).parent / "prompts" / "core.txt").read_text(encoding="utf-8").strip()
-_DEFAULT_DIALOGUE_BUDGET_BYTES = 8_000
-_DEFAULT_TOPIC_BUDGET_BYTES = 4_000
-_DEFAULT_COMPACTION_INPUT_BUDGET_BYTES = 12_000
+_DEFAULT_SYSTEM_PROMPT = (Path(__file__).parent / "prompts" / "core.txt").read_text(encoding="utf-8").strip()
 
 
 class Conversation(RoutableAgent):
-    """Application-instructed conversation agent with participant-scoped context.
+    """Application-instructed conversation agent over participant-scoped context.
+
+    The conversation owns its prompt and answer; ``context`` owns what is
+    remembered. The caller creates the manager, may share it with other
+    agents, registers its ``subscriber()``, and closes it.
 
     :param llm: Typed streamed language model service.
-    :param instructions: Application-owned prompt text defining domain, role, tone, and handling policy.
+    :param context: Participant context rendered into each request. The conversation records
+        completed exchanges in it and never clears or closes it.
+    :param instructions: Application-owned prompt text defining domain, role, tone, and handling policy,
+        appended to the system prompt.
+    :param system_prompt: Replaces the default general-conversation system prompt.
     :param routing: Concise front-end metadata; defaults to a general conversation description.
-    :param summary_context_topics: Runtime topic names whose text replaces that source's state.
-    :param incremental_context_topics: Runtime topic names whose text appends to that source.
-    :param dialogue_budget_bytes: UTF-8 byte budget for completed dialogue rendered into a request.
-    :param topic_budget_bytes: UTF-8 byte budget for each topic's context rendered into a request:
-        one value for every topic, or a mapping with a value for each configured topic.
     :param runtime: Runtime used to publish answers. The application owns runtime startup and shutdown.
     :param output_topic: Explicit ``ResponseOutput`` topic for routed answers.
         The conversation publishes replies with its routing name as source, the turn ID as request ID,
         and the originating timestamp. It owns stream framing and finalization.
         No default output or query topic is subscribed.
-    :param compaction_input_budget_bytes: UTF-8 byte budget for the summary and entries in one
-        compaction request; at least half the largest section budget plus 256 bytes.
-
-    All budgets must be positive. Topic lists contain non-empty names; names
-    must be unique within and across both lists.
     """
 
     def __init__(
         self,
         llm: LLMService,
         *,
+        context: ContextManager,
         instructions: str = "",
+        system_prompt: str | None = None,
         routing: RoutingAid | None = None,
-        summary_context_topics: Sequence[str] = (),
-        incremental_context_topics: Sequence[str] = (),
-        dialogue_budget_bytes: int = _DEFAULT_DIALOGUE_BUDGET_BYTES,
-        topic_budget_bytes: int | Mapping[str, int] = _DEFAULT_TOPIC_BUDGET_BYTES,
-        compaction_input_budget_bytes: int = _DEFAULT_COMPACTION_INPUT_BUDGET_BYTES,
         runtime: AgentRuntime,
         output_topic: Topic[ResponseOutput],
     ) -> None:
         if output_topic.message_type is not ResponseOutput:
             raise TypeError("Conversation output_topic must carry ResponseOutput")
-        self._store = _ContextStore(
-            llm,
-            summary_context_topics=summary_context_topics,
-            incremental_context_topics=incremental_context_topics,
-            dialogue_budget_bytes=dialogue_budget_bytes,
-            topic_budget_bytes=topic_budget_bytes,
-            compaction_input_budget_bytes=compaction_input_budget_bytes,
-        )
         self._llm = llm
+        self._context = context
         self._runtime = runtime
         self._output_topic = output_topic
         self._closing = False
         self._instructions = instructions.strip()
+        self._system_prompt = _DEFAULT_SYSTEM_PROMPT if system_prompt is None else system_prompt.strip()
         self._routing = routing or RoutingAid(name="conversation", description="General conversation")
 
     def routing_aid(self, _participant_id: str) -> RoutingAid:
@@ -115,8 +101,8 @@ class Conversation(RoutableAgent):
         and a publication failure publishes no further frames. Failures
         propagate after closing the model iterator; the router reports
         failures that occur before the first frame. A successful answer
-        returns the complete text as routing context. The exchange joins this
-        conversation's transcript only after its final frame is delivered.
+        returns the complete text as routing context. The exchange joins the
+        participant's context only after its final frame is delivered.
         """
 
         fragments: list[str] = []
@@ -150,38 +136,16 @@ class Conversation(RoutableAgent):
     async def release(self, _participant_id: str) -> None:
         """Keep completed participant context; this destination holds no active resources.
 
-        Participant context is removed by ``participant_left()`` or ``close()``.
+        Participant context belongs to the context manager, whose owner clears it.
         """
 
-    async def participant_left(self, participant_id: str) -> None:
-        """Forget a departed participant's context after cancelling its compaction jobs.
-
-        An answer still streaming for that participant when it leaves is not
-        stopped; on completion it can record its exchange into new context.
-        """
-
-        await self._store.clear(participant_id)
+    async def participant_left(self, _participant_id: str) -> None:
+        """Hold nothing for a departed participant; the context manager's owner clears its context."""
 
     async def close(self) -> None:
-        """Stop answering and forget all context after cancelling compaction jobs.
-
-        The caller remains responsible for draining answer streams before
-        closing model clients.
-        """
+        """Stop answering. The caller closes the context manager and drains answer streams."""
 
         self._closing = True
-        await self._store.close()
-
-    def context_subscriber(self) -> Agent:
-        """Return an Agent subscribed to the configured context topics.
-
-        Register the result with the same ``AgentRuntime`` as the conversation
-        consumer. The constructor selects each topic's update behavior; each
-        publication carries only source-owned text. Configure at least one
-        topic before calling this method.
-        """
-
-        return self._store.subscriber()
 
     async def _stream_response(
         self,
@@ -220,7 +184,7 @@ class Conversation(RoutableAgent):
             history_exchange_ids = (None,) * len(history)
         # The front end supplies a bounded recent window, not necessarily the
         # complete prefix retained by this engine.
-        self._store.reconcile_history(
+        self._context.reconcile_history(
             participant_id,
             tuple(
                 (exchange.user, exchange.assistant, timestamp_us)
@@ -250,7 +214,7 @@ class Conversation(RoutableAgent):
             self._commit_exchange(participant_id, request, answer)
 
     def _commit_exchange(self, participant_id: str, request: str, answer: str) -> None:
-        self._store.record_exchange(
+        self._context.record_exchange(
             participant_id,
             request,
             answer,
@@ -261,17 +225,23 @@ class Conversation(RoutableAgent):
     def _answer_messages(self, participant_id: str, request: str) -> tuple[ChatMessage, ...]:
         """Build the answer request from the participant's stored context."""
 
-        return _messages(request, instructions=self._instructions, blocks=self._store.blocks(participant_id))
+        return _messages(
+            request,
+            system_prompt=self._system_prompt,
+            instructions=self._instructions,
+            blocks=self._context.blocks(participant_id),
+        )
 
 
-def _messages(request: str, *, instructions: str, blocks: tuple[_ContextBlock, ...] = ()) -> tuple[ChatMessage, ...]:
+def _messages(
+    request: str, *, system_prompt: str, instructions: str, blocks: tuple[ContextBlock, ...] = ()
+) -> tuple[ChatMessage, ...]:
     """Build an answer request: instructions, prior context oldest first, then the request.
 
     The current time closes the context, so the system prompt stays an
     identical prefix across requests.
     """
 
-    system_prompt = _CORE_PROMPT
     if instructions:
         system_prompt += f"\n\nApplication instructions:\n{instructions}"
     context = "\n\n".join(

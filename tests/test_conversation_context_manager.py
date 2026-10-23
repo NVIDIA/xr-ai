@@ -12,8 +12,7 @@ import asyncio
 from collections.abc import Callable
 
 import pytest
-from xr_ai_conversation import ConversationContextUpdate
-from xr_ai_conversation._store import _ContextStore
+from xr_ai_conversation import CompactionPrompts, ContextManager, ConversationContextUpdate
 from xr_ai_models import Capabilities, ChatResponse
 from xr_ai_runtime import AgentRuntime, Topic
 
@@ -40,7 +39,7 @@ class _LLM:
         return ChatResponse(content="Compacted facts.", reasoning=None, tool_calls=None, finish_reason="stop", raw={})
 
 
-def _store(llm: _LLM | None = None, **overrides) -> _ContextStore:
+def _store(llm: _LLM | None = None, **overrides) -> ContextManager:
     options = {
         "summary_context_topics": ("status",),
         "incremental_context_topics": ("notes",),
@@ -48,10 +47,10 @@ def _store(llm: _LLM | None = None, **overrides) -> _ContextStore:
         "topic_budget_bytes": 200,
         "compaction_input_budget_bytes": 12_000,
     }
-    return _ContextStore(llm or _LLM(), **{**options, **overrides})  # type: ignore[arg-type]
+    return ContextManager(llm or _LLM(), **{**options, **overrides})  # type: ignore[arg-type]
 
 
-def _rendered(store: _ContextStore, participant: str = "alice") -> str:
+def _rendered(store: ContextManager, participant: str = "alice") -> str:
     return "\n".join(block.text for block in store.blocks(participant))
 
 
@@ -192,6 +191,39 @@ async def test_close_forgets_all_context_and_drops_later_topic_updates():
     await store.update("alice", "status", _note("After close."), mode="summary", timestamp_us=_NOON_US)
 
     assert store.blocks("alice") == ()
+
+
+@pytest.mark.asyncio
+async def test_close_drops_later_exchanges_and_history():
+    store = _store()
+    await store.close()
+
+    store.record_exchange("alice", "Late question.", "Late answer.", timestamp_us=_NOON_US, exchange_id=None)
+    store.reconcile_history("alice", (("Old question.", "Old answer.", _NOON_US),), exchange_ids=_NO_IDS)
+
+    assert store.blocks("alice") == ()
+
+
+@pytest.mark.asyncio
+async def test_compaction_prompts_are_customizable_and_the_manager_adds_the_size_limit():
+    llm = _LLM()
+    seen: list[str] = []
+    chat = llm.chat
+
+    async def recording_chat(messages, **kwargs):
+        seen.append(messages[0].content)
+        return await chat(messages, **kwargs)
+
+    llm.chat = recording_chat  # type: ignore[method-assign]
+    prompts = CompactionPrompts(source="Keep only part numbers.", dialogue="Keep only names.", condense="Shorter.")
+    store = _store(llm, compaction_prompts=prompts)
+
+    await store.update("alice", "notes", _note("A" * 80), mode="incremental", timestamp_us=_NOON_US)
+    await store.update("alice", "notes", _note("B" * 80), mode="incremental", timestamp_us=_NOON_US + 1)
+    await _eventually(lambda: "Compacted facts." in _rendered(store))
+
+    assert seen[0].startswith("Keep only part numbers.")
+    assert "at most 50 bytes" in seen[0]
 
 
 @pytest.mark.asyncio
