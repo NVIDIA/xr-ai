@@ -202,6 +202,20 @@ it becomes ineligible, or the participant leaves. An admission release clears
 focus and routes the same query again. A post-answer release clears focus after
 consuming the query.
 
+A focused destination can return `Admission("decline")` to let another destination
+handle the current query, then receive the next turn again. For example, a
+foreground note-taking agent can decline a general question without ending its
+note session. The router keeps its focus and does not call its `release()`.
+The declined destination is excluded from selection and default fallback for
+the rest of this turn, within the existing bounded routing attempts.
+
+An ordinary answer, clarification, failure, or cancellation during that turn
+retains the original focus. If another destination explicitly returns
+`DestinationResult("focus")`, the router releases the previous owner and gives
+focus to that destination instead. This keeps a single foreground owner;
+it does not stack suspended destinations. Returning `Admission("release")`
+explicitly ends focus and reroutes the current query as before.
+
 `interrupt(participant_id)` cancels and drains current response work while
 preserving completed history and focus. Omitting the participant cancels all
 active turns. Output already delivered to the callback cannot be retracted.
