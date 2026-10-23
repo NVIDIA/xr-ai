@@ -59,21 +59,21 @@ the reason.
 ## Repository documentation
 
 `docs/source/` is the canonical home for user-facing concepts, architecture,
-workflows, operations, troubleshooting, and reference material. Do not duplicate
-that content in a README. A README is a concise repository entry point: state
-what the directory contains, link to the canonical documentation, and keep only
-the minimum local information needed before following that link. A top-level
-sample README under `agent-samples/` or `model-server-samples/` additionally keeps
-the exact commands needed to start that sample. State the sample directory as
-the working directory and write every command relative to it, including commands
+workflows, operations, troubleshooting, and reference material. Do not
+duplicate that content in a README. A README is a concise repository entry
+point: state what the directory contains, link to the canonical documentation,
+and keep only the minimum local information needed before following that link.
+A top-level sample README under `agent-samples/` additionally keeps the exact
+commands needed to start that sample. State the sample directory as the
+working directory and write every command relative to it, including commands
 that invoke a nested project such as `model-servers` from an agent sample. It
 also includes a compact configuration entry point: name the sample-owned YAML
-or JSON files, describe the common settings they own, and show one representative
-edit. Put exhaustive field descriptions, precedence, path resolution,
-architecture, behavior, artifact contracts, extension instructions, and eval
-methodology in the sample's `docs/source/` guide. Nested READMEs may contain
-only artifact-local instructions that are not useful in the published
-documentation.
+or JSON files, describe the common settings they own, and show one
+representative edit. Put exhaustive field descriptions, precedence, path
+resolution, architecture, behavior, artifact contracts, extension
+instructions, and eval methodology in the sample's `docs/source/` guide.
+Nested READMEs may contain only artifact-local instructions that are not
+useful in the published documentation.
 
 When documentation exists in both locations, consolidate it into
 `docs/source/` and replace the README copy with a link. When moving README
