@@ -11,8 +11,8 @@ for the behavior they check. Start an OpenAI-compatible LLM (for example the
 `model-servers` Nemotron Omni LLM on port 8108), then run from this package:
 
 ```bash
-uv run --project . --extra voice --group eval python eval/conflict_eval.py
-uv run --project . --extra voice --group eval python eval/compaction_eval.py
+uv run --project . --group eval python eval/conflict_eval.py
+uv run --project . --group eval python eval/compaction_eval.py
 ```
 
 Each script accepts `--base-url` and `--preset` (default

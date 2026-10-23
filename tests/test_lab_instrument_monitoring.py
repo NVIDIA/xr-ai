@@ -19,6 +19,7 @@ import cv2
 import numpy as np
 import pytest
 import yaml
+from xr_ai_interaction import ParticipantJoined, ParticipantLeft, ResponseOutput, UserQuery
 from xr_ai_models import ChatResponse, ToolCall
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, subscribe
 from xr_ai_tools import Tool
@@ -26,15 +27,7 @@ from xr_ai_tools.current_frame import CurrentFrameRequest, ImageFrame
 from xr_ai_tools.image import ImageReference
 from xr_ai_tools.marker_tracking import MarkerPoint, MarkerType, TrackedMarker
 from xr_ai_tools.vision import ImageQueryRequest, ImageQueryResult
-from xr_ai_voice import (
-    VOICE_CONTRIBUTION_TOPIC,
-    VOICE_TRANSCRIPT_TOPIC,
-    UserQuery,
-    VoiceOutput,
-    VoiceParticipantJoined,
-    VoiceParticipantLeft,
-    VoiceTranscript,
-)
+from xr_ai_voice import VOICE_CONTRIBUTION_TOPIC, VOICE_TRANSCRIPT_TOPIC, VoiceTranscript
 from xr_ai_web_events import WEB_EVENT_TOPIC, WebEvent
 
 _REPO = Path(__file__).resolve().parents[1]
@@ -119,7 +112,7 @@ class _InstrumentEventCollector(Agent):
         self.changes: list[InstrumentChange] = []
         self.lost: list[InstrumentLost] = []
         self.snapshots: list[InstrumentStateSnapshot] = []
-        self.voice: list[VoiceOutput] = []
+        self.voice: list[ResponseOutput] = []
 
     @subscribe(INSTRUMENT_CHANGE_TOPIC)
     async def changed(self, event: InstrumentChange, _ctx: RuntimeContext) -> None:
@@ -134,7 +127,7 @@ class _InstrumentEventCollector(Agent):
         self.snapshots.append(event)
 
     @subscribe(VOICE_CONTRIBUTION_TOPIC)
-    async def voice_output(self, event: VoiceOutput, _ctx: RuntimeContext) -> None:
+    async def voice_output(self, event: ResponseOutput, _ctx: RuntimeContext) -> None:
         self.voice.append(event)
 
 
@@ -1334,7 +1327,7 @@ async def test_participant_leave_releases_voice_aggregation_state() -> None:
     lifecycle = _VoiceAggregationLifecycleAgent(Aggregation())  # type: ignore[arg-type]
     ctx = SimpleNamespace(metadata=SimpleNamespace(participant_id="participant-1"))
 
-    await lifecycle.participant_left(VoiceParticipantLeft(), ctx)  # type: ignore[arg-type]
+    await lifecycle.participant_left(ParticipantLeft(), ctx)  # type: ignore[arg-type]
 
     assert released == ["participant-1"]
 
@@ -1408,7 +1401,7 @@ async def test_file_output_records_transcript_monitor_instruments_and_foreground
     async with runtime:
         await runtime.publish(
             PARTICIPANT_JOINED_TOPIC,
-            VoiceParticipantJoined(),
+            ParticipantJoined(),
             participant_id="glasses/user",
         )
         await runtime.publish(
@@ -1459,7 +1452,7 @@ async def test_file_output_records_transcript_monitor_instruments_and_foreground
         )
         await runtime.publish(
             PARTICIPANT_LEFT_TOPIC,
-            VoiceParticipantLeft(),
+            ParticipantLeft(),
             participant_id="glasses/user",
         )
         await runtime.publish(
@@ -1502,7 +1495,7 @@ async def test_web_events_adapter_projects_explicit_sample_topics() -> None:
     async with runtime:
         await runtime.publish(
             PARTICIPANT_JOINED_TOPIC,
-            VoiceParticipantJoined(),
+            ParticipantJoined(),
             participant_id="participant-1",
         )
         await runtime.publish(
@@ -1556,7 +1549,7 @@ async def test_web_events_adapter_projects_explicit_sample_topics() -> None:
         )
         await runtime.publish(
             PARTICIPANT_LEFT_TOPIC,
-            VoiceParticipantLeft(),
+            ParticipantLeft(),
             participant_id="participant-1",
         )
 
@@ -1579,7 +1572,7 @@ async def test_web_events_adapter_projects_explicit_sample_topics() -> None:
 async def test_foreground_injects_participant_into_current_frame_tool(tmp_path: Path) -> None:
     frame_requests: list[CurrentFrameRequest] = []
     image_requests: list[ImageQueryRequest] = []
-    published: list[VoiceOutput] = []
+    published: list[ResponseOutput] = []
 
     async def select_frame(request: CurrentFrameRequest) -> ImageFrame:
         frame_requests.append(request)
@@ -1605,7 +1598,7 @@ async def test_foreground_injects_participant_into_current_frame_tool(tmp_path: 
     class Context:
         metadata = SimpleNamespace(message_id="turn-7")
 
-        async def publish(self, _topic, output: VoiceOutput) -> None:
+        async def publish(self, _topic, output: ResponseOutput) -> None:
             published.append(output)
 
     images = _make_images()
@@ -1674,12 +1667,12 @@ async def test_foreground_prior_tool_then_current_view_is_spoken_once(tmp_path: 
 
             return chunks()
 
-    published: list[VoiceOutput] = []
+    published: list[ResponseOutput] = []
 
     class Context:
         metadata = SimpleNamespace(message_id="turn-streamed")
 
-        async def publish(self, _topic, output: VoiceOutput) -> None:
+        async def publish(self, _topic, output: ResponseOutput) -> None:
             published.append(output)
 
     images = _make_images()
@@ -1764,12 +1757,12 @@ async def test_foreground_empty_current_view_stream_reports_unavailable(tmp_path
         prompt="Route tools.",
     )
     agent._vision = Vision()  # type: ignore[assignment]
-    published: list[VoiceOutput] = []
+    published: list[ResponseOutput] = []
 
     class Context:
         metadata = SimpleNamespace(message_id="turn-empty")
 
-        async def publish(self, _topic, output: VoiceOutput) -> None:
+        async def publish(self, _topic, output: ResponseOutput) -> None:
             published.append(output)
 
     response, tools, spoken = await agent._answer(
@@ -1814,7 +1807,7 @@ async def test_foreground_record_failure_does_not_suppress_speech() -> None:
     )
 
     assert [topic for topic, _message in published] == [VOICE_CONTRIBUTION_TOPIC]
-    assert published[0][1] == VoiceOutput(
+    assert published[0][1] == ResponseOutput(
         text="Device1 is reading 12 volts.",
         interrupt=True,
         timestamp_us=7,
@@ -1955,7 +1948,7 @@ async def test_foreground_tool_loop_returns_model_answer_and_tool_audit(tmp_path
     try:
         await runtime.publish(
             PARTICIPANT_JOINED_TOPIC,
-            VoiceParticipantJoined(),
+            ParticipantJoined(),
             participant_id="participant-4",
         )
         response, tools, spoken = await agent._answer(

@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 from types import SimpleNamespace
 
+from xr_ai_interaction import UserQuery
 from xr_ai_tools import Tool
 from xr_ai_tools.text_memory import (
     AddTranscriptRequest,
@@ -14,7 +15,6 @@ from xr_ai_tools.text_memory import (
     RecallConversationRequest,
     RecallConversationResult,
 )
-from xr_ai_voice import UserQuery
 from xr_render_demo_eval import harness
 from xr_render_demo_worker.agent import RenderAgent
 from xr_render_demo_worker.models import SceneRequest

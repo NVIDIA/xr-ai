@@ -13,13 +13,13 @@ from collections import deque
 import pytest
 import xr_ai_routing._router as router_module
 from xr_ai_conversation import Conversation, ConversationContextUpdate
+from xr_ai_interaction import ResponseOutput, UserQuery
 from xr_ai_models import ChatStreamEvent, DecisionAnswer, DecisionResponse
 from xr_ai_routing import Admission, AgentExchange, AgentRouter, AgentTurn, RoutingAid
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, Topic, subscribe
-from xr_ai_voice import UserQuery, VoiceOutput
 
 QUERIES = Topic("routing-test.queries", UserQuery)
-OUTPUT = Topic("routing-test.output", VoiceOutput, telemetry="none")
+OUTPUT = Topic("routing-test.output", ResponseOutput, telemetry="none")
 CONTEXT = Topic("routing-test.context", ConversationContextUpdate)
 
 
@@ -30,7 +30,7 @@ class _Output(Agent):
         self.changed = asyncio.Event()
 
     @subscribe(OUTPUT)
-    async def receive(self, value: VoiceOutput, ctx: RuntimeContext):
+    async def receive(self, value: ResponseOutput, ctx: RuntimeContext):
         self.items.append((value, ctx.metadata))
         self.changed.set()
 
@@ -94,7 +94,7 @@ async def test_configured_control_output_preserves_concurrent_participant_turn_i
             await release_alice.wait()
         delivered_turns.append((turn, source))
         await runtime.publish(
-            OUTPUT, VoiceOutput(text=text, timestamp_us=turn.timestamp_us),
+            OUTPUT, ResponseOutput(text=text, timestamp_us=turn.timestamp_us),
             participant_id=turn.participant_id, source="router",
         )
 
@@ -223,7 +223,7 @@ async def test_conversation_does_not_retry_or_finalize_failed_typed_publication(
 
     class FailingOutput(_Output):
         @subscribe(OUTPUT)
-        async def receive(self, value: VoiceOutput, ctx: RuntimeContext):
+        async def receive(self, value: ResponseOutput, ctx: RuntimeContext):
             await super().receive(value, ctx)
             if len(self.items) == failed_frame:
                 raise RuntimeError("output delivery failed")
@@ -254,7 +254,7 @@ async def test_failed_final_frame_does_not_commit_the_exchange():
 
     class FailingFinal(_Output):
         @subscribe(OUTPUT)
-        async def receive(self, value: VoiceOutput, ctx: RuntimeContext):
+        async def receive(self, value: ResponseOutput, ctx: RuntimeContext):
             await super().receive(value, ctx)
             if value.final:
                 raise RuntimeError("final delivery failed")
@@ -283,7 +283,7 @@ async def test_interrupted_final_frame_does_not_commit_the_exchange():
 
     class BlockingFinal(_Output):
         @subscribe(OUTPUT)
-        async def receive(self, value: VoiceOutput, ctx: RuntimeContext):
+        async def receive(self, value: ResponseOutput, ctx: RuntimeContext):
             await super().receive(value, ctx)
             if value.final:
                 final_entered.set()
@@ -451,7 +451,7 @@ async def test_finite_ack_does_not_block_direct_answer_in_bounded_voice_consumer
     async def emit_control(turn, _source, text):
         assert (turn.participant_id, turn.turn_id, turn.timestamp_us) == ("alice", "request", 928)
         await runtime.publish(
-            VOICE_OUTPUT_TOPIC, VoiceOutput(text=text, timestamp_us=turn.timestamp_us),
+            VOICE_OUTPUT_TOPIC, ResponseOutput(text=text, timestamp_us=turn.timestamp_us),
             participant_id=turn.participant_id, source="router",
         )
 
@@ -477,10 +477,17 @@ async def test_finite_ack_does_not_block_direct_answer_in_bounded_voice_consumer
 
 
 
-@pytest.mark.parametrize("package", ["xr_ai_routing", "xr_ai_conversation"])
-def test_pure_package_import_does_not_load_voice_media(package):
+@pytest.mark.parametrize(
+    ("package", "excluded"),
+    [
+        ("xr_ai_interaction", ("xr_ai_voice", "xr_ai_runtime")),
+        ("xr_ai_routing", ("xr_ai_voice", "xr_ai_runtime", "xr_ai_interaction")),
+        ("xr_ai_conversation", ("xr_ai_voice",)),
+    ],
+)
+def test_pure_package_import_does_not_load_voice_media(package, excluded):
     result = subprocess.run(
-        [sys.executable, "-c", f"import sys, {package}; assert 'xr_ai_voice' not in sys.modules"],
+        [sys.executable, "-c", f"import sys, {package}; assert not set({excluded!r}) & set(sys.modules)"],
         capture_output=True,
         text=True,
         check=False,

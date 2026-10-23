@@ -21,8 +21,8 @@ import nemo_relay
 from xr_ai_models import ChatMessage, DecisionQuestion, DecisionService, LLMService
 
 if TYPE_CHECKING:
+    from xr_ai_interaction import Interrupted, ParticipantJoined, ParticipantLeft, ResponseOutput, UserQuery
     from xr_ai_runtime import Agent, Topic
-    from xr_ai_voice import UserQuery, VoiceInterrupted, VoiceOutput, VoiceParticipantJoined, VoiceParticipantLeft
 
     from ._runtime import _RuntimeTurn
 
@@ -106,8 +106,8 @@ class AgentRouter:
 
     Supply ``query_topic`` and ``output_topic`` together, then register
     ``runtime_subscriber()`` with :class:`xr_ai_runtime.AgentRuntime`. This
-    requires the ``xr-ai-routing[voice]`` extra; ordinary ``handle()`` use never
-    imports the runtime or voice media. No input or lifecycle topic is
+    requires the ``xr-ai-routing[runtime]`` extra; ordinary ``handle()`` use never
+    imports the runtime or interaction messages. No input or lifecycle topic is
     subscribed unless explicitly supplied.
     Runtime queries use their publication identity and originating timestamp.
     Destinations publish their own output; the router publishes only finite
@@ -127,12 +127,12 @@ class AgentRouter:
     :param acknowledgment_llm: Optional non-reasoning client for intention acknowledgments and duration prediction.
     :param acknowledgment_delay_secs: Finite positive delay before fallback
         acknowledgment; requires ``acknowledgment_llm``.
-    :param query_topic: Explicit runtime input topic carrying ``xr_ai_voice.UserQuery``.
-    :param output_topic: Explicit topic carrying ``xr_ai_voice.VoiceOutput`` for router control output.
-    :param participant_joined_topic: Optional explicit ``VoiceParticipantJoined`` topic reopening admission.
-    :param participant_left_topic: Optional explicit ``VoiceParticipantLeft`` topic for departure cleanup;
+    :param query_topic: Explicit runtime input topic carrying ``xr_ai_interaction.UserQuery``.
+    :param output_topic: Explicit topic carrying ``xr_ai_interaction.ResponseOutput`` for router control output.
+    :param participant_joined_topic: Optional explicit ``ParticipantJoined`` topic reopening admission.
+    :param participant_left_topic: Optional explicit ``ParticipantLeft`` topic for departure cleanup;
         requires ``participant_joined_topic`` so a departed participant can be readmitted.
-    :param interrupted_topic: Optional explicit ``VoiceInterrupted`` topic for participant or global interruption.
+    :param interrupted_topic: Optional explicit ``Interrupted`` topic for participant or global interruption.
     :param initialize_participant: Optional initialization, awaited once before the participant's first turn,
         whether called directly or published. An interrupted initialization runs again on the next turn.
     :param cleanup_participant: Optional idempotent application cleanup after destination work is drained.
@@ -143,7 +143,7 @@ class AgentRouter:
 
     Topic payload classes must match exactly and configured topic names must be
     distinct. Incomplete runtime configuration raises ``ValueError``; a wrong
-    payload class raises ``TypeError``. Missing optional voice support raises
+    payload class raises ``TypeError``. A missing ``runtime`` extra raises
     ``ImportError`` when runtime configuration is supplied. The application must
     await ``stop()`` before stopping its runtime or closing destination resources.
     """
@@ -159,10 +159,10 @@ class AgentRouter:
         acknowledgment_llm: LLMService | None = None,
         acknowledgment_delay_secs: float | None = None,
         query_topic: Topic[UserQuery] | None = None,
-        output_topic: Topic[VoiceOutput] | None = None,
-        participant_joined_topic: Topic[VoiceParticipantJoined] | None = None,
-        participant_left_topic: Topic[VoiceParticipantLeft] | None = None,
-        interrupted_topic: Topic[VoiceInterrupted] | None = None,
+        output_topic: Topic[ResponseOutput] | None = None,
+        participant_joined_topic: Topic[ParticipantJoined] | None = None,
+        participant_left_topic: Topic[ParticipantLeft] | None = None,
+        interrupted_topic: Topic[Interrupted] | None = None,
         initialize_participant: Callable[[str], Awaitable[None]] | None = None,
         cleanup_participant: Callable[[str], Awaitable[None]] | None = None,
         set_status: Callable[[Literal["processing", "idle"], str], Awaitable[None]] | None = None,

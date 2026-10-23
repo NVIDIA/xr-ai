@@ -14,12 +14,12 @@ import nemo_relay
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from xr_ai_hub import FrameUnavailable
+from xr_ai_interaction import ParticipantLeft
 from xr_ai_models import VLMService
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, subscribe
 from xr_ai_tools import Tool
 from xr_ai_tools.current_frame import CurrentFrameRequest
 from xr_ai_tools.vision import ImageQueryRequest, ImageQueryTool
-from xr_ai_voice import VoiceParticipantLeft
 
 from .events import (
     MONITOR_RECORD_TOPIC,
@@ -224,7 +224,7 @@ class MonitorAgent(Agent):
     @subscribe(PARTICIPANT_LEFT_TOPIC)
     async def participant_left(
         self,
-        _event: VoiceParticipantLeft,
+        _event: ParticipantLeft,
         ctx: RuntimeContext,
     ) -> None:
         participant_id = self._participant(ctx)

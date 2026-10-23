@@ -14,10 +14,10 @@ from decimal import Decimal, InvalidOperation
 
 import nemo_relay
 from loguru import logger
+from xr_ai_interaction import ParticipantLeft
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, subscribe
 from xr_ai_tools import Tool
 from xr_ai_tools.marker_tracking import MarkerType
-from xr_ai_voice import VoiceParticipantLeft
 
 from .events import (
     INSTRUMENT_CHANGE_TOPIC,
@@ -219,7 +219,7 @@ class InstrumentMonitorAgent(Agent):
         )
 
     @subscribe(PARTICIPANT_LEFT_TOPIC)
-    async def participant_left(self, _event: VoiceParticipantLeft, ctx: RuntimeContext) -> None:
+    async def participant_left(self, _event: ParticipantLeft, ctx: RuntimeContext) -> None:
         participant_id = ctx.metadata.participant_id
         if participant_id is not None:
             await self._cancel(participant_id)

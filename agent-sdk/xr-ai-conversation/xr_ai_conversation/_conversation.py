@@ -15,8 +15,8 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequenc
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
 
+from xr_ai_interaction import ResponseOutput
 from xr_ai_models import ChatMessage, ChatResponse, LLMService
 from xr_ai_routing import (
     Admission,
@@ -46,9 +46,6 @@ from ._context import (
 from ._context_update import ConversationContextUpdate
 from ._topics import make_context_subscriber
 
-if TYPE_CHECKING:
-    from xr_ai_voice import VoiceOutput
-
 _CORE_PROMPT = (Path(__file__).parent / "prompts" / "core.txt").read_text(encoding="utf-8").strip()
 _DEFAULT_DIALOGUE_BUDGET_BYTES = 8_000
 _DEFAULT_TOPIC_BUDGET_BYTES = 4_000
@@ -70,7 +67,7 @@ class Conversation(RoutableAgent):
     :param topic_budget_bytes: UTF-8 byte budget for each topic's context rendered into a request:
         one value for every topic, or a mapping with a value for each configured topic.
     :param runtime: Runtime used to publish answers. The application owns runtime startup and shutdown.
-    :param output_topic: Explicit ``VoiceOutput`` topic for routed answers; requires ``xr-ai-conversation[voice]``.
+    :param output_topic: Explicit ``ResponseOutput`` topic for routed answers.
         The conversation publishes with its routing name as source, the turn ID as response ID,
         and the originating timestamp. It owns stream framing and finalization.
         No default output or query topic is subscribed.
@@ -93,16 +90,10 @@ class Conversation(RoutableAgent):
         topic_budget_bytes: int | Mapping[str, int] = _DEFAULT_TOPIC_BUDGET_BYTES,
         compaction_input_budget_bytes: int = _DEFAULT_COMPACTION_INPUT_BUDGET_BYTES,
         runtime: AgentRuntime,
-        output_topic: Topic[VoiceOutput],
+        output_topic: Topic[ResponseOutput],
     ) -> None:
-        try:
-            from xr_ai_voice import VoiceOutput
-        except ModuleNotFoundError as error:
-            if error.name != "xr_ai_voice":
-                raise
-            raise ImportError("voice output requires the xr-ai-conversation[voice] extra") from error
-        if output_topic.message_type is not VoiceOutput:
-            raise TypeError("Conversation output_topic must carry VoiceOutput")
+        if output_topic.message_type is not ResponseOutput:
+            raise TypeError("Conversation output_topic must carry ResponseOutput")
         summary_names = self._validate_topic_names("summary_context_topics", summary_context_topics)
         incremental_names = self._validate_topic_names("incremental_context_topics", incremental_context_topics)
         names = (*summary_names, *incremental_names)
@@ -154,7 +145,7 @@ class Conversation(RoutableAgent):
         *,
         started: Callable[[], Awaitable[bool]],
     ) -> DestinationResult:
-        """Publish a routed answer directly to the configured voice output topic.
+        """Publish a routed answer directly to the configured output topic.
 
         Requires ``runtime`` and ``output_topic``. The first nonblank ready chunk
         awaits ``started()`` before publication. That body frame
@@ -167,8 +158,6 @@ class Conversation(RoutableAgent):
         returns the complete text as routing context. The exchange joins this
         conversation's transcript only after its final frame is delivered.
         """
-
-        from xr_ai_voice import VoiceOutput
 
         fragments: list[str] = []
         stream = self._stream_response(turn.query, turn.participant_id, history=turn.history, commit=False)
@@ -190,7 +179,7 @@ class Conversation(RoutableAgent):
                 try:
                     await self._runtime.publish(
                         self._output_topic,
-                        VoiceOutput(
+                        ResponseOutput(
                             text=text, response_id=turn.turn_id, final=False,
                             interrupt=interrupt and not opened, timestamp_us=turn.timestamp_us,
                         ),
@@ -213,7 +202,7 @@ class Conversation(RoutableAgent):
                 with suppress(RuntimeClosedError):
                     await self._runtime.publish(
                         self._output_topic,
-                        VoiceOutput(response_id=turn.turn_id, timestamp_us=turn.timestamp_us),
+                        ResponseOutput(response_id=turn.turn_id, timestamp_us=turn.timestamp_us),
                         participant_id=turn.participant_id,
                         source=self._routing.name,
                     )

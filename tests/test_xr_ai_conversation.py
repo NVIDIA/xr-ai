@@ -24,6 +24,7 @@ from xr_ai_conversation._context import (
     _ConversationContext,
     _TruncatedSummary,
 )
+from xr_ai_interaction import ResponseOutput
 from xr_ai_models import Capabilities, ChatResponse, ChatStreamEvent, DecisionAnswer, DecisionResponse
 from xr_ai_routing import (
     Admission,
@@ -35,11 +36,10 @@ from xr_ai_routing import (
     RoutingAid,
 )
 from xr_ai_runtime import AgentRuntime, Topic
-from xr_ai_voice import VoiceOutput
 
 _NOON_US = 1_790_856_000_000_000
 _MINUTE_US = 60_000_000
-_OUTPUT_TOPIC = Topic("conversation-test.output", VoiceOutput)
+_OUTPUT_TOPIC = Topic("conversation-test.output", ResponseOutput)
 
 
 class _ConversationRuntime:
@@ -1355,23 +1355,8 @@ def test_voice_output_configuration_requires_runtime_and_exact_topic_model():
         Conversation(_LLM(), runtime=AgentRuntime())
     with pytest.raises(TypeError, match="runtime"):
         Conversation(_LLM(), output_topic=_OUTPUT_TOPIC)
-    with pytest.raises(TypeError, match="VoiceOutput"):
+    with pytest.raises(TypeError, match="ResponseOutput"):
         Conversation(_LLM(), runtime=AgentRuntime(), output_topic=Topic("wrong", ConversationContextUpdate))
-
-
-def test_conversation_construction_reports_missing_voice_extra(monkeypatch):
-    import builtins
-
-    original_import = builtins.__import__
-
-    def import_without_voice(name, *args, **kwargs):
-        if name == "xr_ai_voice":
-            raise ModuleNotFoundError("No module named 'xr_ai_voice'", name="xr_ai_voice")
-        return original_import(name, *args, **kwargs)
-
-    monkeypatch.setattr(builtins, "__import__", import_without_voice)
-    with pytest.raises(ImportError, match=r"xr-ai-conversation\[voice\]"):
-        Conversation(_LLM(), runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC)
 
 
 async def test_output_failure_closes_model_without_recording_partial_context():

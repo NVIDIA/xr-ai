@@ -14,14 +14,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
+from xr_ai_interaction import ParticipantJoined, ParticipantLeft
 from xr_ai_runtime import Agent, RuntimeContext, subscribe
 from xr_ai_tools import Tool
-from xr_ai_voice import (
-    VOICE_TRANSCRIPT_TOPIC,
-    VoiceParticipantJoined,
-    VoiceParticipantLeft,
-    VoiceTranscript,
-)
+from xr_ai_voice import VOICE_TRANSCRIPT_TOPIC, VoiceTranscript
 
 from .events import (
     FOREGROUND_RECORD_TOPIC,
@@ -101,7 +97,7 @@ class FileOutputAgent(Agent):
     @subscribe(PARTICIPANT_JOINED_TOPIC)
     async def participant_joined(
         self,
-        _event: VoiceParticipantJoined,
+        _event: ParticipantJoined,
         ctx: RuntimeContext,
     ) -> None:
         participant_id = self._participant(ctx)
@@ -184,7 +180,7 @@ class FileOutputAgent(Agent):
     @subscribe(PARTICIPANT_LEFT_TOPIC)
     async def participant_left(
         self,
-        _event: VoiceParticipantLeft,
+        _event: ParticipantLeft,
         ctx: RuntimeContext,
     ) -> None:
         participant_id = self._participant(ctx)

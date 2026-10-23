@@ -6,11 +6,11 @@
 from __future__ import annotations
 
 from xr_ai_hub import ProcessorEndpoint
+from xr_ai_interaction import ParticipantLeft
 from xr_ai_runtime import Agent, RuntimeContext, subscribe
 from xr_ai_tools.current_frame import CurrentFrameTool
 from xr_ai_tools.image import ImageRegistry
 from xr_ai_tools.marker_tracking import MarkerTrackingTool
-from xr_ai_voice import VoiceParticipantLeft
 
 from .events import PARTICIPANT_LEFT_TOPIC
 
@@ -44,7 +44,7 @@ class ParticipantImageAgent(Agent):
     @subscribe(PARTICIPANT_LEFT_TOPIC)
     async def participant_left(
         self,
-        _event: VoiceParticipantLeft,
+        _event: ParticipantLeft,
         ctx: RuntimeContext,
     ) -> None:
         participant_id = ctx.metadata.participant_id

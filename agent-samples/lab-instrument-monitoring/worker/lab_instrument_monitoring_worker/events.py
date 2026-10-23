@@ -8,14 +8,9 @@ from __future__ import annotations
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+from xr_ai_interaction import Interrupted, ParticipantJoined, ParticipantLeft, UserQuery
 from xr_ai_runtime import Topic
 from xr_ai_tools.marker_tracking import MarkerType
-from xr_ai_voice import (
-    UserQuery,
-    VoiceInterrupted,
-    VoiceParticipantJoined,
-    VoiceParticipantLeft,
-)
 
 
 class MonitorRecord(BaseModel):
@@ -106,15 +101,15 @@ class ForegroundRecord(BaseModel):
 USER_QUERY_TOPIC = Topic("lab-instrument-monitoring.user-query", UserQuery)
 PARTICIPANT_JOINED_TOPIC = Topic(
     "lab-instrument-monitoring.participant-joined",
-    VoiceParticipantJoined,
+    ParticipantJoined,
 )
 PARTICIPANT_LEFT_TOPIC = Topic(
     "lab-instrument-monitoring.participant-left",
-    VoiceParticipantLeft,
+    ParticipantLeft,
 )
 INTERRUPTED_TOPIC = Topic(
     "lab-instrument-monitoring.interrupted",
-    VoiceInterrupted,
+    Interrupted,
 )
 MONITOR_RECORD_TOPIC = Topic("lab-instrument-monitoring.monitor-record", MonitorRecord)
 INSTRUMENT_CHANGE_TOPIC = Topic(

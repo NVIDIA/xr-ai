@@ -11,9 +11,10 @@ its own environment and concise entry-point README.
 | Directory | Import | Distribution | Use it for |
 |---|---|---|---|
 | [`xr-ai-hub`](xr-ai-hub/) | `xr_ai_hub` | `xr-ai-hub-client` | Minimal IPC with DeviceIOHub using msgpack over ZMQ |
+| [`xr-ai-interaction`](xr-ai-interaction/) | `xr_ai_interaction` | `xr-ai-interaction` | Transport-neutral query, response, presence, and interruption messages |
 | [`xr-ai-models`](xr-ai-models/) | `xr_ai_models` | `xr-ai-models` | Typed model services and OpenAI-compatible clients |
 | [`xr-ai-routing`](xr-ai-routing/) | `xr_ai_routing` | `xr-ai-routing` | Participant-scoped routing and typed destination contracts |
-| [`xr-ai-conversation`](xr-ai-conversation/) | `xr_ai_conversation` | `xr-ai-conversation` | Routable conversation agent with direct voice output, named context, and rolling-summary compaction |
+| [`xr-ai-conversation`](xr-ai-conversation/) | `xr_ai_conversation` | `xr-ai-conversation` | Routable conversation agent with direct response output, named context, and rolling-summary compaction |
 | [`xr-ai-runtime`](xr-ai-runtime/) | `xr_ai_runtime` | `xr-ai-agent-runtime` | Agent registration and typed publish/fan-out |
 | [`xr-ai-tools`](xr-ai-tools/) | `xr_ai_tools` | `xr-ai-tools` | Relay-managed tools and model tool-call helpers |
 | [`xr-ai-voice`](xr-ai-voice/) | `xr_ai_voice` | `xr-ai-voice` | Voice agent, session, transport, and pipeline |

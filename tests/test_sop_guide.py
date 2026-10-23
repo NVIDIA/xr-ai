@@ -16,20 +16,14 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 import yaml
+from xr_ai_interaction import ParticipantJoined, ParticipantLeft, ResponseOutput, UserQuery
 from xr_ai_models import ChatResponse, ToolCall
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, subscribe
 from xr_ai_tools.current_frame import ImageFrame
 from xr_ai_tools.image import ImageReference
 from xr_ai_tools.types import EmptyRequest
 from xr_ai_tools.vision import ImageQueryResult
-from xr_ai_voice import (
-    VOICE_OUTPUT_TOPIC,
-    UserQuery,
-    VoiceAggregationAgent,
-    VoiceOutput,
-    VoiceParticipantJoined,
-    VoiceParticipantLeft,
-)
+from xr_ai_voice import VOICE_OUTPUT_TOPIC, VoiceAggregationAgent
 
 _SAMPLE = Path(__file__).resolve().parents[1] / "agent-samples/procedure-capture-guide"
 sys.path.insert(0, str(_SAMPLE / "worker"))
@@ -1516,7 +1510,7 @@ async def test_guide_app_composition_starts_and_cleans_up(tmp_path, document, mo
             assert not kwargs["voice_gate"].stop_commands_enabled
 
         async def run(self, runtime):
-            await runtime.publish(PARTICIPANT_JOINED_TOPIC, VoiceParticipantJoined(), participant_id="alice")
+            await runtime.publish(PARTICIPANT_JOINED_TOPIC, ParticipantJoined(), participant_id="alice")
             assert agents[0]._backend._sessions["alice"].step_id == "base"
             # Simulate worker shutdown while the participant is still connected.
 
@@ -1536,7 +1530,7 @@ async def test_actual_runtime_and_aggregation_deliver_guide_and_release(document
             self.outputs = asyncio.Queue()
 
         @subscribe(VOICE_OUTPUT_TOPIC)
-        async def receive(self, output: VoiceOutput, ctx: RuntimeContext):
+        async def receive(self, output: ResponseOutput, ctx: RuntimeContext):
             await self.outputs.put((ctx.metadata.participant_id, output.text))
 
     llm = Mock(chat=AsyncMock(return_value=ChatResponse("Align the marked edges.", None, None, "stop", {})))
@@ -1553,7 +1547,7 @@ async def test_actual_runtime_and_aggregation_deliver_guide_and_release(document
     agent.bind_runtime(runtime)
     async with runtime:
         try:
-            await runtime.publish(PARTICIPANT_JOINED_TOPIC, VoiceParticipantJoined(), participant_id="alice")
+            await runtime.publish(PARTICIPANT_JOINED_TOPIC, ParticipantJoined(), participant_id="alice")
             assert await asyncio.wait_for(sink.outputs.get(), 2) == (
                 "alice", "Align Parts is ready. Say start guide to begin.",
             )
@@ -1570,7 +1564,7 @@ async def test_actual_runtime_and_aggregation_deliver_guide_and_release(document
             await runtime.publish(USER_QUERY_TOPIC, UserQuery(text="What do I align?", timestamp_us=1),
                                   participant_id="alice")
             assert await asyncio.wait_for(sink.outputs.get(), 2) == ("alice", "Align the marked edges.")
-            await runtime.publish(PARTICIPANT_LEFT_TOPIC, VoiceParticipantLeft(), participant_id="alice")
+            await runtime.publish(PARTICIPANT_LEFT_TOPIC, ParticipantLeft(), participant_id="alice")
             assert not agent._backend._sessions and not agent._backend._monitors and not agent._turns
             assert not aggregation._states
         finally:
@@ -1585,7 +1579,7 @@ async def test_interrupted_transition_delivers_guidance_through_real_aggregation
             self.outputs = asyncio.Queue()
 
         @subscribe(VOICE_OUTPUT_TOPIC)
-        async def receive(self, output: VoiceOutput, ctx: RuntimeContext):
+        async def receive(self, output: ResponseOutput, ctx: RuntimeContext):
             await self.outputs.put(output.text)
 
     llm = Mock(chat=AsyncMock(return_value=ChatResponse("", None, [
@@ -1612,7 +1606,7 @@ async def test_interrupted_transition_delivers_guidance_through_real_aggregation
 
     async with runtime:
         try:
-            await runtime.publish(PARTICIPANT_JOINED_TOPIC, VoiceParticipantJoined(), participant_id="alice")
+            await runtime.publish(PARTICIPANT_JOINED_TOPIC, ParticipantJoined(), participant_id="alice")
             await asyncio.wait_for(sink.outputs.get(), 2)
             await control(backend, "restart")
             backend._sessions["alice"].state["base"] = True
@@ -1647,7 +1641,7 @@ async def test_transition_discards_notice_queued_during_foreground_turn(document
             self.outputs = asyncio.Queue()
 
         @subscribe(VOICE_OUTPUT_TOPIC)
-        async def receive(self, output: VoiceOutput, ctx: RuntimeContext):
+        async def receive(self, output: ResponseOutput, ctx: RuntimeContext):
             await self.outputs.put(output.text)
 
     entered, release = asyncio.Event(), asyncio.Event()
@@ -1673,7 +1667,7 @@ async def test_transition_discards_notice_queued_during_foreground_turn(document
     agent.bind_runtime(runtime)
     async with runtime:
         try:
-            await runtime.publish(PARTICIPANT_JOINED_TOPIC, VoiceParticipantJoined(), participant_id="alice")
+            await runtime.publish(PARTICIPANT_JOINED_TOPIC, ParticipantJoined(), participant_id="alice")
             assert await asyncio.wait_for(sink.outputs.get(), 2) == "Align Parts is ready. Say start guide to begin."
             await control(backend, "restart")
             if final_step:

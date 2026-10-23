@@ -17,13 +17,13 @@ import nemo_relay
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from xr_ai_hub import FrameUnavailable
+from xr_ai_interaction import ParticipantLeft
 from xr_ai_models import ChatMessage, ChatResponse, LLMService, ToolDef, VLMService
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeClosedError, RuntimeContext, subscribe
 from xr_ai_tools import Tool, ToolSet
 from xr_ai_tools.current_frame import CurrentFrameRequest
 from xr_ai_tools.tool_calling import run_tool_loop
 from xr_ai_tools.vision import ImageQueryRequest, ImageQueryTool
-from xr_ai_voice import VoiceParticipantLeft
 
 from .events import (
     BACKGROUND_FACT_TOPIC,
@@ -174,7 +174,7 @@ class ChangeWatchAgent(Agent):
     @subscribe(PARTICIPANT_LEFT_TOPIC)
     async def participant_left(
         self,
-        _event: VoiceParticipantLeft,
+        _event: ParticipantLeft,
         ctx: RuntimeContext,
     ) -> None:
         await self._cancel(self._participant(ctx))

@@ -6,10 +6,10 @@
 from __future__ import annotations
 
 from xr_ai_hub import ProcessorEndpoint
+from xr_ai_interaction import ParticipantJoined, ParticipantLeft
 from xr_ai_runtime import Agent, RuntimeContext, subscribe
 from xr_ai_tools.current_frame import CurrentFrameTool
 from xr_ai_tools.image import ImageRegistry
-from xr_ai_voice import VoiceParticipantJoined, VoiceParticipantLeft
 
 from .events import (
     PARTICIPANT_CLEANUP_COMPLETE_TOPIC,
@@ -47,7 +47,7 @@ class ParticipantImageAgent(Agent):
     @subscribe(PARTICIPANT_JOINED_TOPIC)
     async def participant_joined(
         self,
-        _event: VoiceParticipantJoined,
+        _event: ParticipantJoined,
         ctx: RuntimeContext,
     ) -> None:
         participant_id = ctx.metadata.participant_id
@@ -59,7 +59,7 @@ class ParticipantImageAgent(Agent):
     @subscribe(PARTICIPANT_LEFT_TOPIC)
     async def participant_left(
         self,
-        _event: VoiceParticipantLeft,
+        _event: ParticipantLeft,
         ctx: RuntimeContext,
     ) -> None:
         participant_id = ctx.metadata.participant_id

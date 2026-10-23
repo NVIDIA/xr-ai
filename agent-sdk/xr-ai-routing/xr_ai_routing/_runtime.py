@@ -12,14 +12,14 @@ from functools import partial
 from typing import TYPE_CHECKING, Any
 
 import nemo_relay
-from xr_ai_runtime import Agent, RuntimeContext, Topic, subscribe
 
 try:
-    from xr_ai_voice import UserQuery, VoiceInterrupted, VoiceOutput, VoiceParticipantJoined, VoiceParticipantLeft
+    from xr_ai_interaction import Interrupted, ParticipantJoined, ParticipantLeft, ResponseOutput, UserQuery
+    from xr_ai_runtime import Agent, RuntimeContext, Topic, subscribe
 except ModuleNotFoundError as error:
-    if error.name != "xr_ai_voice":
+    if error.name not in {"xr_ai_interaction", "xr_ai_runtime"}:
         raise
-    raise ImportError("runtime routing requires the xr-ai-routing[voice] extra") from error
+    raise ImportError("runtime routing requires the xr-ai-routing[runtime] extra") from error
 
 from ._contracts import AgentTurn
 
@@ -37,23 +37,23 @@ class _RuntimeRouting:
         self,
         owner: AgentRouter,
         query_topic: Topic[UserQuery],
-        output_topic: Topic[VoiceOutput],
+        output_topic: Topic[ResponseOutput],
         *,
-        participant_joined_topic: Topic[VoiceParticipantJoined] | None,
-        participant_left_topic: Topic[VoiceParticipantLeft] | None,
-        interrupted_topic: Topic[VoiceInterrupted] | None,
+        participant_joined_topic: Topic[ParticipantJoined] | None,
+        participant_left_topic: Topic[ParticipantLeft] | None,
+        interrupted_topic: Topic[Interrupted] | None,
     ) -> None:
         subscriptions = (
             (query_topic, UserQuery, _query_receiver),
-            (participant_joined_topic, VoiceParticipantJoined, _joined_receiver),
-            (participant_left_topic, VoiceParticipantLeft, _left_receiver),
-            (interrupted_topic, VoiceInterrupted, _interrupted_receiver),
+            (participant_joined_topic, ParticipantJoined, _joined_receiver),
+            (participant_left_topic, ParticipantLeft, _left_receiver),
+            (interrupted_topic, Interrupted, _interrupted_receiver),
         )
         names = [topic.name for topic, _, _ in subscriptions if topic is not None]
         if len(set(names)) != len(names) or output_topic.name in names:
             raise ValueError("router input, lifecycle, and output topic names must be distinct")
-        if output_topic.message_type is not VoiceOutput:
-            raise TypeError("router output_topic must carry VoiceOutput")
+        if output_topic.message_type is not ResponseOutput:
+            raise TypeError("router output_topic must carry ResponseOutput")
         for topic, expected, _receiver in subscriptions:
             if topic is not None and topic.message_type is not expected:
                 raise TypeError(f"router topic {topic.name!r} must carry {expected.__name__}")
@@ -76,13 +76,13 @@ class _RuntimeRouting:
         state = _RuntimeTurn(ctx)
         await self._owner._submit(turn, emit=partial(self._output, state), runtime_turn=state)
 
-    async def _joined(self, _event: VoiceParticipantJoined, ctx: RuntimeContext) -> None:
+    async def _joined(self, _event: ParticipantJoined, ctx: RuntimeContext) -> None:
         await self._owner._participant_joined(_participant(ctx))
 
-    async def _left(self, _event: VoiceParticipantLeft, ctx: RuntimeContext) -> None:
+    async def _left(self, _event: ParticipantLeft, ctx: RuntimeContext) -> None:
         await self._owner.participant_left(_participant(ctx))
 
-    async def _interrupted(self, _event: VoiceInterrupted, ctx: RuntimeContext) -> None:
+    async def _interrupted(self, _event: Interrupted, ctx: RuntimeContext) -> None:
         await self._owner.interrupt(ctx.metadata.participant_id)
 
     @contextmanager
@@ -108,7 +108,7 @@ class _RuntimeRouting:
             nemo_relay.ScopeType.Agent,
             metadata={"destination": source},
         ):
-            await state.context.publish(self._output_topic, VoiceOutput(text=text, timestamp_us=turn.timestamp_us))
+            await state.context.publish(self._output_topic, ResponseOutput(text=text, timestamp_us=turn.timestamp_us))
 
 
 class _RouterRuntimeAgent(Agent):
@@ -127,7 +127,7 @@ def _query_receiver() -> Any:
 
 
 def _joined_receiver() -> Any:
-    async def receive(self: _RouterRuntimeAgent, message: VoiceParticipantJoined, ctx: RuntimeContext) -> None:
+    async def receive(self: _RouterRuntimeAgent, message: ParticipantJoined, ctx: RuntimeContext) -> None:
         self._router._check_lifecycle_caller()
         await self._router._runtime._joined(message, ctx)
 
@@ -135,7 +135,7 @@ def _joined_receiver() -> Any:
 
 
 def _left_receiver() -> Any:
-    async def receive(self: _RouterRuntimeAgent, message: VoiceParticipantLeft, ctx: RuntimeContext) -> None:
+    async def receive(self: _RouterRuntimeAgent, message: ParticipantLeft, ctx: RuntimeContext) -> None:
         self._router._check_lifecycle_caller()
         await self._router._runtime._left(message, ctx)
 
@@ -143,7 +143,7 @@ def _left_receiver() -> Any:
 
 
 def _interrupted_receiver() -> Any:
-    async def receive(self: _RouterRuntimeAgent, message: VoiceInterrupted, ctx: RuntimeContext) -> None:
+    async def receive(self: _RouterRuntimeAgent, message: Interrupted, ctx: RuntimeContext) -> None:
         self._router._check_lifecycle_caller()
         await self._router._runtime._interrupted(message, ctx)
 

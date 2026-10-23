@@ -5,8 +5,9 @@
 
 from __future__ import annotations
 
+from xr_ai_interaction import ResponseOutput
 from xr_ai_runtime import Agent, RuntimeContext, subscribe
-from xr_ai_voice import VOICE_CONTRIBUTION_TOPIC, VoiceOutput
+from xr_ai_voice import VOICE_CONTRIBUTION_TOPIC
 
 from .events import (
     INSTRUMENT_CHANGE_TOPIC,
@@ -34,7 +35,7 @@ class InstrumentAlertAgent(Agent):
             text = f"{event.device_name} changed from {event.previous_reading} to {event.meter_reading}."
         await ctx.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(text=text, timestamp_us=event.timestamp_us),
+            ResponseOutput(text=text, timestamp_us=event.timestamp_us),
         )
 
     @subscribe(INSTRUMENT_LOST_TOPIC)
@@ -45,7 +46,7 @@ class InstrumentAlertAgent(Agent):
     ) -> None:
         await ctx.publish(
             VOICE_CONTRIBUTION_TOPIC,
-            VoiceOutput(
+            ResponseOutput(
                 text=(f"I am no longer tracking {event.device_name}. Its last reading was {event.meter_reading}."),
                 timestamp_us=event.timestamp_us,
             ),

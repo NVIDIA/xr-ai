@@ -17,19 +17,14 @@ from unittest.mock import AsyncMock
 import nemo_relay
 import pytest
 import yaml
+from xr_ai_interaction import ParticipantJoined, ParticipantLeft, ResponseOutput, UserQuery
 from xr_ai_models import ChatMessage, ChatResponse, ToolCall
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, subscribe
 from xr_ai_tools import ToolSet
 from xr_ai_tools.image import ImageReference, ImageRegistry
 from xr_ai_tools.tool_calling import ToolCallRecord, ToolLoopResult
 from xr_ai_tools.vision import ImageQueryChunk, ImageQueryResult
-from xr_ai_voice import (
-    VOICE_CONTRIBUTION_TOPIC,
-    UserQuery,
-    VoiceOutput,
-    VoiceParticipantJoined,
-    VoiceParticipantLeft,
-)
+from xr_ai_voice import VOICE_CONTRIBUTION_TOPIC
 from xr_ai_web_events import WEB_EVENT_TOPIC, WebEvent, WebEventsAgent
 
 _ROOT = Path(__file__).resolve().parents[1]
@@ -270,8 +265,8 @@ async def test_typed_events_are_projected_to_web_topics() -> None:
             VIDEO_LOG_RECORD_TOPIC,
             VideoLogRecord(timestamp_us=10, record_type="observation", caption="A cup."),
         ),
-        (PARTICIPANT_JOINED_TOPIC, VoiceParticipantJoined()),
-        (PARTICIPANT_LEFT_TOPIC, VoiceParticipantLeft()),
+        (PARTICIPANT_JOINED_TOPIC, ParticipantJoined()),
+        (PARTICIPANT_LEFT_TOPIC, ParticipantLeft()),
     )
 
     async with runtime:
@@ -553,7 +548,7 @@ async def test_web_viewer_surrounds_runtime_lifecycle() -> None:
         async with runtime:
             await runtime.publish(
                 PARTICIPANT_JOINED_TOPIC,
-                VoiceParticipantJoined(),
+                ParticipantJoined(),
                 participant_id="participant-live",
             )
         assert viewer.running
@@ -567,7 +562,7 @@ async def test_participant_leave_releases_voice_aggregation_state() -> None:
     ctx = SimpleNamespace(metadata=SimpleNamespace(participant_id="participant-voice"))
 
     await aggregation.participant_left(
-        VoiceParticipantLeft(),
+        ParticipantLeft(),
         ctx,  # type: ignore[arg-type]
     )
 
@@ -1375,7 +1370,7 @@ async def test_mixed_tool_turn_with_streamed_current_view_is_already_spoken(
 @pytest.mark.asyncio
 async def test_streaming_current_view_uses_question_and_times_out() -> None:
     observed: list[str] = []
-    published: list[VoiceOutput] = []
+    published: list[ResponseOutput] = []
 
     class CurrentFrame:
         async def execute(self, _request):
@@ -1437,7 +1432,7 @@ async def test_streaming_current_view_uses_question_and_times_out() -> None:
 async def test_streaming_current_view_handles_leading_whitespace(
     chunks: list[str], expected_text: str, available: bool
 ) -> None:
-    published: list[VoiceOutput] = []
+    published: list[ResponseOutput] = []
 
     class CurrentFrame:
         async def execute(self, _request):
@@ -1505,7 +1500,7 @@ async def test_foreground_record_failure_does_not_suppress_speech() -> None:
     assert len(published) == 1
     topic, message = published[0]
     assert topic is VOICE_CONTRIBUTION_TOPIC
-    assert isinstance(message, VoiceOutput)
+    assert isinstance(message, ResponseOutput)
     assert message.text == "Your water is ready."
 
 
@@ -1557,7 +1552,7 @@ async def test_images_release_after_every_producer_finishes_cleanup() -> None:
         )
     )
     await images.participant_left(
-        VoiceParticipantLeft(),
+        ParticipantLeft(),
         ctx,  # type: ignore[arg-type]
     )
     producers = (
@@ -1628,11 +1623,11 @@ async def test_cleanup_quorum_does_not_mix_rejoin_generations() -> None:
 
     files._close_participant = close_participant
     await files.participant_joined(
-        VoiceParticipantJoined(),
+        ParticipantJoined(),
         context("join-1"),  # type: ignore[arg-type]
     )
     await files.participant_left(
-        VoiceParticipantLeft(),
+        ParticipantLeft(),
         context("leave-1"),  # type: ignore[arg-type]
     )
     for producer in producers[:-1]:
@@ -1642,7 +1637,7 @@ async def test_cleanup_quorum_does_not_mix_rejoin_generations() -> None:
         )
 
     await files.participant_joined(
-        VoiceParticipantJoined(),
+        ParticipantJoined(),
         context("join-2"),  # type: ignore[arg-type]
     )
     await files.participant_cleanup_complete(
@@ -1650,7 +1645,7 @@ async def test_cleanup_quorum_does_not_mix_rejoin_generations() -> None:
         context("cleanup-stale"),  # type: ignore[arg-type]
     )
     await files.participant_left(
-        VoiceParticipantLeft(),
+        ParticipantLeft(),
         context("leave-2"),  # type: ignore[arg-type]
     )
     for producer in producers[:-1]:
@@ -1678,7 +1673,7 @@ async def test_cleanup_quorum_does_not_mix_rejoin_generations() -> None:
     images._leaving_generation = {}
     images.get_current_frame = SimpleNamespace(release=released.append)
     await images.participant_joined(
-        VoiceParticipantJoined(),
+        ParticipantJoined(),
         context("join-images"),  # type: ignore[arg-type]
     )
     await images.participant_cleanup_complete(
@@ -1686,7 +1681,7 @@ async def test_cleanup_quorum_does_not_mix_rejoin_generations() -> None:
         context("cleanup-images-old"),  # type: ignore[arg-type]
     )
     await images.participant_left(
-        VoiceParticipantLeft(),
+        ParticipantLeft(),
         context("leave-images-new"),  # type: ignore[arg-type]
     )
     for producer in producers:
@@ -1735,11 +1730,11 @@ async def test_rejoin_wins_race_with_ready_cleanup() -> None:
     files._closed = set()
     files._state = AsyncMock(return_value=original_state)
     await files.participant_joined(
-        VoiceParticipantJoined(),
+        ParticipantJoined(),
         context("join-1"),  # type: ignore[arg-type]
     )
     await files.participant_left(
-        VoiceParticipantLeft(),
+        ParticipantLeft(),
         context("leave-1"),  # type: ignore[arg-type]
     )
     for producer in producers[:-1]:
@@ -1776,7 +1771,7 @@ async def test_rejoin_wins_race_with_ready_cleanup() -> None:
     )
     await asyncio.wait_for(close_started.wait(), timeout=1.0)
     await files.participant_joined(
-        VoiceParticipantJoined(),
+        ParticipantJoined(),
         context("join-2"),  # type: ignore[arg-type]
     )
     continue_close.set()
@@ -1844,7 +1839,7 @@ async def test_file_output_writes_session_bounded_jsonl(tmp_path: Path) -> None:
         @subscribe(PARTICIPANT_LEFT_TOPIC)
         async def participant_left(
             self,
-            _event: VoiceParticipantLeft,
+            _event: ParticipantLeft,
             ctx: RuntimeContext,
         ) -> None:
             nonlocal leave_generation
@@ -1855,7 +1850,7 @@ async def test_file_output_writes_session_bounded_jsonl(tmp_path: Path) -> None:
     async with runtime:
         await runtime.publish(
             PARTICIPANT_JOINED_TOPIC,
-            VoiceParticipantJoined(),
+            ParticipantJoined(),
             participant_id="glasses/user",
         )
         await runtime.publish(
@@ -1870,7 +1865,7 @@ async def test_file_output_writes_session_bounded_jsonl(tmp_path: Path) -> None:
         )
         await runtime.publish(
             PARTICIPANT_LEFT_TOPIC,
-            VoiceParticipantLeft(),
+            ParticipantLeft(),
             participant_id="glasses/user",
         )
         assert leave_generation is not None

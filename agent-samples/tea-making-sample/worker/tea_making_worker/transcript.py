@@ -14,15 +14,12 @@ from dataclasses import dataclass, field
 import nemo_relay
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from xr_ai_interaction import ParticipantLeft
 from xr_ai_models import ChatMessage, ChatResponse, LLMService, ToolDef
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeClosedError, RuntimeContext, subscribe
 from xr_ai_tools import Tool, ToolSet
 from xr_ai_tools.tool_calling import run_tool_loop
-from xr_ai_voice import (
-    VOICE_TRANSCRIPT_TOPIC,
-    VoiceParticipantLeft,
-    VoiceTranscript,
-)
+from xr_ai_voice import VOICE_TRANSCRIPT_TOPIC, VoiceTranscript
 
 from .events import (
     BACKGROUND_FACT_TOPIC,
@@ -170,7 +167,7 @@ class TranscriptAgent(Agent):
     @subscribe(PARTICIPANT_LEFT_TOPIC)
     async def participant_left(
         self,
-        _event: VoiceParticipantLeft,
+        _event: ParticipantLeft,
         ctx: RuntimeContext,
     ) -> None:
         await self._cancel(self._participant(ctx))

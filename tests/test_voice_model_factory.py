@@ -9,10 +9,11 @@ from unittest.mock import AsyncMock
 
 import pytest
 import yaml
+from xr_ai_interaction import UserQuery
 from xr_ai_models import ModelsConfig, load_models_config, load_models_config_from_dict
 from xr_ai_models._openai_compat import OpenAICompatSTT
 from xr_ai_runtime import Topic
-from xr_ai_voice import UserQuery, VoiceAgent, _runtime, _session
+from xr_ai_voice import VoiceAgent, _runtime, _session
 from xr_ai_voice._processors import VadConfig
 from xr_ai_voicegate import load_voice_gate_config
 

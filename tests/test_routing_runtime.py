@@ -6,11 +6,14 @@
 from __future__ import annotations
 
 import asyncio
+import builtins
 import logging
+import sys
 from collections import deque
 from contextlib import asynccontextmanager
 
 import pytest
+from xr_ai_interaction import Interrupted, ParticipantJoined, ParticipantLeft, ResponseOutput, UserQuery
 from xr_ai_models import DecisionAnswer, DecisionResponse
 from xr_ai_routing import (
     Admission,
@@ -22,13 +25,45 @@ from xr_ai_routing import (
     current_turn_context,
 )
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, Topic, subscribe
-from xr_ai_voice import UserQuery, VoiceInterrupted, VoiceOutput, VoiceParticipantJoined, VoiceParticipantLeft
 
 QUERIES = Topic("routing-test.queries", UserQuery)
-OUTPUT = Topic("routing-test.output", VoiceOutput, telemetry="none")
-JOINED = Topic("routing-test.joined", VoiceParticipantJoined)
-LEFT = Topic("routing-test.left", VoiceParticipantLeft)
-INTERRUPTED = Topic("routing-test.interrupted", VoiceInterrupted)
+OUTPUT = Topic("routing-test.output", ResponseOutput, telemetry="none")
+JOINED = Topic("routing-test.joined", ParticipantJoined)
+LEFT = Topic("routing-test.left", ParticipantLeft)
+INTERRUPTED = Topic("routing-test.interrupted", Interrupted)
+
+
+@pytest.mark.parametrize("missing_module", ["xr_ai_interaction", "xr_ai_runtime"])
+def test_runtime_configuration_reports_missing_extra(monkeypatch, missing_module):
+    monkeypatch.delitem(sys.modules, "xr_ai_routing._runtime", raising=False)
+    original_import = builtins.__import__
+
+    def import_without_dependency(name, *args, **kwargs):
+        if name == missing_module:
+            raise ModuleNotFoundError(f"No module named {name!r}", name=name)
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", import_without_dependency)
+    with pytest.raises(ImportError, match=r"xr-ai-routing\[runtime\]") as raised:
+        AgentRouter({"conversation": object()}, None, query_topic=QUERIES, output_topic=OUTPUT)
+    assert isinstance(raised.value.__cause__, ModuleNotFoundError)
+    assert raised.value.__cause__.name == missing_module
+
+
+def test_runtime_configuration_preserves_missing_transitive_dependency(monkeypatch):
+    monkeypatch.delitem(sys.modules, "xr_ai_routing._runtime", raising=False)
+    original_import = builtins.__import__
+    missing_dependency = ModuleNotFoundError("No module named 'zmq'", name="zmq")
+
+    def import_without_transitive_dependency(name, *args, **kwargs):
+        if name == "xr_ai_runtime":
+            raise missing_dependency
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", import_without_transitive_dependency)
+    with pytest.raises(ModuleNotFoundError) as raised:
+        AgentRouter({"conversation": object()}, None, query_topic=QUERIES, output_topic=OUTPUT)
+    assert raised.value is missing_dependency
 
 
 class _Output(Agent):
@@ -38,7 +73,7 @@ class _Output(Agent):
         self.changed = asyncio.Event()
 
     @subscribe(OUTPUT)
-    async def receive(self, value: VoiceOutput, ctx: RuntimeContext):
+    async def receive(self, value: ResponseOutput, ctx: RuntimeContext):
         self.items.append((value, ctx.metadata))
         self.changed.set()
 
@@ -106,7 +141,7 @@ class _Destination:
             await started()
             await self.runtime.publish(
                 OUTPUT,
-                VoiceOutput(
+                ResponseOutput(
                     text=f"{self.name}: {turn.query}", response_id=turn.turn_id, timestamp_us=turn.timestamp_us
                 ),
                 participant_id=turn.participant_id,
@@ -302,7 +337,7 @@ async def test_join_only_and_failed_initialization_remain_cleanup_owned_with_ret
         _output,
         _status,
     ):
-        await runtime.publish(JOINED, VoiceParticipantJoined(), participant_id="joined")
+        await runtime.publish(JOINED, ParticipantJoined(), participant_id="joined")
         with pytest.raises(ValueError, match="partially initialized"):
             await router.handle(AgentTurn("partial", "request", "request"))
         with pytest.raises(ExceptionGroup):
@@ -337,8 +372,8 @@ async def test_query_queued_on_retired_lock_cannot_enter_rejoined_participant_li
             router.handle(AgentTurn("alice", "stale", "stale")) if entry == "direct" else _query(runtime, "stale")
         )
         await queued.wait()
-        await runtime.publish(LEFT, VoiceParticipantLeft(), participant_id="alice")
-        await runtime.publish(JOINED, VoiceParticipantJoined(), participant_id="alice")
+        await runtime.publish(LEFT, ParticipantLeft(), participant_id="alice")
+        await runtime.publish(JOINED, ParticipantJoined(), participant_id="alice")
         assert router._locks["alice"] is not retired
         resume.set()
         if entry == "direct":
@@ -466,18 +501,18 @@ async def test_supersession_interrupt_leave_rejoin_and_stop_drain_owned_work():
         destination.block = True
         await _query(runtime, "old")
         await destination.started.wait()
-        await runtime.publish(INTERRUPTED, VoiceInterrupted(), participant_id="alice")
+        await runtime.publish(INTERRUPTED, Interrupted(), participant_id="alice")
         assert destination.finished.is_set() and output.items == []
         destination.block = False
         await _query(runtime, "new")
         await status.idle(2)
         assert destination.turns[-1].history == ()
-        await runtime.publish(LEFT, VoiceParticipantLeft(), participant_id="alice")
+        await runtime.publish(LEFT, ParticipantLeft(), participant_id="alice")
         await _query(runtime, "late")
         assert len(destination.turns) == 2
         with pytest.raises(RuntimeError, match="participant has left"):
             await router.handle(AgentTurn("alice", "late", "late"))
-        await runtime.publish(JOINED, VoiceParticipantJoined(), participant_id="alice")
+        await runtime.publish(JOINED, ParticipantJoined(), participant_id="alice")
         await _query(runtime, "rejoined")
         await status.idle(3)
         assert destination.turns[-1].history == ()
@@ -493,14 +528,14 @@ async def test_alice_cleanup_does_not_block_bob_query_or_interrupt():
         await _query(runtime, "alice request")
         await status.idle()
         destination.cleanup_release = asyncio.Event()
-        left = asyncio.create_task(runtime.publish(LEFT, VoiceParticipantLeft(), participant_id="alice"))
+        left = asyncio.create_task(runtime.publish(LEFT, ParticipantLeft(), participant_id="alice"))
         await destination.cleanup_entered.wait()
         destination.started.clear()
         destination.finished.clear()
         destination.block = True
         await asyncio.wait_for(_query(runtime, "bob request", "bob"), 1)
         await destination.started.wait()
-        await asyncio.wait_for(runtime.publish(INTERRUPTED, VoiceInterrupted(), participant_id="bob"), 1)
+        await asyncio.wait_for(runtime.publish(INTERRUPTED, Interrupted(), participant_id="bob"), 1)
         assert destination.finished.is_set() and not left.done()
         destination.cleanup_release.set()
         await left
@@ -572,15 +607,15 @@ def test_runtime_topic_models_and_incomplete_configuration_rejected():
         AgentRouter({"conversation": destination}, None, output_topic=OUTPUT)
     with pytest.raises(TypeError, match="UserQuery"):
         AgentRouter(
-            {"conversation": destination}, None, query_topic=Topic("wrong-query", VoiceOutput), output_topic=OUTPUT
+            {"conversation": destination}, None, query_topic=Topic("wrong-query", ResponseOutput), output_topic=OUTPUT
         )
-    with pytest.raises(TypeError, match="VoiceOutput"):
+    with pytest.raises(TypeError, match="ResponseOutput"):
         AgentRouter(
             {"conversation": destination}, None, query_topic=QUERIES, output_topic=Topic("wrong-output", UserQuery)
         )
     with pytest.raises(ValueError, match="distinct"):
         AgentRouter(
-            {"conversation": destination}, None, query_topic=QUERIES, output_topic=Topic(QUERIES.name, VoiceOutput)
+            {"conversation": destination}, None, query_topic=QUERIES, output_topic=Topic(QUERIES.name, ResponseOutput)
         )
     with pytest.raises(ValueError, match="participant_left_topic requires participant_joined_topic"):
         AgentRouter(
@@ -642,9 +677,9 @@ async def test_runtime_control_uses_query_context_without_direct_output_callback
     "topic,event",
     [
         (QUERIES, UserQuery(text="recursive", timestamp_us=1)),
-        (JOINED, VoiceParticipantJoined()),
-        (LEFT, VoiceParticipantLeft()),
-        (INTERRUPTED, VoiceInterrupted()),
+        (JOINED, ParticipantJoined()),
+        (LEFT, ParticipantLeft()),
+        (INTERRUPTED, Interrupted()),
     ],
 )
 async def test_initialization_hook_cannot_reenter_through_runtime_publication(topic, event):
@@ -710,7 +745,7 @@ async def test_runtime_admission_closure_is_rechecked_after_direct_response_drai
 @pytest.mark.parametrize(
     "topic,event",
     [
-        (JOINED, VoiceParticipantJoined()),
+        (JOINED, ParticipantJoined()),
         (QUERIES, UserQuery(text="late during cleanup", timestamp_us=1)),
     ],
 )
@@ -744,7 +779,7 @@ async def test_events_delivered_during_stop_cannot_reinitialize_after_cleanup(to
         await asyncio.gather(stopping, stale)
         assert initialized == ["alice"]
         assert len(destinations["conversation"].turns) == 1
-        await runtime.publish(JOINED, VoiceParticipantJoined(), participant_id="alice")
+        await runtime.publish(JOINED, ParticipantJoined(), participant_id="alice")
         assert initialized == ["alice", "alice"]
 
 
@@ -756,7 +791,7 @@ async def test_participant_left_during_successful_stop_waits_for_it():
         destination.cleanup_release = asyncio.Event()
         stopping = asyncio.create_task(router.stop())
         await destination.cleanup_entered.wait()
-        left = asyncio.create_task(runtime.publish(LEFT, VoiceParticipantLeft(), participant_id="alice"))
+        left = asyncio.create_task(runtime.publish(LEFT, ParticipantLeft(), participant_id="alice"))
         checkpoint = asyncio.Event()
         asyncio.get_running_loop().call_soon(checkpoint.set)
         await checkpoint.wait()
@@ -771,8 +806,8 @@ async def test_rejoin_retries_failed_departure_and_readmits_participant():
         await status.idle()
         destination.release_failures = 1
         with pytest.raises(BaseExceptionGroup):
-            await runtime.publish(LEFT, VoiceParticipantLeft(), participant_id="alice")
-        await runtime.publish(JOINED, VoiceParticipantJoined(), participant_id="alice")
+            await runtime.publish(LEFT, ParticipantLeft(), participant_id="alice")
+        await runtime.publish(JOINED, ParticipantJoined(), participant_id="alice")
         await _query(runtime, "after rejoin")
         await _settled(router)
         assert [turn.query for turn in destination.turns] == ["first", "after rejoin"]
@@ -820,7 +855,7 @@ async def test_runtime_logs_failed_turns_and_dropped_queries(caplog):
         with caplog.at_level(logging.WARNING, logger="xr_ai_routing._router"):
             await _query(runtime, "fails")
             await _settled(router)
-            await runtime.publish(LEFT, VoiceParticipantLeft(), participant_id="alice")
+            await runtime.publish(LEFT, ParticipantLeft(), participant_id="alice")
             await _query(runtime, "dropped")
         messages = [record.getMessage() for record in caplog.records]
         assert any("runtime routing failed" in message for message in messages)
@@ -840,7 +875,7 @@ async def test_cleanup_cancels_join_initialization_before_taking_the_participant
             raise
 
     async with _app(initialize_participant=initialize) as (runtime, router, *_):
-        joined = asyncio.create_task(runtime.publish(JOINED, VoiceParticipantJoined(), participant_id="alice"))
+        joined = asyncio.create_task(runtime.publish(JOINED, ParticipantJoined(), participant_id="alice"))
         await asyncio.wait_for(entered.wait(), 1)
         cleanup = router.participant_left("alice") if operation == "participant_left" else router.stop()
         await asyncio.wait_for(cleanup, 1)
@@ -888,7 +923,7 @@ async def test_canceled_join_waiter_does_not_interrupt_initializer_cleanup():
             cleanup_finished.set()
 
     async with _app(initialize_participant=initialize) as (runtime, router, *_):
-        joined = asyncio.create_task(runtime.publish(JOINED, VoiceParticipantJoined(), participant_id="alice"))
+        joined = asyncio.create_task(runtime.publish(JOINED, ParticipantJoined(), participant_id="alice"))
         await asyncio.wait_for(entered.wait(), 1)
         initializing = router._join_tasks["alice"]
         interrupting = asyncio.create_task(router.interrupt("alice"))
@@ -903,4 +938,3 @@ async def test_canceled_join_waiter_does_not_interrupt_initializer_cleanup():
         await asyncio.gather(joined, return_exceptions=True)
         assert cleanup_finished.is_set()
         assert router._join_tasks == {}
-

@@ -12,18 +12,13 @@ from pathlib import Path
 
 import nemo_relay
 from loguru import logger
+from xr_ai_interaction import ParticipantLeft
 from xr_ai_logging import setup_logging
 from xr_ai_models import load_models_config, make_llm, make_tts, make_vlm
 from xr_ai_runtime import AgentRuntime, RuntimeContext, subscribe
 from xr_ai_tools.rag import RAGTools
 from xr_ai_tools.vision import ImageQueryTool
-from xr_ai_voice import (
-    HubVoiceTransport,
-    VadConfig,
-    VoiceAgent,
-    VoiceAggregationAgent,
-    VoiceParticipantLeft,
-)
+from xr_ai_voice import HubVoiceTransport, VadConfig, VoiceAgent, VoiceAggregationAgent
 from xr_ai_voicegate import load_voice_gate_config
 from xr_ai_web_events import WebEventsAgent
 
@@ -58,7 +53,7 @@ class _ParticipantVoiceAggregationAgent(VoiceAggregationAgent):
     @subscribe(PARTICIPANT_LEFT_TOPIC)
     async def participant_left(
         self,
-        _event: VoiceParticipantLeft,
+        _event: ParticipantLeft,
         ctx: RuntimeContext,
     ) -> None:
         participant_id = ctx.metadata.participant_id

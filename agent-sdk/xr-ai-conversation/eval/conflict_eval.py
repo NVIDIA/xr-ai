@@ -27,9 +27,9 @@ from _common import (
     validate_suite,
 )
 from xr_ai_conversation import Conversation, ConversationContextUpdate
+from xr_ai_interaction import ResponseOutput
 from xr_ai_routing import AgentTurn
 from xr_ai_runtime import AgentRuntime, Topic
-from xr_ai_voice import VoiceOutput
 
 _PARTICIPANT = "alice"
 _MINUTE_NS = 60_000_000_000
@@ -57,7 +57,7 @@ async def _seed(
     conversation = Conversation(
         llm,
         runtime=runtime,
-        output_topic=Topic("conversation-eval.output", VoiceOutput),
+        output_topic=Topic("conversation-eval.output", ResponseOutput),
         summary_context_topics=tuple(summary_topics),
         incremental_context_topics=tuple(incremental_topics),
         dialogue_budget_bytes=case.get("dialogue_budget_bytes", 8_000),

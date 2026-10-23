@@ -13,6 +13,7 @@ requires-python = ">=3.11,<3.15"
 dependencies = [
     # Pulled in via editable installs of the workspace packages.
     "xr-ai-agent-runtime",
+    "xr-ai-interaction",
     "xr-ai-routing",
     "xr-ai-conversation",
     "xr-ai-hub-client",
@@ -54,6 +55,7 @@ xr-ai-model-server-stack = { path = "../utils/xr-ai-model-server-stack", editabl
 xr-ai-agent-runtime      = { path = "../agent-sdk/xr-ai-runtime",       editable = true }
 xr-ai-routing            = { path = "../agent-sdk/xr-ai-routing",       editable = true }
 xr-ai-conversation       = { path = "../agent-sdk/xr-ai-conversation",  editable = true }
+xr-ai-interaction        = { path = "../agent-sdk/xr-ai-interaction",   editable = true }
 xr-ai-hub-client           = { path = "../agent-sdk/xr-ai-hub",                        editable = true }
 xr-ai-models          = { path = "../agent-sdk/xr-ai-models",           editable = true }
 xr-ai-tools           = { path = "../agent-sdk/xr-ai-tools",            editable = true }
