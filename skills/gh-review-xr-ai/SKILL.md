@@ -234,9 +234,11 @@ Use this structure, omitting empty sections:
 
 ## Follow-ups (not blocking)
 
-- Cite the responsible code and explain the underlying cause. Propose a
-  self-contained follow-up PR or an issue with a narrow outcome and validation
-  target. State clearly that it does not block this PR.
+- For code defects, cite the responsible code and explain the underlying cause.
+  For other findings, cite relevant documentation or validation evidence and
+  explain the discrepancy or gap. Propose a self-contained follow-up PR or an
+  issue with a narrow outcome and validation target. State clearly that it
+  does not block this PR.
 ```
 
 If there are no change-scoped findings, write: `No change-scoped blockers or
