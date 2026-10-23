@@ -278,6 +278,43 @@ class _CallbackStubEndpoint:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("utterances", [1, 2])
+@pytest.mark.parametrize("packet_ms", [10, 2000])
+async def test_real_vad_orders_speech_frames_across_packet_sizes(monkeypatch, utterances, packet_ms):
+    from xr_ai_vad import detector
+
+    class Silero:
+        def __call__(self, tensor, sample_rate):
+            return 0.9 if tensor.abs().max().item() > 0 else 0.0
+
+        def reset_states(self):
+            pass
+
+    monkeypatch.setattr(detector, "load_silero_vad", lambda **kwargs: Silero())
+    proc = VadSttProcessor(stt=_FakeStt(text="hello agent"), vad_cfg=VadConfig())
+    audio = np.concatenate([
+        np.full(5 * 512, 10_000, np.int16),
+        np.zeros(25 * 512, np.int16),
+    ]).tobytes()
+    audio *= utterances
+    packet_bytes = 16000 * packet_ms // 1000 * 2
+    frames = []
+    for offset in range(0, len(audio), packet_bytes):
+        frame = InputAudioRawFrame(
+            audio=audio[offset:offset + packet_bytes], sample_rate=16000, num_channels=1,
+        )
+        frame.transport_source = "web-client"
+        frame.pts = 123_000 + offset // 2 * 1_000_000_000 // 16000
+        frames.append(frame)
+
+    sink = await _run_chain(proc, sends=frames)
+
+    assert [type(f) for f in sink.frames if isinstance(f, (
+        UserStartedSpeakingFrame, UserStoppedSpeakingFrame, TranscriptionFrame,
+    ))] == [UserStartedSpeakingFrame, UserStoppedSpeakingFrame, TranscriptionFrame] * utterances
+
+
+@pytest.mark.asyncio
 async def test_vad_stt_emits_transcription_on_utterance(monkeypatch):
     """When the underlying VadDetector calls back with an utterance,
     the processor pushes ``UserStoppedSpeakingFrame`` then a

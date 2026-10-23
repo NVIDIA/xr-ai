@@ -113,8 +113,6 @@ async def test_speech_start_fires_once_at_min_speech_crossing():
 
     # 10 × 20 ms = 200 ms of speech — well past min_speech (60 ms).
     await _feed_many(vad, 10, _tone_bytes(0.5))
-    # Let the on_speech_start task (scheduled via create_task) run.
-    await asyncio.sleep(0)
     assert starts == [1], "on_speech_start should fire exactly once per utterance"
 
     # Allow the mixed speech/silence window plus four complete quiet windows.
@@ -124,7 +122,6 @@ async def test_speech_start_fires_once_at_min_speech_crossing():
 
     # Start a second utterance — on_speech_start should fire again.
     await _feed_many(vad, 10, _tone_bytes(0.5))
-    await asyncio.sleep(0)
     assert starts == [1, 1], "on_speech_start should re-arm for the next utterance"
 
 
@@ -332,16 +329,75 @@ async def test_short_speech_in_ten_ms_packets_finalizes():
 @pytest.mark.parametrize("frame_ms", [10, 1000])
 async def test_multiple_utterances_in_one_feed_keep_audio_order(frame_ms):
     received = []
+    events = []
+
+    async def on_start():
+        events.append("start")
+        await asyncio.sleep(0)
+        events.append("start complete")
 
     async def on_utt(audio, _rate):
+        events.append("utterance")
         received.append(audio)
 
-    vad = VadDetector(on_utt, min_speech=0.06, silence_duration=0.06)
+    vad = VadDetector(on_utt, on_speech_start=on_start, min_speech=0.06, silence_duration=0.06)
     _install_stub(vad)
     first = np.concatenate([np.full(3 * 512, 8_000, np.int16), np.zeros(2 * 512, np.int16)]).tobytes()
     second = np.concatenate([np.full(3 * 512, 16_000, np.int16), np.zeros(2 * 512, np.int16)]).tobytes()
     await _feed_parts(vad, first + second, SR, frame_ms)
     assert received == [first, second]
+    assert events == ["start", "start complete", "utterance"] * 2
+
+
+@pytest.mark.asyncio
+async def test_feed_cancellation_cancels_awaited_speech_start():
+    entered = asyncio.Event()
+    exited = asyncio.Event()
+    finalized = []
+
+    async def on_start():
+        entered.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            exited.set()
+
+    async def on_utt(audio, _rate):
+        finalized.append(audio)
+
+    vad = VadDetector(on_utt, on_speech_start=on_start, min_speech=0.06, silence_duration=0.06)
+    _install_stub(vad)
+    audio = np.concatenate([np.full(3 * 512, 10_000, np.int16), np.zeros(2 * 512, np.int16)]).tobytes()
+    feed = asyncio.create_task(vad.feed(audio, SR))
+    try:
+        await asyncio.wait_for(entered.wait(), timeout=1)
+        feed.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await feed
+        assert exited.is_set()
+        assert finalized == []
+    finally:
+        feed.cancel()
+        await asyncio.gather(feed, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_speech_start_failure_is_isolated_before_finalization(caplog):
+    events = []
+
+    async def on_start():
+        events.append("start")
+        raise RuntimeError("callback failed")
+
+    async def on_utt(_audio, _rate):
+        events.append("utterance")
+
+    vad = VadDetector(on_utt, on_speech_start=on_start, min_speech=0.06, silence_duration=0.06)
+    _install_stub(vad)
+    audio = np.concatenate([np.full(3 * 512, 10_000, np.int16), np.zeros(2 * 512, np.int16)]).tobytes()
+    await vad.feed(audio, SR)
+    assert events == ["start", "utterance"]
+    assert "on_speech_start callback raised" in caplog.text
 
 
 @pytest.mark.asyncio

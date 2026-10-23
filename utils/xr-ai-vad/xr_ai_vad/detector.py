@@ -19,7 +19,6 @@ Usage::
 """
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import Awaitable, Callable, Optional
 
@@ -30,8 +29,8 @@ from silero_vad import load_silero_vad
 log = logging.getLogger("xr_ai_vad")
 
 # Silero v5 only accepts 16 kHz or 8 kHz. We always classify at 16 kHz —
-# input at any other rate is linearly resampled in-process before
-# buffering. The original-rate PCM still goes to `on_utterance` so STT /
+# complete original-rate windows are linearly resampled for classification.
+# The original-rate PCM still goes to `on_utterance` so STT /
 # WAV downstream get full-fidelity audio.
 _SILERO_SR       = 16_000
 _SILERO_WINDOW   = 512    # 32 ms at 16 kHz — silero v5 hard requirement
@@ -56,7 +55,9 @@ class VadDetector:
     When ``on_speech_start`` is provided, it fires once per utterance at the
     moment ``speech_s`` first crosses ``min_speech`` — a "leading edge" hook
     for speculative work (e.g. warming up a downstream resource before STT
-    completes).
+    completes). It is awaited on the feeding task before processing further
+    windows or finalizing that utterance. Callback exceptions are logged and
+    isolated so detection can continue.
     """
 
     def __init__(
@@ -157,7 +158,7 @@ class VadDetector:
                     and self._speech_s >= self._min_speech
                     and prev_speech_s < self._min_speech):
                 self._speech_start_fired = True
-                asyncio.create_task(self._safe_speech_start())
+                await self._safe_speech_start()
         else:
             if self._speaking:
                 self._buffer.append(pcm_int16)
@@ -199,6 +200,7 @@ class VadDetector:
             assert self._on_speech_start is not None
             await self._on_speech_start()
         except Exception:
+            # isolation boundary: a user callback must not stop detection.
             log.exception("on_speech_start callback raised")
 
     async def _finalize(self, sample_rate: int) -> None:
