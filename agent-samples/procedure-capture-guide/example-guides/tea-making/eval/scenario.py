@@ -133,7 +133,6 @@ async def evaluate(manifest_path: Path, output: Path) -> bool:
         passed = True
         for index, action in enumerate(manifest["actions"]):
             kind = action["action"]
-            offset = len(events)
             action_passed = True
             if kind == "image":
                 camera.path = fixtures[action["scene"]] if "scene" in action else (
@@ -164,10 +163,9 @@ async def evaluate(manifest_path: Path, output: Path) -> bool:
                 speech_offset = len(speech.outputs)
                 answer = await say(action["text"])
                 if "expect" in action:
-                    action_passed &= re.search(action["expect"], answer) is not None
+                    action_passed &= re.search(action["expect"], answer.text) is not None
                 if "tools" in action:
-                    calls = [call for event in events[offset:] if event["kind"] == "model"
-                             for call in event["calls"]]
+                    calls = answer.calls
                     action_passed &= [call["name"] for call in calls] == action["tools"]
                     if "arguments" in action:
                         action_passed &= [json.loads(call["arguments"]) for call in calls] == action["arguments"]

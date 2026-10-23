@@ -12,6 +12,17 @@ Start with `packet.json`: `session_id`, `status`, `narration_status`, `counts`,
 packet directory. A complete packet can still contain caption errors or no
 narration; inspect the contents, not only its status.
 
+A finalized `complete` packet contains `packet.json`, `summary.md`, and
+`transcript.jsonl`; the transcript can be empty. The frame index and caption log
+are created only when observations are saved. An absent `frames/index.jsonl`
+with `counts.frames: 0`, or absent `captions.jsonl` with `counts.captions: 0`,
+means no evidence of that kind was saved. A missing log with a nonzero count
+is inconsistent: report it rather than treating it as empty. `errors.jsonl`
+is optional; its absence does not establish sufficient evidence. An `incomplete`
+packet can lack required files. Check status, counts, and file availability
+before using the packet; `complete` means writes finished, not that the
+demonstration succeeded or contains every required action.
+
 | Source | Fields used for evidence |
 |---|---|
 | `frames/index.jsonl` | `frame_id`, `timestamp_us`, `path`, `sequence`, `width`, `height` |
@@ -20,7 +31,8 @@ narration; inspect the contents, not only its status.
 | `summary.md` and `hierarchy` | Derived orientation aids, not an exhaustive step inventory |
 | `errors.jsonl` if present | Capture gaps; absence of observations is not proof of inactivity |
 
-Source timestamps are Unix microseconds. Caption `generated_at_us` measures
+Fields ending in `_us` use Unix microseconds; `started_at` and `ended_at`
+use UTC ISO 8601 timestamps. Caption `generated_at_us` measures
 inference completion, not event time. STT timestamps are alignment hints, not
 precise action boundaries. Inspect nearby frames if timing is uncertain.
 Newer captions also contain pipeline-generated `delta_reference_frame_id` and
@@ -34,9 +46,21 @@ Keep comparison IDs and source times in review notes, not executable guide state
 No meaningful visible change differs from an indeterminate comparison: neither
 establishes inactivity throughout the interval. Uncertain labels are not actions
 and must not erase actions supported by narration or inspected images.
-SOP snapshots, captions, and narration cover the spoken "start capture" and
-"stop capture" boundary. Optional session media is not required for guide
-generation and may span multiple SOP packets.
+Capture commands take effect after speech recognition and command processing,
+not at exact spoken-word boundaries. `started_at` records the accepted start
+command's transcript timestamp, not a guarantee that sampling began then.
+`stop_command.timestamp_us` records the accepted stop utterance's transcript
+timestamp; saved frames can extend beyond it while the command is processed.
+`ended_at` is null during capture and records the effective closure after
+producers stop and evidence admission closes, before pending writes and summaries
+finish draining. `stop_command` is null if no spoken stop was accepted, such as
+when disconnecting finalizes capture. These boundaries do not prove task completion.
+Commands are excluded from narration; a late transcript can miss admission even
+if the user spoke before stopping. Inspect nearby evidence and report gaps rather
+than assuming exact alignment or discarding frames after the stop timestamp.
+
+Optional session media is not required for guide generation and may span
+multiple SOP packets.
 Use packet-local narration, not the whole shared transcript. New packets have
 no `media_capture` field. Older packets may link a bundle through
 `media_capture.manifest`; retain that bundle if present. Raw audio may help review

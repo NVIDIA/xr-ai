@@ -9,6 +9,7 @@ fault-injection tests also check that reported progress agrees with speech.
 These regressions test the harness contract, not local-model perception.
 """
 
+import asyncio
 import importlib.util
 import io
 import json
@@ -158,6 +159,115 @@ def test_packet_cli_uses_runtime_controls_and_unique_source_evidence(
     assert (output / "relay.jsonl").is_file()
     llm.close.assert_awaited_once()
     vlm.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("runner", ["packet", "scenario"])
+@pytest.mark.parametrize("wrong_foreground_call", [False, True])
+async def test_evaluation_attributes_overlapping_model_calls_to_their_origin(
+    packets, runtime_models, tmp_path, monkeypatch, runner, wrong_foreground_call,
+):
+    from procedure_capture_guide_worker.guide.agent import GuideAgent
+    from xr_ai_models import ChatMessage, ChatResponse, ToolCall
+
+    llm, _vlm = runtime_models
+    foreground_chat = llm.chat.side_effect
+    observed = asyncio.Event()
+    observations = 0
+
+    async def chat(messages, **kwargs):
+        nonlocal observations
+        payload = json.loads(messages[1].content)
+        if payload.get("request") == "auxiliary":
+            return ChatResponse("Auxiliary output.", None, None, "stop", {})
+        if "request" not in payload:
+            observations += 1
+            # First exercise the real observation commit tool without completing
+            # the step; completion follows after the start response is delivered.
+            updates = {} if observations == 1 else {"visible": True}
+            observed.set()
+            return ChatResponse("", None, [ToolCall(
+                id=f"observation-{observations}", name="workflow__commit",
+                arguments=json.dumps({"updates": updates}),
+            )], "tool_calls", {})
+        response = await foreground_chat(messages, **kwargs)
+        if wrong_foreground_call and payload["request"] == "Next":
+            # A genuine wrong foreground call must still fail routing assertions.
+            response.tool_calls[0] = ToolCall(id="wrong", name="workflow__status", arguments="{}")
+        return response
+
+    llm.chat.side_effect = chat
+    route = GuideAgent._route
+
+    async def overlapping_route(self, text, participant_id):
+        response = await route(self, text, participant_id)
+        if text == "Start guide":
+            async with asyncio.timeout(5):
+                await observed.wait()
+            # Another component's task can inherit the foreground context without
+            # belonging to its model/tool loop (for example, voice aggregation).
+            await asyncio.create_task(self._llm.chat((
+                ChatMessage(role="system", content="Auxiliary component"),
+                ChatMessage(role="user", content=json.dumps({"request": "auxiliary"})),
+            )))
+        return response
+
+    monkeypatch.setattr(GuideAgent, "_route", overlapping_route)
+    packet = make_packet(tmp_path, count=30)
+    guide = yaml.safe_load((_TEST_DATA / "test_guide.yaml").read_text())
+    guide["steps"] = guide["steps"][:1]
+    step = guide["steps"][0]
+    step["next"] = None
+    step["evidence"].pop("commit")
+    step["evidence"]["consecutive"] = 1
+    step["agent"] = {"prompt": "Commit visible only for a blue indicator.", "tools": []}
+    guide_path = tmp_path / "guide.yaml"
+    guide_path.write_text(yaml.safe_dump(guide))
+    output = tmp_path / "result"
+    if runner == "packet":
+        spec = importlib.util.spec_from_file_location("attribution_packet_eval", _SCRIPTS / "evaluate.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        passed = await module.evaluate(packet, guide_path, output, tail_s=5)
+    else:
+        tea_eval = _SAMPLE / "example-guides/tea-making/eval"
+        monkeypatch.syspath_prepend(str(tea_eval))
+        spec = importlib.util.spec_from_file_location("attribution_scenario_eval", tea_eval / "scenario.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        manifest = tmp_path / "scenario.yaml"
+        manifest.write_text(yaml.safe_dump({
+            "guide_path": "guide.yaml", "fail_fast": True, "actions": [
+                {"action": "image", "path": "frames/0.png"},
+                {"action": "say", "text": "Start guide", "tools": ["workflow__restart"]},
+                {"action": "wait_speech", "expect": "The indicator is blue", "timeout_s": 5},
+                {"action": "say", "text": "Next", "tools": ["workflow__advance"],
+                 "arguments": [{"skip": False}]},
+            ],
+        }))
+        passed = await module.evaluate(manifest, output)
+
+    assert passed is not wrong_foreground_call
+    events = [json.loads(line) for line in (output / "events.jsonl").read_text().splitlines()]
+    start = next(event for event in events if event["kind"] == "user")
+    delivered = next(index for index, event in enumerate(events)
+                     if event["kind"] == "speech" and event["timestamp_us"] == start["timestamp_us"])
+    background = [event for event in events[:delivered]
+                  if event["kind"] == "model" and event["origin"] == "observation"]
+    assert background and all(event["turn_id"] is None for event in background)
+    assert background[0]["calls"][0]["name"] == "workflow__commit"
+    auxiliary = next(event for event in events if event.get("text") == "Auxiliary output.")
+    assert auxiliary["origin"] == "unscoped" and auxiliary["turn_id"] is None
+    turns = [event for event in events if event["kind"] == "user"]
+    assert len({event["turn_id"] for event in turns}) == len(turns)
+    for turn in turns:
+        calls = [call["name"] for event in events if event["kind"] == "model"
+                 and event["origin"] == "foreground" and event["turn_id"] == turn["turn_id"]
+                 for call in event["calls"]]
+        expected = ["workflow__restart"] if turn["text"] == "Start guide" else ["workflow__advance"]
+        if wrong_foreground_call and turn["text"] == "Next":
+            expected = ["workflow__status"]
+        assert calls == expected
 
 
 @pytest.mark.parametrize("fault", ["step_completion", "automatic_completion", "final_inactive"])

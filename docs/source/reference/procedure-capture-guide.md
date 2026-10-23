@@ -548,6 +548,10 @@ quoted commands, negation, requests to explain guide content, unsupported captur
 requests, and visual questions.
 These scenarios run with the full permitted tool set; the evaluator does not preselect
 tools based on the utterance.
+Both guide evaluators tag model events with their origin and foreground turn ID.
+Routing assertions check only calls belonging to the simulated user turn;
+concurrent background observation calls remain in the trace but cannot count
+as foreground routing successes or failures.
 
 `example-guides/tea-making/eval/label_reading_scenario.yaml` tests the included tea guide with generated label
 cards: chamomile alone, longer chamomile names, other teas, and an unreadable

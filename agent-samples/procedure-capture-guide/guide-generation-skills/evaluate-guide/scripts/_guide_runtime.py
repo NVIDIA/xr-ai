@@ -18,6 +18,7 @@ import sys
 import tempfile
 import time
 from collections.abc import Awaitable, Callable
+from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -110,6 +111,15 @@ class Speech(Agent):
 
 
 @dataclass
+class TurnResult:
+    """Delivered answer and model tool requests belonging to one user turn."""
+
+    text: str
+    turn_id: int
+    calls: tuple[dict, ...]
+
+
+@dataclass
 class EvaluationContext:
     """Expose observed runtime behavior to a packet or scenario evaluation."""
 
@@ -119,7 +129,7 @@ class EvaluationContext:
     visual_results: list[dict]
     log: Callable[..., None]
     wait_until: Callable[..., Awaitable[None]]
-    say: Callable[[str], Awaitable[str]]
+    say: Callable[[str], Awaitable[TurnResult]]
     quiet: Callable[[float], Awaitable[bool]]
     guidance: Callable[[], Awaitable[dict]]
 
@@ -153,15 +163,42 @@ async def run_evaluation(
     models = xr_ai_models.load_models_config(settings.models_config)
     llm, vlm = xr_ai_models.make_llm(models, "llm"), xr_ai_models.make_vlm(models, "vlm")
     chat = llm.chat
+    model_origin: ContextVar[tuple[str, int | None, asyncio.Task | None]] = ContextVar(
+        "model_origin", default=("unscoped", None, None),
+    )
 
     async def logged_chat(*args, **kwargs):
+        origin, turn_id, owner = model_origin.get()
+        # Runtime deliveries and background tasks inherit context variables.
+        # Inheritance alone does not make their model calls part of this turn.
+        if owner is not asyncio.current_task():
+            origin, turn_id = "unscoped", None
         result = await chat(*args, **kwargs)
-        log("model", text=result.content, calls=[
+        log("model", origin=origin, turn_id=turn_id, text=result.content, calls=[
             {"name": call.name, "arguments": call.arguments} for call in result.tool_calls or ()
         ])
         return result
 
     llm.chat = logged_chat
+
+    class TracedGuideAgent(GuideAgent):
+        async def _answer(self, query, participant_id):
+            token = model_origin.set(("foreground", query.timestamp_us, asyncio.current_task()))
+            try:
+                await super()._answer(query, participant_id)
+            finally:
+                model_origin.reset(token)
+
+        async def _tool_loop(self, system, user, tools, *, foreground=False):
+            # A monitor can inherit the context of the turn that started it.
+            # Its observations must never be attributed to that foreground turn.
+            origin = model_origin.get() if foreground else ("observation", None, asyncio.current_task())
+            token = model_origin.set(origin)
+            try:
+                return await super()._tool_loop(system, user, tools, foreground=foreground)
+            finally:
+                model_origin.reset(token)
+
     camera, images = Camera(), ImageRegistry()
     image_sources = {}
 
@@ -195,7 +232,7 @@ async def run_evaluation(
     aggregation = runtime.register("aggregation", VoiceAggregationAgent(
         llm=llm, coalesce_window_s=0.01, minimum_playback_s=0, speech_rate_wpm=60000,
     ))
-    agent = runtime.register("guide", GuideAgent(
+    agent = runtime.register("guide", TracedGuideAgent(
         guide=guide, llm=llm, current_frame=frames, image_query=vision,
         vision_timeout_s=settings.guide.vision_timeout_s, aggregation=aggregation,
     ))
@@ -219,7 +256,7 @@ async def run_evaluation(
     async def say(text):
         nonlocal quiet_offset
         timestamp = time.time_ns() // 1000
-        log("user", text=text, timestamp_us=timestamp)
+        log("user", text=text, timestamp_us=timestamp, turn_id=timestamp)
         await runtime.publish(USER_QUERY_TOPIC, UserQuery(text=text, timestamp_us=timestamp),
                               participant_id=_PID)
         # Correlate the delivered answer, not an unrelated background notice.
@@ -227,7 +264,10 @@ async def run_evaluation(
         answer_index = next(index for index, item in enumerate(speech.outputs) if item.timestamp_us == timestamp)
         # Include notices delivered during the following image switch, even before quiet begins.
         quiet_offset = answer_index + 1
-        return speech.outputs[answer_index].text
+        calls = tuple(call for event in events
+                      if event["kind"] == "model" and event["origin"] == "foreground"
+                      and event["turn_id"] == timestamp for call in event["calls"])
+        return TurnResult(speech.outputs[answer_index].text, timestamp, calls)
 
     def relay_event(event):
         with (output / "relay.jsonl").open("a") as stream:

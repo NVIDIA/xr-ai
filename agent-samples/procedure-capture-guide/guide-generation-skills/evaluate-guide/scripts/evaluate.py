@@ -55,17 +55,15 @@ async def evaluate(packet: Path, guide_path: Path, output: Path, *, tail_s: floa
     async def exercise(run: EvaluationContext) -> bool:
         speech_offset = 0
         for index, action in enumerate(actions):
-            offset = len(run.events)
             if action["action"] == "say":
                 speech_offset = len(run.speech.outputs)
                 answer = await run.say(action["text"])
-                calls = [call for event in run.events[offset:] if event["kind"] == "model"
-                         for call in event["calls"]]
+                calls = answer.calls
                 passed = [call["name"] for call in calls] == action["tools"]
                 if "arguments" in action:
                     passed &= [json.loads(call["arguments"]) for call in calls] == action["arguments"]
                 if "expect" in action:
-                    passed &= re.search(action["expect"], answer) is not None
+                    passed &= re.search(action["expect"], answer.text) is not None
                 await run.guidance()
             else:
                 await run.wait_until(
