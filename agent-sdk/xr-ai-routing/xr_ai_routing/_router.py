@@ -726,9 +726,7 @@ class AgentRouter:
                     self._remember(turn, admission.text)
                     turn = self._turn_with_latest_history(turn)
                 focused = None
-                candidates = [
-                    item for item in self._destinations if item != destination_name and item not in declined
-                ]
+                candidates = [item for item in self._destinations if item != destination_name]
                 if not candidates or attempt == 1:
                     text = admission.text or "Which part would you like help with?"
                     if not admission.text:
@@ -772,10 +770,9 @@ class AgentRouter:
                     # clear context needed by that final attempt.
                     if declined_name != self._default_destination:
                         declined_destination = self._destinations[declined_name]
-                        if self._focus.get(turn.participant_id) != declined_name:
-                            await declined_destination.release(turn.participant_id)
-                            if self._generation.get(turn.participant_id) is not generation:
-                                raise asyncio.CancelledError()
+                        await declined_destination.release(turn.participant_id)
+                        if self._generation.get(turn.participant_id) is not generation:
+                            raise asyncio.CancelledError()
                     self._destinations_used.setdefault(turn.participant_id, set()).add(destination_name)
                     focused = None
                     admission = Admission("accept")
@@ -897,11 +894,11 @@ class AgentRouter:
                 raise ValueError("destinations must decline or clarify in admit(), before answer()")
             if result.disposition == "focus":
                 previous_focus = self._focus.get(turn.participant_id)
+                self._focus[turn.participant_id] = destination_name
                 if previous_focus is not None and previous_focus != destination_name:
                     await self._destinations[previous_focus].release(turn.participant_id)
                     if self._generation.get(turn.participant_id) is not generation:
                         raise asyncio.CancelledError()
-                self._focus[turn.participant_id] = destination_name
             elif result.disposition == "release":
                 await destination.release(turn.participant_id)
                 if self._generation.get(turn.participant_id) is not generation:

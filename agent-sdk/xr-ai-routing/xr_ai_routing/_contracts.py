@@ -89,7 +89,8 @@ class Admission:
     ``clarify`` ends routing with a question, and ``release`` clears focus and
     returns the same query to ordinary routing. Declining a turn does not clear
     existing focus or call the focused destination's ``release()``. That owner
-    receives the next turn unless another destination explicitly takes focus.
+    receives the next turn unless it releases focus, becomes ineligible, another
+    destination explicitly takes focus, or the participant leaves.
     """
 
     disposition: Literal["accept", "decline", "clarify", "release"]
@@ -115,6 +116,8 @@ class DestinationResult:
 
     A post-answer ``release`` consumes this turn and clears focus. It does not
     reroute the request; use ``Admission("release")`` for that behavior.
+    Returning ``focus`` takes focus and calls the previous owner's ``release()``
+    if a different destination held it.
     """
 
     text: str = ""
@@ -196,7 +199,6 @@ class RoutableAgent(Protocol):
         rerouting or clears its focus. It is also the departure fallback when
         no ``participant_left()`` hook is present. Declining a turn while focused
         does not call this method; a different destination taking focus does.
-        A destination can clear
-        active resources here while retaining completed participant data; use
-        the optional departure hook for stronger cleanup.
+        A destination can clear active resources here while retaining completed
+        participant data; use the optional departure hook for stronger cleanup.
         """

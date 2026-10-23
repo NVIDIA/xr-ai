@@ -639,7 +639,7 @@ async def test_seeded_history_is_retained_with_unknown_timestamps():
 
 
 @pytest.mark.asyncio
-async def test_focused_decline_returns_to_ordinary_route_selection():
+async def test_focused_decline_reroutes_one_turn_and_keeps_focus():
     tea = _Destination("tea", admissions=(Admission("accept"), Admission("decline")))
     tea.results.append(DestinationResult("focus"))
     visual = _Destination("visual", results=(DestinationResult("answer", "A blue cup."),))
@@ -1874,6 +1874,7 @@ async def test_turn_cancellation_cancels_ack_and_departure_drops_timing_examples
 
 
 @pytest.mark.parametrize("alternative", [False, True])
+@pytest.mark.asyncio
 async def test_focused_default_decline_cannot_bounce_back_through_fallback(alternative):
     owner = _Destination(
         "conversation", admissions=(Admission("accept"), Admission("decline")),
@@ -1897,6 +1898,7 @@ async def test_focused_default_decline_cannot_bounce_back_through_fallback(alter
 
 
 @pytest.mark.parametrize("outcome", ["clarify", "admission_release", "answer_release", "error"])
+@pytest.mark.asyncio
 async def test_focused_decline_retains_owner_after_other_destination_outcomes(outcome):
     class Other(_Destination):
         async def answer(self, turn, *, started):
@@ -1930,8 +1932,22 @@ async def test_focused_decline_retains_owner_after_other_destination_outcomes(ou
         await router.stop()
 
 
-async def test_another_destination_taking_focus_releases_previous_owner_once():
-    notes = _Destination(
+@pytest.mark.parametrize("release_outcome", ["complete", "interrupt", "error"])
+@pytest.mark.asyncio
+async def test_another_destination_taking_focus_releases_previous_owner_once(release_outcome):
+    releasing = asyncio.Event()
+
+    class Notes(_Destination):
+        async def release(self, participant_id):
+            await super().release(participant_id)
+            if len(self.releases) == 1:
+                releasing.set()
+                if release_outcome == "interrupt":
+                    await asyncio.Event().wait()
+                elif release_outcome == "error":
+                    raise RuntimeError("release failed")
+
+    notes = Notes(
         "notes", admissions=(Admission("accept"), Admission("decline")),
         results=(DestinationResult("focus"),),
     )
@@ -1942,7 +1958,17 @@ async def test_another_destination_taking_focus_releases_previous_owner_once():
     )
     try:
         await _run(router, query="Take notes")
-        await _run(router, query="Start the guide")
+        if release_outcome == "interrupt":
+            pending = asyncio.create_task(_run(router, query="Start the guide"))
+            await asyncio.wait_for(releasing.wait(), 1)
+            await router.interrupt("alice")
+            with pytest.raises(asyncio.CancelledError):
+                await pending
+        elif release_outcome == "error":
+            with pytest.raises(RuntimeError, match="release failed"):
+                await _run(router, query="Start the guide")
+        else:
+            await _run(router, query="Start the guide")
         assert notes.releases == ["alice"]
         await _run(router, query="Next step")
         assert guide.calls[-2:] == [("admit", "Next step", True), ("answer", "Next step")]
@@ -1951,6 +1977,7 @@ async def test_another_destination_taking_focus_releases_previous_owner_once():
         await router.stop()
 
 
+@pytest.mark.asyncio
 async def test_cancelled_answer_after_focused_decline_keeps_owner_and_drains_work():
     entered, cleaned = asyncio.Event(), asyncio.Event()
 

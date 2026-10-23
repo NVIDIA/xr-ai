@@ -198,9 +198,9 @@ publication.
 Returning `DestinationResult("focus")` makes that destination the participant's
 first route for later turns. It remains focused across answers until it returns
 `DestinationResult("release")`, its admission returns `Admission("release")`,
-it becomes ineligible, or the participant leaves. An admission release clears
-focus and routes the same query again. A post-answer release clears focus after
-consuming the query.
+it becomes ineligible, another destination returns `DestinationResult("focus")`,
+or the participant leaves. An admission release clears focus and routes the
+same query again. A post-answer release clears focus after consuming the query.
 
 A focused destination can return `Admission("decline")` to let another destination
 handle the current query, then receive the next turn again. For example, a
