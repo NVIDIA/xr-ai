@@ -84,6 +84,42 @@ LLM execution intercepts must accept the new codec context parameter. Refer to t
 [Relay 0.10.0 migration notes](https://github.com/NVIDIA/NeMo-Relay/releases/tag/0.10.0)
 for the configuration and intercept changes.
 
+### Voice output declares reply or update
+
+`ResponseOutput` replaces `interrupt` with `kind`, `request_id`, and `urgent`.
+`kind` is required: a `reply` answers `request_id`, and an `update` is unprompted
+and may set `urgent=True` to cut current speech. Updates are finite and have no
+`response_id`. `VoiceAgent` now decides when each message is spoken, so
+`VoiceAggregationAgent` and `VOICE_CONTRIBUTION_TOPIC` are removed. Publish
+updates straight to `VOICE_OUTPUT_TOPIC`, and pass
+`combiner=llm_update_combiner(llm)` to `VoiceAgent` to have pending updates
+rewritten into one utterance. `ResponseOutputs`, exported from
+`xr_ai_interaction`, builds these messages and frames streamed replies. A
+producer whose queued updates became stale can drop them with
+`outputs.withdraw(participant_id)`, which publishes `kind="withdraw"`.
+
+```python
+# Before
+from xr_ai_voice import VOICE_CONTRIBUTION_TOPIC, VoiceAggregationAgent, VoiceOutput
+
+runtime.register("voice-aggregation", VoiceAggregationAgent(llm=llm))
+await ctx.publish(VOICE_CONTRIBUTION_TOPIC, VoiceOutput(text="Timer done.", interrupt=True))
+
+# After
+from xr_ai_interaction import ResponseOutputs
+from xr_ai_voice import VOICE_OUTPUT_TOPIC, VoiceAgent, llm_update_combiner
+
+voice = VoiceAgent(..., combiner=llm_update_combiner(llm))
+outputs = ResponseOutputs(ctx, VOICE_OUTPUT_TOPIC)
+await outputs.update(participant_id, "Timer done.", urgent=True)
+async with outputs.reply(participant_id, request_id=query_id) as reply:
+    await reply.send("Here is the answer.")
+```
+
+The aggregation tuning parameters have no replacement: coalescing follows real
+playback state, and `llm_update_combiner` takes only `prompt`, `max_tokens`,
+and `timeout_s`.
+
 ### Persistent services after startup failure
 
 Stacks using `launch_mode="persist"` now retain services that had signaled

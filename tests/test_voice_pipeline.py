@@ -1657,9 +1657,10 @@ class _StringAssistant(_VoiceIOProcessor):
 
     async def handle(self, query: VoiceQuery) -> None:
         self.handle_calls.append((query.participant_id, query.text))
-        await self.enqueue_response(
+        await self.enqueue_reply(
             query.participant_id,
             f"answer: {query.text}",
+            request_id=query.text,
             pts_us=query.timestamp_us,
         )
 
@@ -1680,9 +1681,10 @@ class _IterAssistant(_VoiceIOProcessor):
                 self.cancelled = True
                 raise
 
-        await self.enqueue_response(
+        await self.enqueue_reply(
             query.participant_id,
             _gen(),
+            request_id=query.text,
             pts_us=query.timestamp_us,
         )
 
@@ -1763,7 +1765,7 @@ async def test_interrupting_response_does_not_cancel_query_delivery() -> None:
     await asyncio.wait_for(query_started.wait(), 1.0)
     input_task = next(iter(assistant._input_tasks))  # noqa: SLF001
 
-    await assistant.enqueue_response("pid-1", "answer", interrupt=True)
+    await assistant.enqueue_update("pid-1", "answer", source="producer", urgent=True)
     await asyncio.wait_for(assistant._inflight["pid-1"], 1.0)  # noqa: SLF001
 
     assert not input_task.cancelled()
@@ -1799,7 +1801,7 @@ async def test_failed_response_iterator_is_closed() -> None:
         return None
 
     assistant.push_frame = capture  # type: ignore[method-assign]
-    await assistant.enqueue_response("pid-1", stream)
+    await assistant.enqueue_reply("pid-1", stream, request_id="r1")
     await asyncio.wait_for(assistant._inflight["pid-1"], 1.0)  # noqa: SLF001
 
     assert stream.closed is True
@@ -1821,7 +1823,7 @@ async def test_external_response_stream_uses_normal_assistant_output_frames() ->
         frames.append(frame)
 
     assistant.push_frame = capture  # type: ignore[method-assign]
-    await assistant.enqueue_response("pid-1", chunks(), pts_us=42)
+    await assistant.enqueue_reply("pid-1", chunks(), pts_us=42, request_id="r1")
     task = assistant._inflight["pid-1"]  # noqa: SLF001
     _ = await task
 
@@ -1853,7 +1855,7 @@ async def test_external_response_preserves_chunks_before_iterator_failure() -> N
         frames.append(frame)
 
     assistant.push_frame = capture  # type: ignore[method-assign]
-    await assistant.enqueue_response("pid-1", chunks(), pts_us=42)
+    await assistant.enqueue_reply("pid-1", chunks(), pts_us=42, request_id="r1")
     await assistant._inflight["pid-1"]  # noqa: SLF001
 
     end = next(frame for frame in frames if isinstance(frame, AssistantResponseEndFrame))
@@ -1882,11 +1884,11 @@ async def test_external_responses_preserve_participant_fifo() -> None:
         frames.append(frame)
 
     assistant.push_frame = capture  # type: ignore[method-assign]
-    await assistant.enqueue_response("pid-1", first_response())
+    await assistant.enqueue_reply("pid-1", first_response(), request_id="r1")
     await asyncio.sleep(0)
-    await assistant.enqueue_response("pid-1", "second")
+    await assistant.enqueue_reply("pid-1", "second", request_id="r1")
 
-    assert len(assistant._queued["pid-1"]) == 1  # noqa: SLF001
+    assert len(assistant._queued_replies["pid-1"]) == 1  # noqa: SLF001
     release_first.set()
     async def wait_until_idle() -> None:
         while assistant._inflight:  # noqa: SLF001
@@ -1994,10 +1996,10 @@ async def test_voice_io_closes_cancelled_response_stream() -> None:
         return None
 
     assistant.push_frame = capture  # type: ignore[method-assign]
-    await assistant.enqueue_response("pid-1", stream)
+    await assistant.enqueue_reply("pid-1", stream, request_id="r1")
     task = assistant._inflight["pid-1"]  # noqa: SLF001
     await asyncio.wait_for(started.wait(), 1.0)
-    await assistant._cancel_pid("pid-1")  # noqa: SLF001
+    await assistant._barge_in("pid-1")  # noqa: SLF001
     await asyncio.gather(task, return_exceptions=True)
 
     assert stream.closed is True
@@ -2056,7 +2058,7 @@ async def test_replacement_query_reports_consumer_aborted_output() -> None:
         return None
 
     assistant.push_frame = capture  # type: ignore[method-assign]
-    await assistant.enqueue_response("pid-1", response())
+    await assistant.enqueue_reply("pid-1", response(), request_id="r1")
     await asyncio.wait_for(response_started.wait(), 1.0)
     await assistant.enqueue_query("pid-1", "replacement", pts_us=9)
     await asyncio.wait_for(query_received.wait(), 1.0)
@@ -2543,7 +2545,7 @@ async def test_incremental_voice_output_flushes_one_final_partial_chunk():
 
     async def drive() -> None:
         await asyncio.sleep(0.05)
-        await io_processor.enqueue_response("alice", response_chunks(), pts_us=7)
+        await io_processor.enqueue_reply("alice", response_chunks(), pts_us=7, request_id="r1")
         await io_processor._inflight["alice"]  # noqa: SLF001
         await asyncio.sleep(0.1)
         await worker.queue_frame(EndFrame())
@@ -3349,9 +3351,10 @@ class _EchoAssistant(_VoiceIOProcessor):
         super().__init__(self.handle)
 
     async def handle(self, query: VoiceQuery) -> None:
-        await self.enqueue_response(
+        await self.enqueue_reply(
             query.participant_id,
             f"echo {query.text}.",
+            request_id=query.text,
             pts_us=query.timestamp_us,
         )
 

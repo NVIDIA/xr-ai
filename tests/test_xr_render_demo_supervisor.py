@@ -304,18 +304,18 @@ async def test_turn_tasks_run_in_forked_relay_context(monkeypatch) -> None:
         def __init__(self, pid):
             self.metadata = SimpleNamespace(participant_id=pid, message_id=f"t-{pid}")
 
-        async def publish(self, topic, value):
+        async def publish(self, topic, value, *, participant_id):
             published.append(value)
 
     agent = RenderAgent(_QuickSupervisor())
     await agent.answer_user(UserQuery(text="hi", timestamp_us=1), _Ctx("alice"))
     await agent.answer_user(UserQuery(text="hi", timestamp_us=1), _Ctx("bob"))
     for _ in range(200):
-        if len(published) == 2:
+        if len(published) == 4:
             break
         await asyncio.sleep(0.01)
     assert forks == 2
-    assert len(published) == 2
+    assert len(published) == 4
 
 
 async def test_supervisor_eval_fails_on_exception_after_delegation(monkeypatch) -> None:
@@ -343,7 +343,7 @@ async def test_failing_supervisor_publishes_failure_notice() -> None:
     class _Ctx:
         metadata = SimpleNamespace(participant_id="alice", message_id="trace-1")
 
-        async def publish(self, topic, value):
+        async def publish(self, topic, value, *, participant_id):
             published.append(value)
 
     class _ExplodingSupervisor:
@@ -353,10 +353,11 @@ async def test_failing_supervisor_publishes_failure_notice() -> None:
     agent = RenderAgent(_ExplodingSupervisor())
     await agent._run_turn(UserQuery(text="Make a sphere.", timestamp_us=1), _Ctx())
 
-    assert len(published) == 1
-    assert published[0].text == "Something went wrong. Please try again."
-    assert published[0].final is True
-    assert published[0].response_id == "trace-1"
+    assert [(m.text, m.final) for m in published] == [
+        ("Something went wrong. Please try again.", False),
+        ("", True),
+    ]
+    assert {m.request_id for m in published} == {"trace-1"}
 
 
 _REF_US = harness.EVAL_REFERENCE_US

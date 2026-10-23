@@ -50,7 +50,7 @@ accepted speech or typed query         ├─> current frame + generic VLM query
               ├─> visual monitor controls      v
               ├─> instrument controls   InstrumentMonitorAgent
               └─> current readings             │
-                                               ├─> change event ─┬─> voice aggregation
+                                               ├─> change event ─┬─> voice updates
                                                ├─> lost event ───┤
                                                │                 └─> JSONL/backend
                                                └─> state event ────> JSONL/backend
@@ -74,7 +74,6 @@ does not use NVIDIA Agent Toolkit, PydanticAI, MCP clients, or MCP servers.
 | `LabInstrumentAgent` | One-frame marker-associated reads and debug source images | Long-lived state or notification policy |
 | `InstrumentMonitorAgent` | Reading normalization, change detection, last-seen state, loss detection, periodic snapshots | Speech or storage |
 | `InstrumentAlertAgent` | Which instrument events become participant voice output | Tracking state |
-| `VoiceAggregationAgent` | Participant speech pacing, ordering, and coalescing | Instrument or foreground decisions |
 | `FileOutputAgent` | Session files, JSONL records, recent visual-history tool | Agent decisions |
 | `WebEventsAdapterAgent` | Explicit sample-event projection into browser topics | HTTP serving or durable history |
 | `WebEventsAgent` | Bounded in-memory history and read-only HTTP page | Application topic selection or persistence |
@@ -85,13 +84,16 @@ releases its own state.
 
 For a `current_view` selection, `ForegroundAgent` uses the same direct path as
 `simple-vlm-example`: `CurrentFrameTool` selects one frame and
-`StreamingImageQueryTool` publishes chunks to participant voice. The tool is a
-direct return, so the completed visual answer does not incur a second language
-model call. A dedicated current-view system prompt applies visible-evidence,
+`StreamingImageQueryTool` streams chunks to participant voice as a reply to the
+query. The tool is a direct return, so the completed visual answer does not
+incur a second language model call. A dedicated current-view system prompt applies visible-evidence,
 plain-speech, and response-length rules directly to the streaming VLM output.
 The default voice gate accepts `agent` and `hey agent`, plays a listening chime,
 and allows a five-second follow-up. `VoiceAgent` mirrors spoken text to the
 client's `agent.response` topic so the same output can be rendered as captions.
+`InstrumentAlertAgent` publishes instrument events as unprompted updates through
+`ResponseOutputs`; `VoiceAgent` combines those that arrive while the participant
+is being spoken to with the `llm_update_combiner` passed to it in `app.py`.
 
 ## Source map
 

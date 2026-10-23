@@ -64,7 +64,7 @@ async def _control(_turn, _source, _text):
 
 
 async def _standalone_started():
-    return True
+    return None
 
 
 
@@ -94,7 +94,7 @@ async def test_configured_control_output_preserves_concurrent_participant_turn_i
             await release_alice.wait()
         delivered_turns.append((turn, source))
         await runtime.publish(
-            OUTPUT, ResponseOutput(text=text, timestamp_us=turn.timestamp_us),
+            OUTPUT, ResponseOutput(kind="reply", text=text, request_id=turn.turn_id, timestamp_us=turn.timestamp_us),
             participant_id=turn.participant_id, source="router",
         )
 
@@ -154,7 +154,8 @@ async def test_conversation_context_topic_and_direct_output_retain_complete_hist
                 AgentExchange("first request", "answer one answer two"),
                 AgentExchange("followup", "answer one answer two"),
             ]
-            assert output.items[0][0].interrupt and not output.items[1][0].interrupt
+            assert [value.kind for value, _ in output.items] == ["reply"] * 6
+            assert [value.request_id for value, _ in output.items] == ["first"] * 3 + ["followup"] * 3
             assert [value.final for value, _ in output.items] == [False, False, True] * 2
             assert output.items[0][0].response_id == output.items[2][0].response_id
             assert output.items[0][0].response_id != output.items[3][0].response_id
@@ -193,12 +194,12 @@ async def test_conversations_publish_directly_to_shared_typed_topic_with_own_sou
                 )
                 assert result.text == "spoken answer"
             assert [value.text for value, _ in output.items] == ["spoken ", "answer", ""] * 2
-            assert [value.interrupt for value, _ in output.items] == [True, False, False] * 2
+            assert [value.kind for value, _ in output.items] == ["reply"] * 6
             assert [value.final for value, _ in output.items] == [False, False, True] * 2
             for index, (value, metadata) in enumerate(output.items):
                 assert metadata.participant_id == "alice"
                 assert metadata.source == ("general" if index < 3 else "specialist")
-                assert value.response_id == f"turn-{index // 3}"
+                assert value.request_id == f"turn-{index // 3}"
                 assert value.timestamp_us == 17
         finally:
             for conversation in conversations:
@@ -306,7 +307,7 @@ async def test_interrupted_final_frame_does_not_commit_the_exchange():
             await conversation.close()
 
 
-async def test_answer_after_router_preamble_does_not_interrupt_it():
+async def test_answer_shares_request_id_with_router_preamble():
     class LLM:
         def stream_events(self, _messages):
             async def response():
@@ -318,20 +319,27 @@ async def test_answer_after_router_preamble_does_not_interrupt_it():
         async def admit(self, _turn, *, focused):
             return Admission("accept", preamble="One moment.")
 
-    control = []
-
-    async def record_control(_turn, source, text):
-        control.append((source, text))
-
     runtime = AgentRuntime()
     output = runtime.register("output", _Output())
+
+    async def publish_control(turn, source, text):
+        await runtime.publish(
+            OUTPUT, ResponseOutput(kind="reply", text=text, request_id=turn.turn_id, timestamp_us=turn.timestamp_us),
+            participant_id=turn.participant_id, source=source,
+        )
+
     conversation = Preambled(LLM(), runtime=runtime, output_topic=OUTPUT)
-    router = AgentRouter({"conversation": conversation}, None, output=record_control)
+    router = AgentRouter({"conversation": conversation}, None, output=publish_control)
     async with runtime:
         try:
             await router.handle(AgentTurn("alice", "request", "request"))
-            assert control == [("conversation", "One moment.")]
-            assert [(value.text, value.interrupt) for value, _ in output.items] == [("answer", False), ("", False)]
+            assert [(value.kind, value.request_id, value.text) for value, _ in output.items] == [
+                ("reply", "request", "One moment."),
+                ("reply", "request", "answer"),
+                ("reply", "request", ""),
+            ]
+            assert output.items[0][0].response_id is None
+            assert output.items[1][0].response_id == output.items[2][0].response_id is not None
         finally:
             await router.stop()
             await conversation.close()
@@ -349,9 +357,8 @@ async def test_model_failure_is_reported_once_and_partial_stream_is_finalized(pa
     class Recording(Conversation):
         async def answer(self, turn, *, started):
             async def recorded():
-                leads = await started()
-                notifications.append(leads)
-                return leads
+                await started()
+                notifications.append("started")
 
             return await super().answer(turn, started=recorded)
 
@@ -377,7 +384,7 @@ async def test_model_failure_is_reported_once_and_partial_stream_is_finalized(pa
             with pytest.raises(RuntimeError, match="model failed"):
                 await router.handle(AgentTurn("alice", "request", "request"))
             assert closed.is_set()
-            assert notifications == ([True] if partial else [])
+            assert notifications == (["started"] if partial else [])
             assert router._history["alice"] == []
             assert conversation._context.transcript("alice") == ()
             assert all(meta.source == "conversation" for _, meta in output.items)
@@ -405,7 +412,7 @@ async def test_finite_ack_does_not_block_direct_answer_in_bounded_voice_consumer
             self.accepted = asyncio.Event()
             self.spoken = []
 
-        async def enqueue_response(self, _participant, response, **_kwargs):
+        async def enqueue_reply(self, _participant, response, **_kwargs):
             self.queue.put_nowait(response)
             self.accepted.set()
 
@@ -451,7 +458,8 @@ async def test_finite_ack_does_not_block_direct_answer_in_bounded_voice_consumer
     async def emit_control(turn, _source, text):
         assert (turn.participant_id, turn.turn_id, turn.timestamp_us) == ("alice", "request", 928)
         await runtime.publish(
-            VOICE_OUTPUT_TOPIC, ResponseOutput(text=text, timestamp_us=turn.timestamp_us),
+            VOICE_OUTPUT_TOPIC,
+            ResponseOutput(kind="reply", text=text, request_id=turn.turn_id, timestamp_us=turn.timestamp_us),
             participant_id=turn.participant_id, source="router",
         )
 

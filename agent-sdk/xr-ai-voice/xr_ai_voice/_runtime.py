@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import asyncio
 from builtins import BaseExceptionGroup
-from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Mapping
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -67,7 +67,6 @@ class _ResponseTrace:
     response_id: str
     correlation_id: str
     timestamp_us: int
-    interrupt: bool
     started_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     fragments: list[str] = field(default_factory=list)
 
@@ -77,10 +76,12 @@ class _ResponseStream(AsyncIterator[str]):
         self,
         capacity: int,
         on_close: Callable[[_ResponseStream], None],
+        idle_timeout_s: float,
     ) -> None:
         self.queue: asyncio.Queue[str] = asyncio.Queue(maxsize=capacity)
         self.closed = asyncio.Event()
         self._on_close = on_close
+        self._idle_timeout_s = idle_timeout_s
 
     async def send(self, text: str) -> None:
         if not text or self.closed.is_set():
@@ -114,10 +115,15 @@ class _ResponseStream(AsyncIterator[str]):
         try:
             done, _ = await asyncio.wait(
                 (queued, closed),
+                timeout=self._idle_timeout_s,
                 return_when=asyncio.FIRST_COMPLETED,
             )
             if queued in done:
                 return queued.result()
+            if not done:
+                # A stalled producer must not hold the participant's floor.
+                logger.warning("voice response stream idle for {}s; closing it", self._idle_timeout_s)
+                await self.aclose()
             raise StopAsyncIteration
         except asyncio.CancelledError:
             await self.aclose()
@@ -168,6 +174,15 @@ class VoiceAgent(Agent):
     ordinary STT and typed input use ``User``. This display does not change
     :class:`UserQuery` or require an application subscriber. Delivery uses the
     existing hub transport and retains its backpressure and best-effort semantics.
+
+    Each participant has one voice floor. A reply answers one request and
+    supersedes speech for any other request, which is dropped. An urgent update
+    cuts current speech and plays next. Other updates wait until the bot stops
+    speaking and are spoken as one utterance, joined with spaces or rewritten by
+    ``combiner``, an async callable from the pending update texts to the spoken
+    text; a failing combiner falls back to the join. A new user query or a
+    barge-in cancels replies but keeps updates. A streamed reply that receives
+    no fragment for ``stream_idle_timeout_s`` is closed so it cannot hold the floor.
     """
 
     def __init__(
@@ -190,9 +205,13 @@ class VoiceAgent(Agent):
         participant_left_topic: Topic[ParticipantLeft] | None = None,
         interrupted_topic: Topic[Interrupted] | None = None,
         interrupt_on_supersede: bool = False,
+        combiner: Callable[[Sequence[str]], Awaitable[str]] | None = None,
+        stream_idle_timeout_s: float = 15.0,
     ) -> None:
         if response_capacity <= 0:
             raise ValueError("voice response capacity must be positive")
+        if stream_idle_timeout_s <= 0:
+            raise ValueError("voice stream idle timeout must be positive")
         super().__init__()
         self._session = _VoiceSession(
             stt=stt,
@@ -213,6 +232,8 @@ class VoiceAgent(Agent):
         self.participant_left_topic = participant_left_topic
         self.interrupted_topic = interrupted_topic
         self.interrupt_on_supersede = interrupt_on_supersede
+        self.combiner = combiner
+        self.stream_idle_timeout_s = stream_idle_timeout_s
         self._runtime: AgentRuntime | None = None
         self._source = "voice"
         self._output_lock = asyncio.Lock()
@@ -247,6 +268,8 @@ class VoiceAgent(Agent):
         participant_left_topic: Topic[ParticipantLeft] | None = None,
         interrupted_topic: Topic[Interrupted] | None = None,
         interrupt_on_supersede: bool = False,
+        combiner: Callable[[Sequence[str]], Awaitable[str]] | None = None,
+        stream_idle_timeout_s: float = 15.0,
     ) -> VoiceAgent:
         """Construct voice input from loaded models and voice-gate settings.
 
@@ -258,14 +281,16 @@ class VoiceAgent(Agent):
 
         Raises :class:`KeyError` when the selected batch ``stt`` role is absent,
         :class:`TypeError` when it names another model role, and
-        :class:`ValueError` for an unsupported adapter or non-positive response
-        capacity. Caller-created clients and transports remain caller-owned
+        :class:`ValueError` for an unsupported adapter, non-positive response
+        capacity, or non-positive stream idle timeout. Caller-created clients and transports remain caller-owned
         when construction fails.
         """
 
-        # Reject capacity before allocating the factory-owned batch client.
+        # Reject invalid limits before allocating the factory-owned batch client.
         if response_capacity <= 0:
             raise ValueError("voice response capacity must be positive")
+        if stream_idle_timeout_s <= 0:
+            raise ValueError("voice stream idle timeout must be positive")
         speaker = voice_gate._speaker
         stt = (
             None
@@ -290,6 +315,8 @@ class VoiceAgent(Agent):
             participant_left_topic=participant_left_topic,
             interrupted_topic=interrupted_topic,
             interrupt_on_supersede=interrupt_on_supersede,
+            combiner=combiner,
+            stream_idle_timeout_s=stream_idle_timeout_s,
         )
 
     async def run(self, runtime: AgentRuntime, *, source: str = "voice") -> None:
@@ -325,6 +352,7 @@ class VoiceAgent(Agent):
                         else None
                     ),
                     interrupt_on_supersede=self.interrupt_on_supersede,
+                    combiner=self.combiner,
                 )
             finally:
                 if unsubscribe_data is not None:
@@ -358,6 +386,50 @@ class VoiceAgent(Agent):
             if output.timestamp_us is not None
             else metadata.timestamp_us
         )
+        if output.kind == "withdraw":
+            async with self._output_lock:
+                with self._response_scope(
+                    participant_id=participant_id,
+                    source=metadata.source,
+                    response_id=None,
+                    correlation_id=metadata.correlation_id,
+                    text="",
+                    fragment_count=0,
+                    kind=output.kind,
+                    urgent=False,
+                    timestamp_us=timestamp_us,
+                    streaming=False,
+                    status="completed",
+                ):
+                    await self._session.withdraw_updates(participant_id, source=metadata.source)
+            return
+        if output.kind == "update":
+            async with self._output_lock:
+                with self._response_scope(
+                    participant_id=participant_id,
+                    source=metadata.source,
+                    response_id=None,
+                    correlation_id=metadata.correlation_id,
+                    text=output.text,
+                    fragment_count=1,
+                    kind=output.kind,
+                    urgent=output.urgent,
+                    timestamp_us=timestamp_us,
+                    streaming=False,
+                    status="completed",
+                ):
+                    await self._session.enqueue_update(
+                        participant_id,
+                        output.text,
+                        urgent=output.urgent,
+                        source=metadata.source,
+                        pts_us=timestamp_us,
+                    )
+            return
+
+        request_id = output.request_id
+        if request_id is None:
+            raise ValueError("voice reply requires a request_id")
         if output.response_id is None:
             async with self._output_lock:
                 with self._response_scope(
@@ -367,15 +439,16 @@ class VoiceAgent(Agent):
                     correlation_id=metadata.correlation_id,
                     text=output.text,
                     fragment_count=1,
-                    interrupt=output.interrupt,
+                    kind=output.kind,
+                    urgent=False,
                     timestamp_us=timestamp_us,
                     streaming=False,
                     status="completed",
                 ):
-                    await self._session.enqueue_response(
+                    await self._session.enqueue_reply(
                         participant_id,
                         output.text,
-                        interrupt=output.interrupt,
+                        request_id=request_id,
                         pts_us=timestamp_us,
                     )
             return
@@ -406,15 +479,16 @@ class VoiceAgent(Agent):
                         correlation_id=metadata.correlation_id,
                         text=output.text,
                         fragment_count=1,
-                        interrupt=output.interrupt,
+                        kind=output.kind,
+                        urgent=False,
                         timestamp_us=timestamp_us,
                         streaming=False,
                         status="completed",
                     ):
-                        await self._session.enqueue_response(
+                        await self._session.enqueue_reply(
                             participant_id,
                             output.text,
-                            interrupt=output.interrupt,
+                            request_id=request_id,
                             pts_us=timestamp_us,
                         )
                     self._remember_closed_stream(key)
@@ -425,6 +499,7 @@ class VoiceAgent(Agent):
                 stream = _ResponseStream(
                     self.response_capacity,
                     lambda closed: self._discard_stream(key, closed),
+                    self.stream_idle_timeout_s,
                 )
                 trace = _ResponseTrace(
                     participant_id=participant_id,
@@ -432,12 +507,11 @@ class VoiceAgent(Agent):
                     response_id=output.response_id,
                     correlation_id=metadata.correlation_id,
                     timestamp_us=timestamp_us,
-                    interrupt=output.interrupt,
                 )
-                await self._session.enqueue_response(
+                await self._session.enqueue_reply(
                     participant_id,
                     stream,
-                    interrupt=output.interrupt,
+                    request_id=request_id,
                     pts_us=timestamp_us,
                 )
                 if stream.closed.is_set():
@@ -447,12 +521,8 @@ class VoiceAgent(Agent):
                 self._response_traces[key] = trace
             else:
                 stream = existing
-                if output.interrupt:
-                    raise ValueError("only the first chunk of a voice stream may interrupt")
 
-            trace = self._response_traces[key]
-            trace.fragments.append(output.text)
-            trace.interrupt = trace.interrupt or output.interrupt
+            self._response_traces[key].fragments.append(output.text)
 
         await stream.send(output.text)
         if output.final:
@@ -702,7 +772,8 @@ class VoiceAgent(Agent):
             correlation_id=trace.correlation_id,
             text="".join(trace.fragments),
             fragment_count=len(trace.fragments),
-            interrupt=trace.interrupt,
+            kind="reply",
+            urgent=False,
             timestamp_us=trace.timestamp_us,
             streaming=True,
             status=status,
@@ -719,7 +790,8 @@ class VoiceAgent(Agent):
         correlation_id: str,
         text: str,
         fragment_count: int,
-        interrupt: bool,
+        kind: str,
+        urgent: bool,
         timestamp_us: int,
         streaming: bool,
         status: str,
@@ -732,7 +804,8 @@ class VoiceAgent(Agent):
                 "text": text,
                 "streaming": streaming,
                 "fragment_count": fragment_count,
-                "interrupt": interrupt,
+                "kind": kind,
+                "urgent": urgent,
             },
             metadata={
                 "participant_id": participant_id,

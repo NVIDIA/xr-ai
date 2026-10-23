@@ -16,6 +16,8 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 import yaml
+from pipecat.frames.frames import BotStartedSpeakingFrame, BotStoppedSpeakingFrame, TextFrame
+from pipecat.processors.frame_processor import FrameDirection
 from xr_ai_hub import FrameUnavailable
 from xr_ai_interaction import ParticipantJoined, ParticipantLeft, ResponseOutput, UserQuery
 from xr_ai_models import ChatResponse, ToolCall
@@ -25,7 +27,8 @@ from xr_ai_tools.current_frame import CurrentFrameRequest, ImageFrame
 from xr_ai_tools.image import ImageReference
 from xr_ai_tools.types import EmptyRequest
 from xr_ai_tools.vision import ImageQueryResult
-from xr_ai_voice import VOICE_OUTPUT_TOPIC, VoiceAggregationAgent
+from xr_ai_voice import VOICE_OUTPUT_TOPIC
+from xr_ai_voice._processors.io import _VoiceIOProcessor
 
 _SAMPLE = Path(__file__).resolve().parents[1] / "agent-samples/procedure-capture-guide"
 _TEST_DATA = Path(__file__).resolve().parent
@@ -97,7 +100,7 @@ async def connected_engine(document):
     agent = GuideAgent(
         guide=selected(document), llm=Mock(chat=AsyncMock()),
         current_frame=Mock(execute=AsyncMock()), image_query=Mock(execute=AsyncMock()),
-        vision_timeout_s=1, aggregation=Mock(release=AsyncMock()),
+        vision_timeout_s=1,
     )
     agent.bind_runtime(Mock(running=True, publish=AsyncMock()))
     # Tick explicitly to make evidence and cancellation tests independent of time.
@@ -651,7 +654,7 @@ async def test_departure_while_input_cleanup_awaits_does_not_restart_turn(engine
         entered.set()
         await release.wait()
 
-    engine._aggregation.release.side_effect = cleanup
+    engine._withdraw = cleanup
     query = asyncio.create_task(engine.user_query(UserQuery(text="next", timestamp_us=1), context()))
     await entered.wait()
     leaving = asyncio.create_task(engine.participant_left(None, context()))
@@ -1661,7 +1664,7 @@ async def test_capture_composition_does_not_construct_guide_or_llm(tmp_path, mon
     for name in ("make_vlm", "make_stt", "make_tts"):
         monkeypatch.setattr(app, name, lambda *_args: model)
     forbidden = Mock(side_effect=AssertionError("Capture must not construct guide or LLM"))
-    for name in ("make_llm", "GuideAgent", "VoiceAggregationAgent", "load_guide"):
+    for name in ("make_llm", "GuideAgent", "llm_update_combiner", "load_guide"):
         monkeypatch.setattr(app, name, forbidden)
 
     async def receive():
@@ -1675,6 +1678,7 @@ async def test_capture_composition_does_not_construct_guide_or_llm(tmp_path, mon
             super().__init__()
             assert set(kwargs["probes"]) == {"stt", "tts", "vlm"}
             assert kwargs["query_topic"].name == app.CAPTURE_INPUT_TOPIC.name
+            assert "combiner" not in kwargs
             assert not kwargs["text_input"]
 
         async def run(self, runtime):
@@ -1747,6 +1751,7 @@ async def test_guide_app_composition_starts_and_cleans_up(tmp_path, document, mo
             assert set(kwargs["probes"]) == {"llm", "vlm", "stt", "tts"}
             assert not kwargs["voice_gate"].magic_phrases
             assert not kwargs["voice_gate"].stop_commands_enabled
+            assert callable(kwargs["combiner"])
 
         async def run(self, runtime):
             await runtime.publish(PARTICIPANT_JOINED_TOPIC, ParticipantJoined(), participant_id="alice")
@@ -1757,12 +1762,11 @@ async def test_guide_app_composition_starts_and_cleans_up(tmp_path, document, mo
     monkeypatch.setattr(app, "VoiceAgent", Voice)
     await app.run_app(config)
     assert not agents[0]._backend._sessions and not agents[0]._connected
-    assert agents[0]._aggregation._stopping
     capture.assert_not_called()
     endpoint.close.assert_called_once()
 
 
-async def test_actual_runtime_and_aggregation_deliver_guide_and_release(document):
+async def test_actual_runtime_delivers_guide_and_release(document):
     class Sink(Agent):
         def __init__(self):
             super().__init__()
@@ -1770,16 +1774,14 @@ async def test_actual_runtime_and_aggregation_deliver_guide_and_release(document
 
         @subscribe(VOICE_OUTPUT_TOPIC)
         async def receive(self, output: ResponseOutput, ctx: RuntimeContext):
-            await self.outputs.put((ctx.metadata.participant_id, output.text))
+            if output.text:
+                await self.outputs.put((ctx.metadata.participant_id, output.text))
 
     llm = Mock(chat=AsyncMock(return_value=ChatResponse("Align the marked edges.", None, None, "stop", {})))
     runtime = AgentRuntime()
-    aggregation = runtime.register("aggregation", VoiceAggregationAgent(
-        llm=llm, coalesce_window_s=0.01, minimum_playback_s=0, speech_rate_wpm=60000,
-    ))
     agent = runtime.register("guide", GuideAgent(
         guide=selected(document), llm=llm, current_frame=Mock(), image_query=Mock(),
-        vision_timeout_s=1, aggregation=aggregation,
+        vision_timeout_s=1,
     ))
     agent._backend._trigger = AsyncMock(return_value=_Observation(False, "Camera unavailable"))
     sink = runtime.register("sink", Sink())
@@ -1805,13 +1807,11 @@ async def test_actual_runtime_and_aggregation_deliver_guide_and_release(document
             assert await asyncio.wait_for(sink.outputs.get(), 2) == ("alice", "Align the marked edges.")
             await runtime.publish(PARTICIPANT_LEFT_TOPIC, ParticipantLeft(), participant_id="alice")
             assert not agent._backend._sessions and not agent._backend._monitors and not agent._turns
-            assert not aggregation._states
         finally:
             await agent.stop()
-            await aggregation.stop()
 
 
-async def test_interrupted_transition_delivers_guidance_through_real_aggregation(document):
+async def test_interrupted_transition_delivers_guidance_through_runtime(document):
     class Sink(Agent):
         def __init__(self):
             super().__init__()
@@ -1819,18 +1819,16 @@ async def test_interrupted_transition_delivers_guidance_through_real_aggregation
 
         @subscribe(VOICE_OUTPUT_TOPIC)
         async def receive(self, output: ResponseOutput, ctx: RuntimeContext):
-            await self.outputs.put(output.text)
+            if output.text:
+                await self.outputs.put(output.text)
 
     llm = Mock(chat=AsyncMock(return_value=ChatResponse("", None, [
         ToolCall(id="advance", name="workflow__advance", arguments="{}"),
     ], "tool_calls", {})))
     runtime = AgentRuntime()
-    aggregation = runtime.register("aggregation", VoiceAggregationAgent(
-        llm=llm, coalesce_window_s=0.01, minimum_playback_s=0, speech_rate_wpm=60000,
-    ))
     agent = runtime.register("guide", GuideAgent(
         guide=selected(document), llm=llm, current_frame=Mock(), image_query=Mock(),
-        vision_timeout_s=1, aggregation=aggregation,
+        vision_timeout_s=1,
     ))
     backend = agent._backend
     backend._start_monitor = Mock()
@@ -1841,7 +1839,6 @@ async def test_interrupted_transition_delivers_guidance_through_real_aggregation
     async def invalidate(pid):
         entered.set()
         await release.wait()
-        await aggregation.release(pid)
 
     async with runtime:
         try:
@@ -1866,22 +1863,39 @@ async def test_interrupted_transition_delivers_guidance_through_real_aggregation
         finally:
             release.set()
             await agent.stop()
-            await aggregation.stop()
 
 
 @pytest.mark.parametrize(("control_name", "final_step"), [
     ("workflow__restart", False), ("workflow__reset", False),
     ("workflow__advance", False), ("workflow__advance", True),
 ])
-async def test_transition_discards_notice_queued_during_foreground_turn(document, control_name, final_step):
+async def test_transition_withdraws_notice_queued_during_foreground_turn(document, control_name, final_step):
+    spoken = []
+    voice = _VoiceIOProcessor(AsyncMock())
+
+    async def capture(frame, _direction=FrameDirection.DOWNSTREAM):
+        if isinstance(frame, TextFrame):
+            spoken.append(frame.text)
+
+    voice.push_frame = capture
+
+    async def bot(frame):
+        frame.transport_destination = "alice"
+        await voice.process_frame(frame, FrameDirection.UPSTREAM)
+        await asyncio.sleep(0.02)
+
     class Sink(Agent):
-        def __init__(self):
-            super().__init__()
-            self.outputs = asyncio.Queue()
+        """Apply published output to a real voice floor, as VoiceAgent does."""
 
         @subscribe(VOICE_OUTPUT_TOPIC)
         async def receive(self, output: ResponseOutput, ctx: RuntimeContext):
-            await self.outputs.put(output.text)
+            pid, source = ctx.metadata.participant_id, ctx.metadata.source
+            if output.kind == "withdraw":
+                await voice.withdraw_updates(pid, source=source)
+            elif output.kind == "update":
+                await voice.enqueue_update(pid, output.text, urgent=output.urgent, source=source)
+            elif output.text:
+                await voice.enqueue_reply(pid, output.text, request_id=output.request_id)
 
     entered, release = asyncio.Event(), asyncio.Event()
 
@@ -1892,39 +1906,41 @@ async def test_transition_discards_notice_queued_during_foreground_turn(document
 
     llm = Mock(chat=AsyncMock(side_effect=chat))
     runtime = AgentRuntime()
-    # Hold non-urgent notices in the real aggregation queue until the transition.
-    aggregation = runtime.register("aggregation", VoiceAggregationAgent(
-        llm=llm, coalesce_window_s=60, minimum_playback_s=0, speech_rate_wpm=60000,
-    ))
     agent = runtime.register("guide", GuideAgent(
         guide=selected(document), llm=llm, current_frame=Mock(), image_query=Mock(),
-        vision_timeout_s=1, aggregation=aggregation,
+        vision_timeout_s=1,
     ))
     backend = agent._backend
     backend._start_monitor = Mock()
-    sink = runtime.register("sink", Sink())
+    runtime.register("sink", Sink())
     agent.bind_runtime(runtime)
     async with runtime:
         try:
             await runtime.publish(PARTICIPANT_JOINED_TOPIC, ParticipantJoined(), participant_id="alice")
-            assert await asyncio.wait_for(sink.outputs.get(), 2) == "Align Parts is ready. Say start guide to begin."
+            await asyncio.sleep(0.02)
+            assert spoken == ["Align Parts is ready. Say start guide to begin."]
+            # The bot is speaking, so non-urgent notices stay pending in the floor.
+            await bot(BotStartedSpeakingFrame())
             await control(backend, "restart")
             if final_step:
                 await control(backend, "advance", skip=True)
             session = backend._sessions["alice"]
             session.evidence_hits = 2
             assert backend._commit(session, session.step, {session.step_id: True}, "")[1]
-            # The observation committed before the foreground began, but its notice
-            # is published after input-time aggregation cleanup and before control.
             await runtime.publish(USER_QUERY_TOPIC, UserQuery(text="Continue now", timestamp_us=1),
                                   participant_id="alice")
             await asyncio.wait_for(entered.wait(), 2)
+            # The observation committed before the foreground began; its notice is
+            # published while the foreground is waiting and before the control runs.
             await backend._publish_notices(session)
-            obsolete = aggregation._states["alice"].task
+            await asyncio.sleep(0.02)
+            assert len(voice._pending_updates["alice"]) == 1
             release.set()
             expected_step = "lid" if control_name == "workflow__advance" and not final_step else "base"
-            output = await asyncio.wait_for(sink.outputs.get(), 2)
-            assert obsolete.cancelled()
+            await asyncio.sleep(0.1)
+            await bot(BotStoppedSpeakingFrame())
+            output = spoken[-1]
+            assert len(spoken) == 2
             if control_name == "workflow__reset":
                 assert output == "Guide stopped. Say start guide to begin again."
                 assert not session.active and "alice" not in backend._monitors
@@ -1934,9 +1950,7 @@ async def test_transition_discards_notice_queued_during_foreground_turn(document
             else:
                 assert output.endswith(f"Do {expected_step}.") and "complete. Say next." not in output
             assert session.step_id == expected_step and not session.state[expected_step]
-            assert not session.notices and sink.outputs.empty()
-            assert not aggregation._states["alice"].pending
+            assert not session.notices and "alice" not in voice._pending_updates
         finally:
             release.set()
             await agent.stop()
-            await aggregation.stop()

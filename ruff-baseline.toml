@@ -42,7 +42,6 @@
 "agent-sdk/xr-ai-tools/xr_ai_tools/rpc.py" = ["BLE001"]  # BLE001=2
 "agent-sdk/xr-ai-tools/xr_ai_tools/tracking.py" = ["BLE001"]  # BLE001=1
 "agent-sdk/xr-ai-tools/xr_ai_tools/video_memory.py" = ["BLE001"]  # BLE001=1
-"agent-sdk/xr-ai-voice/xr_ai_voice/_aggregation.py" = ["BLE001"]  # BLE001=1
 "agent-sdk/xr-ai-voice/xr_ai_voice/_processors/io.py" = ["BLE001"]  # BLE001=6
 "agent-sdk/xr-ai-voice/xr_ai_voice/_processors/speaker_stt.py" = ["BLE001"]  # BLE001=2
 "agent-sdk/xr-ai-voice/xr_ai_voice/_processors/streaming_tts.py" = ["BLE001"]  # BLE001=7

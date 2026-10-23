@@ -142,7 +142,10 @@ class _Destination:
             await self.runtime.publish(
                 OUTPUT,
                 ResponseOutput(
-                    text=f"{self.name}: {turn.query}", response_id=turn.turn_id, timestamp_us=turn.timestamp_us
+                    kind="reply",
+                    text=f"{self.name}: {turn.query}",
+                    request_id=turn.turn_id,
+                    timestamp_us=turn.timestamp_us,
                 ),
                 participant_id=turn.participant_id,
                 source=self.name,
@@ -289,7 +292,7 @@ async def test_nested_router_initialization_owns_context_and_restores_outer_resp
             else:
                 await inner.handle(request)
             assert current_turn_context() == before
-            assert await started()
+            await started()
             return DestinationResult(text="outer context")
 
     async with _app(lambda runtime: {"conversation": Outer(runtime)}) as (runtime, router, *_):
@@ -463,7 +466,7 @@ async def test_typed_topics_direct_attribution_history_and_dynamic_routing_aids(
         assert "updated continuation context" in decisions.calls[1][1]["destination"].criteria["specialist"]
         assert [meta.source for _, meta in output.items] == ["specialist", "conversation"]
         assert all(
-            value.response_id == turn.turn_id
+            value.request_id == turn.turn_id
             for (value, _), turn in zip(
                 output.items,
                 [specialist.turns[0], conversation.turns[0]],
@@ -491,6 +494,7 @@ async def test_explicit_focus_admission_release_and_finite_router_output():
         control, metadata = output.items[1]
         assert metadata.source == "router"
         assert control.text == "Task complete." and control.final and control.response_id is None
+        assert control.kind == "reply" and control.request_id == destinations["conversation"].turns[0].turn_id
         assert destinations["conversation"].turns[0].history[-1].assistant == "Task complete."
         assert specialist.departures == ["alice"]
 
@@ -664,6 +668,7 @@ async def test_runtime_control_uses_query_context_without_direct_output_callback
             assert len(output.items) == 1
             control, metadata = output.items[0]
             assert control.text == "Which view?" and control.final and control.response_id is None
+            assert control.kind == "reply" and control.request_id
             assert control.timestamp_us == 1234
             assert metadata.source == "router" and metadata.participant_id == "alice"
             assert metadata.parent_message_id == received[0].message_id

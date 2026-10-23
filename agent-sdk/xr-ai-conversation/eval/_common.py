@@ -135,10 +135,8 @@ class ScriptedLLM:
         )
 
 
-async def standalone_started() -> bool:
+async def standalone_started() -> None:
     """Response-start signal for answers called without a router."""
-
-    return True
 
 
 async def settle(conversation: Any, participant: str) -> None:

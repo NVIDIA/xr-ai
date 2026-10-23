@@ -64,9 +64,6 @@ _active_routers: contextvars.ContextVar[frozenset[object]] = contextvars.Context
 class _TurnOutput:
     """Output already produced for one routed turn."""
 
-    control: bool = False
-    """Router-owned control text was delivered or committed."""
-
     control_failed: bool = False
     """The control output callback raised."""
 
@@ -355,7 +352,6 @@ class AgentRouter:
 
             async def emit_if_current(output_turn: AgentTurn, source: str, text: str) -> None:
                 if self._generation.get(participant_id) is generation:
-                    turn_output.control = True
                     try:
                         await emit(output_turn, source, text)
                     except Exception:
@@ -797,14 +793,14 @@ class AgentRouter:
             answer_execution_started_at_unix_ns = time.time_ns()
             prediction_trace: dict[str, object] = {"choice": "not_started", "probabilities": {}}
 
-            async def response_started() -> bool:
+            async def response_started() -> None:
                 nonlocal first_answer_duration
                 if not response_open or self._generation.get(turn.participant_id) is not generation:
-                    return False
+                    return
                 if answer_started.is_set():
                     if acknowledgment_committed.is_set():
                         await acknowledgment_delivered.wait()
-                    return not turn_output.control
+                    return
                 answer_started.set()
                 turn_output.response = True
                 first_answer_duration = _monotonic() - answer_started_at
@@ -830,7 +826,6 @@ class AgentRouter:
                 # A committed acknowledgment is delivered before any direct answer output.
                 if acknowledgment_committed.is_set():
                     await acknowledgment_delivered.wait()
-                return not turn_output.control
 
             async def emit_acknowledgment(source: str, text: str) -> None:
                 if not answer_started.is_set():

@@ -36,7 +36,7 @@ from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, subscribe
 from xr_ai_tools.current_frame import CurrentFrameTool
 from xr_ai_tools.image import ImageRegistry
 from xr_ai_tools.vision import ImageQueryTool
-from xr_ai_voice import VOICE_OUTPUT_TOPIC, VoiceAggregationAgent
+from xr_ai_voice import VOICE_OUTPUT_TOPIC
 
 _SAMPLE = Path(__file__).resolve().parents[2]
 _PID = "guide-eval"
@@ -107,6 +107,9 @@ class Speech(Agent):
 
     @subscribe(VOICE_OUTPUT_TOPIC)
     async def receive(self, output: ResponseOutput, _ctx: RuntimeContext):
+        # Reply terminators and withdraws carry no speech.
+        if not output.text:
+            return
         self.outputs.append(output)
         self.log("speech", text=output.text, timestamp_us=output.timestamp_us)
 
@@ -183,10 +186,10 @@ async def run_evaluation(
     llm.chat = logged_chat
 
     class TracedGuideAgent(GuideAgent):
-        async def _answer(self, query, participant_id):
+        async def _answer(self, query, participant_id, request_id):
             token = model_origin.set(("foreground", query.timestamp_us, asyncio.current_task()))
             try:
-                await super()._answer(query, participant_id)
+                await super()._answer(query, participant_id, request_id)
             finally:
                 model_origin.reset(token)
 
@@ -230,12 +233,9 @@ async def run_evaluation(
         _SAMPLE / "worker/procedure_capture_guide_worker/guide/prompts/guide_vision.txt"
     ).read_text())
     runtime = AgentRuntime()
-    aggregation = runtime.register("aggregation", VoiceAggregationAgent(
-        llm=llm, coalesce_window_s=0.01, minimum_playback_s=0, speech_rate_wpm=60000,
-    ))
     agent = runtime.register("guide", TracedGuideAgent(
         guide=guide, llm=llm, current_frame=frames, image_query=vision,
-        vision_timeout_s=settings.guide.vision_timeout_s, aggregation=aggregation,
+        vision_timeout_s=settings.guide.vision_timeout_s,
     ))
     speech = runtime.register("speech", Speech(log))
     agent.bind_runtime(runtime)
@@ -301,7 +301,6 @@ async def run_evaluation(
         log("error", error=repr(exc))
     finally:
         await agent.stop()
-        await aggregation.stop()
         feeder.cancel()
         await asyncio.gather(feeder, return_exceptions=True)
         await nemo_relay.subscribers.flush_async()

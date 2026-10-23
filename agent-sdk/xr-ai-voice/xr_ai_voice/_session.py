@@ -23,7 +23,7 @@ from ._processors.vad_stt import VadConfig
 from ._readiness import ProbeFn, wait_for_services
 from ._speaker_client import _select_speaker_asr
 from ._transport import HubVoiceTransport
-from ._types import VoiceInputSink, VoiceResponse
+from ._types import UpdateCombiner, VoiceInputSink, VoiceResponse
 
 _STATUS_REANNOUNCE_INTERVAL_S = 2.0
 
@@ -114,6 +114,7 @@ class _VoiceSession:
         on_participant_left: Callable[[str], Awaitable[None] | None] | None = None,
         on_interrupted: Callable[[str | None], Awaitable[None] | None] | None = None,
         interrupt_on_supersede: bool = False,
+        combiner: UpdateCombiner | None = None,
     ) -> None:
         """Run media input/output until the pipeline exits."""
         if self._io_processor is not None:
@@ -131,6 +132,7 @@ class _VoiceSession:
             on_participant_left=on_participant_left,
             on_interrupted=on_interrupted,
             interrupt_on_supersede=interrupt_on_supersede,
+            combiner=combiner,
         )
         _, task = _build_voice_pipeline(
             transport=self.transport,
@@ -223,24 +225,52 @@ class _VoiceSession:
             pts_us=pts_us,
         )
 
-    async def enqueue_response(
+    async def enqueue_reply(
         self,
         participant_id: str,
         response: VoiceResponse,
         *,
-        interrupt: bool = False,
+        request_id: str,
         pts_us: int | None = None,
     ) -> None:
-        """Queue finite or incremental output on the active participant voice path."""
+        """Queue a finite or incremental reply on the active participant voice path."""
 
         if self._io_processor is None:
             raise RuntimeError("voice session is not running")
-        await self._io_processor.enqueue_response(
+        await self._io_processor.enqueue_reply(
             participant_id,
             response,
-            interrupt=interrupt,
+            request_id=request_id,
             pts_us=pts_us,
         )
+
+    async def enqueue_update(
+        self,
+        participant_id: str,
+        text: str,
+        *,
+        source: str,
+        urgent: bool = False,
+        pts_us: int | None = None,
+    ) -> None:
+        """Queue unprompted output on the active participant voice path."""
+
+        if self._io_processor is None:
+            raise RuntimeError("voice session is not running")
+        await self._io_processor.enqueue_update(
+            participant_id,
+            text,
+            urgent=urgent,
+            source=source,
+            pts_us=pts_us,
+        )
+
+    async def withdraw_updates(self, participant_id: str, *, source: str) -> None:
+        """Drop one producer's queued updates that have not started playing."""
+
+        if self._io_processor is None:
+            raise RuntimeError("voice session is not running")
+        await self._io_processor.withdraw_updates(participant_id, source=source)
 
     async def __aexit__(self, *_exc: Any) -> None:
         await self.close()

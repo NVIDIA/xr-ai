@@ -15,7 +15,12 @@ from pathlib import Path
 import nemo_relay
 from loguru import logger
 from xr_ai_hub import FrameUnavailable
-from xr_ai_interaction import Interrupted, ParticipantLeft, ResponseOutput, UserQuery
+from xr_ai_interaction import (
+    Interrupted,
+    ParticipantLeft,
+    ResponseOutputs,
+    UserQuery,
+)
 from xr_ai_models import ChatMessage, ChatResponse, LLMService, ToolDef, VLMService
 from xr_ai_runtime import Agent, RuntimeClosedError, RuntimeContext, subscribe
 from xr_ai_tools import Tool, ToolSet
@@ -27,7 +32,7 @@ from xr_ai_tools.vision import (
     ImageQueryResult,
     StreamingImageQueryTool,
 )
-from xr_ai_voice import VOICE_CONTRIBUTION_TOPIC
+from xr_ai_voice import VOICE_OUTPUT_TOPIC
 
 from .background_context import BackgroundContextAgent
 from .change_watch import ChangeWatchAgent
@@ -229,14 +234,15 @@ class ForegroundAgent(Agent):
                 spoken = False
             try:
                 if not spoken:
-                    await ctx.publish(
-                        VOICE_CONTRIBUTION_TOPIC,
-                        ResponseOutput(
-                            text=response,
-                            interrupt=True,
-                            timestamp_us=query.timestamp_us,
-                        ),
+                    outputs = ResponseOutputs(
+                        ctx, VOICE_OUTPUT_TOPIC, closed_errors=(RuntimeClosedError,)
                     )
+                    async with outputs.reply(
+                        participant_id,
+                        request_id=ctx.metadata.message_id,
+                        timestamp_us=query.timestamp_us,
+                    ) as reply:
+                        await reply.send(response)
             except RuntimeClosedError:
                 return
             try:
@@ -447,102 +453,52 @@ class ForegroundAgent(Agent):
         *,
         timestamp_us: int | None,
     ) -> ImageQueryResult:
-        response_id = ctx.metadata.message_id
-        first = True
-        opened = False
-        cancelled = False
         chunks: list[str] = []
-        try:
-            async with asyncio.timeout(self._vlm_timeout_s):
-                try:
-                    frame = await self._images.get_current_frame.execute(
-                        CurrentFrameRequest(participant_id=participant_id)
-                    )
-                except FrameUnavailable as exc:
-                    unavailable = str(exc)
-                    await ctx.publish(
-                        VOICE_CONTRIBUTION_TOPIC,
-                        ResponseOutput(
-                            text=unavailable,
-                            response_id=response_id,
-                            final=False,
-                            interrupt=True,
-                            timestamp_us=timestamp_us,
-                        ),
-                    )
-                    opened = True
-                    return ImageQueryResult(text=unavailable, available=False)
-                stream = self._vision.stream(
-                    ImageQueryRequest(image=frame.image, query=query)
-                )
-                try:
-                    async for chunk in stream:
-                        if first and not chunk.text.strip():
-                            continue
-                        chunks.append(chunk.text)
-                        await ctx.publish(
-                            VOICE_CONTRIBUTION_TOPIC,
-                            ResponseOutput(
-                                text=chunk.text,
-                                response_id=response_id,
-                                final=False,
-                                interrupt=first,
-                                timestamp_us=timestamp_us,
-                            ),
+        outputs = ResponseOutputs(
+            ctx, VOICE_OUTPUT_TOPIC, closed_errors=(RuntimeClosedError,)
+        )
+        async with outputs.reply(
+            participant_id,
+            request_id=ctx.metadata.message_id,
+            timestamp_us=timestamp_us,
+        ) as reply:
+            try:
+                async with asyncio.timeout(self._vlm_timeout_s):
+                    try:
+                        frame = await self._images.get_current_frame.execute(
+                            CurrentFrameRequest(participant_id=participant_id)
                         )
-                        first = False
-                        opened = True
-                finally:
-                    close = getattr(stream, "aclose", None)
-                    if close is not None:
-                        await close()
-                if not chunks:
-                    unavailable = (
-                        "Unable to inspect the current frame because the vision model "
-                        "returned no description."
+                    except FrameUnavailable as exc:
+                        unavailable = str(exc)
+                        await reply.send(unavailable)
+                        return ImageQueryResult(text=unavailable, available=False)
+                    stream = self._vision.stream(
+                        ImageQueryRequest(image=frame.image, query=query)
                     )
-                    await ctx.publish(
-                        VOICE_CONTRIBUTION_TOPIC,
-                        ResponseOutput(
-                            text=unavailable,
-                            response_id=response_id,
-                            final=False,
-                            interrupt=True,
-                            timestamp_us=timestamp_us,
-                        ),
-                    )
-                    opened = True
-                    return ImageQueryResult(text=unavailable, available=False)
-            return ImageQueryResult(text="".join(chunks))
-        except TimeoutError:
-            unavailable = (
-                "Unable to inspect the current frame before the vision timeout."
-            )
-            await ctx.publish(
-                VOICE_CONTRIBUTION_TOPIC,
-                ResponseOutput(
-                    text=unavailable,
-                    response_id=response_id,
-                    final=False,
-                    interrupt=first,
-                    timestamp_us=timestamp_us,
-                ),
-            )
-            opened = True
-            return ImageQueryResult(text=unavailable, available=False)
-        except asyncio.CancelledError:
-            cancelled = True
-            raise
-        finally:
-            if opened and not cancelled:
-                with suppress(RuntimeClosedError):
-                    await ctx.publish(
-                        VOICE_CONTRIBUTION_TOPIC,
-                        ResponseOutput(
-                            response_id=response_id,
-                            timestamp_us=timestamp_us,
-                        ),
-                    )
+                    try:
+                        async for chunk in stream:
+                            if not chunks and not chunk.text.strip():
+                                continue
+                            chunks.append(chunk.text)
+                            await reply.send(chunk.text)
+                    finally:
+                        close = getattr(stream, "aclose", None)
+                        if close is not None:
+                            await close()
+                    if not chunks:
+                        unavailable = (
+                            "Unable to inspect the current frame because the vision "
+                            "model returned no description."
+                        )
+                        await reply.send(unavailable)
+                        return ImageQueryResult(text=unavailable, available=False)
+                return ImageQueryResult(text="".join(chunks))
+            except TimeoutError:
+                unavailable = (
+                    "Unable to inspect the current frame before the vision timeout."
+                )
+                await reply.send(unavailable)
+                return ImageQueryResult(text=unavailable, available=False)
 
     def _background_tools(self, participant_id: str) -> ToolSet:
         return _merge_tool_sets(

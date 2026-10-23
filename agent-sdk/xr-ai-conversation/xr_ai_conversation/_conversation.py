@@ -12,11 +12,10 @@ import asyncio
 import logging
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
-from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 
-from xr_ai_interaction import ResponseOutput
+from xr_ai_interaction import ResponseOutput, ResponseOutputs
 from xr_ai_models import ChatMessage, ChatResponse, LLMService
 from xr_ai_routing import (
     Admission,
@@ -68,7 +67,7 @@ class Conversation(RoutableAgent):
         one value for every topic, or a mapping with a value for each configured topic.
     :param runtime: Runtime used to publish answers. The application owns runtime startup and shutdown.
     :param output_topic: Explicit ``ResponseOutput`` topic for routed answers.
-        The conversation publishes with its routing name as source, the turn ID as response ID,
+        The conversation publishes replies with its routing name as source, the turn ID as request ID,
         and the originating timestamp. It owns stream framing and finalization.
         No default output or query topic is subscribed.
     :param compaction_input_budget_bytes: UTF-8 byte budget for the summary and entries in one
@@ -143,14 +142,13 @@ class Conversation(RoutableAgent):
         self,
         turn: AgentTurn,
         *,
-        started: Callable[[], Awaitable[bool]],
+        started: Callable[[], Awaitable[None]],
     ) -> DestinationResult:
         """Publish a routed answer directly to the configured output topic.
 
-        Requires ``runtime`` and ``output_topic``. The first nonblank ready chunk
-        awaits ``started()`` before publication. That body frame
-        interrupts older output unless router control text already started
-        this turn, and an empty final frame closes a completed, failed, or
+        Requires ``runtime`` and ``output_topic``. The answer is a reply to the
+        turn's ID. The first nonblank ready chunk awaits ``started()`` before
+        publication, and an empty final frame closes a completed, failed, or
         canceled response once opened. Canceled answers publish no further text,
         and a publication failure publishes no further frames. Failures
         propagate after closing the model iterator; the router reports
@@ -161,35 +159,19 @@ class Conversation(RoutableAgent):
 
         fragments: list[str] = []
         stream = self._stream_response(turn.query, turn.participant_id, history=turn.history, commit=False)
-        opened = False
-        publication_failed = False
-        interrupt = False
-        finalized = False
+        outputs = ResponseOutputs(
+            self._runtime, self._output_topic, source=self._routing.name, closed_errors=(RuntimeClosedError,)
+        )
         try:
-            async for text in stream:
-                fragments.append(text)
-                if not opened and not text.strip():
-                    continue
-                if not opened:
-                    interrupt = await started()
-                task = asyncio.current_task()
-                # A model stream can swallow cancellation; never publish for a canceled answer.
-                if task is not None and task.cancelling():
-                    raise asyncio.CancelledError
-                try:
-                    await self._runtime.publish(
-                        self._output_topic,
-                        ResponseOutput(
-                            text=text, response_id=turn.turn_id, final=False,
-                            interrupt=interrupt and not opened, timestamp_us=turn.timestamp_us,
-                        ),
-                        participant_id=turn.participant_id,
-                        source=self._routing.name,
-                    )
-                except Exception:
-                    publication_failed = True
-                    raise
-                opened = True
+            async with outputs.reply(
+                turn.participant_id,
+                request_id=turn.turn_id,
+                timestamp_us=turn.timestamp_us,
+                started=started,
+            ) as reply:
+                async for text in stream:
+                    fragments.append(text)
+                    await reply.send(text)
         except Exception:
             task = asyncio.current_task()
             if task is not None and task.cancelling():
@@ -197,19 +179,9 @@ class Conversation(RoutableAgent):
             raise
         finally:
             await stream.aclose()
-            # Close an opened stream even when canceled so later output does not queue behind it.
-            if opened and not publication_failed:
-                with suppress(RuntimeClosedError):
-                    await self._runtime.publish(
-                        self._output_topic,
-                        ResponseOutput(response_id=turn.turn_id, timestamp_us=turn.timestamp_us),
-                        participant_id=turn.participant_id,
-                        source=self._routing.name,
-                    )
-                    finalized = True
         answer = "".join(fragments)
         task = asyncio.current_task()
-        if finalized and not (task is not None and task.cancelling()):
+        if reply.delivered and not (task is not None and task.cancelling()):
             self._commit_exchange(turn.participant_id, turn.query, answer)
         return DestinationResult("answer", answer.strip())
 

@@ -14,7 +14,7 @@ import nemo_relay
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field
 from xr_ai_hub import FrameUnavailable
-from xr_ai_interaction import Interrupted, ParticipantLeft, ResponseOutput, UserQuery
+from xr_ai_interaction import Interrupted, ParticipantLeft, ResponseOutputs, UserQuery
 from xr_ai_models import ChatMessage, ChatResponse, LLMService, ToolDef, VLMService
 from xr_ai_runtime import Agent, RuntimeClosedError, RuntimeContext, subscribe
 from xr_ai_tools import Tool, ToolSet
@@ -25,7 +25,7 @@ from xr_ai_tools.vision import (
     ImageQueryResult,
     StreamingImageQueryTool,
 )
-from xr_ai_voice import VOICE_CONTRIBUTION_TOPIC
+from xr_ai_voice import VOICE_OUTPUT_TOPIC
 
 from .events import (
     FOREGROUND_RECORD_TOPIC,
@@ -275,15 +275,14 @@ class ForegroundAgent(Agent):
                 tools = []
                 spoken = False
             if not spoken:
+                outputs = ResponseOutputs(ctx, VOICE_OUTPUT_TOPIC, closed_errors=(RuntimeClosedError,))
                 try:
-                    await ctx.publish(
-                        VOICE_CONTRIBUTION_TOPIC,
-                        ResponseOutput(
-                            text=response,
-                            interrupt=True,
-                            timestamp_us=query.timestamp_us,
-                        ),
-                    )
+                    async with outputs.reply(
+                        participant_id,
+                        request_id=ctx.metadata.message_id,
+                        timestamp_us=query.timestamp_us,
+                    ) as reply:
+                        await reply.send(response)
                 except RuntimeClosedError:
                     return
             try:
@@ -532,50 +531,30 @@ class ForegroundAgent(Agent):
         timestamp_us: int | None,
         delivery: _CurrentViewDelivery | None = None,
     ) -> ImageQueryResult:
-        response_id = ctx.metadata.message_id
-        first = True
-        opened = False
-        cancelled = False
         chunks: list[str] = []
-        try:
+        outputs = ResponseOutputs(ctx, VOICE_OUTPUT_TOPIC, closed_errors=(RuntimeClosedError,))
+        async with outputs.reply(
+            participant_id,
+            request_id=ctx.metadata.message_id,
+            timestamp_us=timestamp_us,
+        ) as reply:
             try:
                 frame = await self._images.get_current_frame.execute(CurrentFrameRequest(participant_id=participant_id))
             except FrameUnavailable as exc:
                 unavailable = str(exc)
-                await ctx.publish(
-                    VOICE_CONTRIBUTION_TOPIC,
-                    ResponseOutput(
-                        text=unavailable,
-                        response_id=response_id,
-                        final=False,
-                        interrupt=True,
-                        timestamp_us=timestamp_us,
-                    ),
-                )
+                await reply.send(unavailable)
                 if delivery is not None and unavailable.strip():
                     delivery.spoke = True
-                opened = True
                 return ImageQueryResult(text=unavailable, available=False)
             stream = self._vision.stream(ImageQueryRequest(image=frame.image, query=query))
             try:
                 async for chunk in stream:
-                    if first and not chunk.text.strip():
+                    if not chunks and not chunk.text.strip():
                         continue
                     chunks.append(chunk.text)
-                    await ctx.publish(
-                        VOICE_CONTRIBUTION_TOPIC,
-                        ResponseOutput(
-                            text=chunk.text,
-                            response_id=response_id,
-                            final=False,
-                            interrupt=first,
-                            timestamp_us=timestamp_us,
-                        ),
-                    )
+                    await reply.send(chunk.text)
                     if delivery is not None and chunk.text.strip():
                         delivery.spoke = True
-                    first = False
-                    opened = True
             finally:
                 close = getattr(stream, "aclose", None)
                 if close is not None:
@@ -585,34 +564,11 @@ class ForegroundAgent(Agent):
                     "Unable to inspect the current frame because the vision model "
                     "returned no description."
                 )
-                await ctx.publish(
-                    VOICE_CONTRIBUTION_TOPIC,
-                    ResponseOutput(
-                        text=unavailable,
-                        response_id=response_id,
-                        final=False,
-                        interrupt=True,
-                        timestamp_us=timestamp_us,
-                    ),
-                )
+                await reply.send(unavailable)
                 if delivery is not None:
                     delivery.spoke = True
-                opened = True
                 return ImageQueryResult(text=unavailable, available=False)
             return ImageQueryResult(text="".join(chunks))
-        except asyncio.CancelledError:
-            cancelled = True
-            raise
-        finally:
-            if opened and not cancelled:
-                with suppress(RuntimeClosedError):
-                    await ctx.publish(
-                        VOICE_CONTRIBUTION_TOPIC,
-                        ResponseOutput(
-                            response_id=response_id,
-                            timestamp_us=timestamp_us,
-                        ),
-                    )
 
     async def _cancel(self, participant_id: str) -> None:
         task = self._tasks.pop(participant_id, None)

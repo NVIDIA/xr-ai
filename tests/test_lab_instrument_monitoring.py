@@ -28,7 +28,7 @@ from xr_ai_tools.current_frame import CurrentFrameRequest, ImageFrame
 from xr_ai_tools.image import ImageReference
 from xr_ai_tools.marker_tracking import MarkerPoint, MarkerType, TrackedMarker
 from xr_ai_tools.vision import ImageQueryRequest, ImageQueryResult
-from xr_ai_voice import VOICE_CONTRIBUTION_TOPIC, VOICE_TRANSCRIPT_TOPIC, VoiceTranscript
+from xr_ai_voice import VOICE_OUTPUT_TOPIC, VOICE_TRANSCRIPT_TOPIC, VoiceTranscript
 from xr_ai_web_events import WEB_EVENT_TOPIC, WebEvent
 
 _REPO = Path(__file__).resolve().parents[1]
@@ -41,9 +41,6 @@ _build_processes = _LAUNCHER["_build_processes"]
 _materialize_worker_config = _LAUNCHER["_materialize_worker_config"]
 _parser = _LAUNCHER["_parser"]
 
-from lab_instrument_monitoring_worker.app import (  # noqa: E402  # pyright: ignore[reportMissingImports]
-    _VoiceAggregationLifecycleAgent,
-)
 from lab_instrument_monitoring_worker.config import load_config  # noqa: E402  # pyright: ignore[reportMissingImports]
 from lab_instrument_monitoring_worker.device_map import DeviceMap  # noqa: E402  # pyright: ignore[reportMissingImports]
 from lab_instrument_monitoring_worker.events import (  # noqa: E402  # pyright: ignore[reportMissingImports]
@@ -127,7 +124,7 @@ class _InstrumentEventCollector(Agent):
     async def state(self, event: InstrumentStateSnapshot, _ctx: RuntimeContext) -> None:
         self.snapshots.append(event)
 
-    @subscribe(VOICE_CONTRIBUTION_TOPIC)
+    @subscribe(VOICE_OUTPUT_TOPIC)
     async def voice_output(self, event: ResponseOutput, _ctx: RuntimeContext) -> None:
         self.voice.append(event)
 
@@ -1093,6 +1090,7 @@ async def test_instrument_monitor_emits_only_changes_lost_once_and_full_state() 
         "I am no longer tracking Device1. Its last reading was 12 V.",
         "Device1 changed from 12 V to 13 V.",
     ]
+    assert {output.kind for output in collector.voice} == {"update"}
 
 
 @pytest.mark.asyncio
@@ -1315,22 +1313,6 @@ async def test_monitor_loop_continues_after_subscriber_publish_failure(
     await monitor._monitor("participant-1")
 
     assert attempts == 1
-
-
-@pytest.mark.asyncio
-async def test_participant_leave_releases_voice_aggregation_state() -> None:
-    released: list[str] = []
-
-    class Aggregation:
-        async def release(self, participant_id: str) -> None:
-            released.append(participant_id)
-
-    lifecycle = _VoiceAggregationLifecycleAgent(Aggregation())  # type: ignore[arg-type]
-    ctx = SimpleNamespace(metadata=SimpleNamespace(participant_id="participant-1"))
-
-    await lifecycle.participant_left(ParticipantLeft(), ctx)  # type: ignore[arg-type]
-
-    assert released == ["participant-1"]
 
 
 @pytest.mark.asyncio
@@ -1627,7 +1609,7 @@ async def test_foreground_injects_participant_into_current_frame_tool(tmp_path: 
     class Context:
         metadata = SimpleNamespace(message_id="turn-7")
 
-        async def publish(self, _topic, output: ResponseOutput) -> None:
+        async def publish(self, _topic, output: ResponseOutput, *, participant_id=None) -> None:
             published.append(output)
 
     images = _make_images()
@@ -1667,7 +1649,7 @@ async def test_foreground_injects_participant_into_current_frame_tool(tmp_path: 
     ]
     assert [output.text for output in published] == ["A blue ", "notebook.", ""]
     assert [output.final for output in published] == [False, False, True]
-    assert {output.response_id for output in published} == {"turn-7"}
+    assert {output.request_id for output in published} == {"turn-7"}
 
 
 @pytest.mark.asyncio
@@ -1701,7 +1683,7 @@ async def test_foreground_prior_tool_then_current_view_is_spoken_once(tmp_path: 
     class Context:
         metadata = SimpleNamespace(message_id="turn-streamed")
 
-        async def publish(self, _topic, output: ResponseOutput) -> None:
+        async def publish(self, _topic, output: ResponseOutput, *, participant_id=None) -> None:
             published.append(output)
 
     images = _make_images()
@@ -1791,7 +1773,7 @@ async def test_foreground_empty_current_view_stream_reports_unavailable(tmp_path
     class Context:
         metadata = SimpleNamespace(message_id="turn-empty")
 
-        async def publish(self, _topic, output: ResponseOutput) -> None:
+        async def publish(self, _topic, output: ResponseOutput, *, participant_id=None) -> None:
             published.append(output)
 
     response, tools, spoken = await agent._answer(
@@ -1819,7 +1801,7 @@ async def test_foreground_record_failure_does_not_suppress_speech() -> None:
             message_id="query-1",
         )
 
-        async def publish(self, topic, message) -> None:
+        async def publish(self, topic, message, *, participant_id=None) -> None:
             if topic is FOREGROUND_RECORD_TOPIC:
                 raise OSError("disk full")
             published.append((topic, message))
@@ -1835,12 +1817,11 @@ async def test_foreground_record_failure_does_not_suppress_speech() -> None:
         Context(),  # type: ignore[arg-type]
     )
 
-    assert [topic for topic, _message in published] == [VOICE_CONTRIBUTION_TOPIC]
-    assert published[0][1] == ResponseOutput(
-        text="Device1 is reading 12 volts.",
-        interrupt=True,
-        timestamp_us=7,
-    )
+    assert [topic for topic, _message in published] == [VOICE_OUTPUT_TOPIC] * 2
+    assert published[0][1].kind == "reply"
+    assert published[0][1].request_id == "query-1"
+    assert published[0][1].text == "Device1 is reading 12 volts."
+    assert published[1][1].final is True
 
 
 @pytest.mark.asyncio

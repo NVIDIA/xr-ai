@@ -50,17 +50,33 @@ class _Transport:
 
 class _HandlerProcessor:
     def __init__(self) -> None:
-        self.responses: list[tuple[str, object, bool, int | None]] = []
+        self.replies: list[tuple[str, object, str, int | None]] = []
+        self.updates: list[tuple[str, str, bool, str | None, int | None]] = []
+        self.withdrawn: list[tuple[str, str]] = []
 
-    async def enqueue_response(
+    async def enqueue_reply(
         self,
         participant_id: str,
         response: object,
         *,
-        interrupt: bool = False,
+        request_id: str,
         pts_us: int | None = None,
     ) -> None:
-        self.responses.append((participant_id, response, interrupt, pts_us))
+        self.replies.append((participant_id, response, request_id, pts_us))
+
+    async def enqueue_update(
+        self,
+        participant_id: str,
+        text: str,
+        *,
+        source: str,
+        urgent: bool = False,
+        pts_us: int | None = None,
+    ) -> None:
+        self.updates.append((participant_id, text, urgent, source, pts_us))
+
+    async def withdraw_updates(self, participant_id: str, *, source: str) -> None:
+        self.withdrawn.append((participant_id, source))
 
 
 class _Service:
@@ -100,14 +116,13 @@ async def test_voice_session_queues_external_responses_through_active_processor(
     processor = _HandlerProcessor()
     session._io_processor = processor  # type: ignore[assignment]  # noqa: SLF001
 
-    await session.enqueue_response(
-        "alice",
-        "Careful.",
-        interrupt=True,
-        pts_us=12,
-    )
+    await session.enqueue_reply("alice", "Done.", request_id="r1", pts_us=11)
+    await session.enqueue_update("alice", "Careful.", urgent=True, source="guide", pts_us=12)
+    await session.withdraw_updates("alice", source="guide")
 
-    assert processor.responses == [("alice", "Careful.", True, 12)]
+    assert processor.replies == [("alice", "Done.", "r1", 11)]
+    assert processor.updates == [("alice", "Careful.", True, "guide", 12)]
+    assert processor.withdrawn == [("alice", "guide")]
 
 
 async def test_voice_session_owns_readiness_ready_file_and_cleanup(
