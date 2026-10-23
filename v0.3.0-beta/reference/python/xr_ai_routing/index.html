@@ -505,7 +505,10 @@
 <dd><p>Destination decision made before it speaks or starts work.</p>
 <p><code class="docutils literal notranslate"><span class="pre">accept</span></code> permits work, <code class="docutils literal notranslate"><span class="pre">decline</span></code> returns control for another route,
 <code class="docutils literal notranslate"><span class="pre">clarify</span></code> ends routing with a question, and <code class="docutils literal notranslate"><span class="pre">release</span></code> clears focus and
-returns the same query to ordinary routing.</p>
+returns the same query to ordinary routing. Declining a turn does not clear
+existing focus or call the focused destination’s <code class="docutils literal notranslate"><span class="pre">release()</span></code>. That owner
+receives the next turn unless it releases focus, becomes ineligible, another
+destination explicitly takes focus, or the participant leaves.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="xr_ai_routing.Admission.disposition">
 <span class="sig-name descname"><span class="pre">disposition</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'accept'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'decline'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'clarify'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'release'</span></span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#xr_ai_routing.Admission.disposition" title="Link to this definition">#</a></dt>
@@ -589,7 +592,9 @@ returns the same query to ordinary routing.</p>
 <span class="sig-name descname"><span class="pre">disposition</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'answer'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'focus'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'release'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'clarify'</span></span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'answer'</span></em><a class="headerlink" href="#xr_ai_routing.DestinationResult.disposition" title="Link to this definition">#</a></dt>
 <dd><p>Destinations return answer, focus, or release; the router returns clarify before answer work.</p>
 <p>A post-answer <code class="docutils literal notranslate"><span class="pre">release</span></code> consumes this turn and clears focus. It does not
-reroute the request; use <code class="docutils literal notranslate"><span class="pre">Admission(&quot;release&quot;)</span></code> for that behavior.</p>
+reroute the request; use <code class="docutils literal notranslate"><span class="pre">Admission(&quot;release&quot;)</span></code> for that behavior.
+Returning <code class="docutils literal notranslate"><span class="pre">focus</span></code> takes focus and calls the previous owner’s <code class="docutils literal notranslate"><span class="pre">release()</span></code>
+if a different destination held it.</p>
 </dd></dl>
 
 <dl class="py attribute">
@@ -622,6 +627,8 @@ this protocol.</p>
 <dt class="sig sig-object py" id="xr_ai_routing.RoutableAgent.admit">
 <em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">admit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">turn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#xr_ai_routing.AgentTurn" title="xr_ai_routing.AgentTurn"><span class="pre">AgentTurn</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">focused</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#xr_ai_routing.Admission" title="xr_ai_routing.Admission"><span class="pre">Admission</span></a></span></span><a class="headerlink" href="#xr_ai_routing.RoutableAgent.admit" title="Link to this definition">#</a></dt>
 <dd><p>Accept, decline, clarify, or release before producing spoken output.</p>
+<p>A focused destination can decline this turn without ending its session.
+Use <code class="docutils literal notranslate"><span class="pre">release</span></code> to clear focus and reroute the same query instead.</p>
 </dd></dl>
 
 <dl class="py method">
@@ -681,9 +688,10 @@ clarification is also used when the configured default is unavailable.</p>
 <dd><p>Handle route release; the router also uses it for departure fallback.</p>
 <p>This method runs when the router releases a destination during
 rerouting or clears its focus. It is also the departure fallback when
-no <code class="docutils literal notranslate"><span class="pre">participant_left()</span></code> hook is present. A destination can clear
-active resources here while retaining completed participant data; use
-the optional departure hook for stronger cleanup.</p>
+no <code class="docutils literal notranslate"><span class="pre">participant_left()</span></code> hook is present. Declining a turn while focused
+does not call this method; a different destination taking focus does.
+A destination can clear active resources here while retaining completed
+participant data; use the optional departure hook for stronger cleanup.</p>
 </dd></dl>
 
 </dd></dl>
@@ -788,7 +796,7 @@ an active routed turn, it contains <code class="docutils literal notranslate"><s
 <span class="sig-paren">)</span><a class="headerlink" href="#xr_ai_routing.AgentRouter" title="Link to this definition">#</a></dt>
 <dd><p>Route a turn, check admission before speech, and retain explicit focus.</p>
 <p>A focused destination receives the participant’s next turn first. It can
-answer, release focus, or decline and return control to ordinary routing.
+answer, release focus, or decline only this turn while retaining focus.
 Route choices use the typed decision service; a declined route is excluded
 from one bounded reroute. If selected destinations decline through those
 attempts, the configured eligible default gets one final answer attempt

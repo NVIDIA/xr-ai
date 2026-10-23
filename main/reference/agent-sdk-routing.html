@@ -647,9 +647,21 @@ publication.</p>
 <p>Returning <code class="docutils literal notranslate"><span class="pre">DestinationResult(&quot;focus&quot;)</span></code> makes that destination the participant’s
 first route for later turns. It remains focused across answers until it returns
 <code class="docutils literal notranslate"><span class="pre">DestinationResult(&quot;release&quot;)</span></code>, its admission returns <code class="docutils literal notranslate"><span class="pre">Admission(&quot;release&quot;)</span></code>,
-it becomes ineligible, or the participant leaves. An admission release clears
-focus and routes the same query again. A post-answer release clears focus after
-consuming the query.</p>
+it becomes ineligible, another destination returns <code class="docutils literal notranslate"><span class="pre">DestinationResult(&quot;focus&quot;)</span></code>,
+or the participant leaves. An admission release clears focus and routes the
+same query again. A post-answer release clears focus after consuming the query.</p>
+<p>A focused destination can return <code class="docutils literal notranslate"><span class="pre">Admission(&quot;decline&quot;)</span></code> to let another destination
+handle the current query, then receive the next turn again. For example, a
+foreground note-taking agent can decline a general question without ending its
+note session. The router keeps its focus and does not call its <code class="docutils literal notranslate"><span class="pre">release()</span></code>.
+The declined destination is excluded from selection and default fallback for
+the rest of this turn, within the existing bounded routing attempts.</p>
+<p>An ordinary answer, clarification, failure, or cancellation during that turn
+retains the original focus. If another destination explicitly returns
+<code class="docutils literal notranslate"><span class="pre">DestinationResult(&quot;focus&quot;)</span></code>, the router releases the previous owner and gives
+focus to that destination instead. This keeps a single foreground owner;
+it does not stack suspended destinations. Returning <code class="docutils literal notranslate"><span class="pre">Admission(&quot;release&quot;)</span></code>
+explicitly ends focus and reroutes the current query as before.</p>
 <p><code class="docutils literal notranslate"><span class="pre">interrupt(participant_id)</span></code> cancels and drains current response work while
 preserving completed history and focus. Omitting the participant cancels all
 active turns. Output already delivered to the callback cannot be retracted.
