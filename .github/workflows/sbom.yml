@@ -12,6 +12,7 @@ on:
       - 'dependency-manifest/**'
       - 'uv.toml'
       - '.github/scripts/generate_sbom.py'
+      - 'tests/test_sbom.py'
       - '.github/workflows/sbom.yml'
   workflow_dispatch:
 
@@ -19,7 +20,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: sbom-${{ github.ref }}
+  group: sbom-${{ github.event_name }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: true
 
 jobs:
@@ -30,10 +31,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
+      - name: Install uv
+        uses: astral-sh/setup-uv@caf0cab7a618c569241d31dcd442f54681755d39 # v3.2.4
+
+      - name: Test SBOM generation
+        run: uv run --no-project --with 'pytest>=8.0' pytest --noconftest -p no:cacheprovider tests/test_sbom.py
 
       - name: Install Syft
         env:
@@ -49,12 +51,10 @@ jobs:
           echo "$TOOLS" >> "$GITHUB_PATH"
 
       - name: Generate and check dependency SBOMs
-        run: python3 .github/scripts/generate_sbom.py
+        run: uv run --script .github/scripts/generate_sbom.py
 
       - name: Validate SPDX document
-        run: |
-          python3 -m pip install 'spdx-tools==0.8.3'
-          pyspdxtools --infile dist/sbom/xr-ai.spdx.json
+        run: uv run --no-project --with 'spdx-tools==0.8.3' pyspdxtools --infile dist/sbom/xr-ai.spdx.json
 
       - name: Upload SBOMs and provenance
         uses: actions/upload-artifact@v4

@@ -103,10 +103,10 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   sample resolves unbounded and may install newer versions. An exact transitive
   pin published after the cutoff fails the resolve rather than floating.
 
-## Generated Python project inventory
-
 For machine-readable SPDX and CycloneDX inventories of the committed snapshots,
 refer to [Software bill of materials](docs/source/guides/sbom.md).
+
+## Generated Python project inventory
 
 <!-- BEGIN GENERATED PYTHON DEPENDENCY MAP -->
 

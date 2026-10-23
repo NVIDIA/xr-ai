@@ -13,7 +13,7 @@ dispatch. Download `xr-ai-sbom-<commit>` from the workflow run's artifacts:
 - `xr-ai.spdx.json`: SPDX 2.3 JSON for dependency analysis tools.
 - `xr-ai.cdx.json`: CycloneDX JSON for dependency analysis tools.
 - `xr-ai.syft.json`: Syft's native inventory and discovery evidence.
-- `provenance.json`: source revision, qualification timestamp, input and output
+- `provenance.json`: source revision, qualification cutoffs, input and output
   SHA-256 digests, generator version, and package counts by ecosystem.
 
 Artifacts are retained for 90 days. Download and retain them alongside release
@@ -22,18 +22,21 @@ materials when longer retention is required.
 ## Generate locally
 
 Install [Syft 1.55.0](https://github.com/anchore/syft/releases/tag/v1.55.0)
-and Python 3.11 or later. From the repository root, run:
+and uv (Python 3.11 or later). From the repository root, run:
 
 ```bash
-python3 .github/scripts/generate_sbom.py
+uv run --script .github/scripts/generate_sbom.py
 ```
 
 Use `--syft /path/to/syft` to select the executable and `--output-dir <directory>`
 to change the default `dist/sbom/` destination. Generation reads lockfiles
 without installing their packages or resolving newer versions. It includes web
 development dependencies and both Android application and buildscript locks.
-The generator checks every locked package name and version against the native
-inventory and fails if a package is missing or unexpected.
+The generator checks every in-scope locked package name and version against
+the native inventory and fails if a package is missing or unexpected.
+The snapshots and `uv.toml` must match `HEAD`; generation rejects uncommitted
+input changes. Provenance hashes include `uv.toml` and record both the global
+cutoff and package-specific cutoff overrides.
 CI also validates the SPDX document with `spdx-tools`. npm's local SDK download
 reference is preserved as source information and represented as `NOASSERTION`
 in SPDX's absolute download-location field.
@@ -48,10 +51,12 @@ not a claim that all packages can be installed together. Refer to
 [`DEPENDENCIES.md`](https://github.com/NVIDIA/xr-ai/blob/main/DEPENDENCIES.md)
 for snapshot refresh rules and dependency boundaries.
 
-The inventory covers Python runtime dependencies, web runtime and development
-dependencies, and Android application and buildscript dependencies recorded in
-those locks. License fields are limited to metadata in the inputs; generation
-does not fetch license texts or establish license compliance. The SBOM does not
+The inventory covers registry-sourced Python runtime dependencies, web runtime
+and development dependencies, and Android application and buildscript dependencies
+recorded in those locks. Python editable workspace members, the virtual manifest root, and
+git-sourced packages are excluded from all three inventories; they are not
+assigned PyPI identities. License fields are limited to metadata in the inputs;
+generation does not fetch license texts or establish license compliance. The SBOM does not
 replace `THIRD_PARTY_NOTICES.md` or `third_party_licenses/`.
 
 Installed environments, container operating-system packages, native libraries

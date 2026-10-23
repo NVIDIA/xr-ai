@@ -1,6 +1,11 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+# /// script
+# requires-python = ">=3.11"
+# dependencies = []
+# ///
+
 """Generate and check the qualified dependency snapshot SBOM; run from any directory."""
 
 from __future__ import annotations
@@ -23,7 +28,9 @@ MANIFEST = ROOT / "dependency-manifest"
 
 def _expected_packages() -> dict[str, set[tuple[str, str]]]:
     lock = tomllib.loads((MANIFEST / "uv.lock").read_text())
-    python = {(re.sub(r"[-_.]+", "-", p["name"]).lower(), p["version"]) for p in lock["package"]}
+    python = {
+        (re.sub(r"[-_.]+", "-", p["name"]).lower(), p["version"]) for p in lock["package"] if "registry" in p["source"]
+    }
     lock = json.loads((MANIFEST / "web-xr-build/package-lock.json").read_text())
     npm = {(p.get("name", path.rsplit("node_modules/", 1)[-1]), p["version"]) for path, p in lock["packages"].items()}
     java = set()
@@ -44,12 +51,21 @@ def main() -> None:
     if version["version"].removeprefix("v") != SYFT_VERSION:
         raise SystemExit(f"Install Syft {SYFT_VERSION}; found {version['version']}")
 
-    expected = _expected_packages()
     output = args.output_dir.resolve()
-    output.mkdir(parents=True, exist_ok=True)
     revision = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     inputs = ["pyproject.toml", "uv.lock", "web-xr-build/package.json", "web-xr-build/package-lock.json"]
     inputs += [str(p.relative_to(MANIFEST)) for p in sorted((MANIFEST / "android").glob("*.lockfile"))]
+    input_paths = [MANIFEST / name for name in inputs] + [ROOT / "uv.toml"]
+    dirty = subprocess.check_output(
+        ["git", "status", "--porcelain", "--untracked-files=all", "--", "dependency-manifest", "uv.toml"],
+        cwd=ROOT,
+        text=True,
+    )
+    if dirty:
+        raise SystemExit("SBOM inputs differ from HEAD; commit or restore the dependency snapshots and uv.toml")
+    expected = _expected_packages()
+    input_hashes = {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest() for p in input_paths}
+    qualification = tomllib.loads((ROOT / "uv.toml").read_text())
     with tempfile.TemporaryDirectory(prefix="xr-ai-sbom-") as temporary:
         staged = Path(temporary)
         for name in inputs:
@@ -76,15 +92,29 @@ def main() -> None:
                 revision,
                 "-o",
                 f"syft-json={staged / 'xr-ai.syft.json'}",
-                "-o",
-                f"spdx-json={staged / 'xr-ai.spdx.json'}",
-                "-o",
-                f"cyclonedx-json={staged / 'xr-ai.cdx.json'}",
             ],
             check=True,
             env={**os.environ, "SYFT_CHECK_FOR_APP_UPDATE": "false"},
         )
         document = json.loads((staged / "xr-ai.syft.json").read_text())
+        # Syft assigns PyPI identities even to editable, virtual, and git sources.
+        # Keep only registry Python dependencies in all three output formats.
+        lock = tomllib.loads((staged / "uv.lock").read_text())
+        excluded = {
+            (re.sub(r"[-_.]+", "-", p["name"]).lower(), p["version"])
+            for p in lock["package"]
+            if "registry" not in p["source"]
+        }
+        removed_ids = {
+            p["id"] for p in document["artifacts"] if p["type"] == "python" and (p["name"], p["version"]) in excluded
+        }
+        document["artifacts"] = [p for p in document["artifacts"] if p["id"] not in removed_ids]
+        document["artifactRelationships"] = [
+            r
+            for r in document["artifactRelationships"]
+            if r["parent"] not in removed_ids and r["child"] not in removed_ids
+        ]
+        (staged / "xr-ai.syft.json").write_text(json.dumps(document, indent=2) + "\n")
         for ecosystem, packages in expected.items():
             found = set()
             for package in document["artifacts"]:
@@ -100,6 +130,19 @@ def main() -> None:
                     f"unexpected={sorted(found - packages)}"
                 )
 
+        subprocess.run(
+            [
+                args.syft,
+                "convert",
+                str(staged / "xr-ai.syft.json"),
+                "-o",
+                f"spdx-json={staged / 'xr-ai.spdx.json'}",
+                "-o",
+                f"cyclonedx-json={staged / 'xr-ai.cdx.json'}",
+            ],
+            check=True,
+            env={**os.environ, "SYFT_CHECK_FOR_APP_UPDATE": "false"},
+        )
         spdx_path = staged / "xr-ai.spdx.json"
         spdx = json.loads(spdx_path.read_text())
         for package in spdx["packages"]:
@@ -113,6 +156,7 @@ def main() -> None:
                 )
         spdx_path.write_text(json.dumps(spdx, indent=2) + "\n")
 
+        output.mkdir(parents=True, exist_ok=True)
         for name in ("xr-ai.syft.json", "xr-ai.spdx.json", "xr-ai.cdx.json"):
             shutil.copyfile(staged / name, output / name)
 
@@ -120,11 +164,12 @@ def main() -> None:
         "scope": "Committed qualified dependency snapshots; not installed or redistributed contents",
         "revision": revision,
         "syft_version": SYFT_VERSION,
-        "qualification": tomllib.loads((ROOT / "uv.toml").read_text())["exclude-newer"],
-        "packages": {kind: len(packages) for kind, packages in expected.items()},
-        "inputs": {
-            f"dependency-manifest/{name}": hashlib.sha256((MANIFEST / name).read_bytes()).hexdigest() for name in inputs
+        "qualification": {
+            "exclude-newer": qualification["exclude-newer"],
+            "exclude-newer-package": qualification.get("exclude-newer-package", {}),
         },
+        "packages": {kind: len(packages) for kind, packages in expected.items()},
+        "inputs": input_hashes,
         "outputs": {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(output.glob("xr-ai.*.json"))},
     }
     (output / "provenance.json").write_text(json.dumps(evidence, indent=2, default=str) + "\n")
