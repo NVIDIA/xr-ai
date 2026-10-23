@@ -56,7 +56,7 @@ Use tea labeled chamomile, boiling water, a five-minute steep, and a kettle
 or thermometer that shows the current water temperature. For another locally
 reviewed guide, pass its YAML file path, such as `guides/my-procedure.guide.yaml`,
 or a directory containing exactly one top-level YAML file.
-Relative paths resolve from this sample directory; absolute paths are also
+The launcher resolves relative paths from this sample directory; absolute paths are also
 supported. Quote paths containing spaces. The `guides/` folder remains available
 for local guides; checked-in examples live under `examples/`.
 The guide must have `task.status: approved`. Guide mode uses the same model servers;

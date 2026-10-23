@@ -29,8 +29,6 @@ class SelectedGuide:
 def load_guide(path: Path) -> SelectedGuide:
     """Resolve an unambiguous guide; pin validation and hashing to the same bytes."""
     try:
-        if path.is_symlink():
-            raise ValueError("symbolic-link guides are not allowed")
         if path.is_dir():
             candidates = sorted(
                 child for child in path.iterdir()
@@ -47,8 +45,6 @@ def load_guide(path: Path) -> SelectedGuide:
                     "Provide the path to a specific guide YAML file."
                 )
             path = candidates[0]
-            if path.is_symlink():
-                raise ValueError("symbolic-link guides are not allowed")
         path = path.resolve()
         with path.open("rb") as stream:
             content = stream.read(1_000_001)

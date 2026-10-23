@@ -3,8 +3,8 @@
 
 """Load guide selection and verification settings for guided procedures.
 
-Read the visual verification timeout from guide-agent-config.yaml and resolve
-the command-line guide path against the sample directory. Shared voice, frame,
+Read the visual verification timeout from guide-agent-config.yaml and accept
+the guide path resolved by the launcher. Shared voice, frame,
 and model settings remain in the worker's config.py.
 """
 
@@ -27,8 +27,4 @@ def load_guide_config(path: Path, *, guide_path: str | None) -> GuideConfig:
     timeout = float(data.get("vision_timeout_s", 15.0))
     if not 0 < timeout < float("inf"):
         raise ValueError("vision_timeout_s must be finite and positive")
-    selected = Path(guide_path).expanduser()
-    if not selected.is_absolute():
-        # Worker processes and temporary launch requests need the same path base as the sample CLI.
-        selected = Path(__file__).resolve().parents[3] / selected
-    return GuideConfig(selected, timeout)
+    return GuideConfig(Path(guide_path), timeout)

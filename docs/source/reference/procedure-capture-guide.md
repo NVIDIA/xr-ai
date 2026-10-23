@@ -385,16 +385,12 @@ Select a reviewed guide YAML file or its containing directory by path. The sampl
 remains available for local, Git-ignored guides; maintained examples live under
 `examples/`. Guides can also live outside the sample. Set `task.status` to
 `approved` only after reviewing the instructions, completion checks, timers,
-and safety constraints. For a directory, selection considers only files ending
-in `.yaml` or `.yml` at that level, not nested directories. Exactly one YAML
-file is required: `guide.yaml` works, as does any other single YAML filename.
-If multiple YAML files exist, the error lists all of them and asks for a specific
-file path; `guide.yaml` does not take priority over other files. An empty directory
-also produces an error. Explicit file paths bypass directory selection.
+and safety constraints. A directory must contain exactly one top-level `.yaml`
+or `.yml` file; otherwise, provide a specific file path.
 The worker loads the selected file and rejects
 missing, draft, or invalid guides. It does not search by `task.name` or `task.id`.
-Relative paths resolve from `agent-samples/procedure-capture-guide/`, not the
-worker's working directory; absolute paths are also supported. Quote paths
+The launcher resolves relative paths from `agent-samples/procedure-capture-guide/`
+and passes an absolute path to the worker. Symbolic links are supported. Quote paths
 containing spaces. Run from the sample directory:
 
 ```bash
@@ -721,8 +717,9 @@ The worker loads shared settings into `WorkerConfig` and capture-specific settin
 into `CaptureConfig` under `capture/config.py`; `app.py` supplies each to its
 owning component. Guide mode selects its YAML through `guide_config` and loads
 `GuideConfig` from `guide/config.py`. The required positional `GUIDE_PATH` selects
-a guide file, resolved from the sample directory when relative, or used directly
-when absolute. `task.name` and `task.id` remain guide metadata, not CLI selectors.
+a guide file or a directory containing exactly one top-level YAML file. The
+launcher resolves sample-relative paths and passes an absolute path to the worker.
+`task.name` and `task.id` remain guide metadata, not CLI selectors.
 `--output-root` applies only to capture. Restart after configuration edits.
 Refer to {doc}`configuration` and {doc}`command-line` for fields and CLI options.
 

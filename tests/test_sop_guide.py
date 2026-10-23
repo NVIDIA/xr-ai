@@ -336,13 +336,18 @@ def test_explicit_path_ignores_duplicate_names_and_invalid_siblings(tmp_path, do
         load_guide(tmp_path / "Align Parts")
 
 
-def test_symlink_guide_is_rejected(tmp_path, document):
-    path = write_guide(tmp_path, document)
-    sub = tmp_path / "linked"
-    sub.mkdir()
-    (sub / "link.guide.yaml").symlink_to(path)
-    with pytest.raises(ValueError, match="symbolic-link"):
-        load_guide(sub / "link.guide.yaml")
+@pytest.mark.parametrize("kind", ["file", "directory", "parent"])
+def test_symlink_guide_pins_target_contents(tmp_path, document, kind):
+    source = tmp_path / "source"
+    source.mkdir()
+    path = write_guide(source, document)
+    link = tmp_path / "current"
+    link.symlink_to(path if kind == "file" else source)
+    selected = link / path.name if kind == "parent" else link
+    guide = load_guide(selected)
+    assert guide.path == path
+    assert guide.sha256 == hashlib.sha256(path.read_bytes()).hexdigest()
+    assert guide.workflow.runnable
 
 
 @pytest.mark.parametrize("filename", ["guide.yaml", "assemble-toy.yaml", "tea.yml"])
@@ -379,7 +384,7 @@ def test_directory_does_not_search_nested_yaml_files(tmp_path, document):
         load_guide(tmp_path)
 
 
-def test_directory_selection_preserves_approval_and_symlink_checks(tmp_path, document):
+def test_directory_selection_preserves_approval_through_symlinks(tmp_path, document):
     document["task"]["status"] = "draft"
     path = write_guide(tmp_path, document, "guide.yaml")
     with pytest.raises(ValueError, match="draft"):
@@ -387,21 +392,34 @@ def test_directory_selection_preserves_approval_and_symlink_checks(tmp_path, doc
     linked = tmp_path / "linked"
     linked.mkdir()
     (linked / "guide.yaml").symlink_to(path)
-    with pytest.raises(ValueError, match="symbolic-link"):
+    with pytest.raises(ValueError, match="draft"):
         load_guide(linked)
 
 
-@pytest.mark.parametrize("kind", ["missing", "directory", "oversize", "malformed"])
+@pytest.mark.parametrize("kind", ["missing", "directory", "malformed"])
 def test_invalid_guide_file_is_rejected(tmp_path, kind):
     path = tmp_path / "guide.yaml"
     if kind == "directory":
         path.mkdir()
-    elif kind == "oversize":
-        path.write_bytes(b" " * 1_000_001)
     elif kind == "malformed":
         path.write_text("task: [")
     with pytest.raises(ValueError, match="Cannot load guide"):
         load_guide(path)
+
+
+@pytest.mark.parametrize("size", [1_000_000, 1_000_001])
+def test_guide_size_limit_rejects_otherwise_valid_yaml(tmp_path, document, size):
+    path = write_guide(tmp_path, document)
+    source = path.read_bytes() + b"\n#"
+    source += b"x" * (size - len(source))
+    assert len(source) == size
+    assert parse_workflow(source).runnable
+    path.write_bytes(source)
+    if size > 1_000_000:
+        with pytest.raises(ValueError, match="exceeds 1000000 bytes"):
+            load_guide(path)
+    else:
+        assert load_guide(path).sha256 == hashlib.sha256(source).hexdigest()
 
 
 @pytest.mark.parametrize("trigger", [
@@ -1514,7 +1532,7 @@ def test_cli_selects_guide_with_independent_session_recording(
     monkeypatch.setattr(main, "run_stack", launch)
     main.run(["--mode", "guide", selected, *extra])
     assert requests == [{"worker_config": str(_SAMPLE / "yaml/worker.yaml"), "mode": "guide",
-                         "guide_path": selected, "output_root": None}]
+                         "guide_path": str(configured_path), "output_root": None}]
     for arguments in (["--mode", "guide"], ["--mode", "guide", " "],
                       ["--mode", "replay", "Align Parts"],
                       ["--mode", "capture", "Align Parts"], ["--mode", "unknown"],
@@ -1522,6 +1540,35 @@ def test_cli_selects_guide_with_independent_session_recording(
         with pytest.raises(SystemExit):
             main.run([*arguments, *extra])
     assert len(requests) == 1
+
+
+@pytest.mark.parametrize("selection", ["~/procedures/tea.yaml", "~/procedures/tea"])
+def test_launcher_expands_home_guide_paths(monkeypatch, tmp_path, selection):
+    spec = importlib.util.spec_from_file_location("guide_path_main", _SAMPLE / "main.py")
+    main = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(main)
+    monkeypatch.chdir(tmp_path)
+    requests = []
+
+    def launch(processes, _base, **_kwargs):
+        requests.append(json.loads(processes[-1].config.read_text()))
+
+    monkeypatch.setattr(main, "run_stack", launch)
+    main.run(["--mode", "guide", selection])
+    assert requests[0]["guide_path"] == str(Path(selection).expanduser().resolve())
+
+
+def test_guide_config_accepts_paths_without_sample_tree_resolution(tmp_path, monkeypatch):
+    from procedure_capture_guide_worker.guide import config
+
+    settings = tmp_path / "guide.yaml"
+    settings.write_text("vision_timeout_s: 7\n")
+    monkeypatch.setattr(config, "__file__", "/installed/guide/config.py")
+    monkeypatch.chdir(tmp_path)
+    for selected in (Path("local.yaml"), tmp_path / "external guide.yaml"):
+        loaded = config.load_guide_config(settings, guide_path=str(selected))
+        assert loaded.guide_path == selected
+        assert loaded.vision_timeout_s == 7
 
 
 async def test_unapproved_selection_fails_before_model_construction(tmp_path, document, monkeypatch):
@@ -1546,7 +1593,7 @@ def test_mode_configuration_is_isolated_and_models_are_shared(tmp_path):
     request = tmp_path / "request.json"
     request.write_text(json.dumps({
         "worker_config": str(_SAMPLE / "yaml/worker.yaml"), "mode": "guide",
-        "guide_path": "examples/tea-making/guide.yaml",
+        "guide_path": str(_SAMPLE / "examples/tea-making/guide.yaml"),
     }))
     guide = load_config(request)
     assert guide.mode == "guide" and guide.capture is None
