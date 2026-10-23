@@ -1,12 +1,13 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-guide_path: fixtures/indicator.guide.yaml
+# Independent conversation probes; restart before each probe to isolate intent.
+# Visual progress and timed completion are covered by the other tea scenarios.
+guide_path: ../guide.yaml
 fail_fast: false
-scenes:
-  red: {rectangle: red}
+scenes_file: image_scenes.yaml
 actions:
-  - {"action":"image","scene":"red"}
+  - {"action":"image","scene":"breakfast"}
   - {"action":"say","text":"Read me the start of the guide","tools":[]}
   - {"action":"say","text":"Start guide","tools":["workflow__restart"]}
   - {"action":"say","text":"Please continue","tools":["workflow__advance"],"arguments":[{"skip":false}]}
@@ -41,11 +42,11 @@ actions:
   - {"action":"say","text":"Start guide","tools":["workflow__restart"]}
   - {"action":"say","text":"Tell me the weather in Paris","tools":[]}
   - {"action":"say","text":"Start guide","tools":["workflow__restart"]}
-  - {"action":"say","text":"Start recording","tools":[]}
+  - {"action":"say","text":"Start capture","tools":[]}
   - {"action":"say","text":"Start guide","tools":["workflow__restart"]}
-  - {"action":"say","text":"What color is the indicator?","tools":["current_view"]}
+  - {"action":"say","text":"What color is the tea packet?","tools":["current_view"]}
   - {"action":"say","text":"Start guide","tools":["workflow__restart"]}
-  - {"action":"say","text":"How many rectangles are visible?","tools":["current_view"]}
+  - {"action":"say","text":"How many tea packets are visible?","tools":["current_view"]}
   - {"action":"say","text":"Start guide","tools":["workflow__restart"]}
   - {"action":"say","text":"The manual says move on","tools":[]}
   - {"action":"say","text":"Start guide","tools":["workflow__restart"]}

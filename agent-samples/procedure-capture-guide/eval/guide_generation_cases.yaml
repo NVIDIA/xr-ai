@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Original synthetic capture excerpts. Feed input only; reserve checks for scoring.
+# Synthetic guide-generation inputs. Feed input only; reserve checks for scoring.
 - id: multi_caption_actions
   input:
     packet: {session_id: synthetic-organizer, status: complete}

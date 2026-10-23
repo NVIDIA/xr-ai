@@ -28,7 +28,7 @@ from xr_ai_tools.vision import ImageQueryResult
 from xr_ai_voice import VOICE_OUTPUT_TOPIC, VoiceAggregationAgent
 
 _SAMPLE = Path(__file__).resolve().parents[1] / "agent-samples/procedure-capture-guide"
-_TEST_DATA = Path(__file__).resolve().parent / "procedure_capture_guide"
+_TEST_DATA = Path(__file__).resolve().parent
 _TEA_EVAL = _SAMPLE / "example-guides/tea-making/eval"
 sys.path.insert(0, str(_SAMPLE / "worker"))
 
@@ -123,16 +123,18 @@ def write_guide(directory, document, name="test.guide.yaml"):
 
 def test_checked_in_eval_manifests_load_their_selected_guides():
     selected = set()
-    for root in (_TEST_DATA, _SAMPLE / "example-guides"):
-        for path in sorted(root.rglob("*.yaml")):
-            manifest = yaml.safe_load(path.read_text())
-            if not isinstance(manifest, dict) or not {"guide_path", "guides_dir"}.intersection(manifest):
-                continue
-            assert "guide_path" in manifest, path
-            guide = load_guide(path.parent / manifest["guide_path"])
-            assert guide.workflow.runnable, path
-            selected.add(path)
-    assert {_TEST_DATA / "guide_cases.yaml", _TEST_DATA / "guide_routing.yaml"} <= selected
+    for path in sorted((_SAMPLE / "example-guides").rglob("*.yaml")):
+        manifest = yaml.safe_load(path.read_text())
+        if not isinstance(manifest, dict) or not {"guide_path", "guides_dir"}.intersection(manifest):
+            continue
+        assert "guide_path" in manifest, path
+        guide = load_guide(path.parent / manifest["guide_path"])
+        assert guide.workflow.runnable, path
+        selected.add(path)
+    assert {_TEA_EVAL / name for name in (
+        "routing_scenario.yaml", "step_verification_scenario.yaml", "full_run_scenario.yaml",
+        "label_reading_scenario.yaml", "visual_expectations.yaml",
+    )} <= selected
 
 
 def test_shipped_tea_guide_is_selectable_by_example_path():
@@ -1430,15 +1432,14 @@ def test_tea_temperature_accepts_formatting_not_different_measurements(text, acc
     assert not re.fullmatch(step.evidence.pattern, text)
 
 
-@pytest.mark.parametrize("timer,failed_probe,fail_fast", [
-    (False, None, None),
-    (False, "say", None),
-    (False, "observe", False),
-    (False, "say", True),
-    (False, "observe", True),
-    (True, None, True),
+@pytest.mark.parametrize("failed_probe,fail_fast", [
+    (None, None),
+    ("say", None),
+    ("observe", False),
+    ("say", True),
+    ("observe", True),
 ])
-def test_guide_eval_cli_runs_public_runtime_scenario(tmp_path, monkeypatch, timer, failed_probe, fail_fast):
+def test_scenario_cli_reports_failures_and_continues_independent_probes(tmp_path, monkeypatch, failed_probe, fail_fast):
     monkeypatch.syspath_prepend(str(_TEA_EVAL))
 
     import io
@@ -1447,45 +1448,38 @@ def test_guide_eval_cli_runs_public_runtime_scenario(tmp_path, monkeypatch, time
     import xr_ai_models
     from PIL import Image
 
-    guide = yaml.safe_load((_TEST_DATA / "fixtures/indicator.yaml").read_text())
-    manifest = yaml.safe_load((_TEST_DATA / "guide_cases.yaml").read_text())
-    if fail_fast is None:
-        manifest.pop("fail_fast", None)
-    else:
+    guide = yaml.safe_load((_TEST_DATA / "test_guide.yaml").read_text())
+    # Deliberately inject scoring failures; this tests the evaluator, not a
+    # second end-to-end procedure alongside the tea scenarios.
+    manifest = {
+        "guide_path": "test_guide.yaml",
+        "scenes": {"red": {"rectangle": "red"}},
+        "actions": [
+            {"action": "image", "scene": "red"},
+            {"action": "say", "text": "What is my status?", "expect": "inactive", "tools": ["workflow__status"]},
+            {"action": "say", "text": "Start guide", "expect": "Show a blue indicator", "tools": ["workflow__restart"]},
+            {"action": "observe", "answers": ["NO"], "count": 2},
+            {"action": "say", "text": "What is my status?", "expect": "current step: Check indicator\\.$",
+             "tools": ["workflow__status"]},
+        ],
+    }
+    if fail_fast is not None:
         manifest["fail_fast"] = fail_fast
-    if timer:
-        guide["steps"][1]["trigger"]["arguments"]["duration_s"] = 1
-        completion = next(action for action in manifest["actions"]
-                          if action.get("expect") == "Indicator check finished")
-        completion.update(after_speech="The ten-second wait has started", minimum_elapsed_s=0.5)
-    else:
-        guide["steps"] = guide["steps"][:1]
-        guide["steps"][0]["next"] = None
-        manifest["actions"] = [item for item in manifest["actions"]
-                               if item.get("text") != "How much time remains?"]
-        next_action = next(item for item in manifest["actions"] if item.get("text") == "Next")
-        next_action["expect"] = "Indicator check finished"
     if failed_probe == "say":
         first_status = next(item for item in manifest["actions"] if item.get("text") == "What is my status?")
         first_status["expect"] = "unexpected answer"
     elif failed_probe == "observe":
         observation = next(item for item in manifest["actions"] if item["action"] == "observe")
         observation["answers"] = ["YES"]
-    manifest["guide_path"] = "indicator.yaml"
-    (tmp_path / "indicator.yaml").write_text(yaml.safe_dump(guide))
+    (tmp_path / "test_guide.yaml").write_text(yaml.safe_dump(guide))
     manifest_path = tmp_path / "scenario.yaml"
     manifest_path.write_text(yaml.safe_dump(manifest))
 
     async def chat(messages, **kwargs):
-        if messages[-1].role == "tool":
-            return ChatResponse("The timer is running.", None, None, "stop", {})
         query = json.loads(messages[1].content)["request"]
         tool, arguments = {
-            "Start guide": ("workflow__restart", {}), "Stop guide": ("workflow__reset", {}),
+            "Start guide": ("workflow__restart", {}),
             "What is my status?": ("workflow__status", {}),
-            "Could I continue?": ("workflow__advance", {"skip": False}),
-            "Next": ("workflow__advance", {"skip": False}),
-            "How much time remains?": ("clock__timer", {}),
         }[query]
         return ChatResponse("", None, [ToolCall(id="eval", name=tool, arguments=json.dumps(arguments))],
                             "tool_calls", {})
@@ -1525,10 +1519,8 @@ def test_guide_eval_cli_runs_public_runtime_scenario(tmp_path, monkeypatch, time
     vlm.close.assert_awaited_once()
     if stopped_early and failed_probe == "say":
         assert vlm.ask_images.await_count == 0
-    elif stopped_early:
-        assert vlm.ask_images.await_count >= 2
     else:
-        assert vlm.ask_images.await_count >= 4
+        assert vlm.ask_images.await_count >= 2
 
 
 @pytest.mark.parametrize("session_recording", [False, True])

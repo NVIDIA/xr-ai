@@ -24,7 +24,7 @@ import yaml
 from PIL import Image
 
 _SAMPLE = Path(__file__).resolve().parents[1] / "agent-samples/procedure-capture-guide"
-_TEST_DATA = Path(__file__).resolve().parent / "procedure_capture_guide"
+_TEST_DATA = Path(__file__).resolve().parent
 _SCRIPTS = _SAMPLE / "guide-generation-skills/evaluate-guide/scripts"
 
 
@@ -113,7 +113,7 @@ def test_packet_cli_uses_runtime_controls_and_unique_source_evidence(
 ):
     llm, vlm = runtime_models
     packet = make_packet(tmp_path, count, color)
-    guide = yaml.safe_load((_TEST_DATA / "fixtures/indicator.yaml").read_text())
+    guide = yaml.safe_load((_TEST_DATA / "test_guide.yaml").read_text())
     guide["task"]["status"] = "draft"
     guide["steps"][1]["trigger"]["arguments"]["duration_s"] = 1
     guide["steps"][1]["finish_on_complete"] = automatic
@@ -167,7 +167,7 @@ def test_packet_cli_rejects_announcements_that_disagree_with_progress(
     from procedure_capture_guide_worker.guide.guiding import _Guide
 
     packet = make_packet(tmp_path)
-    guide = yaml.safe_load((_TEST_DATA / "fixtures/indicator.yaml").read_text())
+    guide = yaml.safe_load((_TEST_DATA / "test_guide.yaml").read_text())
     guide["task"]["status"] = "draft"
     guide["steps"] = guide["steps"][:1]
     guide["steps"][0]["next"] = None
@@ -246,7 +246,7 @@ def test_runtime_provenance_excludes_environment_and_tracks_loaded_sdk(packets, 
 
 
 def test_generation_cases_have_separate_inputs_and_review_criteria():
-    cases = yaml.safe_load((_TEST_DATA / "guide_generation_cases.yaml").read_text())
+    cases = yaml.safe_load((_SAMPLE / "eval/guide_generation_cases.yaml").read_text())
     assert len(cases) == 7
     assert len({case["id"] for case in cases}) == len(cases)
     for case in cases:

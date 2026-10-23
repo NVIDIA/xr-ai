@@ -15,7 +15,7 @@ import pytest
 import yaml
 
 _SAMPLE = Path(__file__).resolve().parents[1] / "agent-samples/procedure-capture-guide"
-_TEST_DATA = Path(__file__).resolve().parent / "procedure_capture_guide"
+_TEST_DATA = Path(__file__).resolve().parent
 _REFERENCES = _SAMPLE / "guide-generation-skills/draft-guide/references"
 sys.path.insert(0, str(_SAMPLE / "worker"))
 
@@ -74,10 +74,10 @@ def test_validator_accepts_examples_and_shipped_guides_without_a_schema_fork(cap
     assert _validate_guide.load_workflow is load_workflow
     paths = (sorted(_REFERENCES.glob("*.yaml"))
              + sorted((_SAMPLE / "example-guides").glob("*/guide.yaml"))
-             + sorted((_TEST_DATA / "fixtures").glob("*.yaml")))
+             + [_TEST_DATA / "test_guide.yaml"])
     assert len(paths) >= 5
     assert _SAMPLE / "example-guides/tea-making/guide.yaml" in paths
-    assert _TEST_DATA / "fixtures/indicator.yaml" in paths
+    assert _TEST_DATA / "test_guide.yaml" in paths
     originals = {path: path.read_bytes() for path in paths}
     assert main([str(path) for path in paths]) == 0
     assert not capsys.readouterr().err

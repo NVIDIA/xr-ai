@@ -18,7 +18,7 @@ from PIL import Image
 from xr_ai_models import ChatResponse, ToolCall
 
 _SAMPLE = Path(__file__).resolve().parents[1] / "agent-samples/procedure-capture-guide"
-_TEST_DATA = Path(__file__).resolve().parent / "procedure_capture_guide"
+_TEST_DATA = Path(__file__).resolve().parent
 _TEA_EVAL = _SAMPLE / "example-guides/tea-making/eval"
 
 
@@ -218,12 +218,29 @@ def test_flow_uses_shipped_guide_and_control_contract(evaluator, filename):
 @pytest.mark.parametrize("filename,fail_fast", [
     ("example-guides/tea-making/eval/step_verification_scenario.yaml", True),
     ("example-guides/tea-making/eval/full_run_scenario.yaml", True),
-    ("../../tests/procedure_capture_guide/guide_cases.yaml", True),
-    ("../../tests/procedure_capture_guide/guide_routing.yaml", False),
+    ("example-guides/tea-making/eval/routing_scenario.yaml", False),
 ])
 def test_manifest_declares_dependent_or_independent_checks(filename, fail_fast):
     manifest = yaml.safe_load((_SAMPLE / filename).read_text())
     assert manifest["fail_fast"] is fail_fast
+
+
+def test_tea_routing_probes_are_independent_and_include_non_control_requests():
+    manifest = yaml.safe_load((_TEA_EVAL / "routing_scenario.yaml").read_text())
+    assert manifest["guide_path"] == "../guide.yaml"
+    scenes = yaml.safe_load((_TEA_EVAL / manifest["scenes_file"]).read_text())
+    assert manifest["actions"][0]["scene"] in scenes
+    utterances = [action for action in manifest["actions"] if action["action"] == "say"]
+    probes = {action["text"]: action for action in utterances}
+    for text in ("Don't advance", "My coworker said skip", "What does start guide do?", "Start capture"):
+        assert probes[text]["tools"] == []
+    for text in ("What color is the tea packet?", "How many tea packets are visible?"):
+        assert probes[text]["tools"] == ["current_view"]
+    # The first probe tests an inactive guide; each later probe starts afresh.
+    assert utterances[0]["tools"] == []
+    for restart in utterances[1:-1:2]:
+        assert restart["text"] == "Start guide"
+        assert restart["tools"] == ["workflow__restart"]
 
 
 @pytest.mark.asyncio
@@ -303,7 +320,7 @@ def runtime_evaluator(evaluator, monkeypatch):
 
 
 def timer_scenario(tmp_path, actions):
-    guide = yaml.safe_load((_TEST_DATA / "fixtures/indicator.yaml").read_text())
+    guide = yaml.safe_load((_TEST_DATA / "test_guide.yaml").read_text())
     guide["task"]["start_step"] = "wait"
     guide["steps"] = [guide["steps"][1]]
     guide["steps"][0]["trigger"]["arguments"]["duration_s"] = 1
@@ -461,7 +478,7 @@ async def test_invalid_actions_fail_before_model_work(runtime_evaluator, tmp_pat
 async def test_runtime_observe_uses_shared_visual_case(runtime_evaluator, tmp_path, answer, expected):
     module = runtime_evaluator
     module.runtime.xr_ai_models.make_vlm.return_value.ask_images.return_value = SimpleNamespace(content=answer)
-    guide = yaml.safe_load((_TEST_DATA / "fixtures/indicator.yaml").read_text())
+    guide = yaml.safe_load((_TEST_DATA / "test_guide.yaml").read_text())
     guide["steps"] = guide["steps"][:1]
     guide["steps"][0]["next"] = None
     (tmp_path / "test.guide.yaml").write_text(yaml.safe_dump(guide))
