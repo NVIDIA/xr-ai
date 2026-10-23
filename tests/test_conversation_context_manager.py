@@ -195,13 +195,28 @@ async def test_close_forgets_all_context_and_drops_later_topic_updates():
 
 @pytest.mark.asyncio
 async def test_close_drops_later_exchanges_and_history():
-    store = _store()
+    llm = _LLM()
+    store = _store(llm)
     await store.close()
 
-    store.record_exchange("alice", "Late question.", "Late answer.", timestamp_us=_NOON_US, exchange_id=None)
-    store.reconcile_history("alice", (("Old question.", "Old answer.", _NOON_US),), exchange_ids=_NO_IDS)
+    # Each batch is past the dialogue's compaction trigger, so a recorded one would schedule compaction.
+    for index in range(4):
+        store.record_exchange(
+            "alice",
+            f"Late question {index} " + "q" * 80,
+            "Late answer.",
+            timestamp_us=_NOON_US + index,
+            exchange_id=None,
+        )
+    store.reconcile_history(
+        "alice",
+        tuple((f"Old question {index} " + "q" * 80, "Old answer.", _NOON_US + index) for index in range(4)),
+        exchange_ids=_NO_IDS,
+    )
+    await asyncio.sleep(0)
 
     assert store.blocks("alice") == ()
+    assert llm.requests == 0
 
 
 @pytest.mark.asyncio
@@ -227,17 +242,38 @@ async def test_compaction_prompts_are_customizable_and_the_manager_adds_the_size
 
 
 @pytest.mark.asyncio
-async def test_update_without_a_participant_is_dropped(caplog):
+async def test_topic_update_without_a_participant_is_dropped(caplog):
     store = _store()
+    runtime = AgentRuntime()
+    runtime.register("context", store.subscriber())
 
-    await store.update(None, "status", _note("Nobody's state."), mode="summary", timestamp_us=_NOON_US)
+    async with runtime:
+        await runtime.publish(Topic("status", ConversationContextUpdate), {"text": "Nobody's state."})
+        await _eventually(lambda: "dropping context update without participant" in caplog.text)
 
-    assert "dropping context update without participant" in caplog.text
     assert store.blocks("alice") == ()
 
 
 @pytest.mark.asyncio
-async def test_oversized_summary_state_is_clipped_within_its_budget():
+@pytest.mark.parametrize(
+    ("source", "mode", "message"),
+    [
+        ("unknown", "summary", "not a configured topic"),
+        ("status", "incremental", "configured as summary"),
+        ("notes", "summary", "configured as incremental"),
+    ],
+)
+async def test_update_rejects_an_unconfigured_source_or_the_wrong_mode(source, mode, message):
+    store = _store()
+
+    with pytest.raises(ValueError, match=message):
+        await store.update("alice", source, _note("Ignored."), mode=mode, timestamp_us=_NOON_US)
+
+    assert store.blocks("alice") == ()
+
+
+@pytest.mark.asyncio
+async def test_oversized_summary_state_is_clipped_within_its_budget(caplog):
     store = _store(topic_budget_bytes=300)
 
     await store.update("alice", "status", _note("start " + "x" * 5_000 + " end"), mode="summary", timestamp_us=_NOON_US)
@@ -246,6 +282,7 @@ async def test_oversized_summary_state_is_clipped_within_its_budget():
     assert len(block.text.encode()) <= 300
     assert "start" in block.text
     assert block.text.endswith("end")
+    assert "clipping oversized context state" in caplog.text
 
 
 @pytest.mark.asyncio

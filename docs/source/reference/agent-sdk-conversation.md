@@ -34,12 +34,14 @@ conversation = Conversation(
     runtime=runtime,
     output_topic=VOICE_OUTPUT_TOPIC,
 )
-front_end = AgentRouter(
-    {"conversation": conversation},
-    decisions,
-    output=publish_router_control,
-    cleanup_participant=context.clear,
-)
+front_end = AgentRouter({"conversation": conversation}, decisions, output=publish_router_control)
+
+
+async def participant_left(participant_id: str) -> None:
+    await front_end.participant_left(participant_id)
+    await context.clear(participant_id)
+
+
 async with runtime:
     try:
         result = await front_end.handle(
@@ -51,10 +53,13 @@ await conversation.close()
 await context.close()
 ```
 
-`cleanup_participant=context.clear` is what forgets a participant's context when they
-leave. The conversation does not clear it, and without this wiring a departed
-participant's dialogue and summaries stay in the manager until `close()`, and a reused
-participant id inherits them.
+`context.clear()` is what forgets a participant's context when they leave. The
+conversation does not clear it, so without that call a departed participant's
+dialogue and summaries stay in the manager until `close()`, and a reused
+participant id inherits them. A router configured with runtime topics does the
+same through `AgentRouter(..., cleanup_participant=context.clear)`; that option
+requires `query_topic` and `output_topic`, so a direct router like this one calls
+`clear()` after `participant_left()` returns.
 
 The agent answers from its prompt, completed history, and the context
 manager's sources. Configure the runtime and a `ResponseOutput` topic, such as
@@ -186,17 +191,17 @@ requests.
 
 The application owns the context manager's lifecycle. `release()` and
 `participant_left()` on the conversation leave participant context in place, so
-a shared manager is not cleared by one agent. Wire `context.clear` as the
-router's `cleanup_participant`, as in the example above. The router runs it after
-it has interrupted and drained the participant's in-flight work, so it is the one
-ordering in which a streaming answer cannot record into the cleared context. It
-cancels the participant's compaction jobs, waits for them, and forgets the
+a shared manager is not cleared by one agent. Clear it after the router's
+departure, as in the example above, or pass `context.clear` as a runtime router's
+`cleanup_participant`. Either way it runs after the router has cancelled and
+drained the participant's in-flight answers, and a cancelled answer records no
+exchange, so nothing streaming can record into the cleared context. It cancels the participant's compaction jobs, waits for them, and forgets the
 participant's context; it is idempotent, and other participants are unaffected.
 `context.close()` does the same for every participant and drops later updates,
 exchanges, and history. `conversation.close()` only stops new answers.
 
-An answer still streaming when its participant is cleared outside the router's
-cleanup is not stopped, and on completion it records its exchange as the start of
+An answer still streaming when its participant is cleared before the router's
+departure is not stopped, and on completion it records its exchange as the start of
 new context. After `context.close()` the exchange is dropped. Compaction tasks
 call the model, so close the context manager before closing the shared model
 client, and drain in-flight answers separately.

@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from typing import Literal
 
 from xr_ai_models import ChatMessage, ChatResponse, LLMService
 from xr_ai_runtime import Agent, Topic
@@ -151,6 +152,10 @@ class ContextManager:
             raise ValueError(
                 "compaction_input_budget_bytes must be at least half the largest section budget plus 256 bytes"
             )
+        self._topic_modes: dict[str, Literal["summary", "incremental"]] = {
+            **dict.fromkeys(summary_names, "summary"),
+            **dict.fromkeys(incremental_names, "incremental"),
+        }
         self._summary_context_topics = tuple(Topic(name, ConversationContextUpdate) for name in summary_names)
         self._incremental_context_topics = tuple(Topic(name, ConversationContextUpdate) for name in incremental_names)
         self._llm = llm
@@ -172,18 +177,23 @@ class ContextManager:
 
     async def update(
         self,
-        participant_id: str | None,
+        participant_id: str,
         source: str,
         update: ConversationContextUpdate,
         *,
-        mode: str,
+        mode: Literal["summary", "incremental"],
         timestamp_us: int | None = None,
     ) -> None:
-        """Apply one configured topic update to a participant's context."""
+        """Apply one configured topic update to a participant's context.
 
-        if participant_id is None:
-            _logger.error("dropping context update without participant source=%r", source)
-            return
+        :raises ValueError: If ``source`` is not a configured topic or ``mode`` is not its configured mode.
+        """
+
+        configured = self._topic_modes.get(source)
+        if configured is None:
+            raise ValueError(f"context source {source!r} is not a configured topic")
+        if mode != configured:
+            raise ValueError(f"context source {source!r} is configured as {configured}, not {mode}")
         if self._closing:
             _logger.warning("dropping context update while closing participant=%r source=%r", participant_id, source)
             return
@@ -246,12 +256,11 @@ class ContextManager:
         """Render a participant's dialogue and topic context, summaries first, then newer entries in time order."""
 
         blocks = self._dialogue_blocks(participant_id)
-        summary_topics = {topic.name for topic in self._summary_context_topics}
         for source, background, records in self._context.source_snapshots(participant_id):
             budget = self._topic_budgets.get(source)
             if budget is None:
                 continue
-            if source in summary_topics:
+            if self._topic_modes.get(source) == "summary":
                 if background is not None:
                     blocks.append(
                         ContextBlock(background.latest_us, _state_text(source, background.text, background.latest_us))

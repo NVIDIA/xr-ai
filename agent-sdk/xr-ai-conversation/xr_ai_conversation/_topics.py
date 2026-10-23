@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -14,6 +15,8 @@ from ._context_update import ConversationContextUpdate
 
 if TYPE_CHECKING:
     from ._manager import ContextManager
+
+_logger = logging.getLogger(__name__)
 
 
 class _ConversationContextAgent(Agent):
@@ -26,7 +29,7 @@ def _handler(source: str, mode: Literal["summary", "incremental"]) -> Any:
     async def receive(self, update: ConversationContextUpdate, ctx: RuntimeContext) -> None:
         participant_id = ctx.metadata.participant_id
         if participant_id is None:
-            await self._manager.update(None, source, update, mode=mode, timestamp_us=ctx.metadata.timestamp_us)
+            _logger.error("dropping context update without participant source=%r", source)
             return
         await self._manager.update(participant_id, source, update, mode=mode, timestamp_us=ctx.metadata.timestamp_us)
 

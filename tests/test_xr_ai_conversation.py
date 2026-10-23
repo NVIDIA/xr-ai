@@ -48,7 +48,6 @@ class _ConversationRuntime:
             await _publish_output(source, message.text)
 
 
-
 def test_conversation_explicitly_implements_routable_agent():
     assert Conversation.__bases__ == (RoutableAgent,)
     assert all(callable(Conversation.__dict__.get(method)) for method in ("routing_aid", "admit", "answer", "release"))
@@ -174,6 +173,7 @@ async def test_conversation_notifies_before_delivery_and_preserves_answer_contex
             async def chunks():
                 for text in (" ", "Hello", " there."):
                     yield ChatStreamEvent(kind="text", text=text)
+
             return chunks()
 
     class Recording(Conversation):
@@ -244,7 +244,8 @@ async def test_conversation_reconciles_recent_front_end_window_after_another_des
     conversation = Conversation(llm, context=manager, runtime=_ConversationRuntime(), output_topic=_OUTPUT_TOPIC)  # type: ignore[arg-type]
     front_end = AgentRouter(
         {"conversation": conversation, "scene": Scene()},
-        Decisions(), output=_emit_control,  # type: ignore[arg-type]
+        Decisions(),
+        output=_emit_control,  # type: ignore[arg-type]
         context_budget_bytes=160,
     )
 
@@ -313,7 +314,8 @@ async def test_unknown_seed_does_not_mask_a_later_identical_routed_exchange():
     conversation = Conversation(llm, context=manager, runtime=_ConversationRuntime(), output_topic=_OUTPUT_TOPIC)  # type: ignore[arg-type]
     front_end = AgentRouter(
         {"conversation": conversation, "scene": Scene()},
-        Decisions(), output=_emit_control,  # type: ignore[arg-type]
+        Decisions(),
+        output=_emit_control,  # type: ignore[arg-type]
         context_budget_bytes=1_000,
     )
 
@@ -367,7 +369,8 @@ async def test_admission_release_text_and_rerouted_answer_keep_separate_history_
     conversation = Conversation(llm, context=manager, runtime=_ConversationRuntime(), output_topic=_OUTPUT_TOPIC)  # type: ignore[arg-type]
     front_end = AgentRouter(
         {"conversation": conversation, "scene": Scene()},
-        Decisions(), output=_emit_control,  # type: ignore[arg-type]
+        Decisions(),
+        output=_emit_control,  # type: ignore[arg-type]
         context_budget_bytes=1_000,
     )
 
@@ -444,7 +447,10 @@ def test_answer_request_keeps_instructions_context_and_request_separate():
 def test_system_prompt_replaces_the_default_and_instructions_still_append(system_prompt, expected):
     model = _LLM()
     default = Conversation(
-        model, context=ContextManager(model), runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC  # type: ignore[arg-type]
+        model,
+        context=ContextManager(model),
+        runtime=AgentRuntime(),
+        output_topic=_OUTPUT_TOPIC,  # type: ignore[arg-type]
     )
     conversation = Conversation(
         model,
@@ -488,6 +494,54 @@ async def test_conversations_share_one_context_manager_without_owning_it():
     # Closing one conversation neither stops its peer nor closes the shared manager.
     assert [chunk async for chunk in second._stream_response("Hello.", "alice")] == ["Hello there."]
     assert "User: Remember copper." in second._answer_messages("alice", "Again")[1].content
+    await manager.close()
+
+
+@pytest.mark.asyncio
+async def test_routed_conversations_sharing_a_manager_record_each_exchange_once():
+    class Decisions:
+        def __init__(self):
+            self.choices = iter(("conversation", "second", "conversation", "second"))
+
+        async def decide(self, _state, questions, **_kwargs):
+            choice = next(self.choices)
+            return DecisionResponse(
+                answers={
+                    "destination": DecisionAnswer(
+                        choice, 1.0, {label: float(label == choice) for label in questions["destination"].criteria}
+                    )
+                },
+                model="fake",
+                usage={},
+                raw={},
+            )
+
+    llm = _LLM()
+    manager = ContextManager(llm)
+    first = Conversation(llm, context=manager, runtime=_ConversationRuntime(), output_topic=_OUTPUT_TOPIC)  # type: ignore[arg-type]
+    second = Conversation(
+        llm,
+        context=manager,
+        routing=RoutingAid(name="second", description="Another destination"),
+        runtime=_ConversationRuntime(),  # type: ignore[arg-type]
+        output_topic=_OUTPUT_TOPIC,
+    )
+    front_end = AgentRouter({"conversation": first, "second": second}, Decisions(), output=_emit_control)  # type: ignore[arg-type]
+
+    async def emit(_source, _text):
+        pass
+
+    for index, request in enumerate(("Remember copper.", "Remember tin.", "Remember zinc.", "What did I say?")):
+        await _route(front_end, AgentTurn("alice", f"turn-{index}", request), emit=emit)
+
+    context = llm.messages[-1][1].content
+    assert [context.count(f"User: Remember {metal}.") for metal in ("copper", "tin", "zinc")] == [1, 1, 1]
+
+    # The documented direct-router departure: the router drains, then the application clears.
+    await front_end.participant_left("alice")
+    await manager.clear("alice")
+    assert manager.blocks("alice") == ()
+    await front_end.stop()
     await manager.close()
 
 
@@ -612,9 +666,7 @@ async def test_oversized_newest_exchange_is_clipped_in_the_prompt_instead_of_wip
         topic_budget_bytes=1500,
     )
     conversation = Conversation(llm, context=manager, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC)
-    await manager.update(
-        "alice", "notes", ConversationContextUpdate(text="Bench 3 is usable."), mode="incremental"
-    )
+    await manager.update("alice", "notes", ConversationContextUpdate(text="Bench 3 is usable."), mode="incremental")
     pasted_log = "Controller log:\n" + "heartbeat ok\n" * 1500 + "ERROR interlock tripped code E-4471"
     _ = [chunk async for chunk in conversation._stream_response(pasted_log, "alice")]
     await _settle(manager, "alice")
@@ -634,9 +686,7 @@ async def test_oversized_uncompacted_update_is_clipped_in_the_prompt_instead_of_
     llm = _LLM()
     manager = ContextManager(llm, incremental_context_topics=("notes",), topic_budget_bytes=1500)
     conversation = Conversation(llm, context=manager, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC)
-    await manager.update(
-        "alice", "notes", ConversationContextUpdate(text="Bench 3 is usable."), mode="incremental"
-    )
+    await manager.update("alice", "notes", ConversationContextUpdate(text="Bench 3 is usable."), mode="incremental")
     # Store a large raw update without letting compaction run before the next prompt.
     await manager._context.update("alice", "notes", "incremental", "dump " * 2000 + "Purge started.")
     _ = [chunk async for chunk in conversation._stream_response("Status?", "alice")]
@@ -644,22 +694,6 @@ async def test_oversized_uncompacted_update_is_clipped_in_the_prompt_instead_of_
     context = llm.messages[-1][-2].content
     assert "Purge started." in context
     assert "bytes omitted" in context
-    await conversation.close()
-
-
-@pytest.mark.asyncio
-async def test_oversized_summary_topic_state_is_clipped_to_its_budget(caplog):
-    model = _LLM()
-    manager = ContextManager(model, summary_context_topics=("status",), topic_budget_bytes=200)
-    conversation = Conversation(model, context=manager, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC)
-    text = "Status begins. " + "detail " * 200 + "Status ends."
-    await manager.update("alice", "status", ConversationContextUpdate(text=text), mode="summary")
-
-    ((source, stored),) = manager._context.sections("alice")
-    assert source == "status"
-    assert stored.startswith("Status begins.") and stored.endswith("Status ends.")
-    assert len(f"Source status current state, published at an unknown time:\n{stored}".encode("utf-8")) <= 200
-    assert "clipping oversized context state" in caplog.text
     await conversation.close()
 
 
@@ -732,7 +766,8 @@ async def test_router_history_windows_larger_than_256_exchanges_are_not_replayed
     conversation = Conversation(llm, context=manager, runtime=_ConversationRuntime(), output_topic=_OUTPUT_TOPIC)  # type: ignore[arg-type]
     front_end = AgentRouter(
         {"conversation": conversation},
-        _Decisions(), output=_emit_control,  # type: ignore[arg-type]
+        _Decisions(),
+        output=_emit_control,  # type: ignore[arg-type]
         context_budget_bytes=64_000,
     )
 
@@ -1008,37 +1043,6 @@ async def test_answers_stay_responsive_while_compaction_is_stuck_and_commit_late
 # Named topics
 
 
-@pytest.mark.asyncio
-async def test_runtime_named_context_topics_use_configured_modes_per_participant():
-    llm = _LLM()
-    tea = Topic("tea.status", ConversationContextUpdate)
-    xr = Topic("xr.observations", ConversationContextUpdate)
-    manager = ContextManager(
-        llm,
-        summary_context_topics=(tea.name,),
-        incremental_context_topics=(xr.name,),
-        topic_budget_bytes=200,
-    )
-    conversation = Conversation(llm, context=manager, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC)
-    runtime = AgentRuntime()
-    runtime.register("conversation-context", manager.subscriber())
-
-    async with runtime:
-        await runtime.publish(tea, {"text": "Tea timer is at 4 minutes."}, participant_id="alice")
-        await runtime.publish(tea, {"text": "Timer is now at 6 minutes."}, participant_id="alice")
-        await runtime.publish(xr, {"text": "The exhibit has three panels."}, participant_id="alice")
-        await runtime.publish(xr, {"text": "One panel is interactive."}, participant_id="alice")
-        await runtime.publish(tea, {"text": "A different timer is at 2 minutes."}, participant_id="bob")
-        await _settle(manager, "alice")
-
-    assert manager._context.sections("alice") == (
-        ("tea.status", "Timer is now at 6 minutes."),
-        ("xr.observations", "Compacted source facts."),
-    )
-    assert manager._context.sections("bob") == (("tea.status", "A different timer is at 2 minutes."),)
-    await conversation.close()
-
-
 def test_context_update_is_text_only():
     assert ConversationContextUpdate(text="A source-owned fact.").model_dump() == {"text": "A source-owned fact."}
     with pytest.raises(ValueError):
@@ -1117,9 +1121,7 @@ async def test_source_summary_near_budget_does_not_block_later_updates():
         await publish(f"correction {index} " + "c" * 290)
     # The first two corrections are merged; the newest stays verbatim below the trigger.
     assert len(calls) == 3
-    assert manager._context.sections("alice") == (
-        ("notes", "Latest corrections applied.\ncorrection 2 " + "c" * 290),
-    )
+    assert manager._context.sections("alice") == (("notes", "Latest corrections applied.\ncorrection 2 " + "c" * 290),)
     await conversation.close()
 
 
@@ -1173,17 +1175,6 @@ async def test_incremental_update_during_compaction_keeps_it_for_the_next_batch(
     assert calls[0] == ("", ["first fact"])
     assert "summary of first fact" in calls[1][0] and calls[1][1] == ["second fact"]
     assert context.sections("alice") == (("tea", "summary of both facts"),)
-
-
-@pytest.mark.asyncio
-async def test_context_update_without_participant_is_dropped(caplog):
-    model = _LLM()
-    manager = ContextManager(model, summary_context_topics=("tea",))
-    conversation = Conversation(model, context=manager, runtime=AgentRuntime(), output_topic=_OUTPUT_TOPIC)  # type: ignore[arg-type]
-    await manager.update(None, "tea", ConversationContextUpdate(text="shared"), mode="summary")
-    assert manager._context.sections("alice") == ()
-    assert "without participant" in caplog.text
-    await conversation.close()
 
 
 # ---------------------------------------------------------------------------
