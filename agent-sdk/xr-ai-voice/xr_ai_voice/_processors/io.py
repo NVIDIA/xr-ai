@@ -92,8 +92,11 @@ class _VoiceIOProcessor(FrameProcessor):
         self._combiner = combiner
         self._inflight: dict[str, asyncio.Task[None]] = {}
         self._flight: dict[str, _QueuedResponse] = {}
-        # Its audio may still play after the response task finished.
-        self._last_started: dict[str, _QueuedResponse] = {}
+        # Holds the floor from its start until its audio stops, which can be
+        # after its text finished; output that produced no audio keeps it.
+        self._owner: dict[str, _QueuedResponse] = {}
+        # The owner whose audio started, so an older stream's stop cannot clear a newer owner.
+        self._heard: dict[str, _QueuedResponse] = {}
         self._input_tasks: set[asyncio.Task[None]] = set()
         self._queued_replies: dict[str, deque[_QueuedResponse]] = {}
         self._queued_urgent: dict[str, deque[_QueuedResponse]] = {}
@@ -225,8 +228,14 @@ class _VoiceIOProcessor(FrameProcessor):
             if pid:
                 if isinstance(frame, BotStartedSpeakingFrame):
                     self._speaking.add(pid)
+                    if (owner := self._owner.get(pid)) is not None:
+                        self._heard[pid] = owner
                 else:
                     self._speaking.discard(pid)
+                    owner = self._owner.get(pid)
+                    if pid not in self._flight and owner is not None and self._heard.get(pid) is owner:
+                        del self._owner[pid]
+                        del self._heard[pid]
                     await self._start_next(pid)
             return
 
@@ -333,14 +342,12 @@ class _VoiceIOProcessor(FrameProcessor):
             await self._close_response(item.response)
             return
         await self._drop_queued_replies(pid, keep=request_id)
-        current = self._flight.get(pid)
-        playing = current if current is not None else self._last_started.get(pid) if pid in self._speaking else None
-        if playing is not None and not playing.urgent and playing.request_id != request_id:
-            if current is not None:
-                _ = await self._cancel_output(pid)
-            elif playing.request_id is not None:
-                self._supersede(pid, playing.request_id)
-            await self._interrupt_audio(pid)
+        previous = self._active_request.get(pid)
+        if previous is not None and previous != request_id:
+            self._supersede(pid, previous)
+        owner = self._owner.get(pid)
+        if owner is not None and not owner.urgent and owner.request_id != request_id:
+            await self._cut(pid, owner)
         self._active_request[pid] = request_id
         pending = self._queued_replies.setdefault(pid, deque())
         pending.append(item)
@@ -350,14 +357,24 @@ class _VoiceIOProcessor(FrameProcessor):
     async def _spawn_urgent(self, item: _QueuedResponse) -> None:
         pid = item.participant_id
         self._queued_urgent.setdefault(pid, deque()).append(item)
-        current = self._flight.get(pid)
-        if current is not None and current.urgent:
+        owner = self._owner.get(pid)
+        if owner is not None and owner.urgent:
+            # TTS plays audio in order, so this follows the urgent output already playing.
             logger.info("voice urgent update queued pid={!r}", pid)
-            return
-        if current is not None:
-            _ = await self._cancel_output(pid)
-        await self._interrupt_audio(pid)
+        elif owner is not None:
+            await self._cut(pid, owner)
+        else:
+            await self._interrupt_audio(pid)
         await self._start_next(pid)
+
+    async def _cut(self, pid: str, owner: _QueuedResponse) -> None:
+        """Cancel the owner's output, supersede its request, and flush its audio."""
+
+        if pid in self._flight:
+            _ = await self._cancel_output(pid)
+        elif owner.request_id is not None:
+            self._supersede(pid, owner.request_id)
+        await self._interrupt_audio(pid)
 
     async def _interrupt_audio(self, pid: str) -> None:
         interruption = InterruptionFrame()
@@ -374,7 +391,7 @@ class _VoiceIOProcessor(FrameProcessor):
             name=f"voice-response-{pid}",
         )
         self._flight[pid] = item
-        self._last_started[pid] = item
+        self._owner[pid] = item
         self._inflight[pid] = task
 
     async def _run_response(self, item: _QueuedResponse, token: object) -> None:
@@ -563,7 +580,8 @@ class _VoiceIOProcessor(FrameProcessor):
         self._active_request.pop(pid, None)
         self._superseded.pop(pid, None)
         self._speaking.discard(pid)
-        self._last_started.pop(pid, None)
+        self._owner.pop(pid, None)
+        self._heard.pop(pid, None)
         self._seen_output.discard(pid)
 
     @staticmethod
@@ -602,7 +620,8 @@ class _VoiceIOProcessor(FrameProcessor):
         self._speaking.clear()
         self._inflight.clear()
         self._flight.clear()
-        self._last_started.clear()
+        self._owner.clear()
+        self._heard.clear()
         self._turn_tokens.clear()
         self._cancel_input_tasks()
 

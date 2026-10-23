@@ -272,6 +272,48 @@ async def test_reply_for_a_new_request_cuts_audio_of_a_finished_reply() -> None:
     assert floor.texts == ["old answer", "new answer"]
 
 
+async def test_reply_for_a_new_request_cuts_audio_still_being_synthesized() -> None:
+    floor = _Floor()
+    await floor.processor.enqueue_reply("alice", "old answer", request_id="r1")
+    await floor.settle()
+    assert floor.processor._inflight == {}  # noqa: SLF001
+
+    await floor.processor.enqueue_reply("alice", "new answer", request_id="r2")
+    await floor.settle()
+
+    assert floor.interruptions == ["alice"]
+    assert floor.texts == ["old answer", "new answer"]
+
+
+async def test_stop_of_cut_audio_does_not_release_the_new_reply() -> None:
+    floor = _Floor()
+    await floor.processor.enqueue_reply("alice", "first", request_id="r1")
+    await floor.settle()
+    await floor.bot(started=True)
+    await floor.processor.enqueue_reply("alice", "second", request_id="r2")
+    await floor.settle()
+    await floor.bot(started=False)
+
+    await floor.processor.enqueue_reply("alice", "third", request_id="r3")
+    await floor.settle()
+
+    assert floor.interruptions == ["alice", "alice"]
+
+
+async def test_new_request_supersedes_the_previous_one_during_silence() -> None:
+    floor = _Floor()
+    for text, request_id in (("one", "r1"), ("two", "r2")):
+        await floor.processor.enqueue_reply("alice", text, request_id=request_id)
+        await floor.settle()
+        await floor.bot(started=True)
+        await floor.bot(started=False)
+
+    await floor.processor.enqueue_reply("alice", "late", request_id="r1")
+    await floor.settle()
+
+    assert floor.texts == ["one", "two"]
+
+
 async def test_reply_for_the_same_request_does_not_cut_playing_audio() -> None:
     floor = _Floor()
     await floor.processor.enqueue_reply("alice", "one", request_id="r1")
@@ -350,6 +392,19 @@ async def test_urgent_updates_queue_in_order_and_a_reply_waits_for_them() -> Non
 
     assert floor.texts == ["one", "two", "three", "answer"]
     assert floor.interruptions == ["alice"]
+
+
+async def test_urgent_update_does_not_cut_a_playing_urgent_update() -> None:
+    floor = _Floor()
+    await floor.processor.enqueue_update("alice", "Fire alarm.", source="producer", urgent=True)
+    await floor.settle()
+    await floor.bot(started=True)
+
+    await floor.processor.enqueue_update("alice", "Leave now.", source="producer", urgent=True)
+    await floor.settle()
+
+    assert floor.interruptions == ["alice"]
+    assert floor.texts == ["Fire alarm.", "Leave now."]
 
 
 async def test_barge_in_cancels_replies_but_keeps_updates() -> None:

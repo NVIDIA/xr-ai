@@ -99,13 +99,16 @@ independent agents cannot merge accidentally.
 Several agents can publish to the same participant. Each participant has one
 voice floor that decides what is spoken and when:
 
+- Output is current from when its text starts until its audio stops playing,
+  including while TTS is still synthesizing it.
 - A reply for request R plays in order with other replies for R. A reply for a
-  different request cancels the response in flight and any queued replies, marks
-  that request superseded, and flushes queued hub audio. Later output for a
-  superseded request is dropped. Pending updates are kept.
-- An urgent update cancels the response in flight unless that is itself urgent,
+  different request supersedes the previous request, even when nothing is
+  playing, cancels current output and any queued replies, and flushes queued
+  hub audio. Later output for a superseded request is dropped. Pending updates
+  are kept.
+- An urgent update cancels current output unless that is itself urgent,
   supersedes the cancelled reply's request, flushes queued hub audio, and plays
-  next. Urgent updates queue in order.
+  next. Urgent updates play in order without cutting each other.
 - Other updates wait until the bot is not speaking, then all pending updates are
   spoken as one utterance. `VoiceAgent` learns playback state from the media
   output, not from a duration estimate. By default the texts are joined with

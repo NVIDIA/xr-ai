@@ -191,3 +191,32 @@ async def test_idle_chime_clears_speaking_without_fallback(monkeypatch: pytest.M
         endpoint.release.set()
         await _until(lambda: _PID not in io_processor._speaking)  # noqa: SLF001
         await _until(lambda: tts.calls == ["Timer done."])
+
+
+@pytest.mark.asyncio
+async def test_new_request_cancels_reply_audio_still_being_synthesized(monkeypatch: pytest.MonkeyPatch) -> None:
+    async with _pipeline(monkeypatch) as (io_processor, _worker, tts, endpoint, _gate):
+        synthesis = asyncio.Event()
+        cancelled: list[str] = []
+        synthesize = tts.synthesize
+
+        async def slow_first(text: str, **kwargs: object) -> bytes:
+            if text == "Old answer.":
+                try:
+                    await synthesis.wait()
+                except asyncio.CancelledError:
+                    cancelled.append(text)
+                    raise
+            return await synthesize(text, **kwargs)
+
+        tts.synthesize = slow_first  # type: ignore[method-assign]
+        await io_processor.enqueue_reply(_PID, _one_reply("Old answer."), request_id="r1")
+        await _until(lambda: not io_processor._inflight and tts.calls == [])  # noqa: SLF001
+        await asyncio.sleep(0.05)
+        assert _PID not in io_processor._speaking  # noqa: SLF001
+
+        await io_processor.enqueue_reply(_PID, _one_reply("New answer."), request_id="r2")
+        endpoint.release.set()
+
+        await _until(lambda: cancelled == ["Old answer."])
+        await _until(lambda: tts.calls == ["New answer."])
