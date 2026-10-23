@@ -647,6 +647,32 @@ This makes readiness explicit and process-defined: a model server signals ready
 after weights load, an HTTP server after it starts listening, a worker after
 its IPC receive loop is active.</p>
 </section>
+<section id="foreground-stack-health">
+<h3>Foreground stack health<a class="headerlink" href="#foreground-stack-health" title="Link to this heading">#</a></h3>
+<p>Applications using <code class="docutils literal notranslate"><span class="pre">run_stack</span></code> can pass <code class="docutils literal notranslate"><span class="pre">health_port=8093</span></code> to expose process
+health to a local supervisor or monitoring script. Repository samples expose
+this as <code class="docutils literal notranslate"><span class="pre">--health-port</span> <span class="pre">PORT</span></code>. The listener binds only to loopback, separately
+from the worker’s optional event viewer. For example, from
+<code class="docutils literal notranslate"><span class="pre">agent-samples/simple-vlm-example/</span></code>:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>simple_vlm_example<span class="w"> </span>--health-port<span class="w"> </span><span class="m">8093</span>
+</pre></div>
+</div>
+<p>Query <code class="docutils literal notranslate"><span class="pre">http://127.0.0.1:8093/healthz</span></code> locally. It returns 503 while startup or
+cleanup is in progress, and 200 after startup completes while every spawned
+process is still running. Every request checks the child-process handles.
+The JSON response contains <code class="docutils literal notranslate"><span class="pre">status</span></code> (<code class="docutils literal notranslate"><span class="pre">ready</span></code> or <code class="docutils literal notranslate"><span class="pre">not_ready</span></code>), <code class="docutils literal notranslate"><span class="pre">processes</span></code>
+(spawned names mapped to <code class="docutils literal notranslate"><span class="pre">running</span></code> or <code class="docutils literal notranslate"><span class="pre">exited</span></code>), and <code class="docutils literal notranslate"><span class="pre">unchecked_reuse</span></code> (names
+of external services that are not checked). HEAD returns the same status
+without a body. Shutdown signals immediately clear readiness.
+An unreachable endpoint means the orchestrator cannot report health; it does
+not establish whether its child processes or external services have stopped.
+Keep the endpoint private; use SSH forwarding for remote inspection.</p>
+<p>This is process health, not an inference or dependency probe. Services declared
+with <code class="docutils literal notranslate"><span class="pre">launch_mode=&quot;reuse&quot;</span></code> are not checked, and live child processes may still
+be unresponsive. The listener is disabled by default and for
+<code class="docutils literal notranslate"><span class="pre">exit_after_ready=True</span></code>. Invalid or occupied ports fail before launching
+processes. Refer to <code class="docutils literal notranslate"><span class="pre">run_stack</span></code> for the API contract.</p>
+</section>
 <section id="launch-mode-own-persist-reuse">
 <h3><code class="docutils literal notranslate"><span class="pre">launch_mode</span></code>: own, persist, reuse<a class="headerlink" href="#launch-mode-own-persist-reuse" title="Link to this heading">#</a></h3>
 <p><code class="docutils literal notranslate"><span class="pre">Process.launch_mode</span></code> controls spawn and shutdown behaviour:</p>
@@ -816,6 +842,7 @@ construction remain with their consuming packages.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#serial-and-parallel-items">Serial and parallel items</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#how-run-stack-works">How <code class="docutils literal notranslate"><span class="pre">run_stack</span></code> works</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#the-ready-file-protocol">The <code class="docutils literal notranslate"><span class="pre">--ready-file</span></code> protocol</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#foreground-stack-health">Foreground stack health</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#launch-mode-own-persist-reuse"><code class="docutils literal notranslate"><span class="pre">launch_mode</span></code>: own, persist, reuse</a></li>
 </ul>
 </li>

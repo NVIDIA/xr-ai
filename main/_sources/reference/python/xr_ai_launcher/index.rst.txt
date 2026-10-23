@@ -349,7 +349,7 @@ Package Contents
 
 
 
-.. py:function:: run_stack(processes: Sequence[Union[Process, Parallel]], base: pathlib.Path, *, exit_after_ready: bool = False) -> None
+.. py:function:: run_stack(processes: Sequence[Union[Process, Parallel]], base: pathlib.Path, *, exit_after_ready: bool = False, health_port: int | None = None) -> None
 
    Start *processes* in declaration order, waiting for each item to signal
    readiness before advancing to the next.
@@ -362,6 +362,17 @@ Package Contents
    it must ``Path(ready_file).touch()`` to signal the launcher.  Progress
    is printed every five seconds so model-loading or CloudXR start-up
    remains visible.
+
+   Pass ``health_port`` as an integer TCP port (1–65535) to expose
+   ``GET http://127.0.0.1:<port>/healthz`` for this foreground stack. It returns
+   503 during startup and cleanup, or when any spawned process has exited;
+   200 means startup completed and every spawned process is still running.
+   The endpoint is disabled with ``health_port=None`` (the default) and for
+   ``exit_after_ready=True``. Invalid ports and bind failures abort
+   before any process is launched. This is process health, not an inference
+   probe, and does not check services declared with ``launch_mode="reuse"``.
+   The JSON body reports ``status``, spawned ``processes`` (running or exited),
+   and ``unchecked_reuse`` process names. HEAD is also supported.
 
    After all processes are ready the launcher monitors them: if any exits,
    the remaining foreground processes are terminated. The launcher preserves

@@ -829,6 +829,7 @@ loguru records. All output remains available in the per-process log file.</p>
 <dd><em class="sig-param"><span class="n"><span class="pre">base</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">pathlib.Path</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">exit_after_ready</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">health_port</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
 </dl>
 
 <span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_launcher.run_stack" title="Link to this definition">#</a></dt>
@@ -841,6 +842,16 @@ readiness before advancing to the next.</p>
 it must <code class="docutils literal notranslate"><span class="pre">Path(ready_file).touch()</span></code> to signal the launcher.  Progress
 is printed every five seconds so model-loading or CloudXR start-up
 remains visible.</p>
+<p>Pass <code class="docutils literal notranslate"><span class="pre">health_port</span></code> as an integer TCP port (1–65535) to expose
+<code class="docutils literal notranslate"><span class="pre">GET</span> <span class="pre">http://127.0.0.1:&lt;port&gt;/healthz</span></code> for this foreground stack. It returns
+503 during startup and cleanup, or when any spawned process has exited;
+200 means startup completed and every spawned process is still running.
+The endpoint is disabled with <code class="docutils literal notranslate"><span class="pre">health_port=None</span></code> (the default) and for
+<code class="docutils literal notranslate"><span class="pre">exit_after_ready=True</span></code>. Invalid ports and bind failures abort
+before any process is launched. This is process health, not an inference
+probe, and does not check services declared with <code class="docutils literal notranslate"><span class="pre">launch_mode=&quot;reuse&quot;</span></code>.
+The JSON body reports <code class="docutils literal notranslate"><span class="pre">status</span></code>, spawned <code class="docutils literal notranslate"><span class="pre">processes</span></code> (running or exited),
+and <code class="docutils literal notranslate"><span class="pre">unchecked_reuse</span></code> process names. HEAD is also supported.</p>
 <p>After all processes are ready the launcher monitors them: if any exits,
 the remaining foreground processes are terminated. The launcher preserves
 a positive child status, maps a signal to <code class="docutils literal notranslate"><span class="pre">128</span> <span class="pre">+</span> <span class="pre">signal</span></code>, and maps an

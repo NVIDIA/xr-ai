@@ -181,6 +181,35 @@ This makes readiness explicit and process-defined: a model server signals ready
 after weights load, an HTTP server after it starts listening, a worker after
 its IPC receive loop is active.
 
+### Foreground stack health
+
+Applications using `run_stack` can pass `health_port=8093` to expose process
+health to a local supervisor or monitoring script. Repository samples expose
+this as `--health-port PORT`. The listener binds only to loopback, separately
+from the worker's optional event viewer. For example, from
+`agent-samples/simple-vlm-example/`:
+
+```bash
+uv run simple_vlm_example --health-port 8093
+```
+
+Query `http://127.0.0.1:8093/healthz` locally. It returns 503 while startup or
+cleanup is in progress, and 200 after startup completes while every spawned
+process is still running. Every request checks the child-process handles.
+The JSON response contains `status` (`ready` or `not_ready`), `processes`
+(spawned names mapped to `running` or `exited`), and `unchecked_reuse` (names
+of external services that are not checked). HEAD returns the same status
+without a body. Shutdown signals immediately clear readiness.
+An unreachable endpoint means the orchestrator cannot report health; it does
+not establish whether its child processes or external services have stopped.
+Keep the endpoint private; use SSH forwarding for remote inspection.
+
+This is process health, not an inference or dependency probe. Services declared
+with `launch_mode="reuse"` are not checked, and live child processes may still
+be unresponsive. The listener is disabled by default and for
+`exit_after_ready=True`. Invalid or occupied ports fail before launching
+processes. Refer to `run_stack` for the API contract.
+
 ### `launch_mode`: own, persist, reuse
 
 `Process.launch_mode` controls spawn and shutdown behaviour:
