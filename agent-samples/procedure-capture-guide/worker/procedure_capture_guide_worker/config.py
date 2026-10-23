@@ -54,8 +54,8 @@ def load_config(path: Path | None) -> WorkerConfig:
         raise ValueError("mode must be capture or guide")
     if mode == "guide" and output_root is not None:
         raise ValueError("--output-root is only available in capture mode")
-    if mode == "capture" and overrides.get("guide_name") is not None:
-        raise ValueError("GUIDE_NAME is only available in guide mode")
+    if mode == "capture" and overrides.get("guide_path") is not None:
+        raise ValueError("GUIDE_PATH is only available in guide mode")
     settings = {}
     for name in (
         "frame_max_age_s",
@@ -77,7 +77,7 @@ def load_config(path: Path | None) -> WorkerConfig:
             base / data.get("capture_config", "capture-agent-config.yaml"), output_root=output_root,
         ) if mode == "capture" else None,
         guide=load_guide_config(
-            base / data.get("guide_config", "guide-agent-config.yaml"), guide_name=overrides.get("guide_name"),
+            base / data.get("guide_config", "guide-agent-config.yaml"), guide_path=overrides.get("guide_path"),
         ) if mode == "guide" else None,
         **settings,
     )
