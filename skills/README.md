@@ -12,6 +12,9 @@ development, and reviews. Each directory follows the open
 <!-- Compatibility anchors for headings consolidated into the documentation. -->
 <a id="available-skills"></a><a id="setup"></a>
 
-Refer to [Set up with a coding agent](https://nvidia.github.io/xr-ai/latest/getting_started/skills.html) for
-the setup prompt, available skills, installation, and the fallback for agents
-without a skills mechanism.
+To launch and verify the Simple VLM browser demo, use
+[`run-demo`](run-demo/SKILL.md). It follows `setup` when preparation is needed.
+
+Refer to [Skills](https://nvidia.github.io/xr-ai/latest/getting_started/skills.html) for
+the demo and setup prompts, available skills, installation, and the fallback
+for agents without a skills mechanism.

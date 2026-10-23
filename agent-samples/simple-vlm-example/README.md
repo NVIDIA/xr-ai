@@ -46,6 +46,9 @@ every checked-in field and example value.
 
 ## Run
 
+For a coding agent to launch and verify this sample, refer to
+[`run-demo`](https://nvidia.github.io/xr-ai/latest/getting_started/skills.html#run-the-browser-demo).
+
 Run all commands from `agent-samples/simple-vlm-example/`. Start the sample’s local
 models first:
 

@@ -5,17 +5,18 @@
 
 # Quickstart
 
-## Set up with a coding agent
+<!-- Compatibility anchor for the earlier setup heading. -->
+<a id="set-up-with-a-coding-agent"></a>
 
-The fastest path: paste this to your agent and it does the rest, including
-walking you through the choices below. Refer to {doc}`skills` for how it works.
+## Run with a coding agent
 
-```{literalinclude} /_snippets/agent-setup-prompt.txt
+Paste this to your coding agent to run the Simple VLM browser demo:
+
+```{literalinclude} /_snippets/agent-demo-prompt.txt
 :language: text
 ```
 
-To have your agent run the browser demo, install `run-demo` as described in
-{doc}`skills` and ask it to run xr-ai.
+Refer to {doc}`skills` for `run-demo` or development-only preparation with `setup`.
 
 The remainder of this quickstart is the manual path.
 
@@ -28,11 +29,12 @@ with a `cd` from the repository root; keep running that procedure's commands
 from the selected sample directory.
 
 Each interactive procedure includes one concrete spoken request that exercises
-the sample's main path. After it succeeds, you can ask “What can you do?” to
-explore further. In samples with wake-word gating, prefix that spoken question
-with “Hey Agent”; one follow-up utterance within five seconds can omit the wake
-phrase. Typed requests bypass the voice gate. Treat the reply as a
-conversational introduction rather than an exhaustive capability reference.
+the sample's main path. In the shipped voice-gated samples, first say
+“Hey agent, let's start talking” and wait for “I'm listening to you now.”
+Then speak questions without a wake phrase. After the first interaction succeeds,
+you can ask “What can you do?” to explore further. Typed requests bypass the
+voice gate. Treat the reply as a conversational introduction rather than an
+exhaustive capability reference.
 
 (model-servers-shared-ai-services)=
 ## Model servers for each sample
@@ -129,12 +131,13 @@ microphone access.
 
 ### Step 3 — Meet the agent
 
-First say “Hey agent, let's start talking” and wait for the listening confirmation.
+First say “Hey agent, let's start talking” and wait for
+“I'm listening to you now.”
 
 Try this first spoken interaction:
 
 ```text
-You: Hey Agent, what am I looking at?
+You: What am I looking at?
 Agent: [Answers from the current camera frame.]
 ```
 
@@ -200,11 +203,12 @@ recipes.
 
 ### Try the lab agent
 
-Point the camera at instruments carrying the configured markers, then try this
-spoken interaction:
+Point the camera at instruments carrying the configured markers. Say
+“Hey agent, let's start talking” and wait for “I'm listening to you now.”
+Then try this spoken interaction:
 
 ```text
-You: Hey Agent, read the instruments.
+You: Read the instruments.
 Agent: [Reports the visible marker-associated readings or their availability.]
 ```
 

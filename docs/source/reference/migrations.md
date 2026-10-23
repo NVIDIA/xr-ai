@@ -54,6 +54,20 @@ Replace `xr-ai-routing[voice]` with `xr-ai-routing[runtime]`. Remove the
 `[voice]` extra from `xr-ai-conversation`, which now depends on
 `xr-ai-interaction` directly.
 
+### Coding-agent setup skill rename
+
+For users with an installed `getting-started` skill, or a released setup prompt
+that selects `main`, the preparation workflow is now named `setup`. Update
+installed copies and saved setup prompts to use `skills/setup/SKILL.md` at the
+selected repository ref. Use `skills/run-demo/SKILL.md` to launch the browser
+demo. Refer to {doc}`/getting_started/skills` for both entry points.
+
+The old `skills/getting-started/SKILL.md` path remains a compatibility router
+through the next release, preserving the requested outcome: setup prepares a
+checkout; run-demo launches the sample. At older release tags where `setup` is
+absent, use `getting-started` at that same tag for preparation only. No switch
+to `main` is needed when that release's setup skill exists.
+
 ### Dependency refresh and native tool callback exceptions
 
 The SDK now requires the NeMo Relay 0.10 release series. Update copied worker

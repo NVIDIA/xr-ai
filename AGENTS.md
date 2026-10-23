@@ -14,6 +14,8 @@ Building an application? Read
 
 Refer to [Skills](docs/source/getting_started/skills.md) for available
 coding-agent skills and installation.
+For requests to try xr-ai or run its Simple VLM browser demo, follow
+[`skills/run-demo/SKILL.md`](skills/run-demo/SKILL.md).
 
 ## Repository map
 
@@ -28,7 +30,7 @@ utils/           Launcher, logging, VAD, vLLM, and voice-gate utilities
 tests/           Cross-package and integration tests
 docs/source/     User and contributor documentation
 third_party_licenses/  Unmodified third-party license and attribution texts
-skills/          Skill bank that sets coding agents up
+skills/          Coding-agent skills for setup, demos, development, and reviews
 ```
 
 ## Architecture boundaries
