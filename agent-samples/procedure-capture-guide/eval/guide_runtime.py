@@ -37,7 +37,7 @@ from xr_ai_tools.image import ImageRegistry
 from xr_ai_tools.vision import ImageQueryTool
 from xr_ai_voice import VOICE_OUTPUT_TOPIC, UserQuery, VoiceAggregationAgent, VoiceOutput, VoiceParticipantJoined
 
-_SAMPLE = Path(__file__).resolve().parents[3]
+_SAMPLE = Path(__file__).resolve().parents[1]
 _PID = "guide-eval"
 
 

@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+# Minimal procedure guide for visual-evidence and elapsed-timer regressions.
 schema_version: 1
 task:
   id: indicator_check

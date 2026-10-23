@@ -57,7 +57,9 @@ Use the script from the target checkout even if the skills were installed
 elsewhere: it locates that checkout's sample configuration from its own path.
 The runner imports the runtime's YAML parser and uses the worker's model,
 frame-freshness, frame-timeout, and verification-timeout configuration. It
-needs no tea-example files or regression fixtures from `tests/`.
+uses the sample's shared `eval/guide_runtime.py` for camera and speech boundaries,
+agent setup, and traces. Packet playback and checks stay in this skill's scripts;
+they need no tea-example files or regression fixtures from `tests/`.
 The source guide stays draft; test eligibility exists only in memory.
 The command never generates YAML or approves a guide.
 

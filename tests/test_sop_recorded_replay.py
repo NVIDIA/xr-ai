@@ -114,7 +114,7 @@ def test_packet_cli_uses_runtime_controls_and_unique_source_evidence(
 ):
     llm, vlm = runtime_models
     packet = make_packet(tmp_path, count, color)
-    guide = yaml.safe_load((_TEST_DATA / "test_guide.yaml").read_text())
+    guide = yaml.safe_load((_TEST_DATA / "test_procedure_indicator_guide.yaml").read_text())
     guide["task"]["status"] = "draft"
     guide["steps"][1]["trigger"]["arguments"]["duration_s"] = 1
     guide["steps"][1]["finish_on_complete"] = automatic
@@ -154,7 +154,7 @@ def test_packet_cli_uses_runtime_controls_and_unique_source_evidence(
     sources = json.loads((output / "runtime.json").read_text())
     assert {"guide-generation-skills/evaluate-guide/scripts/evaluate.py",
             "guide-generation-skills/evaluate-guide/scripts/_recorded_camera.py",
-            "guide-generation-skills/evaluate-guide/scripts/_guide_runtime.py"} <= sources.keys()
+            "eval/guide_runtime.py"} <= sources.keys()
     assert not any("example-guides/" in source or "tests/" in source for source in sources)
     assert (output / "relay.jsonl").is_file()
     llm.close.assert_awaited_once()
@@ -214,7 +214,7 @@ async def test_evaluation_attributes_overlapping_model_calls_to_their_origin(
 
     monkeypatch.setattr(GuideAgent, "_route", overlapping_route)
     packet = make_packet(tmp_path, count=30)
-    guide = yaml.safe_load((_TEST_DATA / "test_guide.yaml").read_text())
+    guide = yaml.safe_load((_TEST_DATA / "test_procedure_indicator_guide.yaml").read_text())
     guide["steps"] = guide["steps"][:1]
     step = guide["steps"][0]
     step["next"] = None
@@ -277,7 +277,7 @@ def test_packet_cli_rejects_announcements_that_disagree_with_progress(
     from procedure_capture_guide_worker.guide.guiding import _Guide
 
     packet = make_packet(tmp_path)
-    guide = yaml.safe_load((_TEST_DATA / "test_guide.yaml").read_text())
+    guide = yaml.safe_load((_TEST_DATA / "test_procedure_indicator_guide.yaml").read_text())
     guide["task"]["status"] = "draft"
     guide["steps"] = guide["steps"][:1]
     guide["steps"][0]["next"] = None
@@ -330,7 +330,8 @@ def test_packet_cli_rejects_announcements_that_disagree_with_progress(
 
 
 def test_runtime_provenance_excludes_environment_and_tracks_loaded_sdk(packets, tmp_path, monkeypatch):
-    from _guide_runtime import _runtime_hashes as runtime_hashes
+    monkeypatch.syspath_prepend(str(_SAMPLE / "eval"))
+    from guide_runtime import _runtime_hashes as runtime_hashes
     sample = tmp_path / "sample"
     sources = ["yaml/models.json", "yaml/worker.yaml", "yaml/guide-agent-config.yaml",
                "worker/procedure_capture_guide_worker/guide/agent.py",

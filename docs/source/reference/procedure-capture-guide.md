@@ -636,20 +636,23 @@ The adjacent `scenario.py` executes the scenario files; `visual.py` runs isolate
 VLM checks selected by `--manifest`. `_scene_rendering.py` draws their fixtures,
 and `_visual_expectations.py` supplies shared scoring. Automated runtime and
 evaluator regressions live directly under the repository's `tests/`.
-`tests/test_guide.yaml` supplies a minimal visual-and-timer guide for isolated
-evidence, timing, and failure-reporting checks, not a second end-to-end scenario.
+`tests/test_procedure_indicator_guide.yaml` supplies a minimal visual-and-timer
+guide for isolated evidence, timing, and failure-reporting checks, not a second
+end-to-end scenario.
 The sample's standalone `eval/caption_eval.py` loads synthetic caption inputs
 from `eval/caption_cases.yaml`. `eval/guide_generation_cases.yaml` contains the
-text-only authoring probes described above; `tests/test_guide.yaml` is the only
-procedure-specific YAML fixture left in `tests/`.
+text-only authoring probes described above; `tests/test_procedure_indicator_guide.yaml`
+is the only procedure-specific YAML fixture left in `tests/`.
 
-Recorded-packet replay and the runtime harness used by guide authoring live in
-`guide-generation-skills/evaluate-guide/scripts/`. The tea scenario runner reuses that harness
-for production agent/tool setup and trace collection; its scene rendering,
-scripted actions, and assertions stay here. The skill runner does not import
-tea-example or test files. The sample-level `eval/` directory contains the
-live caption evaluator, its cases, and the guide-generation probes; tea scenarios
-stay with the example guide.
+The sample-level `eval/guide_runtime.py` provides shared camera and speech
+boundaries, production agent and tool setup, and trace collection. Both the
+recorded-packet runner and tea scenario runner consume this harness.
+Recorded-packet playback and orchestration stay in
+`guide-generation-skills/evaluate-guide/scripts/`; tea-specific scene rendering,
+scripted actions, and assertions stay with the example guide. Neither runner
+imports the other's implementation or regression fixtures. The sample-level
+`eval/` directory also contains the live caption evaluator, its cases, and the
+guide-generation probes.
 
 Keep the full run independent of step-verification failures so timer and
 lifecycle checks remain reachable. Label-reading has its own scenario because
@@ -666,7 +669,7 @@ The manifests use `guide_path: ../guide.yaml`, relative to their own directory,
 loading `example-guides/tea-making/guide.yaml` through the production guide runtime.
 They exercise the same procedure, prompts, and verification rules that users run,
 without a separate copy of the tea guide. The purpose-built
-`tests/test_guide.yaml` remains a separate, simplified test procedure.
+`tests/test_procedure_indicator_guide.yaml` remains a separate, simplified test procedure.
 Identification checks whether chamomile is visibly printed on the packet,
 using the shipped guide's YES, NO, or UNKNOWN contract.
 
@@ -880,7 +883,7 @@ From the repository root:
 
 ```bash
 uv --config-file uv.toml run --project tests pytest -q \
-  tests/test_capture.py tests/test_sop_guide.py -m "not gpu"
+  tests/test_procedure_capture_guide.py tests/test_sop_guide.py -m "not gpu"
 ```
 
 These tests cover mode isolation, approval, guide validation, participant-local

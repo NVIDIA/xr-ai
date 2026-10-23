@@ -46,6 +46,9 @@ def test_installed_skill_workflow_resolves_children_and_shared_references(tmp_pa
 def test_packet_entry_point_imports_without_example_or_test_helpers(tmp_path):
     scripts = tmp_path / "sample/guide-generation-skills/evaluate-guide/scripts"
     shutil.copytree(_SAMPLE / "guide-generation-skills/evaluate-guide/scripts", scripts)
+    support = tmp_path / "sample/eval"
+    support.mkdir()
+    shutil.copy2(_SAMPLE / "eval/guide_runtime.py", support / "guide_runtime.py")
     result = subprocess.run(
         [sys.executable, str(scripts / "evaluate.py"), "--help"],
         cwd=tmp_path, env={**os.environ, "PYTHONPATH": str(_SAMPLE / "worker")},
@@ -74,10 +77,10 @@ def test_validator_accepts_examples_and_shipped_guides_without_a_schema_fork(cap
     assert _validate_guide.load_workflow is load_workflow
     paths = (sorted(_REFERENCES.glob("*.yaml"))
              + sorted((_SAMPLE / "example-guides").glob("*/guide.yaml"))
-             + [_TEST_DATA / "test_guide.yaml"])
+             + [_TEST_DATA / "test_procedure_indicator_guide.yaml"])
     assert len(paths) >= 5
     assert _SAMPLE / "example-guides/tea-making/guide.yaml" in paths
-    assert _TEST_DATA / "test_guide.yaml" in paths
+    assert _TEST_DATA / "test_procedure_indicator_guide.yaml" in paths
     originals = {path: path.read_bytes() for path in paths}
     assert main([str(path) for path in paths]) == 0
     assert not capsys.readouterr().err

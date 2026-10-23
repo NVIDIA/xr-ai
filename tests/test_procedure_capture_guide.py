@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Voice-controlled task capture, packet integrity, and launch configuration."""
+"""Test procedure capture controls, packet integrity, and launch configuration."""
 
 import asyncio
 import importlib.util

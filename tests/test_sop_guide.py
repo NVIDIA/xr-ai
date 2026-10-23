@@ -1448,11 +1448,11 @@ def test_scenario_cli_reports_failures_and_continues_independent_probes(tmp_path
     import xr_ai_models
     from PIL import Image
 
-    guide = yaml.safe_load((_TEST_DATA / "test_guide.yaml").read_text())
+    guide = yaml.safe_load((_TEST_DATA / "test_procedure_indicator_guide.yaml").read_text())
     # Deliberately inject scoring failures; this tests the evaluator, not a
     # second end-to-end procedure alongside the tea scenarios.
     manifest = {
-        "guide_path": "test_guide.yaml",
+        "guide_path": "test_procedure_indicator_guide.yaml",
         "scenes": {"red": {"rectangle": "red"}},
         "actions": [
             {"action": "image", "scene": "red"},
@@ -1471,7 +1471,7 @@ def test_scenario_cli_reports_failures_and_continues_independent_probes(tmp_path
     elif failed_probe == "observe":
         observation = next(item for item in manifest["actions"] if item["action"] == "observe")
         observation["answers"] = ["YES"]
-    (tmp_path / "test_guide.yaml").write_text(yaml.safe_dump(guide))
+    (tmp_path / "test_procedure_indicator_guide.yaml").write_text(yaml.safe_dump(guide))
     manifest_path = tmp_path / "scenario.yaml"
     manifest_path.write_text(yaml.safe_dump(manifest))
 

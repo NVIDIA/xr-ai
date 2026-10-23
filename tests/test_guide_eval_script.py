@@ -22,6 +22,38 @@ _TEST_DATA = Path(__file__).resolve().parent
 _TEA_EVAL = _SAMPLE / "example-guides/tea-making/eval"
 
 
+@pytest.mark.parametrize("runner,other_runner", [
+    ("example-guides/tea-making/eval/scenario.py",
+     "guide-generation-skills/evaluate-guide/scripts"),
+    ("guide-generation-skills/evaluate-guide/scripts/evaluate.py",
+     "example-guides/tea-making/eval"),
+])
+def test_evaluation_runners_import_shared_runtime_independently(runner, other_runner, tmp_path):
+    # A fresh interpreter prevents earlier tests' sys.path additions or cached
+    # modules from hiding an accidental dependency between the two runners.
+    probe = """
+import runpy
+import sys
+from pathlib import Path
+sample, runner, other = map(Path, sys.argv[1:])
+sys.path[:0] = [str(sample / 'worker'), str((sample / runner).parent)]
+namespace = runpy.run_path(str(sample / runner))
+import guide_runtime
+assert Path(guide_runtime.__file__).resolve() == sample / 'eval/guide_runtime.py'
+assert guide_runtime._SAMPLE == sample
+assert str(sample / other) not in sys.path
+if 'runtime' in namespace:
+    assert namespace['runtime'] is guide_runtime
+else:
+    assert namespace['run_evaluation'] is guide_runtime.run_evaluation
+"""
+    result = subprocess.run(
+        [sys.executable, "-I", "-c", probe, str(_SAMPLE), runner, other_runner],
+        cwd=tmp_path, text=True, capture_output=True, timeout=30,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 @pytest.fixture
 def evaluator(monkeypatch):
     monkeypatch.syspath_prepend(str(_SAMPLE / "worker"))
@@ -320,7 +352,7 @@ def runtime_evaluator(evaluator, monkeypatch):
 
 
 def timer_scenario(tmp_path, actions):
-    guide = yaml.safe_load((_TEST_DATA / "test_guide.yaml").read_text())
+    guide = yaml.safe_load((_TEST_DATA / "test_procedure_indicator_guide.yaml").read_text())
     guide["task"]["start_step"] = "wait"
     guide["steps"] = [guide["steps"][1]]
     guide["steps"][0]["trigger"]["arguments"]["duration_s"] = 1
@@ -478,7 +510,7 @@ async def test_invalid_actions_fail_before_model_work(runtime_evaluator, tmp_pat
 async def test_runtime_observe_uses_shared_visual_case(runtime_evaluator, tmp_path, answer, expected):
     module = runtime_evaluator
     module.runtime.xr_ai_models.make_vlm.return_value.ask_images.return_value = SimpleNamespace(content=answer)
-    guide = yaml.safe_load((_TEST_DATA / "test_guide.yaml").read_text())
+    guide = yaml.safe_load((_TEST_DATA / "test_procedure_indicator_guide.yaml").read_text())
     guide["steps"] = guide["steps"][:1]
     guide["steps"][0]["next"] = None
     (tmp_path / "test.guide.yaml").write_text(yaml.safe_dump(guide))
