@@ -122,6 +122,11 @@ the strict guide YAML. Keep `task.status: draft`, a 1–5 word punctuation-free 
 version increment for an authorized replacement. Use block-style YAML and
 quoted prose. Keep review notes outside the strict guide schema.
 
+For the human-review handoff, after approval run from
+`agent-samples/procedure-capture-guide/` with
+`uv run main.py --mode guide "guides/<slug>.guide.yaml"`; this path is relative
+to the sample, not the repository root. Use an absolute path for a guide saved elsewhere.
+
 Give each step its own initially false completion boolean. Use the same field
 in `writes`, `complete_when`, and direct `evidence.commit`. Timer setup completes
 on its own boolean, not a timestamp sentinel or an earlier step's boolean.

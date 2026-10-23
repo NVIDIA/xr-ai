@@ -47,7 +47,7 @@ def test_sample_command_catalog_matches_top_level_projects() -> None:
         ("--health-port",),
     ]
     assert [argument.flags for argument in commands["procedure_capture_guide"].arguments] == [
-        ("--mode",), ("guide_name",), ("--output-root",), ("--session-recording",), ("--hub-config",),
+        ("--mode",), ("guide_path",), ("--output-root",), ("--session-recording",), ("--hub-config",),
         ("--health-port",),
     ]
     assert [argument.flags for argument in commands["procedure_capture_guide_model_servers"].arguments] == [

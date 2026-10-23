@@ -82,7 +82,7 @@ To record the whole participant connection in either mode, run:
 
 ```bash
 uv run main.py --mode capture --session-recording
-uv run main.py --mode guide "Tea Making" --session-recording
+uv run main.py --mode guide examples/tea-making/guide.yaml --session-recording
 ```
 
 The shared recorder starts immediately after DeviceIOHub and records participant
@@ -360,8 +360,8 @@ Retain unsupported requirements as review blockers rather than weakening them.
 
 Review the YAML and evidence notes before manually setting `task.status` to
 `approved`. Resolve every blocker, including any never-matching draft gate.
-Run an approved guide with `uv run main.py --mode guide "Guide Name"`, then
-say "start guide".
+Switch to `agent-samples/procedure-capture-guide/` and run an approved guide with
+`uv run main.py --mode guide guides/my-procedure.guide.yaml`, then say "start guide".
 
 ### Check generation changes
 
@@ -381,16 +381,21 @@ results distinct from sample-level end-to-end regression results.
 
 ## Follow an approved guide
 
-Place a reviewed `*.guide.yaml` or `*.guide.yml` file under `guides/` in the
-sample directory. User-created guides remain local and ignored by Git; the
-maintained tea-making example is the only checked-in exception. Set `task.status` to
+Select a reviewed guide YAML file or its containing directory by path. The sample's `guides/` directory
+remains available for local, Git-ignored guides; maintained examples live under
+`examples/`. Guides can also live outside the sample. Set `task.status` to
 `approved` only after reviewing the instructions, completion checks, timers,
-and safety constraints. The CLI matches an exact, case-insensitive `task.name`
-or `task.id`; it rejects missing, draft, invalid, and ambiguous selections.
-Quote names containing spaces:
+and safety constraints. A directory must contain exactly one top-level `.yaml`
+or `.yml` file; otherwise, provide a specific file path.
+The worker loads the selected file and rejects
+missing, draft, or invalid guides. It does not search by `task.name` or `task.id`.
+The launcher resolves relative paths from `agent-samples/procedure-capture-guide/`
+and passes an absolute path to the worker. Symbolic links are supported. Quote paths
+containing spaces. Run from the sample directory:
 
 ```bash
-uv run main.py --mode guide "Guide Name"
+uv run main.py --mode guide guides/my-procedure.guide.yaml
+uv run main.py --mode guide examples/tea-making
 ```
 
 Start the shared models first, as for capture. Guide mode uses the LLM, VLM, STT,
@@ -445,7 +450,7 @@ This demo is not a safety interlock. A still image cannot prove a hidden action.
 
 ### Included tea-making guide
 
-`guides/tea-making.guide.yaml` is a hand-authored, approved example with task
+`examples/tea-making/guide.yaml` is a hand-authored, approved example with task
 name **Tea Making** and ID `tea_making`. Its four stages guide brewing
 chamomile tea: read the packet, verify the water temperature, put the tea in
 water, and start the steeping timer. It is not generated from a user recording.
@@ -453,7 +458,7 @@ water, and start the steeping timer. It is not generated from a user recording.
 Start the sample's shared models, then run:
 
 ```bash
-uv run main.py --mode guide "Tea Making"
+uv run main.py --mode guide examples/tea-making/guide.yaml
 ```
 
 Connect and say **start guide**. Say **next** after each verified visual step
@@ -540,8 +545,8 @@ label. It checks real VLM responses, rejection of premature advancement, and
 identification announcements. These cards test the response contract, not
 photographic accuracy.
 
-A YAML or JSON manifest selects `guides_dir` (relative to the manifest) and
-`guide` (name or ID), and lists ordered `actions`:
+A YAML or JSON manifest selects a `guide_path` (relative to the manifest's
+directory, or absolute) and lists ordered `actions`:
 
 - `image`: show an image `path`, or a named synthetic `scene`. Optional
   `scenes` map names to a rectangle color or display text.
@@ -697,7 +702,7 @@ cannot cancel its own response.
 |---|---|
 | `yaml/worker.yaml` | Shared frame and speech detection settings; capability configuration paths |
 | `yaml/capture-agent-config.yaml` | Task output directory, sampling rate, and caption interval |
-| `yaml/guide-agent-config.yaml` | Local guide directory and visual verification timeout |
+| `yaml/guide-agent-config.yaml` | Visual verification timeout |
 | `yaml/models.json` | Shared batch STT, LLM, VLM, and TTS services and endpoints |
 | `yaml/media_capture.yaml` | Opt-in session recording output, profile, and participant lifetime |
 | `yaml/voice_gate.yaml` | Silent, wake-word-free input with sample-owned recording commands |
@@ -711,10 +716,11 @@ beside the worker YAML. Absolute configuration and output paths are also support
 The worker loads shared settings into `WorkerConfig` and capture-specific settings
 into `CaptureConfig` under `capture/config.py`; `app.py` supplies each to its
 owning component. Guide mode selects its YAML through `guide_config` and loads
-`GuideConfig` from `guide/config.py`; its guide directory resolves relative to
-that YAML. The required positional `GUIDE_NAME` selects `task.name` or `task.id`,
-not a filesystem path. `--output-root` applies only to capture. Restart after
-configuration edits.
+`GuideConfig` from `guide/config.py`. The required positional `GUIDE_PATH` selects
+a guide file or a directory containing exactly one top-level YAML file. The
+launcher resolves sample-relative paths and passes an absolute path to the worker.
+`task.name` and `task.id` remain guide metadata, not CLI selectors.
+`--output-root` applies only to capture. Restart after configuration edits.
 Refer to {doc}`configuration` and {doc}`command-line` for fields and CLI options.
 
 ## Guide regression tests
