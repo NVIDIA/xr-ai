@@ -140,7 +140,7 @@ def test_source_links_use_the_current_documentation_ref(monkeypatch) -> None:
         source = [
             "https://github.com/NVIDIA/xr-ai/blob/main/docs/example.md\n"
             "https://github.com/NVIDIA/xr-ai/tree/main/docs\n"
-            "https://raw.githubusercontent.com/NVIDIA/xr-ai/main/skills/getting-started/SKILL.md"
+            "https://raw.githubusercontent.com/NVIDIA/xr-ai/main/skills/setup/SKILL.md"
         ]
 
         config["_rewrite_github_links"](None, "example", source)
@@ -148,22 +148,42 @@ def test_source_links_use_the_current_documentation_ref(monkeypatch) -> None:
         assert source == [
             f"https://github.com/NVIDIA/xr-ai/blob/{ref}/docs/example.md\n"
             f"https://github.com/NVIDIA/xr-ai/tree/{ref}/docs\n"
-            f"https://raw.githubusercontent.com/NVIDIA/xr-ai/{ref}/skills/getting-started/SKILL.md"
+            f"https://raw.githubusercontent.com/NVIDIA/xr-ai/{ref}/skills/setup/SKILL.md"
         ]
 
 
-def test_agent_prompt_is_owned_by_docs_snippet() -> None:
-    snippet_path = _ROOT / "docs" / "source" / "_snippets" / "agent-setup-prompt.txt"
-    snippet = snippet_path.read_text()
+def test_agent_prompts_are_owned_by_docs_snippets() -> None:
+    source = _ROOT / "docs" / "source"
     readme = (_ROOT / "README.md").read_text()
 
-    assert snippet not in readme
     assert "getting_started/skills" in readme
-    for page in (
-        _ROOT / "docs" / "source" / "index.md",
-        _ROOT / "docs" / "source" / "getting_started" / "skills.md",
+    for name, skill_path, pages in (
+        (
+            "agent-setup-prompt.txt",
+            "skills/setup/SKILL.md",
+            (source / "getting_started" / "skills.md",),
+        ),
+        (
+            "agent-demo-prompt.txt",
+            "skills/run-demo/SKILL.md",
+            (
+                source / "index.md",
+                source / "getting_started" / "quickstart.md",
+                source / "getting_started" / "skills.md",
+            ),
+        ),
     ):
-        assert "```{literalinclude} /_snippets/agent-setup-prompt.txt" in page.read_text()
+        snippet = (source / "_snippets" / name).read_text()
+        assert skill_path in snippet
+        assert snippet not in readme
+        for page in pages:
+            assert f"```{{literalinclude}} /_snippets/{name}" in page.read_text()
+
+    demo_skill = (_ROOT / "skills" / "run-demo" / "SKILL.md").read_text()
+    assert (
+        "https://raw.githubusercontent.com/NVIDIA/xr-ai/<ref>/skills/setup/SKILL.md"
+        in demo_skill
+    )
 
 
 def test_application_prompt_is_owned_by_docs_snippet() -> None:
@@ -307,9 +327,8 @@ def test_latest_docs_link_checker_reads_reference_bare_and_html_links(tmp_path) 
     assert all("rendered page does not exist" in error for error in errors)
 
 
-def test_getting_started_skill_routes_to_versioned_setup_docs() -> None:
-    skill = (_ROOT / "skills" / "getting-started" / "SKILL.md").read_text()
-    normalized = " ".join(skill.split())
+def test_setup_skill_routes_to_versioned_setup_docs() -> None:
+    skill = (_ROOT / "skills" / "setup" / "SKILL.md").read_text()
 
     assert "root `README.md` Requirements" not in skill
     assert (
@@ -320,11 +339,6 @@ def test_getting_started_skill_routes_to_versioned_setup_docs() -> None:
         "https://nvidia.github.io/xr-ai/<ref>/getting_started/quickstart.html"
         in skill
     )
-    assert (
-        "For local models, start `agent-samples/simple-vlm-example/model-servers` "
-        "and wait for it to report readiness "
-        "before starting `agent-samples/simple-vlm-example`"
-    ) in normalized
     assert "docs/source/guides/deploying-with-nim.md" in skill
     assert "STT and TTS stay local" not in skill
 

@@ -23,7 +23,8 @@ troubleshooting. The landing page opens the newest complete documentation set;
 a release takes precedence once it contains the current entry points. Start
 with:
 
-- [Set up with a coding agent](https://nvidia.github.io/xr-ai/latest/getting_started/skills.html)
+- [Run the browser demo with a coding agent (`run-demo`)](https://nvidia.github.io/xr-ai/latest/getting_started/skills.html#run-the-browser-demo)
+- [Set up for development with a coding agent](https://nvidia.github.io/xr-ai/latest/getting_started/skills.html#set-up-for-development)
 - [Build your own application](https://nvidia.github.io/xr-ai/latest/guides/building-your-app.html)
 - [Manual quickstart](https://nvidia.github.io/xr-ai/latest/getting_started/quickstart.html)
 - [System requirements](https://nvidia.github.io/xr-ai/latest/getting_started/requirements.html)
@@ -70,7 +71,7 @@ evaluation, and adaptation guidance.
 | `utils/` | Launcher, logging, VAD, vLLM, and voice-gate utilities |
 | `tests/` | Cross-package and integration tests |
 | `docs/source/` | Canonical user and contributor documentation |
-| `skills/` | Setup skills for coding agents |
+| `skills/` | Coding-agent skills for setup, demos, application development, and reviews |
 
 For repository constraints and dependency boundaries, refer to
 [`AGENTS.md`](AGENTS.md) and [`DEPENDENCIES.md`](DEPENDENCIES.md).

@@ -1,8 +1,8 @@
 ---
 name: build-your-app
 description: >-
-  Build, adapt, run, or verify an application on NVIDIA xr-ai, whether or not
-  the repository has already been cloned.
+  Build, adapt, run, or verify a custom application on NVIDIA xr-ai, whether or
+  not the repository has been cloned. Use run-demo to try the reference sample.
 ---
 <!--
   SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.

@@ -1,6 +1,6 @@
 ---
-name: getting-started
-description: Get set up to build on the NVIDIA xr-ai stack (XR AI / DeviceIOHub). Use when a user asks to install, clone, or do initial setup of xr-ai; not for routine work in an already-set-up clone.
+name: setup
+description: Prepare an NVIDIA xr-ai checkout and prerequisites. Use for initial installation, cloning, or development setup, not routine work in a prepared checkout. Use run-demo for a running browser demo.
 ---
 
 <!--
@@ -8,10 +8,11 @@ description: Get set up to build on the NVIDIA xr-ai stack (XR AI / DeviceIOHub)
   SPDX-License-Identifier: Apache-2.0
 -->
 
-# Getting started with xr-ai
+# Set up an XR AI checkout
 
-Pointers only; the linked docs hold the procedures. Paths are relative to the
-repo root, so clone before following them.
+Prepare a checkout and its prerequisites for development. The linked docs hold
+the procedures. Paths are relative to the repo root, so clone before following
+them.
 
 ## First: two setup questions
 
@@ -22,12 +23,12 @@ the pointers below to the answers.
    `main`. This selects `<ref>` for the skill, checkout, and documentation.
    Before giving setup steps, require a copy of this skill from `<ref>`. If
    this copy's source ref differs or is unknown, retrieve it from
-   `https://raw.githubusercontent.com/NVIDIA/xr-ai/<ref>/skills/getting-started/SKILL.md`
-   and continue with that copy. If the file is absent at a release tag, that
-   release predates the skill bank: stop and ask before using `main` for both
-   the skill and the checkout. For other retrieval failures, stop and ask
-   whether to retry. Use `https://nvidia.github.io/xr-ai/main/` for `main`, or
-   replace `main` with the selected release tag.
+   `https://raw.githubusercontent.com/NVIDIA/xr-ai/<ref>/skills/setup/SKILL.md`
+   and continue with that copy. If the file is absent at a release tag,
+   explain that `setup` is unavailable at that release and ask before using
+   `main` for the skill, checkout, and docs. For other retrieval failures, stop
+   and ask whether to retry. Use `https://nvidia.github.io/xr-ai/main/` for
+   `main`, or replace `main` with the selected release tag.
    <https://nvidia.github.io/xr-ai/> opens the newest complete documentation
    set and can fall back to `main` when the release lacks current entry points.
 2. **Local or remote GPU?** Models on the local GPU, or a hosted/remote
@@ -63,21 +64,17 @@ the pointers below to the answers.
   without hardware.
 - **Preparing an upstream sample:** `docs/source/guides/adding-a-sample.md`,
   full repository boilerplate templates.
-- **Quickstart order:** follow
+- **Prerequisites:** check the selected environment against
+  `docs/source/getting_started/requirements.md` and report missing requirements.
+  Ask before privileged host changes, system package installation, daemon
+  restarts, or reboots. Configure credentials using
+  `docs/source/getting_started/credentials.md`. Use existing credential sources
+  without printing secrets.
+- **Running a sample:** the quickstart document is at
   `https://nvidia.github.io/xr-ai/<ref>/getting_started/quickstart.html`, with
-  `<ref>` replaced as above. For local models, start
-  `agent-samples/simple-vlm-example/model-servers` and wait for it to report
-  readiness before starting `agent-samples/simple-vlm-example`. For another
-  sample, start that sample’s own `model-servers/` project instead. Stop the
-  current model stack before switching samples, editing its server settings, or
-  updating the checkout.
-  For hosted models, validate the application's `yaml/models.json` through the
-  deployment guide before starting the application; skip local model-server
-  startup.
-- **Launch failures:** follow `docs/source/guides/troubleshooting.md` and the
-  failure message's process context and run-log directory. Model servers that
-  had signaled readiness when cleanup began survive a startup failure or
-  cancellation; rerun the same model command to reuse them. If the fix changes
-  a server that already started, run the model command with `--stop` first so
-  the new settings take effect. Use `--stop` to clear retained servers. Refer to
-  `docs/source/guides/customizing-model-servers.md`.
+  `<ref>` replaced as above.
+
+## Setup complete
+
+Return the checkout path and ref, selected model environment, and any remaining
+prerequisite or credential blockers. Do not launch model servers or the sample.

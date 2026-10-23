@@ -1,0 +1,10 @@
+Run the xr-ai Simple VLM browser demo for me. Reuse the checkout and ref
+selected in this conversation or the current xr-ai working directory;
+otherwise ask whether to use the latest release
+(newest stable tag; a prerelease only if no stable exists) or main. Fetch
+skills/run-demo/SKILL.md at that ref from
+https://raw.githubusercontent.com/NVIDIA/xr-ai/. If it is absent at a
+release tag, get my OK before using main for the skill, checkout, and docs.
+Install the skill (or just follow it), handle any setup it requires, and
+leave the demo running. Return the browser link, interaction verification
+status, and stop instructions.

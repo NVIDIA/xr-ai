@@ -9,11 +9,13 @@ Build AI agents that see and hear what your users experience in XR, and respond
 in real time.
 
 :::{tip}
-Using a coding agent? Paste this to it:
+Try xr-ai with a coding agent. Paste this to run the browser demo:
 
-```{literalinclude} /_snippets/agent-setup-prompt.txt
+```{literalinclude} /_snippets/agent-demo-prompt.txt
 :language: text
 ```
+
+For development setup and other workflows, refer to {doc}`getting_started/skills`.
 :::
 
 XR AI is an open-source stack that connects web, iOS/visionOS, AR-glasses, and
@@ -40,11 +42,11 @@ It is especially useful when you need to:
 ::::{grid} 1 1 2 2
 :gutter: 3
 
-:::{grid-item-card} 🤖 Set up with your agent
+:::{grid-item-card} 🤖 Try xr-ai with your agent
 :link: getting_started/skills
 :link-type: doc
-The primary path: one pasted prompt sets a coding agent up with the xr-ai
-skills, and it does the rest.
+Launch the browser demo with `run-demo` and receive its connection link and
+verification status.
 :::
 
 :::{grid-item-card} 🚀 Get started
