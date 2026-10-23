@@ -478,8 +478,10 @@ relative <code class="docutils literal notranslate"><span class="pre">[tool.uv.s
 <p>Use the latest stable release by default, falling back to the latest
 prerelease when no stable release exists. Use <code class="docutils literal notranslate"><span class="pre">main</span></code> when the application
 needs unreleased changes. The documentation and checkout must use the same
-ref: use the <code class="docutils literal notranslate"><span class="pre">/latest/</span></code> documentation with the selected release or <code class="docutils literal notranslate"><span class="pre">/main/</span></code>
-with <code class="docutils literal notranslate"><span class="pre">main</span></code>.</p>
+ref: use <code class="docutils literal notranslate"><span class="pre">https://nvidia.github.io/xr-ai/&lt;ref&gt;/</span></code>, replacing <code class="docutils literal notranslate"><span class="pre">&lt;ref&gt;</span></code> with
+the selected release tag or <code class="docutils literal notranslate"><span class="pre">main</span></code>. The <code class="docutils literal notranslate"><span class="pre">/latest/</span></code> alias can fall back to
+<code class="docutils literal notranslate"><span class="pre">main</span></code> when a release lacks current entry points, so it does not guarantee
+a match with a release checkout.</p>
 <p>Create the checkout:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/NVIDIA/xr-ai.git
 <span class="nb">cd</span><span class="w"> </span>xr-ai

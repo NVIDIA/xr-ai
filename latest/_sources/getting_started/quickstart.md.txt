@@ -105,8 +105,8 @@ The hub prints:
 [hub]   Web client  : https://localhost:8080
 ```
 
-This banner appears as soon as the hub itself is ready, while the model
-services and worker are still starting. Clients can connect as soon as it
+This banner appears as soon as the hub itself is ready, while the worker
+is still starting. Clients can connect as soon as it
 appears, but the agent answers queries only after the launcher prints its
 `All processes ready` banner.
 
@@ -120,8 +120,8 @@ private" warning the first time — click **Advanced → Proceed** (Chrome or Ed
 trusting the certificate permanently or running over plain HTTP instead.
 
 Leave **Token URL** blank — the web client fetches a token from the server
-automatically. Click **Connect**, then click **Start Camera** and allow camera
-access. For a spoken interaction, click **Start Microphone** and allow
+automatically. Click **Connect**, then set **Camera Mode** to **Live video**
+and allow camera access. For a spoken interaction, click **Start Microphone** and allow
 microphone access.
 
 ### Step 3 — Meet the agent
@@ -368,7 +368,7 @@ To stop the model servers when done:
 uv run --project model-servers xr_render_demo_model_servers --stop
 ```
 
-XR Render uses the configured configured endpoints in `yaml/models.json`; it does
+XR Render uses the configured endpoints in `yaml/models.json`; it does
 not select or own model deployment profiles.
 
 ## Hub only (standalone)

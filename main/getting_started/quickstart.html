@@ -556,8 +556,8 @@ The hub prints:</p>
 [hub]   Web client  : https://localhost:8080
 </pre></div>
 </div>
-<p>This banner appears as soon as the hub itself is ready, while the model
-services and worker are still starting. Clients can connect as soon as it
+<p>This banner appears as soon as the hub itself is ready, while the worker
+is still starting. Clients can connect as soon as it
 appears, but the agent answers queries only after the launcher prints its
 <code class="docutils literal notranslate"><span class="pre">All</span> <span class="pre">processes</span> <span class="pre">ready</span></code> banner.</p>
 </section>
@@ -570,8 +570,8 @@ private” warning the first time — click <strong>Advanced → Proceed</strong
 <strong>Accept the Risk and Continue</strong> (Firefox). Refer to the networking guide for
 trusting the certificate permanently or running over plain HTTP instead.</p>
 <p>Leave <strong>Token URL</strong> blank — the web client fetches a token from the server
-automatically. Click <strong>Connect</strong>, then click <strong>Start Camera</strong> and allow camera
-access. For a spoken interaction, click <strong>Start Microphone</strong> and allow
+automatically. Click <strong>Connect</strong>, then set <strong>Camera Mode</strong> to <strong>Live video</strong>
+and allow camera access. For a spoken interaction, click <strong>Start Microphone</strong> and allow
 microphone access.</p>
 </section>
 <section id="step-3-meet-the-agent">
@@ -778,7 +778,7 @@ The scene draws two shapes, boxes and spheres; ask for either by name. Refer to
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-servers<span class="w"> </span>xr_render_demo_model_servers<span class="w"> </span>--stop
 </pre></div>
 </div>
-<p>XR Render uses the configured configured endpoints in <code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code>; it does
+<p>XR Render uses the configured endpoints in <code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code>; it does
 not select or own model deployment profiles.</p>
 </section>
 </section>

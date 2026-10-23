@@ -776,8 +776,9 @@ cleanup.
   swap backends. Hosting backend is selectable per YAML (refer to *Choosing the
   vLLM runtime*); persists across stack restarts in both pip and docker modes.
 - **stt-server** loads parakeet-tdt-0.6b-v3 via NeMo ASR in-process.
-  English-only; the `language` and `temperature` form fields are accepted but
-  ignored. Set `startup_timeout_s` to a positive finite number to override the
+  The `language` and `temperature` form fields are accepted but ignored;
+  recognition uses the loaded model's language behavior. Set `startup_timeout_s`
+  to a positive finite number to override the
   600-second cold-start budget.
 - **magpie-tts** loads magpie_tts_multilingual_357m via NeMo TTS in-process.
 - **pocket-tts** loads the compact `kyutai/pocket-tts` model on the configured

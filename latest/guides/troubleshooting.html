@@ -697,7 +697,7 @@ env<span class="w"> </span>-u<span class="w"> </span>LD_LIBRARY_PATH<span class=
 NGC vLLM container.</p>
 <p><strong>Fix:</strong> log in with your NGC API key once. Get a key from
 <a class="reference external" href="https://ngc.nvidia.com/setup/api-key">https://ngc.nvidia.com/setup/api-key</a> and run:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>docker<span class="w"> </span>login<span class="w"> </span>nvcr.io<span class="w"> </span>-u<span class="w"> </span><span class="s1">'$oauthtoken'</span><span class="w"> </span>-p<span class="w"> </span><span class="nv">$NGC_API_KEY</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">printf</span><span class="w"> </span><span class="s1">'%s'</span><span class="w"> </span><span class="s2">"</span><span class="nv">$NGC_API_KEY</span><span class="s2">"</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>docker<span class="w"> </span>login<span class="w"> </span>nvcr.io<span class="w"> </span>-u<span class="w"> </span><span class="s1">'$oauthtoken'</span><span class="w"> </span>--password-stdin
 </pre></div>
 </div>
 <p>The credential is cached in <code class="docutils literal notranslate"><span class="pre">~/.docker/config.json</span></code> and reused on subsequent
@@ -965,9 +965,10 @@ GPU-visible memory. The complete original error remains in the reported log file
 restarts so model weights stay loaded across worker crashes and debug
 restarts. Refer to <a class="reference internal" href="../components/ai-services.html"><span class="doc">AI inference servers</span></a> → <em>vLLM model
 persistence</em>.</p>
-<p><strong>Fix:</strong> to fully release VRAM:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>xr-ai
-uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/simple-vlm-example/model-servers<span class="w"> </span>simple_vlm_example_model_servers<span class="w"> </span>--stop
+<p><strong>Fix:</strong> from the repository root, stop XR Render’s model stack to release its
+VRAM:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>agent-samples/xr-render-demo
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-servers<span class="w"> </span>xr_render_demo_model_servers<span class="w"> </span>--stop
 </pre></div>
 </div>
 <p>Use the current sample’s own model command with <code class="docutils literal notranslate"><span class="pre">--stop</span></code> and the same explicit
@@ -990,10 +991,10 @@ success if server ownership cannot be verified or any target remains running.</p
 appears to hang at startup the first time.</p>
 <p><strong>Cause:</strong> model weights are downloading from HuggingFace into <code class="docutils literal notranslate"><span class="pre">models/</span></code> at
 the repository root (gitignored; the Cosmos3 checkpoint alone is tens of GB).</p>
-<p><strong>Fix:</strong> wait. Subsequent runs use the cached weights and start in
-~30–60 s. If the download makes no progress, note that unauthenticated
-downloads are rate-limited and can
-stall indefinitely; set <code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code> and restart. Refer to
+<p><strong>Fix:</strong> wait. Subsequent runs reuse the cached weights, but CUDA graph
+capture and kernel initialization can still take several minutes. If the
+download makes no progress, note that unauthenticated downloads are rate-limited
+and can stall indefinitely; set <code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code> and restart. Refer to
 <a class="reference internal" href="../getting_started/credentials.html"><span class="doc">Credentials</span></a>.</p>
 </section>
 </section>

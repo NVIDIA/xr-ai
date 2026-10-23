@@ -511,7 +511,7 @@ ordinary STT use <code class="docutils literal notranslate"><span class="pre">Us
 <code class="docutils literal notranslate"><span class="pre">Speaker</span> <span class="pre">1</span> <span class="pre">[ignored]:</span> <span class="pre">What</span> <span class="pre">time</span> <span class="pre">is</span> <span class="pre">it?</span></code>. Before enrollment, detections are
 marked <code class="docutils literal notranslate"><span class="pre">waiting</span> <span class="pre">for</span> <span class="pre">enrollment</span></code>. These display-only messages cannot invoke or
 interrupt the agent. Set <code class="docutils literal notranslate"><span class="pre">speaker.diagnostics:</span> <span class="pre">false</span></code> to stop displaying
-diagnostics and stop transcribing non-owner voices after enrollment. See
+diagnostics and stop transcribing non-owner voices after enrollment. Refer to
 <a class="reference internal" href="../components/ai-services.html"><span class="doc">AI inference servers</span></a> for decoding and resource cost. Ordinary STT,
 including the NIM path, returns
 accepted queries without speaker diagnostics.</p>
@@ -631,6 +631,11 @@ participant-lifetime bundle closes.</p>
 queues. If recording falls behind, it drops pending capture frames rather than
 backpressuring the hub or worker. MP4 finalization requires <code class="docutils literal notranslate"><span class="pre">ffmpeg</span></code> on <code class="docutils literal notranslate"><span class="pre">PATH</span></code>.
 Omit <code class="docutils literal notranslate"><span class="pre">--session-recording</span></code> when a deployment must not retain device media.</p>
+<p>For a captioned MP4, disconnect the participant and wait for
+<code class="docutils literal notranslate"><span class="pre">video/session.mp4</span></code> and the manifest’s <code class="docutils literal notranslate"><span class="pre">renderings.captioned_mp4</span></code> entry before
+stopping the stack. Shutdown finalizes active raw bundles without starting new
+renders. Refer to <a class="reference internal" href="../components/server-runtime.html"><span class="doc">Server runtime</span></a> for rendering a completed
+raw bundle separately.</p>
 <p>Wake phrases match at the start of a final transcript or after sentence-final
 <code class="docutils literal notranslate"><span class="pre">.</span></code>, <code class="docutils literal notranslate"><span class="pre">?</span></code>, or <code class="docutils literal notranslate"><span class="pre">!</span></code> punctuation followed by whitespace or a closing quote. Text
 before that boundary and the phrase itself are discarded before dispatch.</p>

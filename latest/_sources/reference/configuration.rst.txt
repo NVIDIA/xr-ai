@@ -5,9 +5,11 @@ Sample configuration reference
 ==============================
 
 This reference is generated directly from configuration files under each
-installed top-level sample's ``yaml/`` directory in ``agent-samples/``, and from configuration files
-beside a direct capability subproject. Adding a file in either location enrolls
-it automatically. Values are sample- and hardware-specific examples, not
+top-level sample's ``yaml/`` and ``model-servers/yaml/`` directories in
+``agent-samples/``, and from configuration files beside a direct capability
+subproject. Adding a file in these locations enrolls it automatically. The
+catalog also includes service YAML files under ``services/<service>/`` that
+declare ``model_cache``; these supply the shared model-server defaults. Values are sample- and hardware-specific examples, not
 universal defaults. Keep field guidance beside the value as a source comment;
 the generated page preserves those comments verbatim.
 

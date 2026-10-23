@@ -55,7 +55,7 @@ The sample enables `speaker.diagnostics: true` in `yaml/voice_gate.yaml`.
 `Speaker 1 [ignored]: What time is it?`. Before enrollment, detections are
 marked `waiting for enrollment`. These display-only messages cannot invoke or
 interrupt the agent. Set `speaker.diagnostics: false` to stop displaying
-diagnostics and stop transcribing non-owner voices after enrollment. See
+diagnostics and stop transcribing non-owner voices after enrollment. Refer to
 {doc}`../components/ai-services` for decoding and resource cost. Ordinary STT,
 including the NIM path, returns
 accepted queries without speaker diagnostics.
@@ -144,6 +144,13 @@ Encoding and file writes run in the separate capture process behind bounded
 queues. If recording falls behind, it drops pending capture frames rather than
 backpressuring the hub or worker. MP4 finalization requires `ffmpeg` on `PATH`.
 Omit `--session-recording` when a deployment must not retain device media.
+
+
+For a captioned MP4, disconnect the participant and wait for
+`video/session.mp4` and the manifest's `renderings.captioned_mp4` entry before
+stopping the stack. Shutdown finalizes active raw bundles without starting new
+renders. Refer to {doc}`../components/server-runtime` for rendering a completed
+raw bundle separately.
 
 Wake phrases match at the start of a final transcript or after sentence-final
 `.`, `?`, or `!` punctuation followed by whitespace or a closing quote. Text

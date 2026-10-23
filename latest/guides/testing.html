@@ -593,6 +593,23 @@ Docker, or NVENC; otherwise it is expected to run on the stock CI runner. Use
 the narrowest existing test module for the behavior, and add an integration
 test only when a real process boundary is material to the contract.</p>
 </section>
+<section id="build-the-documentation">
+<h2>Build the documentation<a class="headerlink" href="#build-the-documentation" title="Link to this heading">#</a></h2>
+<p>From the repository root, install the pinned documentation toolchain in a
+separate environment and run the same strict checked-out build as the docs PR
+check:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>venv<span class="w"> </span>docs/.venv
+uv<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>--python<span class="w"> </span>docs/.venv/bin/python<span class="w"> </span>-r<span class="w"> </span>docs/requirements.txt
+make<span class="w"> </span>-C<span class="w"> </span>docs<span class="w"> </span>strict<span class="w"> </span><span class="nv">SPHINXBUILD</span><span class="o">=</span><span class="s2">"</span><span class="nv">$PWD</span><span class="s2">/docs/.venv/bin/sphinx-build"</span>
+</pre></div>
+</div>
+<p>The build validates public API documentation, generates the CLI and
+configuration catalogs, treats Sphinx warnings as errors, and checks the
+rendered Python reference for private implementation details. Open
+<code class="docutils literal notranslate"><span class="pre">docs/_build/current/index.html</span></code> to inspect the result. The deployment workflow
+also runs <code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">-C</span> <span class="pre">docs</span> <span class="pre">strict-versions</span></code> with <code class="docutils literal notranslate"><span class="pre">sphinx-multiversion</span></code> installed
+from the same requirements and full release-tag history available.</p>
+</section>
 </section>
 
 
@@ -649,6 +666,7 @@ test only when a real process boundary is material to the contract.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coverage-boundaries">Coverage boundaries</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#measure-coverage">Measure coverage</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#adding-tests">Adding tests</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#build-the-documentation">Build the documentation</a></li>
 </ul>
   </nav></div>
 

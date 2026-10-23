@@ -680,7 +680,8 @@ packages = ["&lt;snake_name&gt;_worker"]
 <span class="sd">&lt;Name&gt; agent orchestrator.  Runs the process stack for this sample.</span>
 
 <span class="sd">How to run (from agent-samples/&lt;name&gt;/):</span>
-<span class="sd">    uv sync &amp;&amp; uv run &lt;snake_name&gt;</span>
+<span class="sd">    uv --config-file ../../uv.toml sync</span>
+<span class="sd">    uv --config-file ../../uv.toml run &lt;snake_name&gt;</span>
 <span class="sd">"""</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 
@@ -785,22 +786,27 @@ class &lt;CamelName&gt;Agent:            # ← FILL IN agent logic
     async def run(self, ready_file: Path | None = None) -&gt; None:
         # ← start any application background tasks before the endpoint task
         self._ep_task = asyncio.create_task(self._ep.run(), name="hub-endpoint")
-        await self._ep.wait_until_running()
-        if ready_file:
-            ready_file.touch()
         try:
+            await self._ep.wait_until_running()
+            if ready_file:
+                ready_file.touch()
             await self._ep_task
         except asyncio.CancelledError:
-            pass
+            if asyncio.current_task().cancelling():
+                raise
+            # ignored: shutdown cancelled the child receive loop.
         finally:
+            self._ep_task.cancel()
+            await asyncio.gather(self._ep_task, return_exceptions=True)
             self._ep_task = None
+            # ← cancel and await application background tasks before closing IPC
+            self._ep.stop()
+            self._ep.close()
 
     def shutdown(self) -&gt; None:
-        # ← cancel any background tasks here first
+        # Closing sockets is deferred until the receive loop has unwound.
         if self._ep_task:
             self._ep_task.cancel()
-        self._ep.stop()
-        self._ep.close()
 
 
 async def main(ready_file: Path | None = None) -&gt; None:

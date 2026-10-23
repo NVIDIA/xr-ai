@@ -135,6 +135,12 @@ behind, so recording does not backpressure the hub or worker. Omit `--session-re
 when the deployment must not retain device media. Refer to
 {doc}`../components/server-runtime` for the capture bundle and renderer contract.
 
+For a captioned MP4, disconnect the participant and wait for
+`video/session.mp4` and the manifest's `renderings.captioned_mp4` entry before
+stopping the stack. Shutdown finalizes active raw bundles without starting new
+renders. Refer to {doc}`../components/server-runtime` for rendering a completed
+raw bundle separately.
+
 ## Configuration
 
 Run and edit the sample from `agent-samples/lab-instrument-monitoring/`. The

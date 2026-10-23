@@ -16,8 +16,10 @@ relative `[tool.uv.sources]` entries in each application's `pyproject.toml`.
 Use the latest stable release by default, falling back to the latest
 prerelease when no stable release exists. Use `main` when the application
 needs unreleased changes. The documentation and checkout must use the same
-ref: use the `/latest/` documentation with the selected release or `/main/`
-with `main`.
+ref: use `https://nvidia.github.io/xr-ai/<ref>/`, replacing `<ref>` with
+the selected release tag or `main`. The `/latest/` alias can fall back to
+`main` when a release lacks current entry points, so it does not guarantee
+a match with a release checkout.
 
 Create the checkout:
 

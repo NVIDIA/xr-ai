@@ -51,8 +51,9 @@ response identity and timestamp. Its first chunk interrupts older speech
 unless router text such as a preamble already started the turn. It finalizes
 partial responses after model failure; the router reports a failure before the
 first chunk.
-Cancellation drains the model without publishing further frames. Model and
-publication failures propagate to the caller.
+Cancellation drains the model without publishing further response text and
+finalizes an already-open stream with an empty frame. Model and publication
+failures propagate to the caller.
 
 The application starts the runtime before answering and stops it after draining
 routed work. `answer(turn, started=...)` is the public request handler; streaming model

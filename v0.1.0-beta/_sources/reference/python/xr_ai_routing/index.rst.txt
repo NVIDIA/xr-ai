@@ -313,7 +313,7 @@ Package Contents
    .. py:attribute:: exchange_id
       :type:  object | None
 
-      Identity of the current completed exchange, when one is active.
+      Identity of the current exchange, when one is active.
 
 
 

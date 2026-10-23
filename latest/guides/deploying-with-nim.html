@@ -520,7 +520,7 @@ GPU layout or manage NIM container lifecycle. Refer to NVIDIA’s
 and the deployment guide for each selected model and container version.</p>
 <p>The example in <code class="docutils literal notranslate"><span class="pre">deployment/nim/models.yaml</span></code> selects Nemotron Omni for LLM
 chat and tool calls, Cosmos3 for vision, Parakeet for recognition, Magpie for
-synthesis, Llama Nemotron Embed for retrieval, and multilingual Nemotron OCR v2
+synthesis, Nemotron 3 Embed for retrieval, and multilingual Nemotron OCR v2
 for text recognition. The OCR entry is available for future integrations; no
 supplied sample consumes it. These are endpoint
 configuration examples, not a claim of production or hardware qualification.
@@ -557,8 +557,9 @@ OpenAI audio routes. <code class="docutils literal notranslate"><span class="pre
 protocol; hosted NVCF speech additionally needs its model’s <code class="docutils literal notranslate"><span class="pre">function_id</span></code>.</p>
 <p>Each entry has <code class="docutils literal notranslate"><span class="pre">deployment.ownership:</span> <span class="pre">external</span></code>. The deployment remains owned
 by its operator when the sample exits or restarts. This file is a consumer
-profile; do not pass it to <code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--models</span></code>, which selects the local
-services to start and stop.</p>
+profile; do not pass it to a sample’s <code class="docutils literal notranslate"><span class="pre">model-servers/</span></code> launcher. Those launchers
+select local services in their source and accept only <code class="docutils literal notranslate"><span class="pre">--stop</span></code> and
+<code class="docutils literal notranslate"><span class="pre">--gpu-profile</span></code>, besides help.</p>
 <p>The checked-in voice workers include the existing <code class="docutils literal notranslate"><span class="pre">xr-ai-models[riva]</span></code> extra.
 Applications copied from an earlier sample must enable that extra in their
 worker’s dependency before selecting Riva speech. The SDK base installation
@@ -720,15 +721,19 @@ uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> <
 <td><p><code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">llm</span></code>, <code class="docutils literal notranslate"><span class="pre">vlm</span></code>, <code class="docutils literal notranslate"><span class="pre">stt</span></code>, <code class="docutils literal notranslate"><span class="pre">tts</span></code></p></td>
 </tr>
-<tr class="row-odd"><td><p>Tea making</p></td>
+<tr class="row-odd"><td><p>Procedure capture and guide</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">llm</span></code>, <code class="docutils literal notranslate"><span class="pre">vlm</span></code>, <code class="docutils literal notranslate"><span class="pre">stt</span></code>, <code class="docutils literal notranslate"><span class="pre">tts</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>Tea making</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">yaml/models.local.json</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">llm</span></code>, <code class="docutils literal notranslate"><span class="pre">vlm</span></code>, <code class="docutils literal notranslate"><span class="pre">stt</span></code>, <code class="docutils literal notranslate"><span class="pre">tts</span></code>, <code class="docutils literal notranslate"><span class="pre">embedding</span></code></p></td>
 </tr>
 </tbody>
 </table>
 </div>
-<p>Simple VLM, lab monitoring, and XR render resolve <code class="docutils literal notranslate"><span class="pre">models.json</span></code> beside their
-worker YAML. Tea making’s worker and RAG YAML each select <code class="docutils literal notranslate"><span class="pre">models_config</span></code>;
+<p>Simple VLM, lab monitoring, XR render, and procedure capture resolve
+<code class="docutils literal notranslate"><span class="pre">models.json</span></code> beside their worker YAML. Tea making’s worker and RAG YAML each select <code class="docutils literal notranslate"><span class="pre">models_config</span></code>;
 update both when choosing a different profile path. Paths are relative to the
 respective YAML. Keep application-specific extra roles when adapting other
 samples. No sample launcher option or model-serving process is needed.</p>

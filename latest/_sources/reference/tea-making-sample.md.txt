@@ -55,27 +55,27 @@ uv sync
 uv run tea_making_sample
 ```
 
-Open `https://localhost:8080`, accept the development certificate, allow camera
-and microphone access, and connect. Wake-word mode is the default; try:
+Open the authenticated web-client URL printed by DeviceIOHub, accept the
+development certificate, allow camera and microphone access, and connect.
+Conversation mode is the default. Say “Hey agent, let's start talking” once,
+then try:
 
 ```text
-Agent, help me make tea.
-Agent, what is the current step?
-Agent, what do you see?
-Agent, start watching for spills.
-Agent, start recording the transcript.
+Help me make tea.
+What is the current step?
+What do you see?
+Start watching for spills.
+Start recording the transcript.
 ```
 
-The launcher options are:
-
-| Option | Behavior |
-|---|---|
-| `--expose-web-events` | Bind the unauthenticated live event viewer to all IPv4 interfaces instead of loopback |
+Pass `--expose-web-events` to bind the unauthenticated live event viewer to all
+IPv4 interfaces instead of loopback. Refer to the generated
+{doc}`command-line <command-line>` reference for all launcher options.
 
 Speech uses the reused TTS endpoint in `yaml/models.local.json`. Voice-gate
 behavior comes from `voice_gate_yaml` in `yaml/tea_making_worker.yaml`.
 The default requires `Hey agent, let's start talking` after connecting,
-then accept speech without a wake phrase until `Hey agent, let's stop talking`.
+then accepts speech without a wake phrase until `Hey agent, let's stop talking`.
 Set `mode: hybrid` to also accept wake-addressed one-off questions before a
 conversation starts, or `mode: always_on` for immediate, ungated speech dispatch.
 The advanced `conversation.require_wake_phrase: true` policy applies only inside an open
@@ -195,6 +195,12 @@ behind, so recording does not backpressure the hub or worker. Omit `--session-re
 when the deployment must not retain device media. Refer to
 {doc}`../components/server-runtime` for the capture bundle and renderer contract.
 
+For a captioned MP4, disconnect the participant and wait for
+`video/session.mp4` and the manifest's `renderings.captioned_mp4` entry before
+stopping the stack. Shutdown finalizes active raw bundles without starting new
+renders. Refer to {doc}`../components/server-runtime` for rendering a completed
+raw bundle separately.
+
 ## Configuration
 
 Run and edit the sample from `agent-samples/tea-making-sample/`. The
@@ -208,7 +214,7 @@ temporary worker configuration with absolute paths. Edit the files under
 | `yaml/workflow.yaml` | Typed state, steps, triggers, evidence, tool access, transitions, and user messages |
 | `yaml/voice_gate.yaml` | Interaction mode, conversation controls and optional wake phrases |
 | `yaml/rag_service.yaml` | Document path, model configuration, cache, chunking, embedding dimensions, and score threshold |
-| `yaml/models.local.json` | Model adapters, shared endpoints, and explicit RAG embedding health settings |
+| `yaml/models.local.json` | Model adapters and shared endpoints, including RAG embeddings |
 | `yaml/device_io_hub.yaml` | LiveKit room and ports, web and token servers, and network behavior |
 
 Set the interaction mode directly in `voice_gate.yaml`; `voice_gate_yaml` in

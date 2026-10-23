@@ -465,9 +465,11 @@
   <section id="sample-configuration-reference">
 <h1>Sample configuration reference<a class="headerlink" href="#sample-configuration-reference" title="Link to this heading">#</a></h1>
 <p>This reference is generated directly from configuration files under each
-installed top-level sample’s <code class="docutils literal notranslate"><span class="pre">yaml/</span></code> directory in <code class="docutils literal notranslate"><span class="pre">agent-samples/</span></code>, and from configuration files
-beside a direct capability subproject. Adding a file in either location enrolls
-it automatically. Values are sample- and hardware-specific examples, not
+top-level sample’s <code class="docutils literal notranslate"><span class="pre">yaml/</span></code> and <code class="docutils literal notranslate"><span class="pre">model-servers/yaml/</span></code> directories in
+<code class="docutils literal notranslate"><span class="pre">agent-samples/</span></code>, and from configuration files beside a direct capability
+subproject. Adding a file in these locations enrolls it automatically. The
+catalog also includes service YAML files under <code class="docutils literal notranslate"><span class="pre">services/&lt;service&gt;/</span></code> that
+declare <code class="docutils literal notranslate"><span class="pre">model_cache</span></code>; these supply the shared model-server defaults. Values are sample- and hardware-specific examples, not
 universal defaults. Keep field guidance beside the value as a source comment;
 the generated page preserves those comments verbatim.</p>
 <p>Refer to the generated
@@ -2239,7 +2241,7 @@ workflow.</p></li>
 <span class="c1"># OpenAI-compatible API at http://localhost:8103/v1</span>
 
 <span class="c1"># NeMo model name.</span>
-<span class="c1"># nvidia/parakeet-tdt-0.6b-v3  — 0.6B TDT model; CC-BY-4.0; ~1.5 GB VRAM; English only</span>
+<span class="c1"># nvidia/parakeet-tdt-0.6b-v3  — 0.6B TDT model; CC-BY-4.0; ~1.5 GB VRAM</span>
 <span class="c1"># nvidia/parakeet-rnnt-1.1b    — stronger, larger; same CC-BY-4.0 license</span>
 <span class="nt">model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nvidia/parakeet-tdt-0.6b-v3</span>
 

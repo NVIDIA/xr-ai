@@ -495,6 +495,9 @@ Refer to <a class="reference internal" href="deploying-with-nim.html"><span clas
 <tr class="row-odd"><td><p>XR render demo</p></td>
 <td><p>Speaker ASR, TTS, Nemotron Omni, Cosmos VLM</p></td>
 </tr>
+<tr class="row-even"><td><p>Procedure capture and guide</p></td>
+<td><p>Batch STT, Pocket TTS, Nemotron Omni, Cosmos VLM</p></td>
+</tr>
 </tbody>
 </table>
 </div>
@@ -502,8 +505,10 @@ Refer to <a class="reference internal" href="deploying-with-nim.html"><span clas
 embeddings. XR rendering uses one Omni server for its LLM roles and does not
 need embeddings. Hubs, workers, RAG, scene, and rendering processes remain in
 the agent launcher; the model launcher brings up inference servers only.</p>
-<p>The shipped workers require speaker ASR on port 8102. They do not contain a
-batch-STT model role or automatically fall back to the batch server on 8103.
+<p>The Simple VLM, lab monitoring, tea making, and XR render workers require
+speaker ASR on port 8102. They do not contain a batch-STT model role or
+automatically fall back to the batch server on 8103. Procedure capture and guide
+uses batch STT on port 8103 with speaker selection disabled.
 For explicit batch speech, replace <code class="docutils literal notranslate"><span class="pre">speaker-stt</span></code> with <code class="docutils literal notranslate"><span class="pre">stt</span></code> in the sample’s
 launcher service list and every selected hardware YAML, add the existing
 batch adapter under <code class="docutils literal notranslate"><span class="pre">models.stt</span></code> in the worker profile, and disable

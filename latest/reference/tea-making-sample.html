@@ -511,33 +511,24 @@ sample from the same terminal:</p>
 uv<span class="w"> </span>run<span class="w"> </span>tea_making_sample
 </pre></div>
 </div>
-<p>Open <code class="docutils literal notranslate"><span class="pre">https://localhost:8080</span></code>, accept the development certificate, allow camera
-and microphone access, and connect. Wake-word mode is the default; try:</p>
-<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Agent, help me make tea.
-Agent, what is the current step?
-Agent, what do you see?
-Agent, start watching for spills.
-Agent, start recording the transcript.
+<p>Open the authenticated web-client URL printed by DeviceIOHub, accept the
+development certificate, allow camera and microphone access, and connect.
+Conversation mode is the default. Say “Hey agent, let’s start talking” once,
+then try:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Help me make tea.
+What is the current step?
+What do you see?
+Start watching for spills.
+Start recording the transcript.
 </pre></div>
 </div>
-<p>The launcher options are:</p>
-<div class="pst-scrollable-table-container"><table class="table">
-<thead>
-<tr class="row-odd"><th class="head"><p>Option</p></th>
-<th class="head"><p>Behavior</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--expose-web-events</span></code></p></td>
-<td><p>Bind the unauthenticated live event viewer to all IPv4 interfaces instead of loopback</p></td>
-</tr>
-</tbody>
-</table>
-</div>
+<p>Pass <code class="docutils literal notranslate"><span class="pre">--expose-web-events</span></code> to bind the unauthenticated live event viewer to all
+IPv4 interfaces instead of loopback. Refer to the generated
+<a class="reference internal" href="command-line.html"><span class="doc">command-line</span></a> reference for all launcher options.</p>
 <p>Speech uses the reused TTS endpoint in <code class="docutils literal notranslate"><span class="pre">yaml/models.local.json</span></code>. Voice-gate
 behavior comes from <code class="docutils literal notranslate"><span class="pre">voice_gate_yaml</span></code> in <code class="docutils literal notranslate"><span class="pre">yaml/tea_making_worker.yaml</span></code>.
 The default requires <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">start</span> <span class="pre">talking</span></code> after connecting,
-then accept speech without a wake phrase until <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">stop</span> <span class="pre">talking</span></code>.
+then accepts speech without a wake phrase until <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">stop</span> <span class="pre">talking</span></code>.
 Set <code class="docutils literal notranslate"><span class="pre">mode:</span> <span class="pre">hybrid</span></code> to also accept wake-addressed one-off questions before a
 conversation starts, or <code class="docutils literal notranslate"><span class="pre">mode:</span> <span class="pre">always_on</span></code> for immediate, ungated speech dispatch.
 The advanced <code class="docutils literal notranslate"><span class="pre">conversation.require_wake_phrase:</span> <span class="pre">true</span></code> policy applies only inside an open
@@ -758,6 +749,11 @@ requires an NVIDIA GPU with NVENC support and <code class="docutils literal notr
 behind, so recording does not backpressure the hub or worker. Omit <code class="docutils literal notranslate"><span class="pre">--session-recording</span></code>
 when the deployment must not retain device media. Refer to
 <a class="reference internal" href="../components/server-runtime.html"><span class="doc">Server runtime</span></a> for the capture bundle and renderer contract.</p>
+<p>For a captioned MP4, disconnect the participant and wait for
+<code class="docutils literal notranslate"><span class="pre">video/session.mp4</span></code> and the manifest’s <code class="docutils literal notranslate"><span class="pre">renderings.captioned_mp4</span></code> entry before
+stopping the stack. Shutdown finalizes active raw bundles without starting new
+renders. Refer to <a class="reference internal" href="../components/server-runtime.html"><span class="doc">Server runtime</span></a> for rendering a completed
+raw bundle separately.</p>
 </section>
 <section id="configuration">
 <h2>Configuration<a class="headerlink" href="#configuration" title="Link to this heading">#</a></h2>
@@ -785,7 +781,7 @@ temporary worker configuration with absolute paths. Edit the files under
 <td><p>Document path, model configuration, cache, chunking, embedding dimensions, and score threshold</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/models.local.json</span></code></p></td>
-<td><p>Model adapters, shared endpoints, and explicit RAG embedding health settings</p></td>
+<td><p>Model adapters and shared endpoints, including RAG embeddings</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/device_io_hub.yaml</span></code></p></td>
 <td><p>LiveKit room and ports, web and token servers, and network behavior</p></td>
