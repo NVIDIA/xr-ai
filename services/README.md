@@ -22,11 +22,14 @@ dependency paths, operational ownership, and standalone commands predictable.
 | `nemotron-omni-llm/` | Nemotron Omni multimodal generation | 8108 |
 | `clef-server/` | Clef-Flash SystemOne choice decisions | 8120 |
 | `embedding-server/` | Nemotron text embeddings | 8109 |
+| `ocr-server/` | Operator-managed Nemotron OCR container | 8000 (inside container) |
 | `video-memory-service/` | Recorded-video queries and historical frame decoding | `tcp://localhost:8310` |
 | `openxr-service/` | Headless OpenXR session and current head pose | `tcp://localhost:8330` |
 | `rag-service/` | Dense document retrieval | `tcp://localhost:8340` |
 
-Local model wrappers expose OpenAI-compatible HTTP. A generic NIM exposes the
+Local batch STT, TTS, chat, vision, and embedding wrappers expose
+OpenAI-compatible HTTP. Speaker STT uses a private WebSocket contract. The
+operator-managed OCR container exposes `POST /v1/ocr`. A generic NIM exposes the
 protocol of its selected image: LLM and VLM NIMs use OpenAI-compatible HTTP,
 while speech NIMs use Riva gRPC. Workers consume both through `xr-ai-models`.
 XR capability services expose typed RPC and are consumed by native tools in

@@ -147,3 +147,22 @@ Keep shared endpoint and polling helpers in `conftest.py`, `_helpers.py`, or
 Docker, or NVENC; otherwise it is expected to run on the stock CI runner. Use
 the narrowest existing test module for the behavior, and add an integration
 test only when a real process boundary is material to the contract.
+
+## Build the documentation
+
+From the repository root, install the pinned documentation toolchain in a
+separate environment and run the same strict checked-out build as the docs PR
+check:
+
+```bash
+uv venv docs/.venv
+uv pip install --python docs/.venv/bin/python -r docs/requirements.txt
+make -C docs strict SPHINXBUILD="$PWD/docs/.venv/bin/sphinx-build"
+```
+
+The build validates public API documentation, generates the CLI and
+configuration catalogs, treats Sphinx warnings as errors, and checks the
+rendered Python reference for private implementation details. Open
+`docs/_build/current/index.html` to inspect the result. The deployment workflow
+also runs `make -C docs strict-versions` with `sphinx-multiversion` installed
+from the same requirements and full release-tag history available.

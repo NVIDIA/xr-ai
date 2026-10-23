@@ -38,8 +38,9 @@ pre-commit install --hook-type commit-msg
 ```
 
 The hooks run Ruff, SPDX checks, and DCO validation. Run the checks relevant to
-your change before submitting it; integration tests require a live hub and are
-skipped when one is unavailable.
+your change before submitting it. CPU integration tests start their own
+subprocesses and run in CI; tests requiring GPU hardware, Docker, or NVENC use
+the `gpu` marker and require a suitably configured host.
 
 Language-specific toolchains are pinned in each client project:
 
@@ -55,11 +56,11 @@ Language-specific toolchains are pinned in each client project:
 
 - Keep code, tests, dependency metadata, and user-facing docs in the same
   change.
-- After changing a `pyproject.toml`, run
+- After changing a `pyproject.toml` outside `apps/`, run
   `uv run --script .github/scripts/generate_dependency_map.py` and regenerate the
   affected project's gitignored `uv.lock` locally. Do not hand-edit the
   generated dependency inventory; pre-commit updates it and CI rejects drift.
-- Add the repository SPDX header to new source files. See
+- Add the repository SPDX header to new source files. Refer to
   [SPDX headers](docs/source/guides/spdx-headers.md).
 - Describe the motivation and validation in the pull request and link related
   issues.

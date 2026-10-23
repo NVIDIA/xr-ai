@@ -8,7 +8,8 @@
 Live-model evals for context compaction and the answer-prompt layout. Refer to
 the [conversation SDK reference](https://nvidia.github.io/xr-ai/latest/reference/agent-sdk-conversation.html#context-compaction)
 for the behavior they check. Start an OpenAI-compatible LLM (for example the
-`model-servers` Nemotron Omni LLM on port 8108), then run from this package:
+`model-servers` Nemotron Omni LLM on port 8108), then run from
+`agent-sdk/xr-ai-conversation/`:
 
 ```bash
 uv run --project . --group eval python eval/conflict_eval.py

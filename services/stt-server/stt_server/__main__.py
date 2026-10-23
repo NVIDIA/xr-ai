@@ -204,7 +204,7 @@ def _build_app(cfg: dict, model_cache: Path):
         file:            UploadFile = File(...),
         response_format: str        = Form("json"),
         # model / language / temperature accepted for API compatibility but not used:
-        # parakeet-tdt is English-only and deterministic.
+        # transcription uses the loaded model's deterministic decoding.
     ):
         from fastapi import HTTPException
         audio_bytes = await file.read()

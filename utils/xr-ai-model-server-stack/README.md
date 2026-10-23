@@ -14,7 +14,7 @@ configured by each sample's `model-servers/pyproject.toml`. A standalone wheel
 installation is not supported: defaults and service projects are repository
 resources, not a bundled deployment.
 
-Shared server YAML lives in `yaml/`; sample-specific GPU profiles live beside each
+Shared server YAML lives in `services/<service>/`; sample-specific GPU profiles live beside each
 launcher in `agent-samples/<sample>/model-servers/yaml/`. Refer to the
 [Python API reference](https://nvidia.github.io/xr-ai/latest/reference/python/xr_ai_model_server_stack/index.html)
 and the

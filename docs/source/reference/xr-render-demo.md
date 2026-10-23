@@ -192,6 +192,12 @@ capture namespace and metadata before exposing parameterless start and stop
 actions; every start creates a timestamped child bundle. The XR render demo
 intentionally selects `demo` plus participant-lifetime recording.
 
+For a captioned MP4, disconnect the participant and wait for
+`video/session.mp4` and the manifest's `renderings.captioned_mp4` entry before
+stopping the stack. Shutdown finalizes active raw bundles without starting new
+renders. Refer to {doc}`../components/server-runtime` for rendering a completed
+raw bundle separately.
+
 ## The LLM server
 
 ### Nemotron-3-Nano-Omni-30B-A3B-Reasoning — port 8108
@@ -432,9 +438,9 @@ a streaming client connects. LOVR cannot start before then.
    → scene process spawns LOVR and waits for CloudXR in a background task
 5. Worker polls `get_health` every 500 ms (up to 120s)
    lovr_started: true  → send `render.ready` to client → XR session unlocked
-   spawn_error: "..."  → log and abort
+   spawn_error: "..."  → send `render.failed` to client and report failure
 6. On reconnect or refresh: `xr.session.started` arrives again
-   → `_xr_started` is already True → skip spawn, send `render.ready`
+   → session controller is already started → skip spawn, send `render.ready`
    immediately
 ```
 
