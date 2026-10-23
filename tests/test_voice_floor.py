@@ -683,6 +683,17 @@ async def test_empty_combiner_result_speaks_the_joined_updates_once() -> None:
     assert floor.texts == ["one two"]
 
 
+async def test_withdraw_drops_an_urgent_update_selected_but_not_yet_spoken() -> None:
+    floor = _Floor()
+    # No await yields between these, so the urgent output holds the floor but has not started.
+    await floor.processor.enqueue_update("alice", "Turn off the burner!", source="safety", urgent=True)
+    await floor.processor.withdraw_updates("alice", source="safety")
+    await floor.processor.enqueue_update("alice", "Timer done.", source="timer")
+    await floor.settle()
+
+    assert floor.texts == ["Timer done."]
+
+
 class _FuzzFloor(_Floor):
     """Drive one participant's floor with a random interleaving of every event it handles.
 
@@ -697,6 +708,7 @@ class _FuzzFloor(_Floor):
         self.user_speaking = False
         self.bot_speaking = False
         self.sources: dict[str, str] = {}
+        self.urgent: set[str] = set()
         self.withdrawn: set[str] = set()
         self.spoken: set[str] = set()
         self.violations: list[str] = []
@@ -744,12 +756,16 @@ class _FuzzFloor(_Floor):
             self.sources[token] = source
             await processor.enqueue_update("alice", token, source=source)
         elif op == "urgent":
-            await processor.enqueue_update("alice", self._token("x"), source="safety", urgent=True)
+            token = self._token("x")
+            self.urgent.add(token)
+            await processor.enqueue_update("alice", token, source="safety", urgent=True)
         elif op == "withdraw":
-            source = self.rng.choice(["guide", "timer"])
+            source = self.rng.choice(["guide", "timer", "safety"])
             self.withdrawn |= {
                 token for token, owner in self.sources.items() if owner == source and token not in self.spoken
             }
+            if source == "safety":
+                self.withdrawn |= self.urgent - self.spoken
             await processor.withdraw_updates("alice", source=source)
         elif op == "query":
             self.user_speaking = False

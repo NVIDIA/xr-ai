@@ -219,6 +219,11 @@ class _VoiceIOProcessor(FrameProcessor):
                 self._queued_urgent[participant_id] = kept_urgent
             else:
                 del self._queued_urgent[participant_id]
+        owner = self._floor.get(participant_id)
+        if owner is not None and owner.item.urgent and owner.item.source == source and not owner.playing:
+            # Selected but not heard yet: dropped like a queued one, not requeued.
+            self._release(participant_id)
+            await self._start_next(participant_id)
         await self._recheck(participant_id)
 
     async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:

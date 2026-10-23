@@ -140,8 +140,8 @@ voice floor that decides what is spoken and when:
   supersedes the active request. Pending and queued urgent updates are kept,
   including an urgent update cancelled before any of it reached TTS; output
   that was playing is not replayed.
-- A `withdraw` from a producer drops that producer's pending updates and queued
-  urgent updates. Output already playing is not cut; a batch being combined
+- A `withdraw` from a producer drops that producer's pending updates and urgent
+  updates that have not started. Output already playing is not cut; a batch being combined
   that contains a withdrawn update is dropped at once and rebuilt from the
   remaining updates. Other producers' updates are kept.
 - A streamed reply that receives no fragment for `stream_idle_timeout_s`
