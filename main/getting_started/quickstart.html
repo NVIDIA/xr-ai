@@ -468,19 +468,24 @@
 -->
 <section id="quickstart">
 <h1>Quickstart<a class="headerlink" href="#quickstart" title="Link to this heading">#</a></h1>
-<section id="set-up-with-a-coding-agent">
-<h2>Set up with a coding agent<a class="headerlink" href="#set-up-with-a-coding-agent" title="Link to this heading">#</a></h2>
-<p>The fastest path: paste this to your agent and it does the rest, including
-walking you through the choices below. Refer to <a class="reference internal" href="skills.html"><span class="doc">Skills</span></a> for how it works.</p>
-<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set up xr-ai for me: ask me whether to build against the latest release
-(newest stable tag; a prerelease only if no stable exists) or main, then
-fetch skills/getting-started/SKILL.md at that ref from
-https://raw.githubusercontent.com/NVIDIA/xr-ai/. If the file does not exist
-at that ref, the release predates agent setup: get my OK to use main for
-both the skill and the checkout. Install the skill (or just follow it), and
-walk me through the rest of the setup.
+<!-- Compatibility anchor for the earlier setup heading. -->
+<p><a id="set-up-with-a-coding-agent"></a></p>
+<section id="run-with-a-coding-agent">
+<h2>Run with a coding agent<a class="headerlink" href="#run-with-a-coding-agent" title="Link to this heading">#</a></h2>
+<p>Paste this to your coding agent to run the Simple VLM browser demo:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Run the xr-ai Simple VLM browser demo for me. Reuse the checkout and ref
+selected in this conversation or the current xr-ai working directory;
+otherwise ask whether to use the latest release
+(newest stable tag; a prerelease only if no stable exists) or main. Fetch
+skills/run-demo/SKILL.md at that ref from
+https://raw.githubusercontent.com/NVIDIA/xr-ai/. If it is absent at a
+release tag, get my OK before using main for the skill, checkout, and docs.
+Install the skill (or just follow it), handle any setup it requires, and
+leave the demo running. Return the browser link, interaction verification
+status, and stop instructions.
 </pre></div>
 </div>
+<p>Refer to <a class="reference internal" href="skills.html"><span class="doc">Skills</span></a> for <code class="docutils literal notranslate"><span class="pre">run-demo</span></code> or development-only preparation with <code class="docutils literal notranslate"><span class="pre">setup</span></code>.</p>
 <p>The remainder of this quickstart is the manual path.</p>
 <p>Every sample follows the same pattern: <strong>start the sample’s model stack, wait for
 its launcher to report readiness and return, start the sample from the same
@@ -490,11 +495,12 @@ the session using the token printed on startup. Each procedure below starts
 with a <code class="docutils literal notranslate"><span class="pre">cd</span></code> from the repository root; keep running that procedure’s commands
 from the selected sample directory.</p>
 <p>Each interactive procedure includes one concrete spoken request that exercises
-the sample’s main path. After it succeeds, you can ask “What can you do?” to
-explore further. In samples with wake-word gating, prefix that spoken question
-with “Hey Agent”; one follow-up utterance within five seconds can omit the wake
-phrase. Typed requests bypass the voice gate. Treat the reply as a
-conversational introduction rather than an exhaustive capability reference.</p>
+the sample’s main path. In the shipped voice-gated samples, first say
+“Hey agent, let’s start talking” and wait for “I’m listening to you now.”
+Then speak questions without a wake phrase. After the first interaction succeeds,
+you can ask “What can you do?” to explore further. Typed requests bypass the
+voice gate. Treat the reply as a conversational introduction rather than an
+exhaustive capability reference.</p>
 </section>
 <section id="model-servers-for-each-sample">
 <span id="model-servers-shared-ai-services"></span><h2>Model servers for each sample<a class="headerlink" href="#model-servers-for-each-sample" title="Link to this heading">#</a></h2>
@@ -576,8 +582,10 @@ microphone access.</p>
 </section>
 <section id="step-3-meet-the-agent">
 <h3>Step 3 — Meet the agent<a class="headerlink" href="#step-3-meet-the-agent" title="Link to this heading">#</a></h3>
+<p>First say “Hey agent, let’s start talking” and wait for
+“I’m listening to you now.”</p>
 <p>Try this first spoken interaction:</p>
-<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>You: Hey Agent, what am I looking at?
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>You: What am I looking at?
 Agent: [Answers from the current camera frame.]
 </pre></div>
 </div>
@@ -633,9 +641,10 @@ for reusable agent patterns, marker setup, output contracts, and adaptation
 recipes.</p>
 <section id="try-the-lab-agent">
 <h3>Try the lab agent<a class="headerlink" href="#try-the-lab-agent" title="Link to this heading">#</a></h3>
-<p>Point the camera at instruments carrying the configured markers, then try this
-spoken interaction:</p>
-<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>You: Hey Agent, read the instruments.
+<p>Point the camera at instruments carrying the configured markers. Say
+“Hey agent, let’s start talking” and wait for “I’m listening to you now.”
+Then try this spoken interaction:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>You: Read the instruments.
 Agent: [Reports the visible marker-associated readings or their availability.]
 </pre></div>
 </div>
@@ -844,7 +853,7 @@ documented beside its value.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#set-up-with-a-coding-agent">Set up with a coding agent</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#run-with-a-coding-agent">Run with a coding agent</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#model-servers-for-each-sample">Model servers for each sample</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#simple-vlm-example-vision-q-a-over-voice-text">Simple VLM example (vision Q&amp;A over voice + text)</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#step-1-start-the-server">Step 1 — Start the server</a></li>

@@ -440,16 +440,20 @@
 in real time.</p>
 <div class="admonition tip">
 <p class="admonition-title">Tip</p>
-<p>Using a coding agent? Paste this to it:</p>
-<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set up xr-ai for me: ask me whether to build against the latest release
-(newest stable tag; a prerelease only if no stable exists) or main, then
-fetch skills/getting-started/SKILL.md at that ref from
-https://raw.githubusercontent.com/NVIDIA/xr-ai/. If the file does not exist
-at that ref, the release predates agent setup: get my OK to use main for
-both the skill and the checkout. Install the skill (or just follow it), and
-walk me through the rest of the setup.
+<p>Try xr-ai with a coding agent. Paste this to run the browser demo:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Run the xr-ai Simple VLM browser demo for me. Reuse the checkout and ref
+selected in this conversation or the current xr-ai working directory;
+otherwise ask whether to use the latest release
+(newest stable tag; a prerelease only if no stable exists) or main. Fetch
+skills/run-demo/SKILL.md at that ref from
+https://raw.githubusercontent.com/NVIDIA/xr-ai/. If it is absent at a
+release tag, get my OK before using main for the skill, checkout, and docs.
+Install the skill (or just follow it), handle any setup it requires, and
+leave the demo running. Return the browser link, interaction verification
+status, and stop instructions.
 </pre></div>
 </div>
+<p>For development setup and other workflows, refer to <a class="reference internal" href="getting_started/skills.html"><span class="doc">Skills</span></a>.</p>
 </div>
 <p>XR AI is an open-source stack that connects web, iOS/visionOS, AR-glasses, and
 XR-headset clients to GPU-accelerated AI services and tool-using agents. An agent
@@ -477,9 +481,9 @@ so each layer evolves independently.</p></li>
 <div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm sd-card-hover docutils">
 <div class="sd-card-body docutils">
 <div class="sd-card-title sd-font-weight-bold docutils">
-🤖 Set up with your agent</div>
-<p class="sd-card-text">The primary path: one pasted prompt sets a coding agent up with the xr-ai
-skills, and it does the rest.</p>
+🤖 Try xr-ai with your agent</div>
+<p class="sd-card-text">Launch the browser demo with <code class="docutils literal notranslate"><span class="pre">run-demo</span></code> and receive its connection link and
+verification status.</p>
 </div>
 <a class="sd-stretched-link sd-hide-link-text reference internal" href="getting_started/skills.html"><span class="doc">Skills</span></a></div>
 </div>

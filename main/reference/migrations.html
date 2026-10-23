@@ -526,6 +526,15 @@ wording.</p>
 <code class="docutils literal notranslate"><span class="pre">[voice]</span></code> extra from <code class="docutils literal notranslate"><span class="pre">xr-ai-conversation</span></code>, which now depends on
 <code class="docutils literal notranslate"><span class="pre">xr-ai-interaction</span></code> directly.</p>
 </section>
+<section id="coding-agent-setup-skill-rename">
+<h3>Coding-agent setup skill rename<a class="headerlink" href="#coding-agent-setup-skill-rename" title="Link to this heading">#</a></h3>
+<p>The development preparation skill is now named <code class="docutils literal notranslate"><span class="pre">setup</span></code>. Replace installed
+<code class="docutils literal notranslate"><span class="pre">getting-started</span></code> copies with <code class="docutils literal notranslate"><span class="pre">setup</span></code> and update saved setup prompts to use
+<code class="docutils literal notranslate"><span class="pre">skills/setup/SKILL.md</span></code> at the selected repository ref. Use
+<code class="docutils literal notranslate"><span class="pre">skills/run-demo/SKILL.md</span></code> to launch the browser demo. Historical release tags
+retain their original files. Refer to <a class="reference internal" href="../getting_started/skills.html"><span class="doc">Skills</span></a> for
+installation and release selection.</p>
+</section>
 <section id="dependency-refresh-and-native-tool-callback-exceptions">
 <h3>Dependency refresh and native tool callback exceptions<a class="headerlink" href="#dependency-refresh-and-native-tool-callback-exceptions" title="Link to this heading">#</a></h3>
 <p>The SDK now requires the NeMo Relay 0.10 release series. Update copied worker
@@ -906,6 +915,7 @@ and <a class="reference internal" href="agent-sdk-conversation.html"><span class
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#changes-since-v0-3-0-beta">Changes since v0.3.0-beta</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#interaction-messages-move-to-xr-ai-interaction">Interaction messages move to xr-ai-interaction</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#coding-agent-setup-skill-rename">Coding-agent setup skill rename</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#dependency-refresh-and-native-tool-callback-exceptions">Dependency refresh and native tool callback exceptions</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#persistent-services-after-startup-failure">Persistent services after startup failure</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nemotron-3-embedding-model">Nemotron 3 embedding model</a></li>

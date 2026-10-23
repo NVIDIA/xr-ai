@@ -474,6 +474,23 @@ the servers remain running while you start, stop, or develop the agent sample.
 These launchers are editable development presets. Applications can also use
 compatible services launched individually or independently operated endpoints.
 Refer to <a class="reference internal" href="deploying-with-nim.html"><span class="doc">Deploying samples with NIM endpoints</span></a> for external NIM endpoints.</p>
+<section id="existing-services">
+<h2>Existing services<a class="headerlink" href="#existing-services" title="Link to this heading">#</a></h2>
+<p>Inspect the selected services’ configured ports before invoking a model
+launcher. Server identities are shared across samples, but reuse checks differ:</p>
+<ul class="simple">
+<li><p><strong>vLLM Docker:</strong> reuse requires the expected container name and a matching
+launch-configuration fingerprint. On the selected ports, startup can evict
+other xr-ai containers and listeners, or recreate a changed container.</p></li>
+<li><p><strong>Pocket TTS:</strong> reuses a listener whose <code class="docutils literal notranslate"><span class="pre">/health</span></code> endpoint is healthy,
+without checking ownership or a launch-configuration fingerprint.</p></li>
+<li><p><strong>Speaker ASR:</strong> requires an owned listener and matching service fingerprint.
+An unmanaged listener or configuration mismatch stops startup; it does not
+evict or recreate the existing service.</p></li>
+</ul>
+<p>Before launching against occupied ports, establish that services will be reused
+unchanged or obtain permission from their operator to replace them.</p>
+</section>
 <section id="required-local-servers">
 <h2>Required local servers<a class="headerlink" href="#required-local-servers" title="Link to this heading">#</a></h2>
 <div class="pst-scrollable-table-container"><table class="table">
@@ -569,8 +586,11 @@ without stopping models while its server configuration stays the same.</p>
 <p>These stacks use common ports and server identities. They are intended for
 one local sample stack at a time. Stopping a stack also stops recognized
 services on its configured ports if another sample or manual invocation
-started them. Starting a stack does not stop services outside its selection.
-Always stop the source stack before switching so unused models release memory.</p>
+started them; <code class="docutils literal notranslate"><span class="pre">--stop</span></code> cannot selectively stop only services started by the
+latest invocation. Always stop the source stack before switching so unused
+models release memory. If any affected service predates your run, obtain its
+operator’s authorization before that whole-stack shutdown and switch.
+Starting a stack does not stop services outside its selection.</p>
 <p>Launchers read the current configuration; they do not keep a launch history
 or reconcile every older checkout. If you already switched, use the previous
 checkout’s stop command and configuration before starting the new stack.
@@ -756,6 +776,7 @@ and NIM configuration.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#existing-services">Existing services</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#required-local-servers">Required local servers</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#start-develop-and-stop">Start, develop, and stop</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#switch-samples-or-update-the-checkout">Switch samples or update the checkout</a></li>
