@@ -21,7 +21,8 @@ dependencies = [
     "xr-ai-models[speaker]",
     "xr-ai-vad",
     "xr-ai-voicegate",
-    "pipecat-ai>=1.6",
+    "pipecat-ai>=1.14.0",
+    "Pillow>=13.0.0",
     # NLTK 3.10.1 rejects its dependencies from in-project virtual environments.
     "nltk!=3.10.1",
     "numpy>=1.24",
