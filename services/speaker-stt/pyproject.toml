@@ -10,27 +10,32 @@ name = "xr-ai-speaker-stt"
 version = "0.1.0"
 requires-python = ">=3.12,<3.14"
 dependencies = [
+    # Patched logging and target policy, and reference-filesystem template evaluation.
+    "hydra-core>=1.3.7",
+    "fsspec>=2026.6.0",
     # CVE-2026-104874: fixed C-extension items-view reference leak.
     "multidict>=6.9.1",
     # CVE-2026-102598: reject Windows device names with empty ADS markers.
     "werkzeug>=3.1.9",
     # CVE-2026-58659: restrict pytorch-lightning checkpoint instantiators.
-    # NeMo also loads the separately pinned lightning 2.4.0, which remains unpatched.
     "pytorch-lightning>=2.6.6",
     "fastapi>=0.115.0", "uvicorn[standard]>=0.34.0", "anyio>=4.8.0", "numpy>=1.24", "pyyaml>=6.0",
     "xr-ai-voicegate", "xr-ai-logging", "xr-ai-launcher",
-    "nemo-toolkit[asr]", "lightning>2.2.1,<=2.4.0", "lhotse==2.0.0a6",
+    "nemo-toolkit[asr]", "lightning>=2.6.6", "lhotse==2.0.0a6",
 ]
 
 [project.scripts]
 speaker_stt = "speaker_stt.__main__:_run"
 
 [tool.uv]
+# NeMo caps Hydra at 1.3.2 and Lightning at 2.4.0. These explicit overrides
+# require GPU qualification; the patched umbrella package also permits fsspec 2026.
+override-dependencies = ["hydra-core==1.3.7", "lightning==2.6.6"]
 environments = ["sys_platform == 'linux'"]
 
 [tool.uv.sources]
 nemo-toolkit = { git = "https://github.com/NVIDIA-NeMo/Speech", rev = "1688cc3d6a9ade854f544987810c53f605dc86fc" }
-lightning = { git = "https://github.com/Lightning-AI/pytorch-lightning", tag = "2.4.0" }
+lightning = { git = "https://github.com/Lightning-AI/pytorch-lightning", rev = "771017e4f39b314b49abd4a1d65905c74268d248" }
 # Exact runtime artifact required by the pinned Speech revision. This keeps
 # the new inference environment isolated without changing the global cutoff.
 lhotse = { url = "https://files.pythonhosted.org/packages/18/ae/8ba7ee0b1db7fadf8de8f58121723a6b1ae3d88bdb0a1ffeee165b62d4ba/lhotse-2.0.0a6-py3-none-any.whl" }

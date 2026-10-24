@@ -18,7 +18,9 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from generate_dependency_map import MANIFEST_DIRECTORY, Project, discover_projects
+from packaging.requirements import Requirement
 from packaging.specifiers import SpecifierSet
+from packaging.utils import canonicalize_name
 from packaging.version import Version
 
 MANIFEST_NAME = "xr-ai-dependency-manifest"
@@ -85,6 +87,20 @@ def common_python_range(ranges: Sequence[str]) -> str:
     return f">=3.{minors[0]},<3.{minors[-1] + 1}"
 
 
+def manifest_overrides(projects: Sequence[Project]) -> list[str]:
+    """Carry service overrides into the inventory's root resolution context."""
+
+    overrides: dict[str, str] = {}
+    for project in projects:
+        data = tomllib.loads((project.directory / "pyproject.toml").read_text())
+        for specification in data.get("tool", {}).get("uv", {}).get("override-dependencies", []):
+            name = canonicalize_name(Requirement(specification).name)
+            if name in overrides and overrides[name] != specification:
+                raise ValueError(f"conflicting override for {name}: {overrides[name]!r} and {specification!r}")
+            overrides[name] = specification
+    return [overrides[name] for name in sorted(overrides)]
+
+
 def manifest_toml(projects: Sequence[Project]) -> str:
     """Return the manifest pyproject.toml aggregating *projects*."""
 
@@ -92,6 +108,7 @@ def manifest_toml(projects: Sequence[Project]) -> str:
     if not members:
         raise ValueError("no projects found to aggregate")
     python_range = common_python_range([project.requires_python for project in members])
+    overrides = manifest_overrides(members)
 
     repository_dependencies = []
     vllm_dependencies = []
@@ -131,6 +148,7 @@ def manifest_toml(projects: Sequence[Project]) -> str:
         "[tool.uv]",
         "package = false",
         'conflicts = [[{ extra = "repository" }, { extra = "vllm" }]]',
+        *([f"override-dependencies = {overrides!r}"] if overrides else []),
         "",
         "[tool.uv.sources]",
         *sources,

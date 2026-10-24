@@ -83,6 +83,22 @@ for Mbed TLS, Apache-2.0 C++ client telemetry, and MIT DeepGEMM notices. The
 license records cover the inspected wheels; other platform artifacts and
 optional execution providers require their own review.
 
+### NeMo dependency security overrides
+
+The NeMo service environments override upstream compatibility caps to resolve
+`hydra-core` 1.3.7 (MIT), `lightning` 2.6.6 (Apache-2.0), and `fsspec` 2026.7.0
+(BSD-3-Clause). The umbrella Lightning package uses upstream commit
+`771017e4f39b314b49abd4a1d65905c74268d248`. Complete license texts and artifact
+provenance are recorded in
+[`hydra-core-1.3.7`](third_party_licenses/hydra-core-1.3.7/),
+[`lightning-2.6.6`](third_party_licenses/lightning-2.6.6/), and
+[`fsspec-2026.7.0`](third_party_licenses/fsspec-2026.7.0/).
+
+NeMo itself retains its existing release or source revision. The separate
+vLLM inventory still resolves fsspec 2026.9.0. These dependency overrides do
+not establish runtime compatibility with NeMo's supported stack; refer to
+[NeMo service qualification](docs/source/guides/testing.md#nemo-service-qualification).
+
 ### Qualified HTTP and JWT security releases
 
 The release security refresh resolves `urllib3` 2.8.0 and `PyJWT` 2.15.1,
@@ -403,6 +419,10 @@ refer to the component disclosures above for applicable license elections.
 | `pillow-13.0.0` | [`LICENSE`](third_party_licenses/pillow-13.0.0/LICENSE) |
 | `onnxruntime-1.31.0` | [`LICENSE`](third_party_licenses/onnxruntime-1.31.0/LICENSE) |
 | `onnxruntime-1.31.0` | [`LICENSE.thirdparty`](third_party_licenses/onnxruntime-1.31.0/LICENSE.thirdparty) |
+
+| `hydra-core-1.3.7` | [`LICENSE`](third_party_licenses/hydra-core-1.3.7/LICENSE) |
+| `lightning-2.6.6` | [`LICENSE`](third_party_licenses/lightning-2.6.6/LICENSE) |
+| `fsspec-2026.7.0` | [`LICENSE`](third_party_licenses/fsspec-2026.7.0/LICENSE) |
 
 ## Updating this file
 
