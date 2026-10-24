@@ -6,8 +6,9 @@
 # xr-ai-conversation
 
 `xr-ai-conversation` provides an application-instructed
-conversation agent with participant-scoped history and named
-background-context sources. It does not contain turn selection, focus
+conversation agent and a `ContextManager` that holds participant-scoped
+history and named background-context sources for it and for any other agent.
+It does not contain turn selection, focus
 management, or tools; routing contracts are provided by
 [`xr-ai-routing`](agent-sdk-routing.md), and other capabilities, such as
 questions about the camera view, belong in separate routed destinations.
@@ -18,20 +19,29 @@ questions about the camera view, belong in separate routed destinations.
 `AgentRouter` alongside application-specific agents.
 
 ```python
-from xr_ai_conversation import Conversation
+from xr_ai_conversation import ContextManager, Conversation
 from xr_ai_routing import AgentRouter, AgentTurn
 from xr_ai_runtime import AgentRuntime
 from xr_ai_voice import VOICE_OUTPUT_TOPIC
 
 runtime = AgentRuntime()
 
+context = ContextManager(llm)
 conversation = Conversation(
     llm,
+    context=context,
     instructions="Answer general questions about the lab.",
     runtime=runtime,
     output_topic=VOICE_OUTPUT_TOPIC,
 )
 front_end = AgentRouter({"conversation": conversation}, decisions, output=publish_router_control)
+
+
+async def participant_left(participant_id: str) -> None:
+    await front_end.participant_left(participant_id)
+    await context.clear(participant_id)
+
+
 async with runtime:
     try:
         result = await front_end.handle(
@@ -40,10 +50,19 @@ async with runtime:
     finally:
         await front_end.stop()
 await conversation.close()
+await context.close()
 ```
 
-The agent answers from its instructions, completed history, and configured
-context sources. Configure the runtime and a `ResponseOutput` topic, such as
+`context.clear()` is what forgets a participant's context when they leave. The
+conversation does not clear it, so without that call a departed participant's
+dialogue and summaries stay in the manager until `close()`, and a reused
+participant id inherits them. A router configured with runtime topics does the
+same through `AgentRouter(..., cleanup_participant=context.clear)`; that option
+requires `query_topic` and `output_topic`, so a direct router like this one calls
+`clear()` after `participant_left()` returns.
+
+The agent answers from its prompt, completed history, and the context
+manager's sources. Configure the runtime and a `ResponseOutput` topic, such as
 `VOICE_OUTPUT_TOPIC` or a text front end's topic, to use it as a routed
 destination. Conversation
 publishes its own response chunks as a reply to the turn ID with its routing name
@@ -59,30 +78,47 @@ The application starts the runtime before answering and stops it after draining
 routed work. `answer(turn, started=...)` is the public request handler; streaming model
 iteration is private to the conversation.
 
-## Named context topics
+## Prompts
 
-The constructor accepts topic names in separate summary and incremental lists.
-The topic determines how its text updates that source; the payload contains only
-`ConversationContextUpdate.text`.
+A request's system prompt is the conversation's `system_prompt` followed by
+its `instructions`. The default system prompt describes a general assistant
+that holds a conversation and answers from its own knowledge as well as from
+the context. It makes no claim about tools or the camera view; an application
+that needs such a policy states it in `instructions`. Pass `system_prompt` to
+replace the default entirely. The compaction instructions are separate and
+belong to the context manager; see [Context compaction](#context-compaction).
+
+## The context manager
+
+`Conversation` neither creates nor owns its `ContextManager`; the application
+passes one in, and several agents can share it. The manager keeps what each
+participant said, the answers they got, and the named sources applications
+publish. The conversation records each completed exchange in it and renders it
+into every request.
+
+The manager's constructor accepts topic names in separate summary and
+incremental lists. The topic determines how its text updates that source; the
+payload contains only `ConversationContextUpdate.text`.
 
 ```python
-conversation = Conversation(
+context = ContextManager(
     llm,
-    runtime=runtime,
-    output_topic=VOICE_OUTPUT_TOPIC,
     summary_context_topics=("sample.monitor-window",),
     incremental_context_topics=("sample.notes",),
 )
-context_agent = conversation.context_subscriber()
+runtime.register("context", context.subscriber())
 ```
 
-Register the returned context agent with the same `AgentRuntime` that delivers
-updates, before runtime start. The application owns that registration and must
-close the conversation during its shutdown. Each topic is an independent,
-participant-scoped source. A summary topic's update replaces its current state;
-incremental text appends and is compacted in the background. A summary update
-does not clear another topic, even when both topics publish for the same
-participant.
+Register the subscriber with the same `AgentRuntime` that delivers updates,
+before runtime start. Each topic is an independent, participant-scoped source.
+A summary topic's update replaces its current state; incremental text appends
+and is compacted in the background. A summary update does not clear another
+topic, even when both topics publish for the same participant. An agent other
+than `Conversation` reads the same context with `context.blocks(participant_id)`
+and writes it with `record_exchange()` or `update()`. Let one router-driven writer
+record exchanges per manager: history reconciliation matches only a contiguous
+tail, so two writers whose exchanges interleave in the router's history are
+recorded again on later turns.
 
 ## Context compaction
 
@@ -94,7 +130,8 @@ written are kept, so text grows with the conversation only until the next
 compaction. A short identity of every exchange is kept for the session so that
 router history is not replayed.
 
-Each section of the rendered context has its own budget, in UTF-8 bytes of
+Each section of the rendered context has its own budget. Agents that share a
+manager share its budgets, which are set where the manager is created, in UTF-8 bytes of
 rendered text rather than model tokens:
 
 - `dialogue_budget_bytes` (default 8,000) bounds completed dialogue.
@@ -120,6 +157,11 @@ rendered text rather than model tokens:
 | A summary-topic update exceeds its topic budget | The update keeps its start and end within the budget. |
 | A front-end history window still contains compacted exchanges | Every exchange identity is remembered for the session, so those exchanges are not added again. |
 
+`CompactionPrompts` replaces what the model is told to keep when it compacts
+dialogue, an incremental source, or an over-long summary. The manager adds the
+size limit and the plain-text output format to every prompt, so custom prompts
+do not state them.
+
 The current request is never clipped. Compaction quality depends on the
 model: a summary can omit details, so applications that must keep exact
 records should publish them as a summary topic. Compaction requests use the
@@ -130,7 +172,7 @@ model configuration, as the model presets do.
 
 An answer request has three messages:
 
-1. The system prompt with core and application instructions.
+1. The system prompt followed by the application instructions.
 2. The context: summaries of earlier material first, then uncompacted
    exchanges, topic updates, and summary-topic states in recorded-time order,
    and the current time last.
@@ -147,21 +189,22 @@ requests.
 
 ## Lifecycle
 
-`release()` keeps completed participant context, as the routing contract
-requires; the router calls it when focus moves to another destination.
-`participant_left()` cancels the participant's compaction jobs, waits for them,
-and forgets its context; `close()` does the same for every participant and
-stops new answers. Other participants are unaffected by one participant's
-departure. The router calls `participant_left()` only on destinations the
-participant was routed to, so when topics publish for a participant who never
-speaks to this conversation, the application calls
-`conversation.participant_left()` itself after `router.participant_left()` or
-`router.stop()` returns.
+The application owns the context manager's lifecycle. `release()` and
+`participant_left()` on the conversation leave participant context in place, so
+a shared manager is not cleared by one agent. Clear it after the router's
+departure, as in the example above, or pass `context.clear` as a runtime router's
+`cleanup_participant`. Either way it runs after the router has cancelled and
+drained the participant's in-flight answers, and a cancelled answer records no
+exchange, so nothing streaming can record into the cleared context. It cancels the participant's compaction jobs, waits for them, and forgets the
+participant's context; it is idempotent, and other participants are unaffected.
+`context.close()` does the same for every participant and drops later updates,
+exchanges, and history. `conversation.close()` only stops new answers.
 
-An answer still streaming when its participant leaves is not stopped. When it
-completes, it records its exchange as the start of new context for that
-participant. Close the conversation before closing the shared model client,
-and drain in-flight answers separately.
+An answer still streaming when its participant is cleared before the router's
+departure is not stopped, and on completion it records its exchange as the start of
+new context. After `context.close()` the exchange is dropped. Compaction tasks
+call the model, so close the context manager before closing the shared model
+client, and drain in-flight answers separately.
 
 ## Evaluations
 
@@ -174,10 +217,11 @@ exchanges and updates. Its README describes how to run them.
 | Module | Responsibility |
 |---|---|
 | `_conversation.py` | Implements the conversation engine and builds answer requests |
+| `_manager.py` | Public `ContextManager`: budgets, rendering, compaction requests, and prompts |
 | `_context_update.py` | Defines the text-only context update payload |
-| `_context.py` | Stores participant dialogue and source context; performs rolling-summary compaction |
+| `_context.py` | Stores participant dialogue and source context; runs the rolling-summary state machine |
 | `_topics.py` | Adapts configured runtime topics to participant-scoped context updates |
-| `prompts/core.txt` | Supplies the default conversation instructions |
+| `prompts/core.txt` | Supplies the default system prompt |
 
 The generated {doc}`Python reference </reference/python/xr_ai_conversation/index>`
-documents the two package exports and their signatures and behavior.
+documents the package exports and their signatures and behavior.

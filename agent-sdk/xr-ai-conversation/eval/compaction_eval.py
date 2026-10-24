@@ -28,7 +28,7 @@ from _common import (
     standalone_started,
     validate_suite,
 )
-from xr_ai_conversation import Conversation, ConversationContextUpdate
+from xr_ai_conversation import ContextManager, Conversation, ConversationContextUpdate
 from xr_ai_interaction import ResponseOutput
 from xr_ai_models import LLMService
 from xr_ai_routing import AgentTurn
@@ -44,15 +44,19 @@ async def run_session(llm: LLMService, name: str, sample_override: int | None) -
     samples = sample_override or session["samples"]
     topic = Topic(topic_name, ConversationContextUpdate)
     runtime = AgentRuntime()
-    conversation = Conversation(
+    manager = ContextManager(
         llm,
-        runtime=runtime,
-        output_topic=Topic("conversation-eval.output", ResponseOutput),
         incremental_context_topics=(topic_name,),
         dialogue_budget_bytes=budgets["dialogue_bytes"],
         topic_budget_bytes=budgets["topic_bytes"],
     )
-    runtime.register("conversation-context", conversation.context_subscriber())
+    conversation = Conversation(
+        llm,
+        context=manager,
+        runtime=runtime,
+        output_topic=Topic("conversation-eval.output", ResponseOutput),
+    )
+    runtime.register("conversation-context", manager.subscriber())
     failures: list[str] = []
     print(f"=== {name}")
     try:
@@ -67,11 +71,12 @@ async def run_session(llm: LLMService, name: str, sample_override: int | None) -
                         )
                     started = time.perf_counter()
                     await conversation.answer(
-                        AgentTurn(participant, str(index), expand(turn["user"])), started=standalone_started,
+                        AgentTurn(participant, str(index), expand(turn["user"])),
+                        started=standalone_started,
                     )
                     answered = time.perf_counter() - started
-                    await settle(conversation, participant)
-                    summary, recent = conversation._context.dialogue_snapshot(participant)
+                    await settle(manager, participant)
+                    summary, recent = manager._context.dialogue_snapshot(participant)
                     print(
                         f"turn {index:2d}: answer {answered:4.1f}s | dialogue summary "
                         f"{len(summary.text.encode()):4d} B, {len(recent)} verbatim"
@@ -102,6 +107,7 @@ async def run_session(llm: LLMService, name: str, sample_override: int | None) -
                     failures.append(f"{name} {probe['name']}: {passed}/{samples} correct")
     finally:
         await conversation.close()
+        await manager.close()
     return failures
 
 
