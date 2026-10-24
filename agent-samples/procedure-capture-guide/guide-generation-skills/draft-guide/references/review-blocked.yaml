@@ -35,15 +35,17 @@ steps:
       interval_s: 3
       result_field: text
       arguments:
-        question: "Describe the visible side socket and any adapter fitted in it. This is context only; the required adapter identity is unresolved."
-    agent:
-      prompt: "Do not commit this step. Human review must identify the intended adapter and define its check."
-      tools: []
+        question: >-
+          Describe the visible side socket and any adapter in it, including
+          markings and attachment points. State unreadable or hidden details.
     voice:
       prompt: "The recorded action is fitting an adapter in the side socket; its identity needs clarification before verification."
       tools: []
     evidence:
-      pattern: '(?!)'
+      condition: >-
+        The intended adapter is identified and fitted in the side socket. Its
+        required identity is unresolved, so a visible adapter alone cannot
+        establish this condition.
       consecutive: 1
     complete_when:
       adapter_fitted: true

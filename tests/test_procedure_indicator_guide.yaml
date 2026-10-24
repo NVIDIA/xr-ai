@@ -28,9 +28,9 @@ steps:
       function: current_view
       interval_s: 0.2
       arguments:
-        question: Is the large rectangle blue? Answer only YES or NO.
+        question: Describe the color of the large rectangle and whether its surface is clearly visible.
     evidence:
-      pattern: '(?i)^YES$'
+      condition: The large rectangle is visibly blue.
       consecutive: 2
       commit: {visible: true}
     voice:

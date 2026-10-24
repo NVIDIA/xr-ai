@@ -121,17 +121,23 @@ test environment, not evidence that a guide's condition is wrong.
    to someone performing it afresh, not merely whether the recording passes.
    Identify consequential assumptions and questions needing human confirmation;
    ordinary organization and wording do not require individual confirmation.
-2. Read the recorded frame selection and actual local VLM responses. Compare
+2. Read the recorded frame selection, actual Cosmos descriptions, and CLEF
+   `decision` events (condition, observation, choice, and confidence). Compare
    incomplete, in-progress, completed, and available incorrect states against
    the exact questions. Inspect their source frames when necessary. Do not
    replace a response with what you believe the model should have said.
+   Separate perception errors from decision errors: correct reasoning cannot
+   recover a fact Cosmos confidently misreports. Confidence is diagnostic,
+   not a substitute for inspecting the evidence or an extra acceptance cutoff.
    Identify false positives, supported completions missed, occlusion, and
    missing negative coverage. Do not weaken requirements to fit a bad demo.
 3. Read executed tool requests and results, guidance state snapshots,
    completion notices, and conversation responses. Do not claim internal
    evidence-hit counts or commits that the trace does not expose.
-   Distinguish a declared tool from a called tool. Direct `evidence.commit`
-   bypasses the observation LLM. Timer starts belong to the runtime on entry
+   Distinguish a declared tool from a called tool. For visual steps, the runtime
+   applies the declared `evidence.commit` only after enough CLEF yes decisions
+   from distinct fresh frames; the conversational LLM does not judge completion.
+   Timer starts belong to the runtime on entry
    to the wait step, never to model-written state or a spoken acknowledgment.
 4. Check that the engine did not accept incomplete states, inherit a previous
    step's completion, advance without its configured control, or claim more

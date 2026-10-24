@@ -89,7 +89,7 @@ def visual():
     return yaml.safe_load((_REFERENCES / "example.yaml").read_text())
 
 
-def test_visual_example_uses_same_writable_boolean_and_closed_answers():
+def test_visual_example_uses_descriptive_evidence_and_bounded_commit():
     workflow = load_workflow(_REFERENCES / "example.yaml")
     step = workflow.steps[workflow.start_step]
     assert workflow.status == "draft"
@@ -98,9 +98,8 @@ def test_visual_example_uses_same_writable_boolean_and_closed_answers():
     assert step.evidence.commit == step.complete_when == {step.writes[0]: True}
     assert step.is_complete({**workflow.initial_state(), **step.evidence.commit})
     assert step.evidence.consecutive >= 2
-    assert re.fullmatch(step.evidence.pattern, "ready")
-    for response in ("not ready", "unclear", "ready, but still held", "unavailable"):
-        assert not re.fullmatch(step.evidence.pattern, response)
+    assert step.evidence.condition and step.evidence.pattern is None
+    assert step.agent is None
     assert step.next_step == "attach_clips"
     assert step.trigger.result_field == "text"
 
@@ -115,8 +114,7 @@ def test_visual_example_requires_fresh_evidence_for_each_linked_step():
         assert not step.is_complete(state), "Earlier completion must not satisfy a later step"
         assert step.trigger.function == "current_view"
         assert step.evidence.commit == step.complete_when == {step.writes[0]: True}
-        for response in ("not ready", "unclear", "unavailable"):
-            assert not re.fullmatch(step.evidence.pattern, response)
+        assert step.evidence.condition and step.evidence.pattern is None
         state.update(step.evidence.commit)
         assert step.is_complete(state)
         visited.append(step_id)
@@ -130,7 +128,7 @@ def test_timer_example_requires_live_setup_before_elapsed_only_wait():
     setup = workflow.steps[workflow.start_step]
     wait = workflow.steps[setup.next_step]
     assert setup.trigger.function == "current_view"
-    assert setup.agent.tools == ()
+    assert setup.agent is None
     assert setup.evidence.commit == {"placement_done": True}
     assert setup.complete_on_skip
     assert not setup.state_on_skip
@@ -150,7 +148,7 @@ def test_timer_example_requires_live_setup_before_elapsed_only_wait():
 
 def test_examples_follow_current_replay_completion_contract(visual):
     for step in visual["steps"]:
-        step.pop("agent")  # Direct evidence commits do not need an observation policy.
+        step.pop("agent", None)  # Direct evidence commits do not need an observation policy.
     visual["steps"][-1]["finish_on_complete"] = True
     workflow = parse_workflow(yaml.safe_dump(visual))
     assert workflow.steps["attach_clips"].finish_on_complete
@@ -185,13 +183,12 @@ def test_unresolved_identity_example_preserves_action_without_false_success():
     assert not workflow.runnable
     assert not step.is_complete(workflow.initial_state())
     assert step.trigger.function == "current_view"
-    assert step.agent.tools == ()
+    assert step.agent is None
     assert step.voice.tools == ()
     assert not step.evidence.commit
     assert step.complete_on_skip
     assert not step.state_on_skip
-    for observation in ("ready", "true", "unclear", "adapter fitted", "(?!)"):
-        assert not re.fullmatch(step.evidence.pattern, observation)
+    assert step.evidence.condition and step.evidence.pattern is None
 
 
 @pytest.mark.parametrize("mutation,diagnostic", [
@@ -203,7 +200,7 @@ def test_unresolved_identity_example_preserves_action_without_false_success():
     (lambda root: root["steps"][0]["trigger"]["arguments"].update(max_frames=4), "max_frames"),
     (lambda root: root["steps"][0]["trigger"]["arguments"].update(question="x" * 501), "500"),
     (lambda root: root["steps"][0]["trigger"].update(result_field="ready"), "result field"),
-    (lambda root: root["steps"][0]["agent"].update(tools=["workflow__commit"]), "unsupported tools"),
+    (lambda root: root["steps"][0].update(agent={"prompt": "Judge", "tools": []}), "remove agent"),
     (lambda root: root["steps"][0].update(next="unknown"), "unknown next"),
     (lambda root: root["steps"][0].update(next="position_workpiece"), "cycle"),
     (lambda root: root["steps"].append({**root["steps"][0], "id": "unreachable"}), "unreachable"),
@@ -215,8 +212,7 @@ def test_validator_rejects_model_authoring_errors(visual, mutation, diagnostic):
 
 
 @pytest.mark.parametrize("path", [
-    ("steps", 0, "evidence", "pattern"),
-    ("steps", 0, "agent", "prompt"),
+    ("steps", 0, "evidence", "condition"),
     ("steps", 0, "voice", "prompt"),
     ("steps", 0, "messages", "enter"),
     ("steps", 0, "messages", "complete"),
@@ -236,18 +232,15 @@ def test_text_fields_reject_non_strings(visual, path, value):
         parse_workflow(yaml.safe_dump(visual))
 
 
-def test_actual_string_regex_and_whitespace_preserve_existing_meaning(visual):
-    visual["steps"][0]["evidence"]["pattern"] = "  [ready]  "
-    visual["steps"][0]["agent"]["prompt"] = "  Observe carefully.  "
-    workflow = parse_workflow(yaml.safe_dump(visual))
-    step = workflow.steps[workflow.start_step]
-    assert step.agent.prompt == "Observe carefully."
-    assert step.evidence.pattern == "[ready]"
-    assert re.fullmatch(step.evidence.pattern, "a")
-    assert not re.fullmatch(step.evidence.pattern, "ready")
-    visual["steps"][0]["evidence"]["pattern"] = " \n "
+def test_actual_string_condition_and_whitespace_preserve_meaning(visual):
+    visual["steps"][0]["evidence"]["condition"] = "  [ready]  "
+    step = parse_workflow(yaml.safe_dump(visual)).steps["position_workpiece"]
+    assert step.evidence.condition == "[ready]"  # Prose, never a regex.
+    visual["steps"][0]["evidence"]["condition"] = " "
     with pytest.raises(ValueError, match="must not be empty"):
         parse_workflow(yaml.safe_dump(visual))
+
+
 
 
 @pytest.mark.parametrize("edit,key", [
@@ -256,8 +249,8 @@ def test_actual_string_regex_and_whitespace_preserve_existing_meaning(visual):
     (lambda source: source.replace(
         "    evidence:\n", "    evidence: {pattern: wrong, consecutive: 1}\n    evidence:\n"),
      "evidence"),
-    (lambda source: source.replace("      pattern: '^ready$'", "      pattern: '^ready$'\n      pattern: '^ready$'"),
-     "pattern"),
+    (lambda source: source.replace("      condition:", "      condition: duplicate\n      condition:"),
+     "condition"),
     (lambda source: source.replace("    initial: false", "    initial: false\n    \"initial\": true"), "initial"),
 ])
 def test_duplicate_keys_rejected_at_every_level(edit, key):
@@ -269,18 +262,15 @@ def test_duplicate_keys_rejected_at_every_level(edit, key):
     assert error.value.problem_mark.line >= 0
 
 
-def test_safe_aliases_and_non_overlapping_merges_remain_supported():
-    source = (_REFERENCES / "example.yaml").read_text()
-    source = source.replace("    type: boolean\n    description:", "    <<: {type: boolean}\n    description:")
-    source = source.replace("    agent:\n", "    agent: &policy\n", 1)
-    # Sharing a policy is not a duplicate key in the receiving step.
-    start = source.index("    voice:\n")
-    end = source.index("    evidence:\n", start)
-    source = source[:start] + "    voice: *policy\n" + source[end:]
+def test_safe_aliases_and_non_overlapping_merges_remain_supported(visual):
+    visual["steps"][1]["voice"] = visual["steps"][0]["voice"]
+    source = yaml.safe_dump(visual)
+    assert "&id" in source and "*id" in source
+    source = source.replace("    type: boolean", "    <<: {type: boolean}")
     workflow = parse_workflow(source)
-    step = workflow.steps[workflow.start_step]
-    assert step.voice == step.agent
-    assert workflow.state_fields["workpiece_positioned"].type == "boolean"
+    assert workflow.steps["position_workpiece"].voice == workflow.steps["attach_clips"].voice
+
+
 
 
 def test_merge_cannot_override_an_existing_requirement():
@@ -329,15 +319,14 @@ def test_timer_request_errors(argument, value):
         parse_workflow(yaml.safe_dump(raw))
 
 
-def test_review_blocked_recipe_never_matches(visual):
+def test_review_blocked_recipe_cannot_commit(visual):
     schema = (_REFERENCES / "packet-and-guide-schema.md").read_text()
     recipe = re.search(r"```yaml\n(.*?)\n```", schema, re.DOTALL).group(1)
     visual["steps"][0].update(yaml.safe_load(recipe))
     workflow = parse_workflow(yaml.safe_dump(visual))
     step = workflow.steps[workflow.start_step]
     assert not step.evidence.commit
-    for observation in ("", "ready", "true", "verified", "review_required", "(?!)"):
-        assert not re.fullmatch(step.evidence.pattern, observation)
+    assert step.evidence.pattern is None and step.evidence.condition
     assert not step.is_complete(workflow.initial_state())
 
 
@@ -385,3 +374,20 @@ def test_module_cli_exit_code_and_read_only_behavior(tmp_path, visual):
     assert "invalid:" in failure.stderr
     assert "Traceback" not in failure.stderr
     assert path.read_text() == "not: a guide"
+
+
+@pytest.mark.parametrize("value", [["true"], {"true": True}, True, 23, 1.5, None])
+@pytest.mark.parametrize("field", ["pattern", "prompt"])
+def test_timer_pattern_and_agent_prompt_require_strings(value, field):
+    raw = yaml.safe_load((_REFERENCES / "timer.yaml").read_text())
+    target = raw["steps"][1]["evidence" if field == "pattern" else "agent"]
+    target[field] = value
+    with pytest.raises(ValueError, match="must be a string"):
+        parse_workflow(yaml.safe_dump(raw))
+
+
+def test_review_blocked_visual_cannot_be_approved():
+    raw = yaml.safe_load((_REFERENCES / "review-blocked.yaml").read_text())
+    raw["task"]["status"] = "approved"
+    with pytest.raises(ValueError, match="requires evidence.commit"):
+        parse_workflow(yaml.safe_dump(raw))
