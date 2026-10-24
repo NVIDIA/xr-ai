@@ -17,6 +17,22 @@ before updating the checkout. Start the updated services before restarting
 workers; launchers can reuse a running service whose identity matches even when
 its application code predates the update.
 
+### Procedure guides separate visual evidence from decisions
+
+For each `current_view` step, replace `evidence.pattern` with an explicit prose
+`evidence.condition` and remove its observation `agent` block. Rewrite the
+trigger question to request descriptive visual facts, including the relevant
+region, count, orientation, contact, or labeled measurement. Cosmos supplies
+those facts; CLEF chooses whether they establish the condition. Retain the
+step's `consecutive`, typed `commit`, and `complete_when` requirements. Approved
+visual steps require a commit; unresolved draft steps must remain drafts.
+Timer steps keep their elapsed-time evidence patterns and runtime-owned clocks.
+
+Restart the sample's model-server launcher to include CLEF on port 8120 and use
+the updated `yaml/models.json` decision entry. Guide mode waits for CLEF;
+capture mode is unchanged. Re-evaluate existing guides after this migration,
+since regex matching of a visual answer no longer determines completion.
+
 ### Interaction messages move to xr-ai-interaction
 
 Code that imports `UserQuery`, `VoiceOutput`, `VoiceParticipantJoined`,

@@ -316,7 +316,7 @@ def test_embedding_profiles_retain_fractional_memory_budget() -> None:
 
 
 _SAMPLES = {
-    "procedure-capture-guide": ("stt", "tts", "omni", "vlm"),
+    "procedure-capture-guide": ("stt", "tts", "omni", "vlm", "clef"),
     "simple-vlm-example": ("speaker-stt", "tts", "vlm"),
     "lab-instrument-monitoring": ("speaker-stt", "tts", "omni", "vlm"),
     "tea-making-sample": ("speaker-stt", "tts", "omni", "embedding"),
@@ -398,7 +398,8 @@ def test_default_stop_needs_no_gpu_or_credentials(monkeypatch, sample, services)
     stopped = []
     monkeypatch.setattr(_stack, "stop_persistent_servers", lambda targets: stopped.extend(targets) or True)
     run_model_stack(base, services, stop=True)
-    expected_ports = {"stt": 8103, "speaker-stt": 8102, "tts": 8105, "omni": 8108, "vlm": 8100, "embedding": 8109}
+    expected_ports = {"stt": 8103, "speaker-stt": 8102, "tts": 8105, "omni": 8108,
+                      "vlm": 8100, "embedding": 8109, "clef": 8120}
     assert stopped == [(service, expected_ports[service]) for service in services]
 
 

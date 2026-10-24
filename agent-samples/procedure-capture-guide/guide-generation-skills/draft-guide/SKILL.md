@@ -107,11 +107,28 @@ view cannot prove a required past motion sequence. Comparing authoring images
 does not give the guide runtime a sequence tool. A plainly narrated orientation is a known
 requirement, not an unknown one merely because its saved image is unavailable.
 
-For each normal visual check, put every required object, count, attachment,
-target, and direction in the actual question (1–500 characters); the tool does
-not receive the voice prompt. Held nearby is not attached. Request exactly
-`ready`, `not ready`, or `unclear`; only `^ready$` after two consecutive matches
-commits. Prefer direct `evidence.commit`; uncertainty and failure never complete.
+For each visual step, write two distinct instructions:
+
+- `trigger.arguments.question` (1–500 characters) asks Cosmos for evidence.
+  Direct attention to the relevant region or objects and ask for concrete
+  descriptions: counts, attachment points, contact, orientation, printed labels,
+  measurements and units. Ask it to identify hidden or ambiguous details.
+  Do not ask for YES/NO, ready/not-ready, or a completion verdict. The tool
+  does not receive the guide's condition or voice prompt.
+- `evidence.condition` states every fact needed for completion. CLEF judges
+  this condition against the written Cosmos observation. Include required
+  counts, locations, orientation, and distinctions such as attached versus
+  held nearby. Avoid conditions that require hidden facts or a motion history.
+
+Use `consecutive: 2` and a typed `evidence.commit` completing the step's own
+boolean. Only CLEF's yes counts; negative, missing, failed, or cancelled decisions
+break the sequence. State mandatory facts and alternatives explicitly: a
+supported alternative must not accidentally require an optional object from
+another alternative.
+Evaluate descriptions missing each required fact as well as complete descriptions.
+Visual steps do not use `evidence.pattern` or an observation
+`agent`. A clear CLEF decision can still repeat a Cosmos perception error;
+evaluate both stages, not just whether a completion message appeared.
 
 ## Write, validate, and review
 

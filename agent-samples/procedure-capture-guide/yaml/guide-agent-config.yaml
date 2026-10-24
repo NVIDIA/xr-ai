@@ -3,3 +3,5 @@
 
 # Guide-only verification settings. The CLI selects the guide file; models are shared with capture.
 vision_timeout_s: 15.0
+# Bound each CLEF judgment separately from visual evidence retrieval.
+decision_timeout_s: 15.0

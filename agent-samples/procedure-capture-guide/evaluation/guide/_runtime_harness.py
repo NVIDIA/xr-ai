@@ -166,6 +166,18 @@ async def run_evaluation(
         settings = load_config(request)
     models = xr_ai_models.load_models_config(settings.models_config)
     llm, vlm = xr_ai_models.make_llm(models, "llm"), xr_ai_models.make_vlm(models, "vlm")
+    decisions = xr_ai_models.make_decision(models, "decision")
+    decide = decisions.decide
+
+    async def logged_decide(state, questions, **kwargs):
+        result = await decide(state, questions, **kwargs)
+        log("decision", origin="observation", state=state, answers={
+            name: {"choice": answer.choice, "confidence": answer.confidence}
+            for name, answer in result.answers.items()
+        })
+        return result
+
+    decisions.decide = logged_decide
     chat = llm.chat
     model_origin: ContextVar[tuple[str, int | None, asyncio.Task | None]] = ContextVar(
         "model_origin", default=("unscoped", None, None),
@@ -234,8 +246,9 @@ async def run_evaluation(
     ).read_text())
     runtime = AgentRuntime()
     agent = runtime.register("guide", TracedGuideAgent(
-        guide=guide, llm=llm, current_frame=frames, image_query=vision,
+        guide=guide, llm=llm, decisions=decisions, current_frame=frames, image_query=vision,
         vision_timeout_s=settings.guide.vision_timeout_s,
+        decision_timeout_s=settings.guide.decision_timeout_s,
     ))
     speech = runtime.register("speech", Speech(log))
     agent.bind_runtime(runtime)
@@ -307,6 +320,7 @@ async def run_evaluation(
         nemo_relay.subscribers.deregister(subscription)
         await llm.close()
         await vlm.close()
+        await decisions.close()
         images.clear()
         # Include SDK modules loaded lazily by model adapters and tools during execution.
         (output / "runtime.json").write_text(json.dumps(_runtime_hashes(settings.models_config, sources), indent=2))

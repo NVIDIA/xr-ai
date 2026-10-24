@@ -60,7 +60,7 @@ _STEP_KEYS = frozenset(
 )
 _TRIGGER_KEYS = frozenset({"function", "interval_s", "arguments", "result_field"})
 _POLICY_KEYS = frozenset({"prompt", "tools"})
-_EVIDENCE_KEYS = frozenset({"pattern", "consecutive", "commit"})
+_EVIDENCE_KEYS = frozenset({"pattern", "condition", "consecutive", "commit"})
 _MESSAGE_KEYS = frozenset({"enter", "complete", "skip"})
 
 
@@ -113,9 +113,10 @@ class Policy:
 
 @dataclass(frozen=True, slots=True)
 class Evidence:
-    pattern: str
+    pattern: str | None
     consecutive: int
     commit: dict[str, Any]
+    condition: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -230,6 +231,8 @@ def parse_workflow(content: bytes | str) -> Workflow:
     for step in steps:
         if step.next_step is not None and step.next_step not in by_id:
             raise ValueError(f"step {step.id!r} has unknown next step {step.next_step!r}")
+        if status == "approved" and step.trigger.function == "current_view" and not step.evidence.commit:
+            raise ValueError(f"approved visual step {step.id!r} requires evidence.commit; resolve its review blocker")
     _validate_linear_graph(start, by_id)
     _validate_completion(start, by_id, fields)
     return Workflow(
@@ -302,10 +305,15 @@ def _step(value: Any, fields: dict[str, StateField]) -> Step:
     _validate_trigger(function, arguments, result_field, fields, step_id)
 
     voice = _policy(raw.get("voice"), f"steps.{step_id}.voice")
-    evidence = _evidence(raw.get("evidence"), step_id, writes, fields)
+    evidence = _evidence(raw.get("evidence"), step_id, writes, fields, function=function)
     deterministic = evidence is not None and bool(evidence.commit)
-    agent = (_policy(raw.get("agent"), f"steps.{step_id}.agent")
-             if "agent" in raw or not deterministic else None)
+    if function == "current_view":
+        if "agent" in raw:
+            raise ValueError(f"visual step {step_id!r} uses evidence.condition for CLEF, not agent; remove agent")
+        agent = None
+    else:
+        agent = (_policy(raw.get("agent"), f"steps.{step_id}.agent")
+                 if "agent" in raw or not deterministic else None)
     if deterministic and not all(evidence.commit.get(name) == value for name, value in completion.items()):
         raise ValueError(f"step {step_id!r} evidence.commit must satisfy complete_when")
     messages = _mapping(raw.get("messages"), f"steps.{step_id}.messages")
@@ -372,16 +380,28 @@ def _validate_trigger(
         raise ValueError(f"step {step_id!r} invalid {function} trigger arguments: {exc}") from exc
 
 
-def _evidence(value: Any, step_id: str, writes: tuple[str, ...], fields: dict[str, StateField]) -> Evidence | None:
+def _evidence(
+    value: Any, step_id: str, writes: tuple[str, ...], fields: dict[str, StateField], *, function: str,
+) -> Evidence | None:
     if value is None:
+        if function == "current_view":
+            raise ValueError(f"visual step {step_id!r} requires evidence.condition for CLEF verification")
         return None
     raw = _mapping(value, f"steps.{step_id}.evidence")
     _only(raw, _EVIDENCE_KEYS, f"steps.{step_id}.evidence")
-    pattern = _required_text(raw.get("pattern"), f"steps.{step_id}.evidence.pattern")
-    try:
-        re.compile(pattern)
-    except re.error as exc:
-        raise ValueError(f"step {step_id!r} has invalid evidence regex: {exc}") from exc
+    pattern = condition = None
+    if function == "current_view":
+        condition = _required_text(raw.get("condition"), f"steps.{step_id}.evidence.condition")
+        if "pattern" in raw:
+            raise ValueError(f"visual step {step_id!r} cannot use evidence.pattern; CLEF judges evidence.condition")
+    else:
+        if "condition" in raw:
+            raise ValueError(f"step {step_id!r} evidence.condition requires current_view")
+        pattern = _required_text(raw.get("pattern"), f"steps.{step_id}.evidence.pattern")
+        try:
+            re.compile(pattern)
+        except re.error as exc:
+            raise ValueError(f"step {step_id!r} has invalid evidence regex: {exc}") from exc
     consecutive = raw.get("consecutive")
     if not isinstance(consecutive, int) or isinstance(consecutive, bool) or consecutive < 1:
         raise ValueError(f"steps.{step_id}.evidence.consecutive must be a positive integer")
@@ -389,7 +409,7 @@ def _evidence(value: Any, step_id: str, writes: tuple[str, ...], fields: dict[st
     if commit and not commit.keys() <= set(writes):
         raise ValueError(f"step {step_id!r} evidence.commit must only use writable fields")
     _state_values(commit, fields, f"steps.{step_id}.evidence.commit")
-    return Evidence(pattern, consecutive, dict(commit))
+    return Evidence(pattern, consecutive, dict(commit), condition)
 
 
 def _validate_linear_graph(start: str, steps: dict[str, Step]) -> None:

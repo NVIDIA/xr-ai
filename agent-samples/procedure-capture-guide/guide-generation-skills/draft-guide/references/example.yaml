@@ -6,9 +6,9 @@
 # beside it, for example arrange-workpiece-guide/guide.yaml.
 # Before handoff, use ../../evaluate-guide/SKILL.md: "Are clips attached?"
 # question can pass one clip or inward tabs. Test the full question below on
-# available incomplete and completed views through the actual guide VLM/tool,
+# available incomplete and completed views through the actual guide VLM and CLEF,
 # then refine and rerun the draft. The author observes actual responses, never
-# supplies ready itself. Preserve both false positives and missed completions.
+# supplies a visual or decision answer itself. Preserve both false positives and missed completions.
 # Identify the voice-bounded SOP packet in review notes, not in guide YAML.
 # No participant-wide raw-media manifest is required.
 # Example evidence: "Center the workpiece in the marked area. Attach two clips,
@@ -62,16 +62,17 @@ steps:
       result_field: text
       arguments:
         question: >-
-          Is one workpiece resting flat and centered inside the marked area,
-          not held above it? Answer exactly ready, not ready, or unclear.
-    agent:
-      prompt: "Use the direct visual classification; do not infer hidden conditions."
-      tools: []
+          Focus on the workpiece, marked boundaries, and support surface. Describe
+          its position relative to each boundary, its contact with the surface,
+          and whether hands hold it above the surface. Report obscured boundaries
+          or contact points.
     voice:
       prompt: "Explain where to place the workpiece. For a live check ask current_view whether it rests flat and centered inside the marked area."
       tools: [current_view]
     evidence:
-      pattern: '^ready$'
+      condition: >-
+        One workpiece rests flat and centered inside the marked area, not held
+        above it.
       consecutive: 2
       commit:
         workpiece_positioned: true
@@ -94,17 +95,18 @@ steps:
       result_field: text
       arguments:
         question: >-
-          Are two clips visibly attached to opposite sides of the workpiece,
-          with both tabs facing outward, not merely held nearby?
-          Answer exactly ready, not ready, or unclear.
-    agent:
-      prompt: "Use the direct classification. Missing or occluded requirements are not success."
-      tools: []
+          Inspect both side edges of the workpiece. Describe the number and
+          positions of clips, how each clip contacts the edge, and where each tab
+          points relative to the workpiece center. Distinguish attachments from
+          clips merely held nearby. Report hidden connections.
     voice:
       prompt: "For a live check, ask current_view about two attached clips, opposite sides, and both tabs outward."
       tools: [current_view]
     evidence:
-      pattern: '^ready$'
+      condition: >-
+        Two clips are visibly attached to opposite sides of the workpiece, with
+        both tabs facing outward. One clip, inward tabs, obscured attachment, or
+        clips held nearby do not establish this condition.
       consecutive: 2
       commit:
         clips_attached: true
