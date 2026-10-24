@@ -96,9 +96,11 @@ uv --config-file uv.toml sync --project services/magpie-tts
 uv --config-file uv.toml sync --project services/speaker-stt
 ```
 
-Run the existing STT and Magpie GPU smoke tests serially on an idle test host:
+Check real imports before downloading or loading models, then run the STT
+and Magpie GPU smoke tests serially on an idle test host:
 
 ```bash
+bash tests/run_local_gpu_tests.sh test_gpu_nemo_dependencies.py
 bash tests/run_local_gpu_tests.sh test_gpu_stt_server.py test_gpu_magpie_tts.py
 ```
 
