@@ -614,7 +614,8 @@ async def _evaluate_turn(
     raw_choice = first_router_choice
     effective = final_destination
     router_was_invoked = any(item.get("selection_call_index") is not None for item in attempts)
-    raw_default = ["clarify"] if fixture.get("route") == "clarify" else [fixture.get("destination")]
+    # Flow fixtures name only acceptable destinations; a correct first choice is any of them.
+    raw_default = ["clarify"] if fixture.get("route") == "clarify" else expected
     expected_raw_choices = set(fixture.get("acceptable_router_choices", raw_default))
     result = {
         "fixture": name,

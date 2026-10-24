@@ -113,6 +113,11 @@ def test_decision_evaluator_preflights_and_runs_every_fixture_without_answer_cal
     assert note_recall["focus_before_match"] is True
     assert summary["answer_scoring"] == "not_run"
     assert summary["evidence_scoring"] == "not_run"
+    # The double answers each fixture correctly, so every scored decision must pass.
+    scores = summary["scores"]
+    assert scores["raw_route"]["scored"] > 0
+    assert scores["effective_destination"]["scored"] == plan["total_turns"]
+    assert all(score["passed"] == score["scored"] for score in scores.values()), scores
     assert len(recorder.calls) <= plan["max_decision_calls"]
     assert all("acceptable_destinations" not in str(call["request_state"]) for call in recorder.calls)
     assert all(turn["history_source"] in {"authored_teacher_forced", "empty_fixture_history"} for turn in turns)
