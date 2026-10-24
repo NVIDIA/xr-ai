@@ -206,15 +206,15 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
     - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
   - `frames`:
     - `numpy>=1.24`
-    - `Pillow>=10.0`
+    - `Pillow>=13.0.0`
     - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
   - `image-editing`:
-    - `Pillow>=10.0`
+    - `Pillow>=13.0.0`
   - `marker-tracking`:
     - `numpy>=1.24`
     - `opencv-contrib-python-headless>=4.8,<5`
     - `zxing-cpp>=2.3,<4`
-    - `Pillow>=10.0`
+    - `Pillow>=13.0.0`
     - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
   - `relay`:
     - `xr-ai-models` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
@@ -241,7 +241,8 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
   - `xr-ai-models[speaker]` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
   - `xr-ai-vad` → [`xr-ai-vad`](utils/xr-ai-vad/) (local, editable)
   - `xr-ai-voicegate` → [`xr-ai-voicegate`](utils/xr-ai-voicegate/) (local, editable)
-  - `pipecat-ai>=1.6`
+  - `pipecat-ai>=1.14.0`
+  - `Pillow>=13.0.0`
   - `nltk!=3.10.1`
   - `numpy>=1.24`
   - `scipy>=1.11`
@@ -311,7 +312,7 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Runtime dependencies:
   - `numpy>=1.24`
   - `silero-vad>=5.1`
-  - `onnxruntime>=1.17`
+  - `onnxruntime>=1.31.0`
   - `torch>=2.0`
 - Optional dependency groups: none
 - Commands: none
@@ -602,7 +603,7 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
   - `xr-ai-tools[services]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
   - `numpy>=1.24`
-  - `Pillow>=10.0`
+  - `Pillow>=13.0.0`
   - `PyNvVideoCodec>=2.2`
   - `pyyaml>=6.0`
 - Optional dependency groups: none
@@ -662,7 +663,7 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
-  - `Pillow>=10.1.0`
+  - `Pillow>=13.0.0`
   - `nemo-relay>=0.10.0,<0.11`
   - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
   - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
@@ -935,7 +936,7 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
   - `numpy>=1.24`
   - `audioop-lts; python_version >= '3.13'`
   - `huggingface-hub>=0.32.0`
-  - `Pillow>=10.0`
+  - `Pillow>=13.0.0`
   - `python-multipart>=0.0.9`
   - `pyyaml>=6.0`
 - Optional dependency groups: none

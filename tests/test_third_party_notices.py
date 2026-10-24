@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 import tomllib
 from pathlib import Path
@@ -152,3 +153,42 @@ def test_bundled_license_index_is_complete_and_links_exist() -> None:
     for target in re.findall(r"\]\(([^)]+)\)", section):
         assert target.startswith("third_party_licenses/"), target
         assert (_ROOT / target).is_file(), f"Broken license index link: {target}"
+
+
+# Preserve the complete license and bundled-library texts from audited wheels.
+_NATIVE_SECURITY_REFRESH = {
+    "pillow": (
+        "13.0.0",
+        (
+            ("pillow-13.0.0/LICENSE",
+             "dda12a98c1979cf3d94df1cff45d27a4cb3f04a60c76f76902ac54cac03ec0ce"),
+        ),
+    ),
+    "onnxruntime": (
+        "1.31.0",
+        (
+            ("onnxruntime-1.31.0/LICENSE",
+             "2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a48922c"),
+            ("onnxruntime-1.31.0/LICENSE.thirdparty",
+             "143764b952fdb1a7c69ce653bfba74a7744d6a8a573bfb73e235fba356c83de3"),
+        ),
+    ),
+    "pipecat-ai": (
+        "1.14.0",
+        (
+            ("pipecat-ai-1.14.0/LICENSE",
+             "e31a733ecb79cbffafd5474e964e5eca15e0a0876a42b1d7253b51b198eb61aa"),
+        ),
+    ),
+}
+
+
+@pytest.mark.parametrize("package", sorted(_NATIVE_SECURITY_REFRESH))
+def test_voice_image_refresh_has_audited_artifact_notices(package: str) -> None:
+    """Require a fresh artifact audit when these qualified versions change."""
+    version, files = _NATIVE_SECURITY_REFRESH[package]
+    assert _LOCK_VERSIONS[package] == {version}
+    assert f"third_party_licenses/{package}-{version}/" in _NOTICES
+    for relative_path, digest in files:
+        contents = (_ROOT / "third_party_licenses" / relative_path).read_bytes()
+        assert hashlib.sha256(contents).hexdigest() == digest
