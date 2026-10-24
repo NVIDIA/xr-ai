@@ -256,7 +256,8 @@ def _streaming_models(monkeypatch):
         asr_calls.append(kwargs)
         previous = kwargs["previous_hypotheses"]
         state = dict(previous[0].dec_state) if previous else {"text": "", "active": False}
-        active = bool(masks[-1][0].any())
+        # Utterance-final padding is zero audio: it carries no new words.
+        active = bool(masks[-1][0].any()) and not kwargs["keep_all_outputs"]
         if active and not state["active"]:
             state["text"] = ""
         current = text[0] if active else state["text"]
