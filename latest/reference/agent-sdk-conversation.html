@@ -470,8 +470,9 @@
 <section id="xr-ai-conversation">
 <h1>xr-ai-conversation<a class="headerlink" href="#xr-ai-conversation" title="Link to this heading">#</a></h1>
 <p><code class="docutils literal notranslate"><span class="pre">xr-ai-conversation</span></code> provides an application-instructed
-conversation agent with participant-scoped history and named
-background-context sources. It does not contain turn selection, focus
+conversation agent and a <code class="docutils literal notranslate"><span class="pre">ContextManager</span></code> that holds participant-scoped
+history and named background-context sources for it and for any other agent.
+It does not contain turn selection, focus
 management, or tools; routing contracts are provided by
 <a class="reference internal" href="agent-sdk-routing.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">xr-ai-routing</span></code></span></a>, and other capabilities, such as
 questions about the camera view, belong in separate routed destinations.</p>
@@ -479,20 +480,29 @@ questions about the camera view, belong in separate routed destinations.</p>
 <h2>Compose a conversation<a class="headerlink" href="#compose-a-conversation" title="Link to this heading">#</a></h2>
 <p><code class="docutils literal notranslate"><span class="pre">Conversation</span></code> implements <code class="docutils literal notranslate"><span class="pre">xr_ai_routing.RoutableAgent</span></code>, so it can be passed to
 <code class="docutils literal notranslate"><span class="pre">AgentRouter</span></code> alongside application-specific agents.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_conversation</span><span class="w"> </span><span class="kn">import</span> <span class="n">Conversation</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_conversation</span><span class="w"> </span><span class="kn">import</span> <span class="n">ContextManager</span><span class="p">,</span> <span class="n">Conversation</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_routing</span><span class="w"> </span><span class="kn">import</span> <span class="n">AgentRouter</span><span class="p">,</span> <span class="n">AgentTurn</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_runtime</span><span class="w"> </span><span class="kn">import</span> <span class="n">AgentRuntime</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_voice</span><span class="w"> </span><span class="kn">import</span> <span class="n">VOICE_OUTPUT_TOPIC</span>
 
 <span class="n">runtime</span> <span class="o">=</span> <span class="n">AgentRuntime</span><span class="p">()</span>
 
+<span class="n">context</span> <span class="o">=</span> <span class="n">ContextManager</span><span class="p">(</span><span class="n">llm</span><span class="p">)</span>
 <span class="n">conversation</span> <span class="o">=</span> <span class="n">Conversation</span><span class="p">(</span>
     <span class="n">llm</span><span class="p">,</span>
+    <span class="n">context</span><span class="o">=</span><span class="n">context</span><span class="p">,</span>
     <span class="n">instructions</span><span class="o">=</span><span class="s2">"Answer general questions about the lab."</span><span class="p">,</span>
     <span class="n">runtime</span><span class="o">=</span><span class="n">runtime</span><span class="p">,</span>
     <span class="n">output_topic</span><span class="o">=</span><span class="n">VOICE_OUTPUT_TOPIC</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="n">front_end</span> <span class="o">=</span> <span class="n">AgentRouter</span><span class="p">({</span><span class="s2">"conversation"</span><span class="p">:</span> <span class="n">conversation</span><span class="p">},</span> <span class="n">decisions</span><span class="p">,</span> <span class="n">output</span><span class="o">=</span><span class="n">publish_router_control</span><span class="p">)</span>
+
+
+<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">participant_left</span><span class="p">(</span><span class="n">participant_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">await</span> <span class="n">front_end</span><span class="o">.</span><span class="n">participant_left</span><span class="p">(</span><span class="n">participant_id</span><span class="p">)</span>
+    <span class="k">await</span> <span class="n">context</span><span class="o">.</span><span class="n">clear</span><span class="p">(</span><span class="n">participant_id</span><span class="p">)</span>
+
+
 <span class="k">async</span> <span class="k">with</span> <span class="n">runtime</span><span class="p">:</span>
     <span class="k">try</span><span class="p">:</span>
         <span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">front_end</span><span class="o">.</span><span class="n">handle</span><span class="p">(</span>
@@ -501,10 +511,18 @@ questions about the camera view, belong in separate routed destinations.</p>
     <span class="k">finally</span><span class="p">:</span>
         <span class="k">await</span> <span class="n">front_end</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
 <span class="k">await</span> <span class="n">conversation</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+<span class="k">await</span> <span class="n">context</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
 </pre></div>
 </div>
-<p>The agent answers from its instructions, completed history, and configured
-context sources. Configure the runtime and a <code class="docutils literal notranslate"><span class="pre">ResponseOutput</span></code> topic, such as
+<p><code class="docutils literal notranslate"><span class="pre">context.clear()</span></code> is what forgets a participant’s context when they leave. The
+conversation does not clear it, so without that call a departed participant’s
+dialogue and summaries stay in the manager until <code class="docutils literal notranslate"><span class="pre">close()</span></code>, and a reused
+participant id inherits them. A router configured with runtime topics does the
+same through <code class="docutils literal notranslate"><span class="pre">AgentRouter(...,</span> <span class="pre">cleanup_participant=context.clear)</span></code>; that option
+requires <code class="docutils literal notranslate"><span class="pre">query_topic</span></code> and <code class="docutils literal notranslate"><span class="pre">output_topic</span></code>, so a direct router like this one calls
+<code class="docutils literal notranslate"><span class="pre">clear()</span></code> after <code class="docutils literal notranslate"><span class="pre">participant_left()</span></code> returns.</p>
+<p>The agent answers from its prompt, completed history, and the context
+manager’s sources. Configure the runtime and a <code class="docutils literal notranslate"><span class="pre">ResponseOutput</span></code> topic, such as
 <code class="docutils literal notranslate"><span class="pre">VOICE_OUTPUT_TOPIC</span></code> or a text front end’s topic, to use it as a routed
 destination. Conversation
 publishes its own response chunks as a reply to the turn ID with its routing name
@@ -519,28 +537,44 @@ failures propagate to the caller.</p>
 routed work. <code class="docutils literal notranslate"><span class="pre">answer(turn,</span> <span class="pre">started=...)</span></code> is the public request handler; streaming model
 iteration is private to the conversation.</p>
 </section>
-<section id="named-context-topics">
-<h2>Named context topics<a class="headerlink" href="#named-context-topics" title="Link to this heading">#</a></h2>
-<p>The constructor accepts topic names in separate summary and incremental lists.
-The topic determines how its text updates that source; the payload contains only
-<code class="docutils literal notranslate"><span class="pre">ConversationContextUpdate.text</span></code>.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">conversation</span> <span class="o">=</span> <span class="n">Conversation</span><span class="p">(</span>
+<section id="prompts">
+<h2>Prompts<a class="headerlink" href="#prompts" title="Link to this heading">#</a></h2>
+<p>A request’s system prompt is the conversation’s <code class="docutils literal notranslate"><span class="pre">system_prompt</span></code> followed by
+its <code class="docutils literal notranslate"><span class="pre">instructions</span></code>. The default system prompt describes a general assistant
+that holds a conversation and answers from its own knowledge as well as from
+the context. It makes no claim about tools or the camera view; an application
+that needs such a policy states it in <code class="docutils literal notranslate"><span class="pre">instructions</span></code>. Pass <code class="docutils literal notranslate"><span class="pre">system_prompt</span></code> to
+replace the default entirely. The compaction instructions are separate and
+belong to the context manager; see <a class="reference internal" href="#context-compaction">Context compaction</a>.</p>
+</section>
+<section id="the-context-manager">
+<h2>The context manager<a class="headerlink" href="#the-context-manager" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">Conversation</span></code> neither creates nor owns its <code class="docutils literal notranslate"><span class="pre">ContextManager</span></code>; the application
+passes one in, and several agents can share it. The manager keeps what each
+participant said, the answers they got, and the named sources applications
+publish. The conversation records each completed exchange in it and renders it
+into every request.</p>
+<p>The manager’s constructor accepts topic names in separate summary and
+incremental lists. The topic determines how its text updates that source; the
+payload contains only <code class="docutils literal notranslate"><span class="pre">ConversationContextUpdate.text</span></code>.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">context</span> <span class="o">=</span> <span class="n">ContextManager</span><span class="p">(</span>
     <span class="n">llm</span><span class="p">,</span>
-    <span class="n">runtime</span><span class="o">=</span><span class="n">runtime</span><span class="p">,</span>
-    <span class="n">output_topic</span><span class="o">=</span><span class="n">VOICE_OUTPUT_TOPIC</span><span class="p">,</span>
     <span class="n">summary_context_topics</span><span class="o">=</span><span class="p">(</span><span class="s2">"sample.monitor-window"</span><span class="p">,),</span>
     <span class="n">incremental_context_topics</span><span class="o">=</span><span class="p">(</span><span class="s2">"sample.notes"</span><span class="p">,),</span>
 <span class="p">)</span>
-<span class="n">context_agent</span> <span class="o">=</span> <span class="n">conversation</span><span class="o">.</span><span class="n">context_subscriber</span><span class="p">()</span>
+<span class="n">runtime</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">"context"</span><span class="p">,</span> <span class="n">context</span><span class="o">.</span><span class="n">subscriber</span><span class="p">())</span>
 </pre></div>
 </div>
-<p>Register the returned context agent with the same <code class="docutils literal notranslate"><span class="pre">AgentRuntime</span></code> that delivers
-updates, before runtime start. The application owns that registration and must
-close the conversation during its shutdown. Each topic is an independent,
-participant-scoped source. A summary topic’s update replaces its current state;
-incremental text appends and is compacted in the background. A summary update
-does not clear another topic, even when both topics publish for the same
-participant.</p>
+<p>Register the subscriber with the same <code class="docutils literal notranslate"><span class="pre">AgentRuntime</span></code> that delivers updates,
+before runtime start. Each topic is an independent, participant-scoped source.
+A summary topic’s update replaces its current state; incremental text appends
+and is compacted in the background. A summary update does not clear another
+topic, even when both topics publish for the same participant. An agent other
+than <code class="docutils literal notranslate"><span class="pre">Conversation</span></code> reads the same context with <code class="docutils literal notranslate"><span class="pre">context.blocks(participant_id)</span></code>
+and writes it with <code class="docutils literal notranslate"><span class="pre">record_exchange()</span></code> or <code class="docutils literal notranslate"><span class="pre">update()</span></code>. Let one router-driven writer
+record exchanges per manager: history reconciliation matches only a contiguous
+tail, so two writers whose exchanges interleave in the router’s history are
+recorded again on later turns.</p>
 </section>
 <section id="context-compaction">
 <h2>Context compaction<a class="headerlink" href="#context-compaction" title="Link to this heading">#</a></h2>
@@ -551,7 +585,8 @@ entries are discarded. Only the summary and the entries added since it was
 written are kept, so text grows with the conversation only until the next
 compaction. A short identity of every exchange is kept for the session so that
 router history is not replayed.</p>
-<p>Each section of the rendered context has its own budget, in UTF-8 bytes of
+<p>Each section of the rendered context has its own budget. Agents that share a
+manager share its budgets, which are set where the manager is created, in UTF-8 bytes of
 rendered text rather than model tokens:</p>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">dialogue_budget_bytes</span></code> (default 8,000) bounds completed dialogue.</p></li>
@@ -596,6 +631,10 @@ background and never delays an answer.</p></li>
 </tbody>
 </table>
 </div>
+<p><code class="docutils literal notranslate"><span class="pre">CompactionPrompts</span></code> replaces what the model is told to keep when it compacts
+dialogue, an incremental source, or an over-long summary. The manager adds the
+size limit and the plain-text output format to every prompt, so custom prompts
+do not state them.</p>
 <p>The current request is never clipped. Compaction quality depends on the
 model: a summary can omit details, so applications that must keep exact
 records should publish them as a summary topic. Compaction requests use the
@@ -605,7 +644,7 @@ model configuration, as the model presets do.</p>
 <h3>Prompt layout<a class="headerlink" href="#prompt-layout" title="Link to this heading">#</a></h3>
 <p>An answer request has three messages:</p>
 <ol class="arabic simple">
-<li><p>The system prompt with core and application instructions.</p></li>
+<li><p>The system prompt followed by the application instructions.</p></li>
 <li><p>The context: summaries of earlier material first, then uncompacted
 exchanges, topic updates, and summary-topic states in recorded-time order,
 and the current time last.</p></li>
@@ -622,20 +661,21 @@ requests.</p>
 </section>
 <section id="lifecycle">
 <h2>Lifecycle<a class="headerlink" href="#lifecycle" title="Link to this heading">#</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">release()</span></code> keeps completed participant context, as the routing contract
-requires; the router calls it when focus moves to another destination.
-<code class="docutils literal notranslate"><span class="pre">participant_left()</span></code> cancels the participant’s compaction jobs, waits for them,
-and forgets its context; <code class="docutils literal notranslate"><span class="pre">close()</span></code> does the same for every participant and
-stops new answers. Other participants are unaffected by one participant’s
-departure. The router calls <code class="docutils literal notranslate"><span class="pre">participant_left()</span></code> only on destinations the
-participant was routed to, so when topics publish for a participant who never
-speaks to this conversation, the application calls
-<code class="docutils literal notranslate"><span class="pre">conversation.participant_left()</span></code> itself after <code class="docutils literal notranslate"><span class="pre">router.participant_left()</span></code> or
-<code class="docutils literal notranslate"><span class="pre">router.stop()</span></code> returns.</p>
-<p>An answer still streaming when its participant leaves is not stopped. When it
-completes, it records its exchange as the start of new context for that
-participant. Close the conversation before closing the shared model client,
-and drain in-flight answers separately.</p>
+<p>The application owns the context manager’s lifecycle. <code class="docutils literal notranslate"><span class="pre">release()</span></code> and
+<code class="docutils literal notranslate"><span class="pre">participant_left()</span></code> on the conversation leave participant context in place, so
+a shared manager is not cleared by one agent. Clear it after the router’s
+departure, as in the example above, or pass <code class="docutils literal notranslate"><span class="pre">context.clear</span></code> as a runtime router’s
+<code class="docutils literal notranslate"><span class="pre">cleanup_participant</span></code>. Either way it runs after the router has cancelled and
+drained the participant’s in-flight answers, and a cancelled answer records no
+exchange, so nothing streaming can record into the cleared context. It cancels the participant’s compaction jobs, waits for them, and forgets the
+participant’s context; it is idempotent, and other participants are unaffected.
+<code class="docutils literal notranslate"><span class="pre">context.close()</span></code> does the same for every participant and drops later updates,
+exchanges, and history. <code class="docutils literal notranslate"><span class="pre">conversation.close()</span></code> only stops new answers.</p>
+<p>An answer still streaming when its participant is cleared before the router’s
+departure is not stopped, and on completion it records its exchange as the start of
+new context. After <code class="docutils literal notranslate"><span class="pre">context.close()</span></code> the exchange is dropped. Compaction tasks
+call the model, so close the context manager before closing the shared model
+client, and drain in-flight answers separately.</p>
 </section>
 <section id="evaluations">
 <h2>Evaluations<a class="headerlink" href="#evaluations" title="Link to this heading">#</a></h2>
@@ -655,23 +695,26 @@ exchanges and updates. Its README describes how to run them.</p>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">_conversation.py</span></code></p></td>
 <td><p>Implements the conversation engine and builds answer requests</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">_context_update.py</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">_manager.py</span></code></p></td>
+<td><p>Public <code class="docutils literal notranslate"><span class="pre">ContextManager</span></code>: budgets, rendering, compaction requests, and prompts</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">_context_update.py</span></code></p></td>
 <td><p>Defines the text-only context update payload</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">_context.py</span></code></p></td>
-<td><p>Stores participant dialogue and source context; performs rolling-summary compaction</p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">_context.py</span></code></p></td>
+<td><p>Stores participant dialogue and source context; runs the rolling-summary state machine</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">_topics.py</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">_topics.py</span></code></p></td>
 <td><p>Adapts configured runtime topics to participant-scoped context updates</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">prompts/core.txt</span></code></p></td>
-<td><p>Supplies the default conversation instructions</p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">prompts/core.txt</span></code></p></td>
+<td><p>Supplies the default system prompt</p></td>
 </tr>
 </tbody>
 </table>
 </div>
 <p>The generated <a class="reference internal" href="python/xr_ai_conversation/index.html"><span class="doc">Python reference</span></a>
-documents the two package exports and their signatures and behavior.</p>
+documents the package exports and their signatures and behavior.</p>
 </section>
 </section>
 
@@ -725,7 +768,8 @@ documents the two package exports and their signatures and behavior.</p>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#compose-a-conversation">Compose a conversation</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#named-context-topics">Named context topics</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#prompts">Prompts</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-context-manager">The context manager</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#context-compaction">Context compaction</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#prompt-layout">Prompt layout</a></li>
 </ul>

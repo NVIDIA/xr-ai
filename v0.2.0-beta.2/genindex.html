@@ -589,6 +589,8 @@
 </li>
       <li><a href="reference/python/xr_ai_voicegate/index.html#xr_ai_voicegate.VoiceGate.bind">bind() (xr_ai_voicegate.VoiceGate method)</a>
 </li>
+      <li><a href="reference/python/xr_ai_conversation/index.html#xr_ai_conversation.ContextManager.blocks">blocks() (xr_ai_conversation.ContextManager method)</a>
+</li>
   </ul></td>
 </tr></table>
 
@@ -637,11 +639,17 @@
 </li>
       <li><a href="reference/python/xr_ai_voice/index.html#xr_ai_voice.HubVoiceTransport.cleanup_participant">cleanup_participant() (xr_ai_voice.HubVoiceTransport method)</a>
 </li>
-      <li><a href="reference/python/xr_ai_tools/image/index.html#xr_ai_tools.image.ImageRegistry.clear">clear() (xr_ai_tools.image.ImageRegistry method)</a>
-</li>
-      <li><a href="reference/python/xr_ai_conversation/index.html#xr_ai_conversation.Conversation.close">close() (xr_ai_conversation.Conversation method)</a>
+      <li><a href="reference/python/xr_ai_conversation/index.html#xr_ai_conversation.ContextManager.clear">clear() (xr_ai_conversation.ContextManager method)</a>
 
       <ul>
+        <li><a href="reference/python/xr_ai_tools/image/index.html#xr_ai_tools.image.ImageRegistry.clear">(xr_ai_tools.image.ImageRegistry method)</a>
+</li>
+      </ul></li>
+      <li><a href="reference/python/xr_ai_conversation/index.html#xr_ai_conversation.ContextManager.close">close() (xr_ai_conversation.ContextManager method)</a>
+
+      <ul>
+        <li><a href="reference/python/xr_ai_conversation/index.html#xr_ai_conversation.Conversation.close">(xr_ai_conversation.Conversation method)</a>
+</li>
         <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.ProcessorEndpoint.close">(xr_ai_hub.ProcessorEndpoint method)</a>
 </li>
         <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.ShmRingBuffer.close">(xr_ai_hub.ShmRingBuffer method)</a>
@@ -689,7 +697,11 @@
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/python/xr_ai_launcher/index.html#xr_ai_launcher.Process.command">command (xr_ai_launcher.Process attribute)</a>
 </li>
+      <li><a href="reference/python/xr_ai_conversation/index.html#xr_ai_conversation.CompactionPrompts">CompactionPrompts (class in xr_ai_conversation)</a>
+</li>
       <li><a href="reference/python/xr_ai_gpu/index.html#xr_ai_gpu.GPUDevice.compute_capability">compute_capability (xr_ai_gpu.GPUDevice attribute)</a>
+</li>
+      <li><a href="reference/python/xr_ai_conversation/index.html#xr_ai_conversation.CompactionPrompts.condense">condense (xr_ai_conversation.CompactionPrompts attribute)</a>
 </li>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.DecisionAnswer.confidence">confidence (xr_ai_models.DecisionAnswer attribute)</a>
 
@@ -725,7 +737,9 @@
       </ul></li>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.ContentPart">ContentPart (in module xr_ai_models)</a>
 </li>
-      <li><a href="reference/python/xr_ai_conversation/index.html#xr_ai_conversation.Conversation.context_subscriber">context_subscriber() (xr_ai_conversation.Conversation method)</a>
+      <li><a href="reference/python/xr_ai_conversation/index.html#xr_ai_conversation.ContextBlock">ContextBlock (class in xr_ai_conversation)</a>
+</li>
+      <li><a href="reference/python/xr_ai_conversation/index.html#xr_ai_conversation.ContextManager">ContextManager (class in xr_ai_conversation)</a>
 </li>
       <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.MsgType.CONTROL">CONTROL (xr_ai_hub.MsgType attribute)</a>
 </li>
@@ -805,10 +819,10 @@
 </li>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.ThinkingSpec.default">default (xr_ai_models.ThinkingSpec attribute)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.AdapterSpec.default_extras">default_extras (xr_ai_models.AdapterSpec attribute)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/python/xr_ai_vllm/index.html#xr_ai_vllm.DEFAULT_IMAGE">DEFAULT_IMAGE (in module xr_ai_vllm)</a>
 </li>
       <li><a href="reference/python/xr_ai_interaction/index.html#xr_ai_interaction.Reply.delivered">delivered (xr_ai_interaction.Reply property)</a>
@@ -840,6 +854,8 @@
       <li><a href="reference/python/xr_ai_routing/index.html#xr_ai_routing.DestinationResult">DestinationResult (class in xr_ai_routing)</a>
 </li>
       <li><a href="reference/python/xr_ai_launcher/index.html#xr_ai_launcher.detect_gpu_config">detect_gpu_config() (in module xr_ai_launcher)</a>
+</li>
+      <li><a href="reference/python/xr_ai_conversation/index.html#xr_ai_conversation.CompactionPrompts.dialogue">dialogue (xr_ai_conversation.CompactionPrompts attribute)</a>
 </li>
       <li><a href="reference/python/xr_ai_routing/index.html#xr_ai_routing.Admission.disposition">disposition (xr_ai_routing.Admission attribute)</a>
 
@@ -1832,6 +1848,10 @@
 </li>
       <li><a href="reference/python/xr_ai_tools/text_memory/index.html#xr_ai_tools.text_memory.RecallConversationResult">RecallConversationResult (class in xr_ai_tools.text_memory)</a>
 </li>
+      <li><a href="reference/python/xr_ai_conversation/index.html#xr_ai_conversation.ContextManager.reconcile_history">reconcile_history() (xr_ai_conversation.ContextManager method)</a>
+</li>
+      <li><a href="reference/python/xr_ai_conversation/index.html#xr_ai_conversation.ContextManager.record_exchange">record_exchange() (xr_ai_conversation.ContextManager method)</a>
+</li>
       <li><a href="reference/python/xr_ai_tools/video_memory/index.html#xr_ai_tools.video_memory.RecordedVideoResult">RecordedVideoResult (class in xr_ai_tools.video_memory)</a>
 </li>
       <li><a href="reference/python/xr_ai_tools/video_memory/index.html#xr_ai_tools.video_memory.VideoHealthResult.recording_enabled">recording_enabled (xr_ai_tools.video_memory.VideoHealthResult attribute)</a>
@@ -1884,10 +1904,10 @@
 </li>
       <li><a href="reference/python/xr_ai_tools/image/index.html#xr_ai_tools.image.ImageRegistry.resolve">resolve() (xr_ai_tools.image.ImageRegistry method)</a>
 </li>
-      <li><a href="reference/python/xr_ai_vllm/index.html#xr_ai_vllm.resolve_model_cache">resolve_model_cache() (in module xr_ai_vllm)</a>
-</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="reference/python/xr_ai_vllm/index.html#xr_ai_vllm.resolve_model_cache">resolve_model_cache() (in module xr_ai_vllm)</a>
+</li>
       <li><a href="reference/python/xr_ai_interaction/index.html#xr_ai_interaction.ResponseOutput.response_id">response_id (xr_ai_interaction.ResponseOutput attribute)</a>
 </li>
       <li><a href="reference/python/xr_ai_interaction/index.html#xr_ai_interaction.ResponseOutput">ResponseOutput (class in xr_ai_interaction)</a>
@@ -2070,9 +2090,11 @@
 </li>
       <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.SlotView">SlotView (class in xr_ai_hub)</a>
 </li>
-      <li><a href="reference/python/xr_ai_runtime/index.html#xr_ai_runtime.MessageMetadata.source">source (xr_ai_runtime.MessageMetadata attribute)</a>
+      <li><a href="reference/python/xr_ai_conversation/index.html#xr_ai_conversation.CompactionPrompts.source">source (xr_ai_conversation.CompactionPrompts attribute)</a>
 
       <ul>
+        <li><a href="reference/python/xr_ai_runtime/index.html#xr_ai_runtime.MessageMetadata.source">(xr_ai_runtime.MessageMetadata attribute)</a>
+</li>
         <li><a href="reference/python/xr_ai_tools/rag/index.html#xr_ai_tools.rag.RetrievedChunk.source">(xr_ai_tools.rag.RetrievedChunk attribute)</a>
 </li>
       </ul></li>
@@ -2182,6 +2204,8 @@
       </ul></li>
       <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.ProcessorEndpoint.subscribed_participants">subscribed_participants (xr_ai_hub.ProcessorEndpoint property)</a>
 </li>
+      <li><a href="reference/python/xr_ai_conversation/index.html#xr_ai_conversation.ContextManager.subscriber">subscriber() (xr_ai_conversation.ContextManager method)</a>
+</li>
       <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.MsgType.SUBSCRIPTION_PROBE">SUBSCRIPTION_PROBE (xr_ai_hub.MsgType attribute)</a>
 </li>
       <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.SubscriptionProbe">SubscriptionProbe (class in xr_ai_hub)</a>
@@ -2206,9 +2230,11 @@
 </li>
       <li><a href="reference/python/xr_ai_runtime/index.html#xr_ai_runtime.Topic.telemetry">telemetry (xr_ai_runtime.Topic attribute)</a>
 </li>
-      <li><a href="reference/python/xr_ai_conversation/index.html#xr_ai_conversation.ConversationContextUpdate.text">text (xr_ai_conversation.ConversationContextUpdate attribute)</a>
+      <li><a href="reference/python/xr_ai_conversation/index.html#xr_ai_conversation.ContextBlock.text">text (xr_ai_conversation.ContextBlock attribute)</a>
 
       <ul>
+        <li><a href="reference/python/xr_ai_conversation/index.html#xr_ai_conversation.ConversationContextUpdate.text">(xr_ai_conversation.ConversationContextUpdate attribute)</a>
+</li>
         <li><a href="reference/python/xr_ai_interaction/index.html#xr_ai_interaction.ResponseOutput.text">(xr_ai_interaction.ResponseOutput attribute)</a>
 </li>
         <li><a href="reference/python/xr_ai_interaction/index.html#xr_ai_interaction.UserQuery.text">(xr_ai_interaction.UserQuery attribute)</a>
@@ -2256,9 +2282,11 @@
 </li>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.EndpointSpec.timeout">timeout (xr_ai_models.EndpointSpec attribute)</a>
 </li>
-      <li><a href="reference/python/xr_ai_interaction/index.html#xr_ai_interaction.ResponseOutput.timestamp_us">timestamp_us (xr_ai_interaction.ResponseOutput attribute)</a>
+      <li><a href="reference/python/xr_ai_conversation/index.html#xr_ai_conversation.ContextBlock.timestamp_us">timestamp_us (xr_ai_conversation.ContextBlock attribute)</a>
 
       <ul>
+        <li><a href="reference/python/xr_ai_interaction/index.html#xr_ai_interaction.ResponseOutput.timestamp_us">(xr_ai_interaction.ResponseOutput attribute)</a>
+</li>
         <li><a href="reference/python/xr_ai_interaction/index.html#xr_ai_interaction.UserQuery.timestamp_us">(xr_ai_interaction.UserQuery attribute)</a>
 </li>
         <li><a href="reference/python/xr_ai_routing/index.html#xr_ai_routing.AgentTurn.timestamp_us">(xr_ai_routing.AgentTurn attribute)</a>
@@ -2306,10 +2334,10 @@
         <li><a href="reference/python/xr_ai_tools/tool_calling/index.html#xr_ai_tools.tool_calling.ToolLoopResult.tool_calls">(xr_ai_tools.tool_calling.ToolLoopResult attribute)</a>
 </li>
       </ul></li>
-      <li><a href="reference/python/xr_ai_tools/tool_calling/index.html#xr_ai_tools.tool_calling.tool_definitions">tool_definitions() (in module xr_ai_tools.tool_calling)</a>
-</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="reference/python/xr_ai_tools/tool_calling/index.html#xr_ai_tools.tool_calling.tool_definitions">tool_definitions() (in module xr_ai_tools.tool_calling)</a>
+</li>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.ToolCall">ToolCall (class in xr_ai_models)</a>
 </li>
       <li><a href="reference/python/xr_ai_tools/tool_calling/index.html#xr_ai_tools.tool_calling.ToolCallRecord">ToolCallRecord (class in xr_ai_tools.tool_calling)</a>
@@ -2438,8 +2466,12 @@
         <li><a href="reference/python/xr_ai_tools/types/index.html#xr_ai_tools.types.SpatialFrame.up">(xr_ai_tools.types.SpatialFrame attribute)</a>
 </li>
       </ul></li>
-      <li><a href="reference/python/xr_ai_interaction/index.html#xr_ai_interaction.ResponseOutputs.update">update() (xr_ai_interaction.ResponseOutputs method)</a>
+      <li><a href="reference/python/xr_ai_conversation/index.html#xr_ai_conversation.ContextManager.update">update() (xr_ai_conversation.ContextManager method)</a>
+
+      <ul>
+        <li><a href="reference/python/xr_ai_interaction/index.html#xr_ai_interaction.ResponseOutputs.update">(xr_ai_interaction.ResponseOutputs method)</a>
 </li>
+      </ul></li>
       <li><a href="reference/python/xr_ai_interaction/index.html#xr_ai_interaction.ResponseOutput.urgent">urgent (xr_ai_interaction.ResponseOutput attribute)</a>
 </li>
       <li><a href="reference/python/xr_ai_tools/image/index.html#xr_ai_tools.image.ImageReference.uri">uri (xr_ai_tools.image.ImageReference attribute)</a>

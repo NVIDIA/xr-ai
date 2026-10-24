@@ -450,7 +450,7 @@
                   
   <section id="module-xr_ai_conversation">
 <span id="xr-ai-conversation"></span><h1>xr_ai_conversation<a class="headerlink" href="#module-xr_ai_conversation" title="Link to this heading">#</a></h1>
-<p>Application-instructed conversation and participant-scoped context.</p>
+<p>Application-instructed conversation and shareable participant-scoped context.</p>
 <section id="classes">
 <h2>Classes<a class="headerlink" href="#classes" title="Link to this heading">#</a></h2>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table autosummary">
@@ -459,7 +459,16 @@
 <td><p>Text published on a configured conversation-context topic.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_conversation.Conversation" title="xr_ai_conversation.Conversation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Conversation</span></code></a></p></td>
-<td><p>Application-instructed conversation agent with participant-scoped context.</p></td>
+<td><p>Application-instructed conversation agent over participant-scoped context.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_conversation.CompactionPrompts" title="xr_ai_conversation.CompactionPrompts"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CompactionPrompts</span></code></a></p></td>
+<td><p>System prompts for the model requests that compact context.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_conversation.ContextBlock" title="xr_ai_conversation.ContextBlock"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ContextBlock</span></code></a></p></td>
+<td><p>One rendered piece of prior context and the time of its newest content.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_conversation.ContextManager" title="xr_ai_conversation.ContextManager"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ContextManager</span></code></a></p></td>
+<td><p>Retain participant-scoped context and render it into prompts for any number of agents.</p></td>
 </tr>
 </tbody>
 </table>
@@ -486,42 +495,37 @@
 <dl>
 <dd><em class="sig-param"><span class="n"><span class="pre">llm</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../xr_ai_models/index.html#xr_ai_models.LLMService" title="xr_ai_models.LLMService"><span class="pre">xr_ai_models.LLMService</span></a></span></em>,</dd>
 <dd><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">context</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#xr_ai_conversation.ContextManager" title="xr_ai_conversation.ContextManager"><span class="pre">xr_ai_conversation.ContextManager</span></a></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">instructions</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">''</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">system_prompt</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">routing</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../xr_ai_routing/index.html#xr_ai_routing.RoutingAid" title="xr_ai_routing.RoutingAid"><span class="pre">xr_ai_routing.RoutingAid</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">summary_context_topics</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">()</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">incremental_context_topics</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">()</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">dialogue_budget_bytes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">_DEFAULT_DIALOGUE_BUDGET_BYTES</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">topic_budget_bytes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">collections.abc.Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">_DEFAULT_TOPIC_BUDGET_BYTES</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">compaction_input_budget_bytes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">_DEFAULT_COMPACTION_INPUT_BUDGET_BYTES</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">runtime</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../xr_ai_runtime/index.html#xr_ai_runtime.AgentRuntime" title="xr_ai_runtime.AgentRuntime"><span class="pre">xr_ai_runtime.AgentRuntime</span></a></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">output_topic</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../xr_ai_runtime/index.html#xr_ai_runtime.Topic" title="xr_ai_runtime.Topic"><span class="pre">xr_ai_runtime.Topic</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../xr_ai_interaction/index.html#xr_ai_interaction.ResponseOutput" title="xr_ai_interaction.ResponseOutput"><span class="pre">xr_ai_interaction.ResponseOutput</span></a><span class="p"><span class="pre">]</span></span></span></em>,</dd>
 </dl>
 
 <span class="sig-paren">)</span><a class="headerlink" href="#xr_ai_conversation.Conversation" title="Link to this definition">#</a></dt>
-<dd><p>Application-instructed conversation agent with participant-scoped context.</p>
+<dd><p>Application-instructed conversation agent over participant-scoped context.</p>
+<p>The conversation owns its prompt and answer; <code class="docutils literal notranslate"><span class="pre">context</span></code> owns what is
+remembered. The caller creates the manager, may share it with other
+agents, registers its <code class="docutils literal notranslate"><span class="pre">subscriber()</span></code>, and closes it.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>llm</strong> – Typed streamed language model service.</p></li>
-<li><p><strong>instructions</strong> – Application-owned prompt text defining domain, role, tone, and handling policy.</p></li>
+<li><p><strong>context</strong> – Participant context rendered into each request. The conversation records
+completed exchanges in it and never clears or closes it.</p></li>
+<li><p><strong>instructions</strong> – Application-owned prompt text defining domain, role, tone, and handling policy,
+appended to the system prompt.</p></li>
+<li><p><strong>system_prompt</strong> – Replaces the default general-conversation system prompt.</p></li>
 <li><p><strong>routing</strong> – Concise front-end metadata; defaults to a general conversation description.</p></li>
-<li><p><strong>summary_context_topics</strong> – Runtime topic names whose text replaces that source’s state.</p></li>
-<li><p><strong>incremental_context_topics</strong> – Runtime topic names whose text appends to that source.</p></li>
-<li><p><strong>dialogue_budget_bytes</strong> – UTF-8 byte budget for completed dialogue rendered into a request.</p></li>
-<li><p><strong>topic_budget_bytes</strong> – UTF-8 byte budget for each topic’s context rendered into a request:
-one value for every topic, or a mapping with a value for each configured topic.</p></li>
 <li><p><strong>runtime</strong> – Runtime used to publish answers. The application owns runtime startup and shutdown.</p></li>
 <li><p><strong>output_topic</strong> – Explicit <code class="docutils literal notranslate"><span class="pre">ResponseOutput</span></code> topic for routed answers.
 The conversation publishes replies with its routing name as source, the turn ID as request ID,
 and the originating timestamp. It owns stream framing and finalization.
 No default output or query topic is subscribed.</p></li>
-<li><p><strong>compaction_input_budget_bytes</strong> – UTF-8 byte budget for the summary and entries in one
-compaction request; at least half the largest section budget plus 256 bytes.</p></li>
 </ul>
 </dd>
 </dl>
-<p>All budgets must be positive. Topic lists contain non-empty names; names
-must be unique within and across both lists.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="xr_ai_conversation.Conversation.routing_aid">
 <span class="sig-name descname"><span class="pre">routing_aid</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">_participant_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../xr_ai_routing/index.html#xr_ai_routing.RoutingAid" title="xr_ai_routing.RoutingAid"><span class="pre">xr_ai_routing.RoutingAid</span></a></span></span><a class="headerlink" href="#xr_ai_conversation.Conversation.routing_aid" title="Link to this definition">#</a></dt>
@@ -561,41 +565,200 @@ canceled response once opened. Canceled answers publish no further text,
 and a publication failure publishes no further frames. Failures
 propagate after closing the model iterator; the router reports
 failures that occur before the first frame. A successful answer
-returns the complete text as routing context. The exchange joins this
-conversation’s transcript only after its final frame is delivered.</p>
+returns the complete text as routing context. The exchange joins the
+participant’s context only after its final frame is delivered.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="xr_ai_conversation.Conversation.release">
 <em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">release</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">_participant_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_conversation.Conversation.release" title="Link to this definition">#</a></dt>
 <dd><p>Keep completed participant context; this destination holds no active resources.</p>
-<p>Participant context is removed by <code class="docutils literal notranslate"><span class="pre">participant_left()</span></code> or <code class="docutils literal notranslate"><span class="pre">close()</span></code>.</p>
+<p>Participant context belongs to the context manager, whose owner clears it.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="xr_ai_conversation.Conversation.participant_left">
-<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">participant_left</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">participant_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_conversation.Conversation.participant_left" title="Link to this definition">#</a></dt>
-<dd><p>Forget a departed participant’s context after cancelling its compaction jobs.</p>
-<p>An answer still streaming for that participant when it leaves is not
-stopped; on completion it can record its exchange into new context.</p>
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">participant_left</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">_participant_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_conversation.Conversation.participant_left" title="Link to this definition">#</a></dt>
+<dd><p>Hold nothing for a departed participant; the context manager’s owner clears its context.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="xr_ai_conversation.Conversation.close">
 <em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">close</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_conversation.Conversation.close" title="Link to this definition">#</a></dt>
-<dd><p>Stop answering and forget all context after cancelling compaction jobs.</p>
-<p>The caller remains responsible for draining answer streams before
-closing model clients.</p>
+<dd><p>Stop answering. The caller closes the context manager and drains answer streams.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="xr_ai_conversation.CompactionPrompts">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_conversation.</span></span><span class="sig-name descname"><span class="pre">CompactionPrompts</span></span><a class="headerlink" href="#xr_ai_conversation.CompactionPrompts" title="Link to this definition">#</a></dt>
+<dd><p>System prompts for the model requests that compact context.</p>
+<p>Each prompt says what to keep and how to treat the material. The manager
+adds the size limit and the output format, so a prompt does not state them.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_conversation.CompactionPrompts.source">
+<span class="sig-name descname"><span class="pre">source</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'Summarize</span> <span class="pre">only</span> <span class="pre">the</span> <span class="pre">source-owned</span> <span class="pre">background</span> <span class="pre">context</span> <span class="pre">below.</span> <span class="pre">Preserve</span> <span class="pre">factual</span> <span class="pre">details,</span> <span class="pre">user...</span></em><a class="headerlink" href="#xr_ai_conversation.CompactionPrompts.source" title="Link to this definition">#</a></dt>
+<dd><p>Instructions for compacting an incremental topic’s updates into its summary.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_conversation.CompactionPrompts.dialogue">
+<span class="sig-name descname"><span class="pre">dialogue</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'Summarize</span> <span class="pre">the</span> <span class="pre">completed</span> <span class="pre">conversation</span> <span class="pre">history</span> <span class="pre">for</span> <span class="pre">future</span> <span class="pre">turns.</span> <span class="pre">Preserve</span> <span class="pre">user-provided</span> <span class="pre">facts,...</span></em><a class="headerlink" href="#xr_ai_conversation.CompactionPrompts.dialogue" title="Link to this definition">#</a></dt>
+<dd><p>Instructions for compacting completed exchanges into the dialogue summary.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_conversation.CompactionPrompts.condense">
+<span class="sig-name descname"><span class="pre">condense</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'Shorten</span> <span class="pre">this</span> <span class="pre">summary.</span> <span class="pre">Keep</span> <span class="pre">facts,</span> <span class="pre">preferences,</span> <span class="pre">corrections,</span> <span class="pre">unresolved</span> <span class="pre">requests,</span> <span class="pre">and</span> <span class="pre">uncertainty.'</span></em><a class="headerlink" href="#xr_ai_conversation.CompactionPrompts.condense" title="Link to this definition">#</a></dt>
+<dd><p>Instructions for shortening a summary that is over its size limit.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="xr_ai_conversation.ContextBlock">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_conversation.</span></span><span class="sig-name descname"><span class="pre">ContextBlock</span></span><a class="headerlink" href="#xr_ai_conversation.ContextBlock" title="Link to this definition">#</a></dt>
+<dd><p>One rendered piece of prior context and the time of its newest content.</p>
+<p>A summary block has no timestamp and sorts before dated blocks.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_conversation.ContextBlock.timestamp_us">
+<span class="sig-name descname"><span class="pre">timestamp_us</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#xr_ai_conversation.ContextBlock.timestamp_us" title="Link to this definition">#</a></dt>
+<dd><p>Unix microseconds of the block’s newest content, or <code class="docutils literal notranslate"><span class="pre">None</span></code> for a summary.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_conversation.ContextBlock.text">
+<span class="sig-name descname"><span class="pre">text</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#xr_ai_conversation.ContextBlock.text" title="Link to this definition">#</a></dt>
+<dd><p>Rendered prompt text.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="xr_ai_conversation.ContextManager">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_conversation.</span></span><span class="sig-name descname"><span class="pre">ContextManager</span></span><span class="sig-paren">(</span>
+
+<dl>
+<dd><em class="sig-param"><span class="n"><span class="pre">llm</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../xr_ai_models/index.html#xr_ai_models.LLMService" title="xr_ai_models.LLMService"><span class="pre">xr_ai_models.LLMService</span></a></span></em>,</dd>
+<dd><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">summary_context_topics</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">()</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">incremental_context_topics</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">()</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">dialogue_budget_bytes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">_DEFAULT_DIALOGUE_BUDGET_BYTES</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">topic_budget_bytes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">collections.abc.Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">_DEFAULT_TOPIC_BUDGET_BYTES</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">compaction_input_budget_bytes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">_DEFAULT_COMPACTION_INPUT_BUDGET_BYTES</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">compaction_prompts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#xr_ai_conversation.CompactionPrompts" title="xr_ai_conversation.CompactionPrompts"><span class="pre">CompactionPrompts</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+</dl>
+
+<span class="sig-paren">)</span><a class="headerlink" href="#xr_ai_conversation.ContextManager" title="Link to this definition">#</a></dt>
+<dd><p>Retain participant-scoped context and render it into prompts for any number of agents.</p>
+<p>Completed dialogue and each configured topic are separate sections with
+their own byte budget. A summary topic keeps only its latest state; an
+incremental topic and the dialogue keep recent entries verbatim and fold
+older ones into a rolling summary written by <code class="docutils literal notranslate"><span class="pre">llm</span></code>.</p>
+<p>Every method runs on the event loop and none yields between reading and
+writing a participant’s context, so a participant’s context is never
+observed half-updated. Compaction runs as a background task per section.</p>
+<p>The owner creates the manager, registers <code class="docutils literal notranslate"><span class="pre">subscriber()</span></code> with the runtime
+that delivers context updates, calls <code class="docutils literal notranslate"><span class="pre">clear()</span></code> when a participant leaves,
+and calls <code class="docutils literal notranslate"><span class="pre">close()</span></code> at shutdown. Agents that share a manager use its
+budgets, so those are configured here and not per agent.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>llm</strong> – Model service that writes compaction summaries.</p></li>
+<li><p><strong>summary_context_topics</strong> – Runtime topic names whose text replaces that source’s state.</p></li>
+<li><p><strong>incremental_context_topics</strong> – Runtime topic names whose text appends to that source.</p></li>
+<li><p><strong>dialogue_budget_bytes</strong> – UTF-8 byte budget for completed dialogue rendered into a prompt.</p></li>
+<li><p><strong>topic_budget_bytes</strong> – UTF-8 byte budget for each topic’s context rendered into a prompt:
+one value for every topic, or a mapping with a value for each configured topic.</p></li>
+<li><p><strong>compaction_input_budget_bytes</strong> – UTF-8 byte budget for the summary and entries in one
+compaction request; at least half the largest section budget plus 256 bytes.</p></li>
+<li><p><strong>compaction_prompts</strong> – Compaction instructions; defaults to <code class="docutils literal notranslate"><span class="pre">CompactionPrompts()</span></code>.</p></li>
+</ul>
+</dd>
+</dl>
+<p>All budgets must be positive. Topic lists contain non-empty names; names
+must be unique within and across both lists.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="xr_ai_conversation.ContextManager.subscriber">
+<span class="sig-name descname"><span class="pre">subscriber</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../xr_ai_runtime/index.html#xr_ai_runtime.Agent" title="xr_ai_runtime.Agent"><span class="pre">xr_ai_runtime.Agent</span></a></span></span><a class="headerlink" href="#xr_ai_conversation.ContextManager.subscriber" title="Link to this definition">#</a></dt>
+<dd><p>Return an Agent that applies the configured context topics to this manager.</p>
+<p>Register the result with the same <code class="docutils literal notranslate"><span class="pre">AgentRuntime</span></code> as the consumer.
+Configure at least one topic before calling this method.</p>
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="xr_ai_conversation.Conversation.context_subscriber">
-<span class="sig-name descname"><span class="pre">context_subscriber</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../xr_ai_runtime/index.html#xr_ai_runtime.Agent" title="xr_ai_runtime.Agent"><span class="pre">xr_ai_runtime.Agent</span></a></span></span><a class="headerlink" href="#xr_ai_conversation.Conversation.context_subscriber" title="Link to this definition">#</a></dt>
-<dd><p>Return an Agent subscribed to the configured context topics.</p>
-<p>Register the result with the same <code class="docutils literal notranslate"><span class="pre">AgentRuntime</span></code> as the conversation
-consumer. The constructor selects each topic’s update behavior; each
-publication carries only source-owned text. Configure at least one
-topic before calling this method.</p>
+<dt class="sig sig-object py" id="xr_ai_conversation.ContextManager.update">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">update</span></span><span class="sig-paren">(</span>
+
+<dl>
+<dd><em class="sig-param"><span class="n"><span class="pre">participant_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">source</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">update</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#xr_ai_conversation.ConversationContextUpdate" title="xr_ai_conversation.ConversationContextUpdate"><span class="pre">xr_ai_conversation.ConversationContextUpdate</span></a></span></em>,</dd>
+<dd><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">mode</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'summary'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'incremental'</span></span><span class="p"><span class="pre">]</span></span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">timestamp_us</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+</dl>
+
+<span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_conversation.ContextManager.update" title="Link to this definition">#</a></dt>
+<dd><p>Apply one configured topic update to a participant’s context.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – If <code class="docutils literal notranslate"><span class="pre">source</span></code> is not a configured topic or <code class="docutils literal notranslate"><span class="pre">mode</span></code> is not its configured mode.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="xr_ai_conversation.ContextManager.reconcile_history">
+<span class="sig-name descname"><span class="pre">reconcile_history</span></span><span class="sig-paren">(</span>
+
+<dl>
+<dd><em class="sig-param"><span class="n"><span class="pre">participant_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">exchanges</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>,</dd>
+<dd><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">exchange_ids</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">object</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span><span class="p"><span class="pre">]</span></span></span></em>,</dd>
+</dl>
+
+<span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_conversation.ContextManager.reconcile_history" title="Link to this definition">#</a></dt>
+<dd><p>Merge a front-end window of completed exchanges without replaying known ones.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="xr_ai_conversation.ContextManager.record_exchange">
+<span class="sig-name descname"><span class="pre">record_exchange</span></span><span class="sig-paren">(</span>
+
+<dl>
+<dd><em class="sig-param"><span class="n"><span class="pre">participant_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">request</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">answer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">timestamp_us</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">exchange_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">object</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em>,</dd>
+</dl>
+
+<span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_conversation.ContextManager.record_exchange" title="Link to this definition">#</a></dt>
+<dd><p>Add one completed exchange to a participant’s dialogue; dropped once closed.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="xr_ai_conversation.ContextManager.blocks">
+<span class="sig-name descname"><span class="pre">blocks</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">participant_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#xr_ai_conversation.ContextBlock" title="xr_ai_conversation.ContextBlock"><span class="pre">ContextBlock</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Ellipsis</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#xr_ai_conversation.ContextManager.blocks" title="Link to this definition">#</a></dt>
+<dd><p>Render a participant’s dialogue and topic context, summaries first, then newer entries in time order.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="xr_ai_conversation.ContextManager.clear">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">clear</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">participant_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_conversation.ContextManager.clear" title="Link to this definition">#</a></dt>
+<dd><p>Forget a participant’s context after cancelling its compaction jobs.</p>
+<p>Later writes for that participant start new context.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="xr_ai_conversation.ContextManager.close">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">close</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_conversation.ContextManager.close" title="Link to this definition">#</a></dt>
+<dd><p>Drop later topic updates and forget all context after cancelling compaction jobs.</p>
 </dd></dl>
 
 </dd></dl>
@@ -665,7 +828,27 @@ topic before calling this method.</p>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_conversation.Conversation.release"><code class="docutils literal notranslate"><span class="pre">release()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_conversation.Conversation.participant_left"><code class="docutils literal notranslate"><span class="pre">participant_left()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_conversation.Conversation.close"><code class="docutils literal notranslate"><span class="pre">close()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_conversation.Conversation.context_subscriber"><code class="docutils literal notranslate"><span class="pre">context_subscriber()</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_conversation.CompactionPrompts"><code class="docutils literal notranslate"><span class="pre">CompactionPrompts</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_conversation.CompactionPrompts.source"><code class="docutils literal notranslate"><span class="pre">source</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_conversation.CompactionPrompts.dialogue"><code class="docutils literal notranslate"><span class="pre">dialogue</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_conversation.CompactionPrompts.condense"><code class="docutils literal notranslate"><span class="pre">condense</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_conversation.ContextBlock"><code class="docutils literal notranslate"><span class="pre">ContextBlock</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_conversation.ContextBlock.timestamp_us"><code class="docutils literal notranslate"><span class="pre">timestamp_us</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_conversation.ContextBlock.text"><code class="docutils literal notranslate"><span class="pre">text</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_conversation.ContextManager"><code class="docutils literal notranslate"><span class="pre">ContextManager</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_conversation.ContextManager.subscriber"><code class="docutils literal notranslate"><span class="pre">subscriber()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_conversation.ContextManager.update"><code class="docutils literal notranslate"><span class="pre">update()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_conversation.ContextManager.reconcile_history"><code class="docutils literal notranslate"><span class="pre">reconcile_history()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_conversation.ContextManager.record_exchange"><code class="docutils literal notranslate"><span class="pre">record_exchange()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_conversation.ContextManager.blocks"><code class="docutils literal notranslate"><span class="pre">blocks()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_conversation.ContextManager.clear"><code class="docutils literal notranslate"><span class="pre">clear()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_conversation.ContextManager.close"><code class="docutils literal notranslate"><span class="pre">close()</span></code></a></li>
 </ul>
 </li>
 </ul>
