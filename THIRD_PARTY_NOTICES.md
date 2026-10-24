@@ -75,7 +75,7 @@ Pillow's full Linux wheel notices include its native-library terms. XR AI
 elects the **FTL** option for FreeType: portions of this software are copyright
 © The FreeType Project (www.freetype.org). All rights reserved. Optional
 libimagequant (GPL) and FriBiDi (LGPL) are absent from the inspected official
-CPython 3.12 macOS arm64 and Linux x86_64/aarch64 wheels; custom builds enabling
+CPython 3.12 macOS arm64 and Linux x86_64 and aarch64 wheels; custom builds enabling
 these libraries require a separate review.
 
 ONNX Runtime's complete third-party notices include the Apache-2.0 election
