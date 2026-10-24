@@ -335,12 +335,19 @@ async def test_join_is_idle_and_voice_can_record_multiple_sessions(demo):
     assert announcements(demo) == [_CAPTURE_WELCOME] * 2 + [
         "Capture started.", "Capture stopped.", _CAPTURE_WELCOME,
     ] * 2
-    for call in demo.output.await_args_list:
+    for index, call in enumerate(demo.output.await_args_list):
         assert call.args[0] == VOICE_OUTPUT_TOPIC
         assert call.kwargs["participant_id"] == "user"
         if call.args[1].kind == "withdraw":
             continue
         assert call.args[1].kind == "reply"
+        assert index > 0
+        previous = demo.output.await_args_list[index - 1]
+        assert previous.kwargs["participant_id"] == call.kwargs["participant_id"]
+        if call.args[1].final:
+            assert previous.args[1].response_id == call.args[1].response_id
+        else:
+            assert previous.args[1].kind == "withdraw"
         assert call.args[1].request_id.startswith("request-")
 
 
@@ -349,11 +356,14 @@ async def test_welcome_uses_voice_join_regardless_of_endpoint_order(demo, hub_fi
     ctx = SimpleNamespace(metadata=SimpleNamespace(participant_id="user"), publish=demo.output)
     if hub_first:
         await demo.capture.receive(joined())
+    early_timestamp = time.time_ns() // 1000
     await demo.capture.participant_joined(ParticipantJoined(), ctx)
     if not hub_first:
         await demo.capture.receive(joined())
     assert announcements(demo) == [_CAPTURE_WELCOME]
     assert demo.output.await_args.args[1].kind == "update"
+    await speak(demo, "Hello", timestamp_us=early_timestamp)
+    assert announcements(demo) == [_CAPTURE_WELCOME]
     assert not demo.capture_backend.is_capturing("user")
     demo.frames.execute.assert_not_awaited()
     await demo.capture.receive(joined())  # Raw lifecycle replay does not speak.
@@ -730,7 +740,7 @@ async def test_app_drains_voice_transcripts_and_recordings_before_endpoint_close
 
 
 @pytest.mark.parametrize("raw_transcript_first", [True, False])
-@pytest.mark.parametrize("queued_greeting", [False, True])
+@pytest.mark.parametrize("queued_greeting", [None, "start", "hello"])
 async def test_recording_acknowledgements_follow_voice_input(demo, monkeypatch, raw_transcript_first, queued_greeting):
     """Exercise both STT delivery paths through real gate, I/O, runtime, and TTS."""
     import wave
@@ -810,8 +820,8 @@ async def test_recording_acknowledgements_follow_voice_input(demo, monkeypatch, 
         async def on_started(*args):
             started.set()
 
-        async def utterance(text, acknowledgement=False):
-            ts = time.time_ns() // 1000
+        async def utterance(text, acknowledgement=False, timestamp_us=None):
+            ts = time.time_ns() // 1000 if timestamp_us is None else timestamp_us
             delivered.clear()
             if raw_transcript_first:
                 previous_action = demo.capture._tails.get("user")
@@ -824,7 +834,8 @@ async def test_recording_acknowledgements_follow_voice_input(demo, monkeypatch, 
             frame.pts = ts * 1000
             await worker.queue_frame(frame)
             await delivered.wait()
-            await asyncio.shield(demo.capture._tails["user"])
+            if tail := demo.capture._tails.get("user"):
+                await asyncio.shield(tail)
             if acknowledgement:
                 boundary = await boundaries.get()
                 assert boundary.transport_destination == "user"
@@ -839,6 +850,7 @@ async def test_recording_acknowledgements_follow_voice_input(demo, monkeypatch, 
             async with asyncio.timeout(5):
                 await started.wait()
                 await demo.capture.receive(joined())
+                early_timestamp = time.time_ns() // 1000
                 if queued_greeting:
                     speaking = UserStartedSpeakingFrame()
                     speaking.transport_source = "user"
@@ -847,11 +859,16 @@ async def test_recording_acknowledgements_follow_voice_input(demo, monkeypatch, 
                 if queued_greeting:
                     while not voice_io._pending_updates.get("user"):
                         await asyncio.sleep(0)
+                    if queued_greeting == "hello":
+                        await utterance("Hello", acknowledgement=True, timestamp_us=early_timestamp)
                 else:
                     await boundaries.get()
                     await utterance("What can you do?", acknowledgement=True)
-                for _ in range(2):
-                    await utterance("Start capture.", acknowledgement=True)
+                for iteration in range(2):
+                    await utterance(
+                        "Start capture.", acknowledgement=True,
+                        timestamp_us=early_timestamp if queued_greeting == "start" and iteration == 0 else None,
+                    )
                     state = demo.capture_backend._sessions["user"]
                     await utterance("Place a cup")
                     await utterance("Stop capture.", acknowledgement=True)
@@ -887,7 +904,8 @@ async def test_recording_acknowledgements_follow_voice_input(demo, monkeypatch, 
     assert echoes == expected
     transcripts = [call.args[0].data.decode() for call in transport.send_return_data.await_args_list
                    if call.args[0].topic == CAPTURE_STT_TOPIC]
-    assert transcripts == ([] if queued_greeting else ["What can you do?"]) + [
+    initial_transcripts = {None: ["What can you do?"], "start": [], "hello": ["Hello"]}
+    assert transcripts == initial_transcripts[queued_greeting] + [
         "Start capture.", "Place a cup", "Stop capture.", "Stop capture.",
     ] * 2
 

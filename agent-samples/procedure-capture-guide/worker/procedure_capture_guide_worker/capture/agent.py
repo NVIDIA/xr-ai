@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 
@@ -63,6 +64,8 @@ class CaptureAgent(Agent):
         self._sessions: dict[str, _Recording] = {}
         self._tails: dict[str, asyncio.Task[None]] = {}
         self._connections: dict[str, _Connection] = {}
+        # Voice can greet before the capture endpoint receives the hub join.
+        self._welcomed_at_us: dict[str, int] = {}
         self._closed = False
 
     def _enqueue(self, pid: str, action: Callable[[], Awaitable[None]]) -> asyncio.Task[None] | None:
@@ -85,11 +88,11 @@ class CaptureAgent(Agent):
         if self._closed or connection.cancelled.is_set() or self._connections.get(pid) is not connection:
             return
         try:
-            # Preserve the order of start and stop acknowledgements.
             outputs = ResponseOutputs(ctx, VOICE_OUTPUT_TOPIC)
-            # A connection greeting still queued behind speech must not play
-            # after a command has started a silent capture.
+            # Drop a still-unheard greeting before any spoken reply. This does
+            # not interrupt a greeting whose audio has already started.
             await outputs.withdraw(pid)
+            # Preserve the order of start and stop acknowledgements.
             reply = outputs.reply(pid, request_id=ctx.metadata.message_id)
             async with reply:
                 await reply.send(text)
@@ -118,6 +121,7 @@ class CaptureAgent(Agent):
             elif not event.joined and duplicate:
                 connection.cancelled.set()
                 self._connections.pop(pid, None)
+                self._welcomed_at_us.pop(pid, None)
 
         async def apply() -> None:
             if not event.joined and not duplicate:
@@ -145,10 +149,13 @@ class CaptureAgent(Agent):
     async def participant_joined(self, _event: ParticipantJoined, ctx: RuntimeContext) -> None:
         # The voice event arrives when speech output is ready. Raw hub events
         # still own capture lifecycle and may arrive through a different endpoint.
+        # Voice joins lack a session ID: on rapid reconnect, an old recording
+        # still awaiting its hub leave can suppress the new connection greeting.
         pid = ctx.metadata.participant_id
         connection = self._connections.get(pid)
         if self._closed or (connection is not None and connection.recording is not None):
             return
+        self._welcomed_at_us[pid] = time.time_ns() // 1000
         await ResponseOutputs(ctx, VOICE_OUTPUT_TOPIC).update(pid, _WELCOME)
 
     @subscribe(CAPTURE_INPUT_TOPIC)
@@ -215,6 +222,10 @@ class CaptureAgent(Agent):
             generation = connection.capture_generation
 
             async def remind() -> None:
+                # Speech predating the welcome is already answered by that hint,
+                # even if the voice pipeline begins playing it before dispatch.
+                if transcript.timestamp_us <= self._welcomed_at_us.get(pid, -1):
+                    return
                 if connection.recording is None and connection.capture_generation == generation:
                     await self._say(pid, connection, ctx, _WELCOME)
 
@@ -237,5 +248,6 @@ class CaptureAgent(Agent):
             finally:
                 for pid in self._connections.keys() | self._sessions.keys():
                     self._capture_backend.release(pid)
+                self._welcomed_at_us.clear()
                 self._connections.clear()
                 self._sessions.clear()
