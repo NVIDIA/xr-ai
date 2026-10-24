@@ -96,8 +96,9 @@ and completion messages; do not copy the worked example's wording.
 | `id`, `title` | Stable identifier and short instruction title |
 | `reads`, `writes` | Lists of declared state fields; `writes` cannot be empty |
 | `trigger` | `function`, positive `interval_s`, `arguments`, optional `result_field` |
-| `agent`, `voice` | Each has a nonempty `prompt` and an allowed `tools` list; `agent` may be omitted with direct `evidence.commit` |
-| `evidence` | Optional mapping: full-match regex `pattern`, positive integer `consecutive`, optional typed `commit` mapping |
+| `voice` | Nonempty `prompt` and allowed `tools` list for conversation |
+| `agent` | Optional for timer steps, required without a direct commit; visual steps reject it |
+| `evidence` | Visual steps require a text `condition` for CLEF; timer steps use a full-match `pattern`. Both use positive integer `consecutive` and an optional typed `commit` mapping |
 | `complete_when` | Nonempty typed mapping using only this step's writable fields |
 | `next` | Next step ID, or `null` for the last step |
 | `complete_on_skip` | Optional boolean, default false; true ends the run if this incomplete step is skipped |
@@ -105,12 +106,22 @@ and completion messages; do not copy the worked example's wording.
 | `state_on_skip` | Optional typed mapping using only writable fields; defaults to `{}` |
 | `messages` | Nonempty `enter`, `complete`, and `skip` strings |
 
+For `current_view`, ask Cosmos for a focused description of the relevant region,
+objects, contacts, labels, and hidden details. State the completion requirements
+in `evidence.condition`. CLEF receives that condition and the description, not
+the image, conversation history, or a suggested answer. Only yes counts toward
+`consecutive`. Repeated frames do not count twice, and failures break the streak.
+Do not use `pattern` or `agent` on visual steps. Unavailable or uncertain evidence
+must not be treated as success, but both models can still misinterpret a scene.
+
 `evidence.commit` uses writable fields, not a literal placeholder like
-`done_field`. With it, matching evidence commits directly without an observation
-LLM; that agent's prompt and tools do not execute. Without it, the observation
-agent may call the engine-provided
-`workflow__commit`, still gated by the evidence threshold. Do not list that
-internal tool in `agent.tools`. Ordinary completion does not advance; messages ask the
+`done_field`, and must satisfy `complete_when`. After the required confirmations,
+the runtime applies this bounded patch; CLEF cannot invent state updates.
+Approved visual steps require a commit. A review-blocked draft may omit it;
+then no decision, even yes, can complete that step. Timer `pattern` matching and
+runtime-owned elapsed-time enforcement are unchanged. A timer without a direct
+commit may still use an observation `agent`; do not list its internal
+`workflow__commit` in `agent.tools`. Ordinary completion does not advance; messages ask the
 user to say next. A terminal `finish_on_complete: true` step ends the run without
 Next; its message must not request another advance. A skip is not verified success.
 
@@ -132,8 +143,8 @@ No participant ID, image path, sequence window, or `max_frames` argument is
 accepted. The engine binds the participant. The 500-character question limit
 applies to the parsed string including spaces and folded YAML, not each line.
 Use `result_field: text` for visual checks and `result_field: expired` for waits.
-Visual policies normally use `agent.tools: []`, `voice.tools: [current_view]`.
-`agent` handles background observations; `voice` answers current-step questions.
+Visual steps omit `agent`; CLEF handles background decisions.
+`voice.tools: [current_view]` lets the conversation LLM answer current-step questions.
 Declaring a tool does not call it; the prompt must give the needed arguments.
 
 Trigger arguments can use `$state.<field>`. The field must be declared in state
@@ -164,7 +175,7 @@ review notes; it does not make the guide tool incapable of checking the result.
 This includes an explicitly instructed count or orientation: absent visual
 corroboration is not an unresolved instruction. Decide from the required result.
 For example, an explicit placement instruction with an unavailable saved image
-can still have a `current_view` placement check with `^ready$` evidence.
+can still have a `current_view` placement check with an explicit visible placement condition.
 
 Reserve a blocked step for an unresolved required condition or an unsupported
 verification, such as proving past ordering or a hidden fit from one image.
@@ -174,17 +185,18 @@ of the known action and target. Refer to
 [the complete blocked example](review-blocked.yaml). Do not substitute a
 request for clarification for both requested output files when an action is known.
 Use a bounded `current_view` question about the observable context, a separate
-false-initialized completion field, and this never-matching evidence gate:
+false-initialized completion field, and a condition without a commit:
 
 ```yaml
 evidence:
-  pattern: '(?!)'
+  condition: The adapter identity and required fit must be resolved by human review.
   consecutive: 1
 ```
 
-Omit `evidence.commit`; set `agent.tools: []` and instruct the agent not to commit
-the step because its requirement cannot be verified. The gate prevents completion
-even if the model proposes it. Set `complete_on_skip: true` if later steps depend
+State the unresolved requirement in `evidence.condition` and omit
+`evidence.commit`. Do not add an `agent` or a regex gate. No CLEF decision can
+complete a step without a commit, and the parser rejects approving such a guide.
+Set `complete_on_skip: true` if later steps depend
 on this unresolved prerequisite. Explain the exact gap in the step prompts and
 review notes. Do not approve until it is resolved; schema validity alone is not
 approval. Never put invented triggers or extra `review_blockers` keys in the YAML.

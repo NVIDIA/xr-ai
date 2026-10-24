@@ -22,6 +22,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 import yaml
+from _procedure_guide_helpers import clef_response, stub_decisions
 from PIL import Image
 
 _SAMPLE = Path(__file__).resolve().parents[1] / "agent-samples/procedure-capture-guide"
@@ -91,7 +92,7 @@ def runtime_models(monkeypatch):
                             "tool_calls", {})
 
     async def vision(images, query, **kwargs):
-        assert len(images) == 1 and "rectangle blue" in query
+        assert len(images) == 1 and "rectangle" in query
         with Image.open(io.BytesIO(images[0])) as source:
             red, _green, blue = source.convert("RGB").getpixel((320, 240))
         return SimpleNamespace(content="YES" if blue > red else "NO")
@@ -99,6 +100,7 @@ def runtime_models(monkeypatch):
     llm = Mock(chat=AsyncMock(side_effect=chat), close=AsyncMock())
     vlm = Mock(ask_images=AsyncMock(side_effect=vision), close=AsyncMock())
     monkeypatch.setattr(xr_ai_models, "make_llm", lambda *_: llm)
+    monkeypatch.setattr(xr_ai_models, "make_decision", lambda *_: stub_decisions())
     monkeypatch.setattr(xr_ai_models, "make_vlm", lambda *_: vlm)
     return llm, vlm
 
@@ -180,22 +182,22 @@ async def test_evaluation_attributes_overlapping_model_calls_to_their_origin(
         payload = json.loads(messages[1].content)
         if payload.get("request") == "auxiliary":
             return ChatResponse("Auxiliary output.", None, None, "stop", {})
-        if "request" not in payload:
-            observations += 1
-            # First exercise the real observation commit tool without completing
-            # the step; completion follows after the start response is delivered.
-            updates = {} if observations == 1 else {"visible": True}
-            observed.set()
-            return ChatResponse("", None, [ToolCall(
-                id=f"observation-{observations}", name="workflow__commit",
-                arguments=json.dumps({"updates": updates}),
-            )], "tool_calls", {})
         response = await foreground_chat(messages, **kwargs)
         if wrong_foreground_call and payload["request"] == "Next":
             # A genuine wrong foreground call must still fail routing assertions.
             response.tool_calls[0] = ToolCall(id="wrong", name="workflow__status", arguments="{}")
         return response
 
+    async def decide(*args, **kwargs):
+        nonlocal observations
+        observations += 1
+        observed.set()
+        return clef_response("no" if observations == 1 else "yes")
+
+    decisions = stub_decisions()
+    decisions.decide.side_effect = decide
+    import xr_ai_models
+    monkeypatch.setattr(xr_ai_models, "make_decision", lambda *_: decisions)
     llm.chat.side_effect = chat
     route = GuideAgent._route
 
@@ -218,9 +220,7 @@ async def test_evaluation_attributes_overlapping_model_calls_to_their_origin(
     guide["steps"] = guide["steps"][:1]
     step = guide["steps"][0]
     step["next"] = None
-    step["evidence"].pop("commit")
     step["evidence"]["consecutive"] = 1
-    step["agent"] = {"prompt": "Commit visible only for a blue indicator.", "tools": []}
     guide_path = tmp_path / "guide.yaml"
     guide_path.write_text(yaml.safe_dump(guide))
     output = tmp_path / "result"
@@ -255,9 +255,9 @@ async def test_evaluation_attributes_overlapping_model_calls_to_their_origin(
     delivered = next(index for index, event in enumerate(events)
                      if event["kind"] == "speech" and event["timestamp_us"] == start["timestamp_us"])
     background = [event for event in events[:delivered]
-                  if event["kind"] == "model" and event["origin"] == "observation"]
-    assert background and all(event["turn_id"] is None for event in background)
-    assert background[0]["calls"][0]["name"] == "workflow__commit"
+                  if event["kind"] == "decision" and event["origin"] == "observation"]
+    assert background and all(event.get("turn_id") is None for event in background)
+    assert background[0]["answers"]["condition_met"]["choice"] == "no"
     auxiliary = next(event for event in events if event.get("text") == "Auxiliary output.")
     assert auxiliary["origin"] == "unscoped" and auxiliary["turn_id"] is None
     turns = [event for event in events if event["kind"] == "user"]

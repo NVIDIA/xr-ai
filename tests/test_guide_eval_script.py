@@ -14,6 +14,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 import yaml
+from _procedure_guide_helpers import clef_response, stub_decisions
 from PIL import Image
 from xr_ai_models import ChatResponse, ToolCall
 
@@ -61,6 +62,7 @@ def evaluator(monkeypatch):
     spec = importlib.util.spec_from_file_location("visual_eval", _TEA_EVAL / "evaluate_visual_checks.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    monkeypatch.setattr(module, "make_decision", lambda *_: stub_decisions())
     return module
 
 
@@ -74,7 +76,7 @@ def test_scenes_are_reproducible_and_distinct(evaluator, tmp_path):
         if scene["kind"] == "packet":
             assert set(scene) <= {"kind", "blend", "color", "covered"}
     identification = guide.workflow.steps["identify"]
-    assert identification.evidence.pattern == r"(?i)^YES$"
+    assert identification.evidence.pattern is None and identification.evidence.condition
     pixels = set()
     for case in cases:
         rendered = evaluator.render_scene(scenes[case["scene"]])
@@ -115,7 +117,7 @@ def test_visual_entry_point_renders_tea_manifest_without_models(tmp_path, monkey
 ])
 def test_negative_cases_separate_recognition_and_gate(evaluator, text, available, recognition, gate):
     case = {"answer": r"TARGET\s*\|\s*100 C", "accept": False}
-    row = evaluator.score(case, r"CURRENT\s*\|\s*100 C", text, available)
+    row = evaluator.score(case, text == "CURRENT | 100 C", text, available)
     assert row["recognition"] is recognition
     assert row["gate_correct"] is gate
 
@@ -143,14 +145,21 @@ async def test_visual_evaluator_uses_guide_question_not_answer(evaluator, tmp_pa
     fake_vlm = SimpleNamespace(close=AsyncMock())
     monkeypatch.setattr(evaluator, "make_vlm", lambda *_args: fake_vlm)
     manifest = yaml.safe_load((_TEA_EVAL / "fixtures/visual_expectations.yaml").read_text())
-    scenes = evaluator.load_scenes(_TEA_EVAL / "fixtures/visual_expectations.yaml", manifest)
-    canonical = []
-    for case in manifest["cases"]:
-        if case["step"] == "heat_water" and case["answer"] != "UNKNOWN":
-            reading = scenes[case["scene"]]["readings"][-1]
-            canonical.append(f'{reading["label"]} | {reading["value"]}')
-        else:
-            canonical.append(case["answer"])
+    manifest["cases"] = [
+        {"scene": "chamomile", "step": "identify", "answer": ".*chamomile.*", "accept": True},
+        {"scene": "green", "step": "identify", "answer": ".*green.*", "accept": False},
+    ]
+    manifest["guide_path"] = str(_SAMPLE / "example-guides/tea-making/guide.yaml")
+    manifest["scenes_file"] = str(_TEA_EVAL / "fixtures/image_scenes.yaml")
+    manifest_path = tmp_path / "manifest.yaml"
+    manifest_path.write_text(yaml.safe_dump(manifest))
+    canonical = ["The packet reads chamomile.", "The packet reads green tea."]
+    decisions = stub_decisions()
+    async def decide(state, questions, **kwargs):
+        assert state["condition"] and "condition_met" in questions
+        return clef_response("yes" if "chamomile" in state["current_observation"] else "no")
+    decisions.decide.side_effect = decide
+    monkeypatch.setattr(evaluator, "make_decision", lambda *_: decisions)
 
     class FakeTool:
         def __init__(self, *, images, vlm, system_prompt):
@@ -167,20 +176,21 @@ async def test_visual_evaluator_uses_guide_question_not_answer(evaluator, tmp_pa
 
     monkeypatch.setattr(evaluator, "ImageQueryTool", FakeTool)
     output = tmp_path / "visual"
-    summary = await evaluator.evaluate(_TEA_EVAL / "fixtures/visual_expectations.yaml", output,
+    summary = await evaluator.evaluate(manifest_path, output,
                                       _SAMPLE / "yaml/models.json", 2, 1)
-    assert summary["attempts"] == 50
-    assert summary["false_rejects"] == (0 if correct else 10)
-    assert summary["gate_correct"] == (50 if correct else 40)
+    assert summary["attempts"] == 4
+    assert summary["false_rejects"] == (0 if correct else 2)
+    assert summary["gate_correct"] == (4 if correct else 2)
     assert summary["passed"] is correct
     if correct:
-        assert summary["recognition_correct"] == 50
+        assert summary["recognition_correct"] == 4
         assert all(step["passed"] for step in summary["by_step"].values())
     rows = [json.loads(line) for line in (output / "results.jsonl").read_text().splitlines()]
     guide = evaluator.load_guide(_SAMPLE / "example-guides/tea-making/guide.yaml")
     for row, request in zip(rows, requests, strict=True):
         assert request.query == guide.workflow.steps[row["step"]].trigger.arguments["question"]
     fake_vlm.close.assert_awaited_once()
+
 
 
 @pytest.mark.asyncio
@@ -301,31 +311,20 @@ def test_inline_scene_manifest_preserves_provenance(evaluator, tmp_path):
     assert len(cases) == len(provenance["images"]) == 25
 
 
-@pytest.mark.parametrize("scene,text,recognition,accepted", [
-    ("current100", "CURRENT | 100.0 C", True, True),
-    ("current100", "CURRENT | 100℃", True, True),
-    ("actual212", "ACTUAL | 212.00℉", True, True),
-    ("current100", "CURRENT\n|\t100 C", True, True),
-    ("current100", "CURRENT | 100.1 C", False, False),
-    ("current100", "TARGET | 100 C", False, False),
-    ("target100", "CURRENT | 100 C", False, True),
-    ("chamomile", "NO CHAMOMILE", False, False),
-    ("chamomile", "YES\n", True, True),
-])
-def test_recognition_and_runtime_gate_have_distinct_contracts(evaluator, scene, text, recognition, accepted):
-    manifest = yaml.safe_load((_TEA_EVAL / "fixtures/visual_expectations.yaml").read_text())
-    case = evaluator.visual_cases(manifest)[scene]
-    guide = evaluator.load_guide(_TEA_EVAL / "fixtures" / manifest["guide_path"])
-    pattern = guide.workflow.steps[case["step"]].evidence.pattern
-    row = evaluator.score(case, pattern, text, True)
-    assert row["recognition"] is recognition
+@pytest.mark.parametrize("accepted", [False, True])
+def test_recognition_and_clef_decision_are_scored_independently(evaluator, accepted):
+    case = {"answer": ".*chamomile.*", "accept": True}
+    row = evaluator.score(case, accepted, "The packet reads chamomile.", True)
+    assert row["recognition"]
     assert row["accepted"] is accepted
-    assert row["gate_correct"] is (accepted == case["accept"])
+    assert row["gate_correct"] is accepted
+
+
 
 
 def test_recognition_normalization_does_not_relax_evidence_gate(evaluator):
     case = {"answer": "BREAKFAST BLACK", "accept": True}
-    row = evaluator.score(case, "^BREAKFAST BLACK$", "BREAKFAST\nBLACK", True)
+    row = evaluator.score(case, False, "BREAKFAST\nBLACK", True)
     assert row["recognition"]
     assert not row["accepted"]
 
@@ -347,6 +346,7 @@ def runtime_evaluator(evaluator, monkeypatch):
     llm = Mock(chat=AsyncMock(side_effect=chat), close=AsyncMock())
     vlm = Mock(ask_images=AsyncMock(return_value=SimpleNamespace(content="NO")), close=AsyncMock())
     monkeypatch.setattr(module.runtime.xr_ai_models, "make_llm", Mock(return_value=llm))
+    monkeypatch.setattr(module.runtime.xr_ai_models, "make_decision", lambda *_: stub_decisions())
     monkeypatch.setattr(module.runtime.xr_ai_models, "make_vlm", Mock(return_value=vlm))
     return module
 

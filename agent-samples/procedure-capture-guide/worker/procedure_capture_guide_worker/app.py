@@ -19,7 +19,7 @@ from pathlib import Path
 
 from xr_ai_hub import ProcessorEndpoint
 from xr_ai_logging import setup_logging
-from xr_ai_models import load_models_config, make_llm, make_stt, make_tts, make_vlm
+from xr_ai_models import load_models_config, make_decision, make_llm, make_stt, make_tts, make_vlm
 from xr_ai_runtime import AgentRuntime
 from xr_ai_tools.current_frame import CurrentFrameTool
 from xr_ai_tools.image import ImageRegistry
@@ -51,6 +51,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
     models = load_models_config(config.models_config)
     stt, tts, vlm = make_stt(models, "stt"), make_tts(models, "tts"), make_vlm(models, "vlm")
     llm = make_llm(models, "llm") if selected_guide is not None else None
+    decisions = make_decision(models, "decision") if selected_guide is not None else None
     # Capture must finish draining after voice stops. Its frame and participant
     # endpoint therefore has a lifetime controlled by this composition layer.
     endpoint = ProcessorEndpoint(sub_addr=_HUB_PUB, push_addr=_HUB_PUSH)
@@ -77,15 +78,17 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
         endpoint.on_participant(capture.receive)
     else:
         guide = runtime.register("guide", GuideAgent(
-            guide=selected_guide, llm=llm, current_frame=frames,
+            guide=selected_guide, llm=llm, decisions=decisions, current_frame=frames,
             image_query=ImageQueryTool(
                 images=images, vlm=vlm,
                 system_prompt=(Path(__file__).parent / "guide/prompts/guide_vision.txt").read_text(encoding="utf-8"),
             ),
             vision_timeout_s=config.guide.vision_timeout_s,
+            decision_timeout_s=config.guide.decision_timeout_s,
         ))
         guide.bind_runtime(runtime)
         probes["llm"] = llm.health
+        probes["CLEF"] = decisions.health
         voice_options = {
             "participant_joined_topic": PARTICIPANT_JOINED_TOPIC,
             "participant_left_topic": PARTICIPANT_LEFT_TOPIC,
@@ -138,3 +141,5 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
             await vlm.close()
             if llm is not None:
                 await llm.close()
+            if decisions is not None:
+                await decisions.close()
