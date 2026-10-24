@@ -19,6 +19,8 @@ dependencies = [
     "werkzeug>=3.1.9",
     # CVE-2026-58659: restrict pytorch-lightning checkpoint instantiators.
     "pytorch-lightning>=2.6.6",
+    # Match Lightning 2.6 checkpoint annotations without disabling validation.
+    "nv-one-logger-pytorch-lightning-integration==2.3.1",
     "fastapi>=0.115.0", "uvicorn[standard]>=0.34.0", "anyio>=4.8.0", "numpy>=1.24", "pyyaml>=6.0",
     "xr-ai-voicegate", "xr-ai-logging", "xr-ai-launcher",
     "nemo-toolkit[asr]", "lightning>=2.6.6", "lhotse==2.0.0a6",
@@ -34,7 +36,10 @@ override-dependencies = ["hydra-core==1.3.7", "lightning==2.6.6"]
 environments = ["sys_platform == 'linux'"]
 
 [tool.uv.sources]
-nemo-toolkit = { git = "https://github.com/NVIDIA-NeMo/Speech", rev = "1688cc3d6a9ade854f544987810c53f605dc86fc" }
+# Pinned compatibility patches retain the upstream inference implementation.
+nv-one-logger-pytorch-lightning-integration = { git = "https://github.com/yanziz-nvidia/nv-one-logger", rev = "665328ee4697b1c488ef58d4597dfad34d33f759", subdirectory = "nv_one_logger/one_logger_pytorch_lightning_integration" }
+# Commit archives keep dependency index policy with the consuming service.
+nemo-toolkit = { url = "https://github.com/yanziz-nvidia/Speech/archive/d7939d46c647d64db180e9f291e058855cd75d3a.tar.gz" }
 lightning = { git = "https://github.com/Lightning-AI/pytorch-lightning", rev = "771017e4f39b314b49abd4a1d65905c74268d248" }
 # Exact runtime artifact required by the pinned Speech revision. This keeps
 # the new inference environment isolated without changing the global cutoff.

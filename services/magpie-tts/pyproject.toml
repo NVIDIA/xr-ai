@@ -19,6 +19,8 @@ dependencies = [
     "werkzeug>=3.1.9",
     # CVE-2026-58659: restrict pytorch-lightning checkpoint instantiators.
     "pytorch-lightning>=2.6.6",
+    # Match Lightning 2.6 checkpoint annotations without disabling validation.
+    "nv-one-logger-pytorch-lightning-integration==2.3.1",
     # CVE-2026-97687 and CVE-2026-97689: fixed HTTP transport.
     "urllib3>=2.8.0",
     # CVE-2026-80047: check remote-code consent before caching custom generation code.
@@ -36,6 +38,10 @@ dependencies = [
 ]
 
 [tool.uv.sources]
+# Commit archives keep dependency index policy with the consuming service.
+nemo-toolkit = { url = "https://github.com/yanziz-nvidia/Speech/archive/f047d87f41761e55bf2baf61967cbc687eeb1754.tar.gz" }
+# Pinned compatibility patches retain the upstream inference implementation.
+nv-one-logger-pytorch-lightning-integration = { git = "https://github.com/yanziz-nvidia/nv-one-logger", rev = "665328ee4697b1c488ef58d4597dfad34d33f759", subdirectory = "nv_one_logger/one_logger_pytorch_lightning_integration" }
 # Use the reviewed upstream 2.6.6 commit for the umbrella package.
 lightning     = { git = "https://github.com/Lightning-AI/pytorch-lightning", rev = "771017e4f39b314b49abd4a1d65905c74268d248" }
 xr-ai-logging = { path = "../../utils/xr-ai-logging", editable = true }

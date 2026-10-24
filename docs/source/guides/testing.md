@@ -88,6 +88,14 @@ fsspec release. Successful lock resolution and CPU tests do not establish
 compatibility with real model checkpoints or CUDA inference. Qualify all three
 services on the intended Linux GPU before deploying this dependency stack.
 
+The projects also pin compatibility source revisions of NeMo and OneLogger.
+These revisions retain OneLogger signature validation and fix the deprecated
+Neptune logger import. Use the declared sources when synchronizing; edits to an
+installed environment do not qualify a reproducible dependency stack. Refer to
+the repository
+[third-party notices](https://github.com/NVIDIA/xr-ai/blob/main/THIRD_PARTY_NOTICES.md#nemo-dependency-security-overrides)
+for source revisions and license provenance.
+
 From the repository root, synchronize each isolated inference environment:
 
 ```bash
