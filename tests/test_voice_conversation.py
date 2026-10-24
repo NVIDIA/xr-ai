@@ -35,8 +35,11 @@ def _config(tmp_path, *, require_wake=False, enabled=True):
 @pytest.mark.parametrize("parts", [
     ["Hey agent.", "Let's start talking."],
     ["Hey agent", "let us", "start talking"],
+    # An utterance boundary can split a word.
+    ["Hey ag", "ent, let's start talking."],
+    ["Hey agent, let's start talk", "ing."],
 ])
-def test_controls_join_only_complete_prefixes(parts):
+def test_controls_join_phrase_prefixes(parts):
     matcher = _ControlMatcher(_ConversationConfig())
     actions = [matcher._feed(text, key="a", at_s=i) for i, text in enumerate(parts)]
     assert actions == ["pending"] * (len(parts) - 1) + ["start"]

@@ -510,7 +510,7 @@ def test_owner_decoder_history_and_finalization_are_independent_of_diagnostics(
                 owner_calls.append((count + 1, final))
             channel, time, length = models.asr.encoder.get_initial_cache_state(batch_size=1)
             length[0] = count + 1
-            tokens = [65 + selected] if masks[-1][0].any() else []
+            tokens = [65 + selected] if masks[-1][0].any() and not final else []
             hyp = Hypothesis(y_sequence=torch.tensor(tokens), dec_state=SimpleNamespace(count=count + 1))
             return None, [hyp], channel, time, length, [hyp]
 
@@ -602,7 +602,7 @@ def test_next_turn_does_not_inherit_late_finalized_tokens(_streaming_models, mon
     from nemo.collections.asr.parts.utils.rnnt_utils import Hypothesis
     from speaker_stt._inference import _Session
 
-    models, activity, _calls, masks, _allocations, _text = _streaming_models
+    models, activity, _calls, _masks, _allocations, _text = _streaming_models
 
     def decode(**kwargs):
         previous = kwargs["previous_hypotheses"]
@@ -611,7 +611,7 @@ def test_next_turn_does_not_inherit_late_finalized_tokens(_streaming_models, mon
         # utterance's first frame; virtual quiet must not consume its new word.
         value = "alpha" if step == 1 else ""
         if step == 3:
-            value = " beta" + (" gamma" if masks[-1][0].any() else "")
+            value = " beta" + ("" if kwargs["keep_all_outputs"] else " gamma")
         hyp = Hypothesis(y_sequence=torch.tensor([ord(c) for c in value]), dec_state=step)
         return None, [hyp], *models.asr.encoder.get_initial_cache_state(batch_size=1), [hyp]
 
@@ -641,7 +641,7 @@ def test_finalized_candidate_reconciliation_remains_required_during_silence(
         step = previous[0].dec_state + 1 if previous else 1
         value = "alpha" if step == 1 else ""
         if step == 3:
-            value = " beta" if kwargs["keep_all_outputs"] else " delta"
+            value = " beta" if kwargs["keep_all_outputs"] else "delta"
         hyp = Hypothesis(y_sequence=torch.tensor([ord(c) for c in value]), dec_state=step)
         return None, [hyp], *models.asr.encoder.get_initial_cache_state(batch_size=1), [hyp]
 
@@ -658,6 +658,51 @@ def test_finalized_candidate_reconciliation_remains_required_during_silence(
     assert session.selection.owner is None
     assert session._speaker_states[3].pending
     # No active candidate remains, but real quiet must still reconcile the
-    # suffix already consumed by the finalized utterance.
-    with pytest.raises(RuntimeError, match="revised finalized audio"):
+    # suffix already consumed by the finalized utterance. Real audio that
+    # decodes differently is kept as new words, not a session failure.
+    session._feed(bytes(5120))
+    assert not session._speaker_states[3].pending
+    assert session._speaker_states[3].emitted == [ord(c) for c in "delta"]
+
+
+@pytest.mark.parametrize("owner", [None, 3])
+def test_utterance_keeps_words_decoded_just_before_its_speaker_is_active(_streaming_models, monkeypatch, owner):
+    import torch
+    from nemo.collections.asr.parts.utils.rnnt_utils import Hypothesis
+    from speaker_stt._inference import _Session
+
+    models, activity, _calls, _masks, _allocations, _text = _streaming_models
+    words = {1: "earlier", 2: "what", 3: " time"}
+
+    def decode(**kwargs):
+        previous = kwargs["previous_hypotheses"]
+        step = previous[0].dec_state + 1 if previous else 1
+        value = "" if kwargs["keep_all_outputs"] else words.get(step, "")
+        hyp = Hypothesis(y_sequence=torch.tensor([ord(c) for c in value]), dec_state=step)
+        return None, [hyp], *models.asr.encoder.get_initial_cache_state(batch_size=1), [hyp]
+
+    monkeypatch.setattr(models.asr, "conformer_stream_step", decode)
+    session = _Session(models, _SpeakerConfig(mode="always_on", silence_duration=0.16), audio_origin_us=0)
+    session.selection.owner = owner
+    events = []
+    # Diarization marks the speaker active a step after their first word. A
+    # word older than one silence_duration belongs to no utterance.
+    for speakers in ([], [], [3], [], []):
+        activity[:] = speakers
+        events.extend(session._feed(bytes(5120)))
+    kind = "one_shot" if owner is None else "transcript"
+    assert [e["text"] for e in events if e["kind"] == kind] == ["what time"]
+
+
+def test_final_padding_stays_attributed_to_the_finishing_speaker(_streaming_models):
+    from speaker_stt._inference import _Session
+
+    models, activity, calls, masks, _allocations, text = _streaming_models
+    session = _Session(models, _SpeakerConfig(mode="always_on", silence_duration=0.16), audio_origin_us=0)
+    text[0] = "talking"
+    for speakers in ([3, 5], []):
+        activity[:] = speakers
         session._feed(bytes(5120))
+    padding = [mask for call, mask in zip(calls, masks, strict=True) if call["keep_all_outputs"]]
+    assert len(padding) == 2 * models.final_padding_hops
+    assert all(target.all() and not others.any() for target, others in padding)

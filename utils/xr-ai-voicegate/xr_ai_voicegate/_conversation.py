@@ -76,26 +76,31 @@ class _ControlMatcher:
         self._words = ""
 
     def _feed(self, text: str, *, key: object, at_s: float) -> str | None:
-        words = _normalize(text)
+        # Fragments join on letters, not words: an utterance boundary can fall
+        # inside a word ("hey ag" + "ent, let's start talking").
+        words = _normalize(text).replace(" ", "")
         if not words:
             self._reset()
             return None
-        controls = {"start": _normalize(self.cfg.start_phrase), "stop": _normalize(self.cfg.stop_phrase)}
+        controls = {
+            "start": _normalize(self.cfg.start_phrase).replace(" ", ""),
+            "stop": _normalize(self.cfg.stop_phrase).replace(" ", ""),
+        }
         if self._words and (key != self._key or not 0 <= at_s - self._started_s <= self.cfg.phrase_window_s):
             self._reset()
-        combined = f"{self._words} {words}" if self._words else words
+        combined = self._words + words
         for action, phrase in controls.items():
             if words == phrase or combined == phrase:
                 self._reset()
                 return action
-        if any(phrase.startswith(combined + " ") for phrase in controls.values()):
+        if any(phrase.startswith(combined) for phrase in controls.values()):
             if not self._words:
                 self._started_s = at_s
             self._words = combined
             self._key = key
             return "pending"
         self._reset()
-        if any(phrase.startswith(words + " ") for phrase in controls.values()):
+        if any(phrase.startswith(words) for phrase in controls.values()):
             self._words = words
             self._key = key
             self._started_s = at_s
