@@ -215,7 +215,7 @@ def test_sample_uses_named_native_agents_and_shared_connection_client() -> None:
         "instruments.py",
     } <= {path.name for path in package.glob("*.py")}
     assert "xr-ai-agent-runtime" in dependencies
-    assert "Pillow>=10.1.0" in dependencies
+    assert "Pillow>=13.0.0" in dependencies
     assert "xr-ai-tools[frames,marker-tracking,vision]" in dependencies
     assert "xr-ai-voice" in dependencies
     assert "xr-ai-web-events" in dependencies
