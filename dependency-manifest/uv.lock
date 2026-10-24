@@ -33,6 +33,12 @@ conflicts = [[
 [options]
 exclude-newer = "2026-10-22T21:39:43Z"
 
+[manifest]
+overrides = [
+    { name = "hydra-core", specifier = "==1.3.7" },
+    { name = "lightning", specifier = "==2.6.6" },
+]
+
 [[package]]
 name = "absl-py"
 version = "2.5.1"
@@ -50,7 +56,7 @@ dependencies = [
     { name = "huggingface-hub" },
     { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
-    { name = "packaging", version = "24.2", source = { registry = "https://pypi.org/simple" } },
+    { name = "packaging" },
     { name = "psutil" },
     { name = "pyyaml" },
     { name = "safetensors" },
@@ -189,7 +195,7 @@ dependencies = [
     { name = "humanize" },
     { name = "msgspec" },
     { name = "overrides" },
-    { name = "packaging", version = "24.2", source = { registry = "https://pypi.org/simple" } },
+    { name = "packaging" },
     { name = "pydantic" },
     { name = "python-dateutil" },
     { name = "pyyaml" },
@@ -1213,12 +1219,12 @@ source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "dill" },
     { name = "filelock" },
-    { name = "fsspec", version = "2025.12.0", source = { registry = "https://pypi.org/simple" }, extra = ["http"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
+    { name = "fsspec", version = "2026.7.0", source = { registry = "https://pypi.org/simple" }, extra = ["http"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
     { name = "huggingface-hub" },
     { name = "multiprocess" },
     { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
-    { name = "packaging", version = "24.2", source = { registry = "https://pypi.org/simple" } },
+    { name = "packaging" },
     { name = "pandas" },
     { name = "pyarrow" },
     { name = "pyyaml" },
@@ -1631,7 +1637,7 @@ dependencies = [
     { name = "nvidia-cudnn-frontend" },
     { name = "nvidia-cutlass-dsl" },
     { name = "nvidia-ml-py" },
-    { name = "packaging", version = "26.3", source = { registry = "https://pypi.org/simple" } },
+    { name = "packaging" },
     { name = "requests" },
     { name = "tabulate" },
     { name = "torch" },
@@ -1758,7 +1764,7 @@ wheels = [
 
 [[package]]
 name = "fsspec"
-version = "2025.12.0"
+version = "2026.7.0"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
     "python_full_version >= '3.13' and sys_platform == 'win32'",
@@ -1771,9 +1777,9 @@ resolution-markers = [
     "python_full_version < '3.12' and sys_platform == 'emscripten'",
     "python_full_version < '3.12' and sys_platform != 'emscripten' and sys_platform != 'win32'",
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/b6/27/954057b0d1f53f086f681755207dda6de6c660ce133c829158e8e8fe7895/fsspec-2025.12.0.tar.gz", hash = "sha256:c505de011584597b1060ff778bb664c1bc022e87921b0e4f10cc9c44f9635973", size = 309748, upload-time = "2025-12-03T15:23:42.687Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/00/78/f34251dadb8f3921264a1d9b8946f5e542014ee2614b285261b4e40e6775/fsspec-2026.7.0.tar.gz", hash = "sha256:c803c40f4cf860b49dea58ee3e1c33cb9c790520e233537e1340049f89b82a88", size = 317040, upload-time = "2026-07-28T16:34:51.052Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/51/c7/b64cae5dba3a1b138d7123ec36bb5ccd39d39939f18454407e5468f4763f/fsspec-2025.12.0-py3-none-any.whl", hash = "sha256:8bf1fe301b7d8acfa6e8571e3b1c3d158f909666642431cc78a1b7b4dbc5ec5b", size = 201422, upload-time = "2025-12-03T15:23:41.434Z" },
+    { url = "https://files.pythonhosted.org/packages/fd/3c/6a2bf344106328fd04963664a60b9bb6496fc25df8e962fcdc1367285fb9/fsspec-2026.7.0-py3-none-any.whl", hash = "sha256:b57ddbafedfaef7018c1ecab32aa200a9d7ca26b77965f64e48b70061249d279", size = 206583, upload-time = "2026-07-28T16:34:49.538Z" },
 ]
 
 [package.optional-dependencies]
@@ -2047,12 +2053,11 @@ source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click", marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository' or extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
     { name = "filelock", marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository' or extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
-    { name = "fsspec", version = "2025.12.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
+    { name = "fsspec", version = "2026.7.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
     { name = "fsspec", version = "2026.9.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
     { name = "hf-xet", marker = "(platform_machine == 'AMD64' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (platform_machine == 'AMD64' and extra == 'extra-25-xr-ai-dependency-manifest-vllm') or (platform_machine == 'ARM64' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (platform_machine == 'ARM64' and extra == 'extra-25-xr-ai-dependency-manifest-vllm') or (platform_machine == 'aarch64' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (platform_machine == 'aarch64' and extra == 'extra-25-xr-ai-dependency-manifest-vllm') or (platform_machine == 'amd64' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (platform_machine == 'amd64' and extra == 'extra-25-xr-ai-dependency-manifest-vllm') or (platform_machine == 'arm64' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (platform_machine == 'arm64' and extra == 'extra-25-xr-ai-dependency-manifest-vllm') or (platform_machine == 'x86_64' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (platform_machine == 'x86_64' and extra == 'extra-25-xr-ai-dependency-manifest-vllm') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
     { name = "httpx2", marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository' or extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
-    { name = "packaging", version = "24.2", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
-    { name = "packaging", version = "26.3", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
+    { name = "packaging", marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository' or extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
     { name = "pyyaml", marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository' or extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
     { name = "tqdm", marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository' or extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
     { name = "typing-extensions", marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository' or extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
@@ -2106,16 +2111,16 @@ cu13 = [
 
 [[package]]
 name = "hydra-core"
-version = "1.3.2"
+version = "1.3.7"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "antlr4-python3-runtime" },
     { name = "omegaconf" },
-    { name = "packaging", version = "24.2", source = { registry = "https://pypi.org/simple" } },
+    { name = "packaging" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/6d/8e/07e42bc434a847154083b315779b0a81d567154504624e181caf2c71cd98/hydra-core-1.3.2.tar.gz", hash = "sha256:8a878ed67216997c3e9d88a8e72e7b4767e81af37afb4ea3334b269a4390a824", size = 3263494, upload-time = "2023-02-23T18:33:43.03Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/5c/a9/fe2c936f36881e3197a8800f5bfba078d7846d54eb5d009b445eda1ee281/hydra_core-1.3.7.tar.gz", hash = "sha256:d4ff629c7e23b64a9db5fe5b027cf7c55b633b737f03be51ef41b77ed016f75e", size = 3278662, upload-time = "2026-09-14T18:02:55.528Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c6/50/e0edd38dcd63fb26a8547f13d28f7a008bc4a3fd4eb4ff030673f22ad41a/hydra_core-1.3.2-py3-none-any.whl", hash = "sha256:fa0238a9e31df3373b35b0bfb672c34cc92718d21f81311d8996a16de1141d8b", size = 154547, upload-time = "2023-02-23T18:33:40.801Z" },
+    { url = "https://files.pythonhosted.org/packages/25/0c/21890c10cc94da917c8e47efc1c55cd3e56a1d25ab5947bdd35abaf9fdc1/hydra_core-1.3.7-py3-none-any.whl", hash = "sha256:83606c4a05c770f1e026e0489875f28989829d151799eabd8cfa8cbe82164515", size = 168790, upload-time = "2026-09-14T18:02:53.661Z" },
 ]
 
 [[package]]
@@ -2584,7 +2589,7 @@ name = "lazy-loader"
 version = "0.6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "packaging", version = "24.2", source = { registry = "https://pypi.org/simple" } },
+    { name = "packaging" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/19/8c/0f2ff2a8b7513e68871a74740c17a504b0488c679b379e6445ebb7bd78dc/lazy_loader-0.6.tar.gz", hash = "sha256:2f4b7824d6401958639008a0cae20c776b61dff619accd6890693e2de8260167", size = 18438, upload-time = "2026-09-21T21:31:32.982Z" }
 wheels = [
@@ -2602,7 +2607,7 @@ dependencies = [
     { name = "intervaltree" },
     { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
-    { name = "packaging", version = "24.2", source = { registry = "https://pypi.org/simple" } },
+    { name = "packaging" },
     { name = "pyyaml" },
     { name = "soundfile" },
     { name = "tabulate" },
@@ -2676,12 +2681,12 @@ wheels = [
 
 [[package]]
 name = "lightning"
-version = "2.4.0"
-source = { git = "https://github.com/Lightning-AI/pytorch-lightning?tag=2.4.0#2129fdf3622e39ba46be4e1139af408e7e951cf3" }
+version = "2.6.6"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "fsspec", version = "2025.12.0", source = { registry = "https://pypi.org/simple" }, extra = ["http"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
+    { name = "fsspec", version = "2026.7.0", source = { registry = "https://pypi.org/simple" }, extra = ["http"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
     { name = "lightning-utilities" },
-    { name = "packaging", version = "24.2", source = { registry = "https://pypi.org/simple" } },
+    { name = "packaging" },
     { name = "pytorch-lightning" },
     { name = "pyyaml" },
     { name = "torch" },
@@ -2689,13 +2694,17 @@ dependencies = [
     { name = "tqdm" },
     { name = "typing-extensions" },
 ]
+sdist = { url = "https://files.pythonhosted.org/packages/39/b8/fbf1469d917c3ed3b22e00ab3a852fb9a5f85b9dc7f7060eedc3449098e7/lightning-2.6.6.tar.gz", hash = "sha256:1c6329e241f8a85f29fedead89c1ee138b36caa08de60c260c6a7eaee81c8295", size = 659902, upload-time = "2026-09-10T09:41:03.009Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/12/43/7da7fe42f254ce57777d1a86eece3f86d1b3329fc568d48e2bc16c8b7ebc/lightning-2.6.6-py3-none-any.whl", hash = "sha256:2bcbd6ee840071cd076c7dc9953d7ac1040df92f1c5fa76583aae644f037ab85", size = 849265, upload-time = "2026-09-10T09:41:00.882Z" },
+]
 
 [[package]]
 name = "lightning-utilities"
 version = "0.15.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "packaging", version = "24.2", source = { registry = "https://pypi.org/simple" } },
+    { name = "packaging" },
     { name = "typing-extensions" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/f1/45/7fa8f56b17dc0f0a41ec70dd307ecd6787254483549843bef4c30ab5adce/lightning_utilities-0.15.3.tar.gz", hash = "sha256:792ae0204c79f6859721ac7f386c237a33b0ed06ba775009cb894e010a842033", size = 33553, upload-time = "2026-02-22T14:48:53.348Z" }
@@ -2796,7 +2805,7 @@ version = "0.11.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "interegular" },
-    { name = "packaging", version = "26.3", source = { registry = "https://pypi.org/simple" } },
+    { name = "packaging" },
     { name = "pydantic" },
     { name = "pyyaml" },
 ]
@@ -2920,8 +2929,10 @@ version = "0.1.0"
 source = { editable = "../services/magpie-tts" }
 dependencies = [
     { name = "fastapi" },
+    { name = "fsspec", version = "2026.7.0", source = { registry = "https://pypi.org/simple" } },
     { name = "hf-xet" },
     { name = "huggingface-hub" },
+    { name = "hydra-core" },
     { name = "lightning" },
     { name = "multidict" },
     { name = "nemo-toolkit", extra = ["tts"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
@@ -2940,9 +2951,11 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.111" },
+    { name = "fsspec", specifier = ">=2026.6.0" },
     { name = "hf-xet", specifier = ">=1.1.2,<2.0.0" },
     { name = "huggingface-hub", specifier = ">=0.32.0" },
-    { name = "lightning", git = "https://github.com/Lightning-AI/pytorch-lightning?tag=2.4.0" },
+    { name = "hydra-core", specifier = ">=1.3.7" },
+    { name = "lightning", git = "https://github.com/Lightning-AI/pytorch-lightning?rev=771017e4f39b314b49abd4a1d65905c74268d248" },
     { name = "multidict", specifier = ">=6.9.1" },
     { name = "nemo-toolkit", extras = ["tts"], specifier = ">=2.5" },
     { name = "numpy", specifier = ">=1.24" },
@@ -3047,7 +3060,7 @@ dependencies = [
     { name = "kiwisolver" },
     { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
-    { name = "packaging", version = "24.2", source = { registry = "https://pypi.org/simple" } },
+    { name = "packaging" },
     { name = "pillow", version = "12.3.0", source = { registry = "https://pypi.org/simple" } },
     { name = "pyparsing" },
     { name = "python-dateutil" },
@@ -3404,7 +3417,7 @@ dependencies = [
     { name = "cuda-pathfinder" },
     { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-vllm') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-vllm') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
-    { name = "packaging", version = "26.3", source = { registry = "https://pypi.org/simple" } },
+    { name = "packaging" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ad/74/86fc2839835b6fc60e99dd459fe3b673390159c52afb14658e74bc03734b/nccl4py-0.6.0-cp311-cp311-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:db38bdd6c1df2f915eebb75aef16e7a3b968bb1b6767e6019a1e194187fdad16", size = 3693333, upload-time = "2026-09-23T17:13:27.644Z" },
@@ -3461,7 +3474,7 @@ source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aistore" },
     { name = "cuda-bindings", marker = "sys_platform != 'darwin'" },
-    { name = "fsspec", version = "2025.12.0", source = { registry = "https://pypi.org/simple" } },
+    { name = "fsspec", version = "2026.7.0", source = { registry = "https://pypi.org/simple" } },
     { name = "huggingface-hub" },
     { name = "numba", marker = "sys_platform == 'darwin'" },
     { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
@@ -3496,7 +3509,7 @@ asr = [
     { name = "nv-one-logger-pytorch-lightning-integration" },
     { name = "nv-one-logger-training-telemetry" },
     { name = "omegaconf" },
-    { name = "packaging", version = "24.2", source = { registry = "https://pypi.org/simple" } },
+    { name = "packaging" },
     { name = "pandas" },
     { name = "sacrebleu" },
     { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.12' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
@@ -3528,7 +3541,7 @@ tts = [
     { name = "nv-one-logger-pytorch-lightning-integration" },
     { name = "nv-one-logger-training-telemetry" },
     { name = "omegaconf" },
-    { name = "packaging", version = "24.2", source = { registry = "https://pypi.org/simple" } },
+    { name = "packaging" },
     { name = "pandas" },
     { name = "pyopenjtalk" },
     { name = "pypinyin" },
@@ -4448,7 +4461,7 @@ dependencies = [
     { name = "flatbuffers" },
     { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
-    { name = "packaging", version = "24.2", source = { registry = "https://pypi.org/simple" } },
+    { name = "packaging" },
     { name = "protobuf", version = "6.33.5", source = { registry = "https://pypi.org/simple" } },
     { name = "sympy" },
 ]
@@ -4753,42 +4766,8 @@ wheels = [
 
 [[package]]
 name = "packaging"
-version = "24.2"
-source = { registry = "https://pypi.org/simple" }
-resolution-markers = [
-    "python_full_version >= '3.13' and sys_platform == 'win32'",
-    "python_full_version >= '3.13' and sys_platform == 'emscripten'",
-    "python_full_version >= '3.13' and sys_platform != 'emscripten' and sys_platform != 'win32'",
-    "python_full_version == '3.12.*' and sys_platform == 'win32'",
-    "python_full_version == '3.12.*' and sys_platform == 'emscripten'",
-    "python_full_version == '3.12.*' and sys_platform != 'emscripten' and sys_platform != 'win32'",
-    "python_full_version < '3.12' and sys_platform == 'win32'",
-    "python_full_version < '3.12' and sys_platform == 'emscripten'",
-    "python_full_version < '3.12' and sys_platform != 'emscripten' and sys_platform != 'win32'",
-]
-sdist = { url = "https://files.pythonhosted.org/packages/d0/63/68dbb6eb2de9cb10ee4c9c14a0148804425e13c4fb20d61cce69f53106da/packaging-24.2.tar.gz", hash = "sha256:c228a6dc5e932d346bc5739379109d49e8853dd8223571c7c5b55260edc0b97f", size = 163950, upload-time = "2024-11-08T09:47:47.202Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/88/ef/eb23f262cca3c0c4eb7ab1933c3b1f03d021f2c48f54763065b6f0e321be/packaging-24.2-py3-none-any.whl", hash = "sha256:09abb1bccd265c01f4a3aa3f7a7db064b36514d2cba19a2f694fe6150451a759", size = 65451, upload-time = "2024-11-08T09:47:44.722Z" },
-]
-
-[[package]]
-name = "packaging"
 version = "26.3"
 source = { registry = "https://pypi.org/simple" }
-resolution-markers = [
-    "python_full_version >= '3.13' and platform_machine == 's390x' and sys_platform == 'darwin'",
-    "python_full_version == '3.12.*' and platform_machine == 's390x' and sys_platform == 'darwin'",
-    "python_full_version >= '3.13' and platform_machine == 's390x' and sys_platform != 'darwin'",
-    "python_full_version == '3.12.*' and platform_machine == 's390x' and sys_platform != 'darwin'",
-    "python_full_version >= '3.13' and platform_machine != 's390x' and sys_platform == 'darwin'",
-    "python_full_version == '3.12.*' and platform_machine != 's390x' and sys_platform == 'darwin'",
-    "python_full_version >= '3.13' and platform_machine != 's390x' and sys_platform != 'darwin'",
-    "python_full_version == '3.12.*' and platform_machine != 's390x' and sys_platform != 'darwin'",
-    "python_full_version < '3.12' and platform_machine == 's390x' and sys_platform == 'darwin'",
-    "python_full_version < '3.12' and platform_machine == 's390x' and sys_platform != 'darwin'",
-    "python_full_version < '3.12' and platform_machine != 's390x' and sys_platform == 'darwin'",
-    "python_full_version < '3.12' and platform_machine != 's390x' and sys_platform != 'darwin'",
-]
 sdist = { url = "https://files.pythonhosted.org/packages/7d/fa/3944b40b07da9ce895c0e6303a5ab7d53da063554f534556b134a54d6093/packaging-26.3.tar.gz", hash = "sha256:94edc256424af38762eb31306eed28beb9f0efc50a8837492c9d6fd6004aed79", size = 313412, upload-time = "2026-08-04T18:15:28.737Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/63/34/ba1c580383c9eada3711951fef0795c80b829a078d72188184bcab9dd527/packaging-26.3-py3-none-any.whl", hash = "sha256:d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c", size = 129956, upload-time = "2026-08-04T18:15:27.159Z" },
@@ -5076,7 +5055,7 @@ name = "pooch"
 version = "1.9.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "packaging", version = "24.2", source = { registry = "https://pypi.org/simple" } },
+    { name = "packaging" },
     { name = "platformdirs" },
     { name = "requests" },
 ]
@@ -5721,7 +5700,7 @@ source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "colorama", marker = "sys_platform == 'win32'" },
     { name = "iniconfig" },
-    { name = "packaging", version = "24.2", source = { registry = "https://pypi.org/simple" } },
+    { name = "packaging" },
     { name = "pluggy" },
     { name = "pygments" },
 ]
@@ -5788,9 +5767,9 @@ name = "pytorch-lightning"
 version = "2.6.6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "fsspec", version = "2025.12.0", source = { registry = "https://pypi.org/simple" }, extra = ["http"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
+    { name = "fsspec", version = "2026.7.0", source = { registry = "https://pypi.org/simple" }, extra = ["http"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
     { name = "lightning-utilities" },
-    { name = "packaging", version = "24.2", source = { registry = "https://pypi.org/simple" } },
+    { name = "packaging" },
     { name = "pyyaml" },
     { name = "torch" },
     { name = "torchmetrics" },
@@ -6521,7 +6500,7 @@ name = "silero-vad"
 version = "6.2.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "packaging", version = "24.2", source = { registry = "https://pypi.org/simple" } },
+    { name = "packaging" },
     { name = "torch" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/32/17/df6bfc8f659fc5c1e082c18275be67c5a581bd2d07734a65b141fc983ccf/silero_vad-6.2.3.tar.gz", hash = "sha256:d7a23b09202be4953915cb9173089bb307eed0418a9bd4794d9ec5af07fa1996", size = 29276676, upload-time = "2026-09-23T11:37:22.208Z" }
@@ -6744,8 +6723,10 @@ version = "0.1.0"
 source = { editable = "../services/stt-server" }
 dependencies = [
     { name = "fastapi" },
+    { name = "fsspec", version = "2026.7.0", source = { registry = "https://pypi.org/simple" } },
     { name = "hf-xet" },
     { name = "huggingface-hub" },
+    { name = "hydra-core" },
     { name = "lightning" },
     { name = "multidict" },
     { name = "nemo-toolkit", extra = ["asr"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
@@ -6762,9 +6743,11 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.111" },
+    { name = "fsspec", specifier = ">=2026.6.0" },
     { name = "hf-xet", specifier = ">=1.1.2,<2.0.0" },
     { name = "huggingface-hub", specifier = ">=0.32.0" },
-    { name = "lightning", git = "https://github.com/Lightning-AI/pytorch-lightning?tag=2.4.0" },
+    { name = "hydra-core", specifier = ">=1.3.7" },
+    { name = "lightning", git = "https://github.com/Lightning-AI/pytorch-lightning?rev=771017e4f39b314b49abd4a1d65905c74268d248" },
     { name = "multidict", specifier = ">=6.9.1" },
     { name = "nemo-toolkit", extras = ["asr"], specifier = ">=2.5" },
     { name = "python-multipart", specifier = ">=0.0.9" },
@@ -6889,7 +6872,7 @@ dependencies = [
     { name = "markdown" },
     { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
-    { name = "packaging", version = "24.2", source = { registry = "https://pypi.org/simple" } },
+    { name = "packaging" },
     { name = "pillow", version = "12.3.0", source = { registry = "https://pypi.org/simple" } },
     { name = "protobuf", version = "6.33.5", source = { registry = "https://pypi.org/simple" } },
     { name = "setuptools" },
@@ -7120,7 +7103,7 @@ dependencies = [
     { name = "cuda-bindings", marker = "(sys_platform == 'linux' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (sys_platform == 'linux' and extra == 'extra-25-xr-ai-dependency-manifest-vllm') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
     { name = "cuda-toolkit", extra = ["cublas", "cudart", "cufft", "cufile", "cupti", "curand", "cusolver", "cusparse", "nvjitlink", "nvrtc", "nvtx"], marker = "(sys_platform == 'linux' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (sys_platform == 'linux' and extra == 'extra-25-xr-ai-dependency-manifest-vllm') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
     { name = "filelock", marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository' or extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
-    { name = "fsspec", version = "2025.12.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
+    { name = "fsspec", version = "2026.7.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
     { name = "fsspec", version = "2026.9.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
     { name = "jinja2", marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository' or extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
     { name = "networkx", version = "3.6.1", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.12' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (python_full_version < '3.12' and extra == 'extra-25-xr-ai-dependency-manifest-vllm') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
@@ -7222,7 +7205,7 @@ dependencies = [
     { name = "lightning-utilities" },
     { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
-    { name = "packaging", version = "24.2", source = { registry = "https://pypi.org/simple" } },
+    { name = "packaging" },
     { name = "torch" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/81/34/39b8b749333db56c0585d7a11fa62a283c087bb1dfc897d69fb8cedbefb1/torchmetrics-1.9.0.tar.gz", hash = "sha256:a488609948600df52d3db4fcdab02e62aab2a85ef34da67037dc3e65b8512faa", size = 581765, upload-time = "2026-03-09T17:41:22.443Z" }
@@ -7276,8 +7259,7 @@ dependencies = [
     { name = "huggingface-hub", marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository' or extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
     { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (python_full_version < '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-vllm') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (python_full_version >= '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-vllm') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
-    { name = "packaging", version = "24.2", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
-    { name = "packaging", version = "26.3", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
+    { name = "packaging", marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository' or extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
     { name = "pyyaml", marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository' or extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
     { name = "regex", marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository' or extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
     { name = "safetensors", marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository' or extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
@@ -7611,7 +7593,7 @@ dependencies = [
     { name = "opentelemetry-api" },
     { name = "opentelemetry-exporter-otlp-proto-http" },
     { name = "opentelemetry-sdk" },
-    { name = "packaging", version = "24.2", source = { registry = "https://pypi.org/simple" } },
+    { name = "packaging" },
     { name = "platformdirs" },
     { name = "protobuf", version = "6.33.5", source = { registry = "https://pypi.org/simple" } },
     { name = "pydantic" },

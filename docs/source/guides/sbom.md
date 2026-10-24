@@ -47,7 +47,9 @@ This SBOM describes the **qualified dependency snapshot**, which changes during
 qualification refreshes and targeted security updates. Ordinary project changes
 can precede the next snapshot refresh. The Python lock includes mutually
 exclusive environments and platform alternatives; their union is an inventory,
-not a claim that all packages can be installed together. Refer to
+not a claim that all packages can be installed together. The generator carries
+overrides from included projects into the inventory root and rejects
+conflicting specifications. Excluded projects retain separate local locks. Refer to
 [`DEPENDENCIES.md`](https://github.com/NVIDIA/xr-ai/blob/main/DEPENDENCIES.md)
 for snapshot refresh rules and dependency boundaries.
 
