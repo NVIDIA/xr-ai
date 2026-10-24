@@ -57,6 +57,7 @@ class _VLM:
         self.observation_started = asyncio.Event()
         self.observation_cleanup = asyncio.Event()
         self.release_observation_cleanup = asyncio.Event()
+        self.observation_cleaned = asyncio.Event()
 
     async def ask_images(self, images, question, **kwargs):
         self.observed_images.append((tuple(images), question))
@@ -67,6 +68,7 @@ class _VLM:
             except asyncio.CancelledError:
                 self.observation_cleanup.set()
                 await self.release_observation_cleanup.wait()
+                self.observation_cleaned.set()
                 raise
         if self.error is not None:
             raise self.error
@@ -464,12 +466,18 @@ async def test_both_paths_positive_publish_exactly_one_alert():
     assert not agent._jobs
 
 
-@pytest.mark.asyncio
-async def test_alert_is_published_before_sibling_cancellation_cleanup_finishes():
+def _slow_sibling_cleanup():
+    """Direct check confirms while the Cosmos check is stuck in cancellation cleanup."""
     vlm = _VLM()
     vlm.block_observation = True
     fast_gate = asyncio.Event()
     decisions = _Decisions("start", fast=("yes", 1.0), backup=("no", 1.0), fast_gate=fast_gate)
+    return vlm, fast_gate, decisions
+
+
+@pytest.mark.asyncio
+async def test_alert_is_announced_after_the_sibling_check_finishes():
+    vlm, fast_gate, decisions = _slow_sibling_cleanup()
     frames = _Frames((_open(), None))
     agent, output, _ = _agent(decisions, frames, vlm=vlm)
     await _start(agent)
@@ -477,11 +485,35 @@ async def test_alert_is_published_before_sibling_cancellation_cleanup_finishes()
     await asyncio.wait_for(vlm.observation_started.wait(), 1)
     fast_gate.set()
     await asyncio.wait_for(vlm.observation_cleanup.wait(), 1)
-    assert any(message.text == "Alert" for message, _ in output.messages)
-    assert not job.task.done()
+    assert not any(message.text == "Alert" for message, _ in output.messages)
     vlm.release_observation_cleanup.set()
     await asyncio.wait_for(job.task, 1)
+    assert sum(message.text == "Alert" for message, _ in output.messages) == 1
     assert not agent._jobs and frames.active == 0
+
+
+@pytest.mark.asyncio
+async def test_departure_during_sibling_cleanup_waits_for_that_cleanup():
+    vlm, fast_gate, decisions = _slow_sibling_cleanup()
+    agent, output, _ = _agent(decisions, _Frames((_open(), None)), vlm=vlm)
+    await _start(agent)
+    await asyncio.wait_for(vlm.observation_started.wait(), 1)
+    fast_gate.set()
+    await asyncio.wait_for(vlm.observation_cleanup.wait(), 1)
+    for _ in range(20):
+        await asyncio.sleep(0)
+
+    # Departure cancels the watch a second time while the losing check is still cleaning up.
+    leaving = asyncio.create_task(agent.participant_left("alice"))
+    for _ in range(5):
+        await asyncio.sleep(0)
+    assert not leaving.done() and not vlm.observation_cleaned.is_set()
+    vlm.release_observation_cleanup.set()
+    await asyncio.wait_for(leaving, 1)
+
+    assert vlm.observation_cleaned.is_set()
+    assert not agent._jobs
+    assert not any(message.text == "Alert" for message, _ in output.messages)
 
 
 @pytest.mark.asyncio
@@ -583,7 +615,7 @@ async def test_request_is_compiled_with_recent_exchanges_and_saved_context():
     assert _spoken(output) == ["I'll alert you once when the red cable is plugged in."]
     # The compiled watch, not the literal request, drives the checks.
     job = agent._jobs["alice"]
-    assert (job.condition, job.relevance) == ("the red cable is plugged in", "the red cable")
+    assert (job.alert.condition, job.alert.relevance) == ("the red cable is plugged in", "the red cable")
     await asyncio.wait_for(decisions.relevance_called.wait(), 1)
     relevance_call = next(call for call in decisions.calls if "relevant" in call[1])
     assert relevance_call[0]["relevance"] == "the red cable"

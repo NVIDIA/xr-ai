@@ -9,7 +9,7 @@ module.
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from dataclasses import replace
 from pathlib import Path
@@ -25,7 +25,10 @@ from xr_ai_conversation import (
 from xr_ai_logging import setup_logging
 from xr_ai_models import (
     DecisionService,
+    LLMService,
     ModelsConfig,
+    TTSService,
+    VLMService,
     load_models_config,
     make_decision,
     make_llm,
@@ -38,7 +41,7 @@ from xr_ai_tools.current_frame import CurrentFrameTool
 from xr_ai_tools.image import ImageRegistry
 from xr_ai_tools.vision import StreamingImageQueryTool
 from xr_ai_voice import VOICE_OUTPUT_TOPIC, HubVoiceTransport, VadConfig, VoiceAgent
-from xr_ai_voicegate import load_voice_gate_config
+from xr_ai_voicegate import VoiceGateConfig, load_voice_gate_config
 
 from ._alert_agent import ALERT_CAPABILITY_TOPIC, VisualAlertAgent
 from ._config import WorkerConfig
@@ -61,7 +64,12 @@ _CONVERSATION_SCOPE = (
 _PROMPTS = Path(__file__).parent / "prompts"
 _CONVERSATION_INSTRUCTIONS = (_PROMPTS / "conversation.txt").read_text(encoding="utf-8").strip()
 _NOTES_INSTRUCTIONS = (_PROMPTS / "note_taking.txt").read_text(encoding="utf-8").strip()
+_NOTES_SCOPE = (
+    "An explicitly started note-taking session for capturing and reviewing participant-authored notes. "
+    "It does not provide general knowledge or inspect current-camera content."
+)
 _NOTES_CONTEXT_TOPIC = Topic("conversation-example.foreground-notes", ConversationContextUpdate)
+ParticipantStep = Callable[[str], Awaitable[None]]
 
 
 def _acknowledgment_models(models: ModelsConfig) -> ModelsConfig:
@@ -130,29 +138,9 @@ async def run_app(
     decisions: DecisionService = make_decision(models, "router")
     vlm = make_vlm(models, "vlm")
     tts = make_tts(models, "tts")
-
-    # VoiceAgent owns transport, speech handling, readiness, and voice cleanup.
     transport = HubVoiceTransport()
-    voice = VoiceAgent.from_models(
-        query_topic=USER_QUERY_TOPIC,
-        models=models,
-        tts=tts,
-        vad=VadConfig(
-            silence_duration=config.silence_duration,
-            min_speech=config.min_speech,
-            silero_threshold=config.silero_threshold,
-        ),
-        voice_gate=voice_gate,
-        probes={"llm": llm.health, "router": decisions.health, "vlm": vlm.health},
-        ready_file=ready_file,
-        closeables=(vlm, decisions),
-        text_topic="vlm.response",
-        idle_timeout_secs=config.idle_timeout_secs,
-        transport=transport,
-        participant_joined_topic=PARTICIPANT_JOINED_TOPIC,
-        participant_left_topic=PARTICIPANT_LEFT_TOPIC,
-        interrupted_topic=INTERRUPTED_TOPIC,
-        interrupt_on_supersede=True,
+    voice = _voice_agent(
+        config, models, voice_gate, transport, tts=tts, llm=llm, decisions=decisions, vlm=vlm, ready_file=ready_file
     )
 
     # Current images remain on the hub path; the worker receives image references.
@@ -164,31 +152,10 @@ async def run_app(
         frame_max_age_s=config.frame_max_age_s,
         frame_timeout_s=config.frame_timeout_s,
     )
-    vision = StreamingImageQueryTool(
-        images=images,
-        vlm=vlm,
-        system_prompt=config.system_prompt,
-    )
-    context_sources = (*config.summary_context_topics, *config.incremental_context_topics)
-    section_budget_bytes = config.context_budget_bytes // (len(context_sources) + 1)
-    if section_budget_bytes <= 0:
-        raise ValueError("context_budget_bytes must provide a positive budget for dialogue and each context topic")
-    topic_budgets = {name: section_budget_bytes for name in context_sources}
+
     # General answers and focused notes use distinct instructions and their own context;
     # AgentRouter supplies shared turn history. This application owns both context managers.
-    context = ContextManager(
-        llm,
-        summary_context_topics=config.summary_context_topics,
-        incremental_context_topics=config.incremental_context_topics,
-        dialogue_budget_bytes=section_budget_bytes,
-        topic_budget_bytes=topic_budgets,
-        compaction_input_budget_bytes=config.compaction_input_budget_bytes,
-    )
-    notes_context = ContextManager(
-        llm,
-        dialogue_budget_bytes=config.context_budget_bytes,
-        compaction_input_budget_bytes=config.compaction_input_budget_bytes,
-    )
+    context, notes_context = _context_managers(config, llm)
     conversation = Conversation(
         llm,
         context=context,
@@ -201,68 +168,32 @@ async def run_app(
         llm,
         context=notes_context,
         instructions=_NOTES_INSTRUCTIONS,
-        routing=RoutingAid(
-            name="notes",
-            description=(
-                "An explicitly started note-taking session for capturing and reviewing participant-authored notes. "
-                "It does not provide general knowledge or inspect current-camera content."
-            ),
-        ),
+        routing=RoutingAid(name="notes", description=_NOTES_SCOPE),
         runtime=runtime,
         output_topic=VOICE_OUTPUT_TOPIC,
     )
-
-    async def publish_note_context(
-        participant_id: str,
-        update: ConversationContextUpdate,
-    ) -> None:
-        await runtime.publish(
-            _NOTES_CONTEXT_TOPIC,
-            update,
-            participant_id=participant_id,
-        )
-
-    async def publish_alert_capability(
-        participant_id: str,
-        update: ConversationContextUpdate,
-    ) -> None:
-        await runtime.publish(
-            ALERT_CAPABILITY_TOPIC,
-            update,
-            participant_id=participant_id,
-        )
-
-    async def publish_observation_context(
-        participant_id: str,
-        update: ConversationContextUpdate,
-    ) -> None:
-        await runtime.publish(
-            OBSERVATION_CONTEXT_TOPIC,
-            update,
-            participant_id=participant_id,
-        )
 
     # Each destination owns its tools, admission policy, and sample state.
     observation = VisualObservationAgent(
         frames,
-        vision,
-        publish_observation_context,
+        StreamingImageQueryTool(images=images, vlm=vlm, system_prompt=config.system_prompt),
+        _context_publisher(runtime, OBSERVATION_CONTEXT_TOPIC),
         runtime=runtime,
         output_topic=VOICE_OUTPUT_TOPIC,
     )
-    notes_agent = NoteTakingAgent(
+    notes = NoteTakingAgent(
         notes_conversation,
         decisions,
         runtime=runtime,
         output_topic=VOICE_OUTPUT_TOPIC,
         context_budget_bytes=config.context_budget_bytes,
-        publish_context=publish_note_context,
+        publish_context=_context_publisher(runtime, _NOTES_CONTEXT_TOPIC),
     )
     alerts = VisualAlertAgent(
         frames,
         images,
         decisions,
-        publish_alert_capability,
+        _context_publisher(runtime, ALERT_CAPABILITY_TOPIC),
         vlm=vlm,
         llm=llm,
         context=context,
@@ -272,34 +203,11 @@ async def run_app(
         confirm_interval_secs=config.alert_confirm_interval_secs,
     )
 
-    async def initialize_participant(participant_id: str) -> None:
-        await notes_agent.participant_joined(participant_id)
-        await alerts.participant_joined(participant_id)
-        await observation.participant_joined(participant_id)
-
-    async def cleanup_participant(participant_id: str) -> None:
-        # Routes used for turns are also cleaned by the router. These idempotent
-        # hooks cover resources initialized at join but never selected for a turn.
-        errors: list[Exception] = []
-        for cleanup in (notes_agent.participant_left, alerts.participant_left, context.clear, notes_context.clear):
-            try:
-                await cleanup(participant_id)
-            except Exception as error:  # noqa: BLE001 -- retain independent cleanup failures.
-                errors.append(error)
-        try:
-            frames.release(participant_id)
-        except Exception as error:  # noqa: BLE001 -- retain the frame owner failure too.
-            errors.append(error)
-        if errors:
-            raise ExceptionGroup(f"failed to clean up participant {participant_id!r}", errors)
+    async def release_frames(participant_id: str) -> None:
+        frames.release(participant_id)
 
     router = AgentRouter(
-        {
-            "conversation": conversation,
-            "observation": observation,
-            "alerts": alerts,
-            "notes": notes_agent,
-        },
+        {"conversation": conversation, "observation": observation, "alerts": alerts, "notes": notes},
         decisions,
         acknowledgment_llm=acknowledgment_llm,
         acknowledgment_delay_secs=config.acknowledgment_delay_secs,
@@ -308,8 +216,14 @@ async def run_app(
         participant_joined_topic=PARTICIPANT_JOINED_TOPIC,
         participant_left_topic=PARTICIPANT_LEFT_TOPIC,
         interrupted_topic=INTERRUPTED_TOPIC,
-        initialize_participant=initialize_participant,
-        cleanup_participant=cleanup_participant,
+        initialize_participant=_in_order(
+            notes.participant_joined, alerts.participant_joined, observation.participant_joined
+        ),
+        # Routes used for turns are also cleaned by the router. These idempotent hooks
+        # cover resources initialized at join but never selected for a turn.
+        cleanup_participant=_all_of(
+            notes.participant_left, alerts.participant_left, context.clear, notes_context.clear, release_frames
+        ),
         set_status=transport.endpoint.set_status,
     )
     # Only general conversation consumes the configured shared context sources.
@@ -337,3 +251,97 @@ async def run_app(
             await acknowledgment_llm.close()
         await llm.close()
     logger.info("conversation-example stopped")
+
+
+def _voice_agent(
+    config: WorkerConfig,
+    models: ModelsConfig,
+    voice_gate: VoiceGateConfig,
+    transport: HubVoiceTransport,
+    *,
+    tts: TTSService,
+    llm: LLMService,
+    decisions: DecisionService,
+    vlm: VLMService,
+    ready_file: Path | None,
+) -> VoiceAgent:
+    """Build the voice front end; it owns transport, speech handling, readiness, and voice cleanup."""
+
+    return VoiceAgent.from_models(
+        query_topic=USER_QUERY_TOPIC,
+        models=models,
+        tts=tts,
+        vad=VadConfig(
+            silence_duration=config.silence_duration,
+            min_speech=config.min_speech,
+            silero_threshold=config.silero_threshold,
+        ),
+        voice_gate=voice_gate,
+        probes={"llm": llm.health, "router": decisions.health, "vlm": vlm.health},
+        ready_file=ready_file,
+        closeables=(vlm, decisions),
+        text_topic="vlm.response",
+        idle_timeout_secs=config.idle_timeout_secs,
+        transport=transport,
+        participant_joined_topic=PARTICIPANT_JOINED_TOPIC,
+        participant_left_topic=PARTICIPANT_LEFT_TOPIC,
+        interrupted_topic=INTERRUPTED_TOPIC,
+        interrupt_on_supersede=True,
+    )
+
+
+def _context_managers(config: WorkerConfig, llm: LLMService) -> tuple[ContextManager, ContextManager]:
+    """Return general context, which reads the configured topics, and private note-session context."""
+
+    sources = (*config.summary_context_topics, *config.incremental_context_topics)
+    # Dialogue and each context topic get an equal share of the budget.
+    section_budget_bytes = config.context_budget_bytes // (len(sources) + 1)
+    if section_budget_bytes <= 0:
+        raise ValueError("context_budget_bytes must provide a positive budget for dialogue and each context topic")
+    general = ContextManager(
+        llm,
+        summary_context_topics=config.summary_context_topics,
+        incremental_context_topics=config.incremental_context_topics,
+        dialogue_budget_bytes=section_budget_bytes,
+        topic_budget_bytes={name: section_budget_bytes for name in sources},
+        compaction_input_budget_bytes=config.compaction_input_budget_bytes,
+    )
+    notes = ContextManager(
+        llm,
+        dialogue_budget_bytes=config.context_budget_bytes,
+        compaction_input_budget_bytes=config.compaction_input_budget_bytes,
+    )
+    return general, notes
+
+
+def _context_publisher(
+    runtime: AgentRuntime, topic: Topic[ConversationContextUpdate]
+) -> Callable[[str, ConversationContextUpdate], Awaitable[None]]:
+    async def publish(participant_id: str, update: ConversationContextUpdate) -> None:
+        await runtime.publish(topic, update, participant_id=participant_id)
+
+    return publish
+
+
+def _in_order(*steps: ParticipantStep) -> ParticipantStep:
+    async def run(participant_id: str) -> None:
+        for step in steps:
+            await step(participant_id)
+
+    return run
+
+
+def _all_of(*steps: ParticipantStep) -> ParticipantStep:
+    """Run every step even when one fails, then raise the failures together."""
+
+    async def run(participant_id: str) -> None:
+        errors: list[Exception] = []
+        for step in steps:
+            try:
+                await step(participant_id)
+            except Exception as error:  # noqa: BLE001 -- retain independent cleanup failures.
+                errors.append(error)
+        if errors:
+            raise ExceptionGroup(f"failed to clean up participant {participant_id!r}", errors)
+
+    return run

@@ -82,8 +82,9 @@ Each job then checks frames in a paced loop. A cheap Clef image call screens eve
 frame for whether the relevance subject may be visible, and a frame it rejects
 costs nothing more. Only a screened frame runs the two condition checks in
 parallel: a direct Clef image decision and a Cosmos observation that Clef judges
-as text. The first yes owns the triggering frame, and only one complete “Alert”
-voice update is published as urgent. The agent then asks Cosmos for a short
+as text. The first yes owns the triggering frame; the other check is cancelled,
+and its cleanup finishes before only one complete “Alert” voice update is
+published as urgent. The agent then asks Cosmos for a short
 description of relevant evidence from that same frame and publishes it as one
 non-urgent update once the model has finished, then stops. The description does
 not cut the announcement.
@@ -95,7 +96,8 @@ other available; if both fail, or the screen or frame capture fails, the job
 retires with a concise failure message. Only an explicit new alert request
 replaces an existing job. “Cancel the visual alert” cancels it. Ordinary
 questions and fragments are not alert controls. Each participant owns an
-independent job; departure and worker shutdown cancel and drain its work.
+independent job; departure and worker shutdown cancel its work and wait for that
+cleanup to finish, even if they are cancelled themselves while waiting.
 
 The backup judge sees Cosmos's text description rather than the image, so it
 can miss evidence or repeat a description error. Neither path guarantees visual
@@ -193,8 +195,11 @@ The worker package is under
 | `_config.py` | Resolves worker, model, voice-gate, and prompt settings |
 | `prompts/note_control.txt` | Note action instructions for dictation, question handoff, readback, and finish |
 | `_note_taking.py` | Implements the sample-owned focused note-taking destination |
-| `_alert_agent.py` | Owns one-shot background visual alerts: screening, confirmation, and pacing |
+| `_alert_agent.py` | Owns one-shot background visual alerts: requests, the paced watch, announcement, and job lifecycle |
 | `_alert_compile.py` | Compiles an alert request and the participant's context into a watch |
+| `_alert_checks.py` | Screens a frame for relevance and races the two condition checks on it |
+| `_decisions.py` | Asks Clef one traced question and rejects a choice outside its criteria |
+| `_tasks.py` | Waits for owned tasks without letting caller cancellation interrupt their cleanup |
 | `_visual_agents.py` | Implements direct current-image observation |
 | `prompts/system.txt` | Defines the default VLM instruction |
 | `prompts/alert_control.txt`, `prompts/alert_compile.txt`, `prompts/alert_relevance.txt`, `prompts/alert_condition.txt`, `prompts/alert_description.txt` | Start/cancel admission, request compilation, frame screening, and evidence matching |
