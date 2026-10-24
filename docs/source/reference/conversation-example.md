@@ -56,8 +56,8 @@ model-server stack configures that service's models and GPU placement. The LLM a
 enables Omni reasoning with a 4096-token soft reasoning hint and a 4608-token
 total output limit. Start those endpoints together with
 the sample's local model-server stack. The worker checks LLM, Clef, and VLM
-health before opening the voice session; readiness does not send an inference
-request through the VLM.
+health and waits for the required speaker STT service before opening the voice
+session; readiness does not send an inference request through the VLM.
 
 `VoiceAgent` owns application readiness, hub transport, voice gating, TTS, signals,
 and cleanup. It publishes accepted speech and typed text as a participant-scoped
@@ -283,9 +283,11 @@ already declined the same request from fallback.
 
 Before announcing readiness, VoiceAgent retries health probes for the configured
 LLM, Clef router, and VLM. These probes do not generate an answer or warm up the
-multimodal inference path. STT and TTS do not gate worker startup; start the
-sample's local model-server stack before the sample so speech requests can
-succeed.
+multimodal inference path. Because `yaml/voice_gate.yaml` sets
+`speaker.backend: required`, VoiceAgent also waits for the speaker STT service
+before announcing readiness. The sample uses no batch STT client, and TTS
+health does not gate startup; start the sample's local model-server stack
+before the sample so speech requests can succeed.
 
 ## Configuration
 
