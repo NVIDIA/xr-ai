@@ -1,0 +1,19 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Sample workload overrides. Other settings come from each service's YAML under services/.
+# These retain the existing conservative budgets; tune together on the target GPU.
+# With explicit KV bytes, utilization is startup admission, not a total-memory cap.
+speaker-stt:
+  cuda_visible_devices: '0'
+tts:
+  cuda_visible_devices: '0'
+omni:
+  max_num_seqs: 8
+  gpu_memory_utilization: 0.35
+  kv_cache_memory_bytes: 2147483648
+vlm:
+  gpu_memory_utilization: 0.23
+  kv_cache_memory_bytes: 1610612736
+  max_num_seqs: 4
+clef: {}

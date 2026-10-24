@@ -1,0 +1,472 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Each flow is one participant session. The evaluator appends only completed
+# user/assistant exchanges to history between turns; it must not seed future
+# answers or predictions. Assertions are reported separately by layer.
+# A `context_record_required_before` precondition names a completed context record
+# that must be present before issuing the turn; otherwise its answer is not scored.
+- name: general_planning_continuation
+  image: blank
+  turns:
+    - name: start_general_plan
+      authored_completion: "Start by checking how much sunlight the garden gets and where water is available."
+      query: I'm planning a small community garden. What should I consider first?
+      acceptable_destinations: [conversation]
+      admission_expectations: {conversation: accept}
+      evidence_expectation: none
+      destination_disposition: answer
+      answer_any_of: [sunlight, water, soil]
+    - name: continue_general_plan
+      authored_completion: "Leave enough room for paths between the beds, then fit the layout to the available area."
+      query: And what about the space?
+      acceptable_destinations: [conversation]
+      admission_expectations: {conversation: accept}
+      evidence_expectation: none
+      destination_disposition: answer
+      answer_any_of: [layout, area, space]
+
+- name: current_visual_then_recall
+  image: red_left_blue_right
+  initial_history:
+    - user: In an earlier view, the right-hand shape was red.
+      assistant: I recorded that earlier observation.
+  turns:
+    - name: current_view_over_old_observation
+      authored_completion: "The shape on the right is blue."
+      query: What color is the shape on the right now?
+      acceptable_destinations: [observation]
+      admission_expectations: {observation: accept}
+      evidence_expectation: current_view
+      destination_disposition: answer
+      answer_any_of: [blue]
+    - name: recall_latest_visual_answer
+      authored_completion: "I just said the shape on the right was blue."
+      query: What color did you just say was on the right?
+      acceptable_destinations: [conversation]
+      admission_expectations: {conversation: accept}
+      evidence_expectation: completed_history_only
+      destination_disposition: answer
+      answer_any_of: [blue]
+
+- name: poisoned_camera_unavailable_history_does_not_block_fresh_view
+  image: closed_sign
+  initial_history:
+    - user: Can you read what is in front of me?
+      assistant: I cannot access a camera in this chat.
+  turns:
+    - name: current_sign_text_over_stale_unavailability_claim
+      authored_completion: "The sign reads CLOSED."
+      query: What does the sign say right now?
+      acceptable_destinations: [observation]
+      admission_expectations: {observation: accept}
+      evidence_expectation: current_view
+      destination_disposition: answer
+      answer_any_of: [closed]
+
+- name: general_ar_vr_followup_topic_shift_and_shared_recall
+  image: virtual_walkthrough
+  turns:
+    - name: ask_general_ar_vr_question
+      authored_completion: "For a first-time visitor, I'd prioritize readable labels, comfortable pacing, and clear spatial anchors."
+      query: I’m preparing an AR/VR walkthrough for a first-time visitor. What should I consider?
+      acceptable_destinations: [conversation]
+      admission_expectations: {conversation: accept}
+      evidence_expectation: none
+      destination_disposition: answer
+      answer_expectation: nonempty
+    - name: continue_ar_vr_topic
+      authored_completion: "I'd start with readable labels, since visitors need to understand each step without stopping the walkthrough."
+      query: Which part would you address first, and why?
+      acceptable_destinations: [conversation]
+      admission_expectations: {conversation: accept}
+      evidence_expectation: completed_history_only
+      destination_disposition: answer
+      answer_expectation: nonempty
+    - name: switch_to_general_topic
+      authored_completion: "18 percent of 250 is 45."
+      query: "Separate question: what is 18 percent of 250?"
+      acceptable_destinations: [conversation]
+      admission_expectations: {conversation: accept}
+      evidence_expectation: none
+      destination_disposition: answer
+      answer_any_of: [45]
+    - name: recall_ar_vr_recommendation_in_general_conversation
+      authored_completion: "I first suggested making the labels readable and keeping the walkthrough comfortable to follow."
+      query: What was the first thing you suggested for the walkthrough?
+      acceptable_destinations: [conversation]
+      admission_expectations: {conversation: accept}
+      evidence_expectation: completed_history_only
+      destination_disposition: answer
+      answer_expectation: nonempty
+
+- name: conversation_handles_ar_vr_and_unrelated_followup
+  image: blank
+  initial_history:
+    - user: I am planning an AR walkthrough for new visitors. What should I consider?
+      assistant: "Synthetic seed: consider legibility, comfort, and clear spatial anchoring."
+  turns:
+    - name: switch_to_unrelated_factual_question
+      authored_completion: "Yeast releases carbon dioxide as it ferments, which makes the dough rise."
+      query: Why does dough rise when baking?
+      acceptable_destinations: [conversation]
+      admission_expectations: {conversation: accept}
+      evidence_expectation: none
+      destination_disposition: answer
+      answer_any_of: [yeast, gas, ferment]
+
+- name: direct_visual_handoff_to_general_conversation
+  image: virtual_walkthrough
+  turns:
+    - name: observe_scene_for_later_reasoning
+      authored_completion: "I see a broad display ahead, with several labels and controls grouped along its lower edge."
+      query: Describe the major visible elements and how they are arranged.
+      acceptable_destinations: [observation]
+      admission_expectations: {observation: accept}
+      evidence_expectation: current_view
+      destination_disposition: answer
+      answer_expectation: nonempty
+    - name: ask_general_conversation_to_use_observation
+      authored_completion: "I'd make the labels easier to scan and keep the controls grouped where visitors can reach them."
+      query: Based on that observation, what would you improve for an AR/VR walkthrough?
+      acceptable_destinations: [conversation]
+      admission_expectations: {conversation: accept}
+      evidence_expectation: completed_history_only
+      destination_disposition: answer
+      answer_expectation: nonempty
+    - name: recall_visual_handoff_in_general_conversation
+      authored_completion: "The display was ahead, with its labels and controls grouped along the lower edge."
+      query: What did you notice about the arrangement before recommending an improvement?
+      acceptable_destinations: [conversation]
+      admission_expectations: {conversation: accept}
+      evidence_expectation: completed_history_only
+      destination_disposition: answer
+      answer_expectation: nonempty
+
+- name: incomplete_in_scope_request_gets_task_clarification
+  image: blank
+  turns:
+    - name: open_presentation_task
+      authored_completion: "What topic is the presentation about, and who will be listening?"
+      query: Help me prepare a short presentation.
+      acceptable_destinations: [conversation]
+      admission_expectations: {conversation: accept}
+      evidence_expectation: none
+      destination_disposition: answer
+      answer_any_of: [topic, audience, presentation]
+    - name: supply_task_detail
+      authored_completion: "For a team research update, focus on the main finding and why it matters. How long is the presentation?"
+      query: It's a research update for my team.
+      acceptable_destinations: [conversation]
+      admission_expectations: {conversation: accept}
+      evidence_expectation: completed_history_only
+      destination_disposition: answer
+      answer_should_clarify: true
+      clarification_any_of: [length, audience, findings, update]
+
+- name: clarify_visual_referent_then_inspect
+  image: red_left_blue_right
+  turns:
+    - name: ambiguous_visual_reference
+      authored_completion: "Do you mean the red shape on the left or the blue circle on the right?"
+      query: Can you check that one?
+      acceptable_destinations: [conversation, observation]
+      acceptable_router_choices: [clarify, conversation]
+      route_outcome: select
+      admission_expectations: {}
+      evidence_expectation: completed_history_or_current_view
+      destination_disposition: answer
+      answer_should_clarify: true
+      clarification_any_of: [which, mean, one]
+    - name: clarified_visual_target
+      authored_completion: "The blue circle is the one on the right."
+      query: I mean the blue circle.
+      acceptable_destinations: [observation]
+      admission_expectations: {observation: accept}
+      evidence_expectation: current_view
+      destination_disposition: answer
+      answer_any_of: [blue, circle]
+
+- name: visual_clarification_followed_by_new_topic
+  image: blank
+  initial_history:
+    - user: What do you see in front of me?
+      assistant: Could you clarify what you would like me to check in the scene?
+  turns:
+    - name: switch_to_general_calculation
+      authored_completion: "Nine times seven is 63."
+      query: What is nine times seven?
+      acceptable_destinations: [conversation]
+      admission_expectations: {conversation: accept}
+      evidence_expectation: none
+      destination_disposition: answer
+      answer_any_of: [63, sixty-three]
+    - name: continue_after_topic_shift
+      authored_completion: "Eight times eight is 64."
+      query: And what is eight times eight?
+      acceptable_destinations: [conversation]
+      admission_expectations: {conversation: accept}
+      evidence_expectation: none
+      destination_disposition: answer
+      answer_any_of: [64, sixty-four]
+
+- name: observation_native_admission_accepts_visual_request
+  image: closed_sign
+  turns:
+    - name: read_visible_sign
+      authored_completion: "The large word on the sign is CLOSED."
+      query: Read the large word on the sign.
+      acceptable_destinations: [observation]
+      admission_expectations: {observation: accept}
+      evidence_expectation: current_view
+      destination_disposition: answer
+      answer_any_of: [closed]
+
+- name: notes_handoff_releases_to_general_conversation
+  turns:
+    - name: start_notes
+      authored_completion: "I'm ready. Tell me what you'd like to save."
+      query: Take some notes.
+      acceptable_destinations: [notes]
+      admission_expectations: {notes: accept}
+      evidence_expectation: none
+      router_invoked: true
+      destination_disposition: focus
+      focus_after: notes
+      destination_actions: {notes: start}
+      answer_expectation: nonempty
+    - name: save_accessibility_note
+      query: "Save this note: use large print on the exhibit labels."
+      authored_completion: Noted.
+      acceptable_destinations: [notes]
+      admission_expectations: {notes: accept}
+      destination_actions: {notes: capture}
+      focus_before: notes
+      focus_after: notes
+      router_invoked: false
+      context_update_expectations: [{source: conversation-example.foreground-notes, mode: summary}]
+      evidence_expectation: none
+      answer_expectation: nonempty
+    - name: explicit_handoff_for_general_answer
+      query: Why do leaves change color?
+      authored_completion: Leaves change color as chlorophyll breaks down.
+      acceptable_destinations: [conversation]
+      admission_expectations: {notes: decline, conversation: accept}
+      destination_actions: {notes: handoff}
+      focus_before: notes
+      focus_after: notes
+      evidence_expectation: none
+      answer_expectation: nonempty
+    - name: capture_statement_after_answer
+      query: I work at a ceramics studio.
+      authored_completion: Noted.
+      acceptable_destinations: [notes]
+      admission_expectations: {notes: accept}
+      destination_actions: {notes: capture}
+      focus_before: notes
+      focus_after: notes
+      evidence_expectation: none
+      answer_expectation: nonempty
+    - name: capture_explicitly_dictated_question
+      query: "Save this question: how does the water pump work?"
+      authored_completion: Noted.
+      acceptable_destinations: [notes]
+      admission_expectations: {notes: accept}
+      destination_actions: {notes: capture}
+      focus_before: notes
+      focus_after: notes
+      evidence_expectation: none
+      answer_expectation: nonempty
+    - name: focused_notes_read_back_after_handoff
+      query: What did I save about the exhibit labels?
+      authored_completion: You saved that the exhibit labels should use large print.
+      acceptable_destinations: [notes]
+      admission_expectations: {notes: accept}
+      destination_actions: {notes: readback}
+      focus_before: notes
+      evidence_expectation: completed_history_only
+      answer_any_of: [large print]
+
+- name: first_turn_agent_capabilities
+  image: blank
+  turns:
+    - name: explain_help_without_claiming_live_camera
+      # Generation review: include general conversation as well as notes and visual
+      # help. Reject a global refusal of non-visual questions, claims of an active
+      # camera/alert job, a whole-application camera-access refusal, markdown lists,
+      # or an explanation of internal procedures. Missing current evidence must not
+      # become a claim that visual assistance is unavailable, or that delegation
+      # or frame capture already happened.
+      # This rubric is for answer review; the decision-only runner does not score it.
+      authored_completion: "We can talk through your ideas and questions. I can also help keep notes, answer questions about your camera view, or alert you once when a condition you choose is visible."
+      query: I'm preparing a community workshop. Can you help me think it through, and what else can we do together?
+      acceptable_destinations: [conversation]
+      admission_expectations: {conversation: accept}
+      evidence_expectation: none
+      destination_disposition: answer
+      answer_expectation: nonempty
+
+
+- name: elliptical_visible_state_then_recall_and_refresh
+  image: blank
+  initial_history:
+    - user: Describe the area by the doorway.
+      assistant: A folding chair is beside a coat rack.
+  turns:
+    - name: named_subject_without_camera_keyword
+      authored_completion: "The folding chair is folded."
+      query: folding chair upright or folded?
+      acceptable_destinations: [observation]
+      admission_expectations: {observation: accept}
+      evidence_expectation: current_view
+      destination_disposition: answer
+      answer_any_of: [folded]
+    - name: recall_completed_state_without_rechecking
+      authored_completion: "I said the chair was folded."
+      query: What did you say its position was?
+      acceptable_destinations: [conversation]
+      admission_expectations: {conversation: accept}
+      evidence_expectation: completed_history_only
+      destination_disposition: answer
+      answer_any_of: [folded]
+    - name: current_state_requires_new_evidence
+      authored_completion: "The chair is upright now."
+      query: Is the folding chair still folded now?
+      acceptable_destinations: [observation]
+      admission_expectations: {observation: accept}
+      evidence_expectation: current_view
+      destination_disposition: answer
+      answer_any_of: [upright]
+
+- name: identified_item_knowledge_vs_visible_label
+  image: blank
+  initial_history:
+    - user: Can you identify this electronic reader?
+      assistant: It appears to be a Kindle.
+  turns:
+    - name: knowledge_from_tentative_completed_identity
+      authored_completion: "If it is a Kindle, it is made by Amazon."
+      query: Who makes that model?
+      acceptable_destinations: [conversation]
+      admission_expectations: {conversation: accept}
+      evidence_expectation: completed_history_only
+      destination_disposition: answer
+      answer_any_of: [Amazon]
+    - name: printed_manufacturer_requires_current_image
+      authored_completion: "The label says Amazon."
+      query: Read the maker's name on the back of the e-reader now.
+      acceptable_destinations: [observation]
+      admission_expectations: {observation: accept}
+      evidence_expectation: current_view
+      destination_disposition: answer
+      answer_any_of: [Amazon]
+    - name: general_property_after_visual_identification
+      authored_completion: "Kindle e-readers generally use an e-paper display."
+      query: Does that model generally have a paperlike screen?
+      acceptable_destinations: [conversation]
+      admission_expectations: {conversation: accept}
+      evidence_expectation: completed_history_only
+      destination_disposition: answer
+      answer_any_of: [e-paper, e-ink]
+    - name: current_presence_overrides_established_identity
+      authored_completion: "The e-reader is no longer on the shelf."
+      query: Is the e-reader still on the shelf?
+      acceptable_destinations: [observation]
+      admission_expectations: {observation: accept}
+      evidence_expectation: current_view
+      destination_disposition: answer
+      answer_any_of: [no longer]
+
+- name: unidentified_item_needs_visible_evidence
+  image: blank
+  initial_history:
+    - user: Can you identify the device on the desk?
+      assistant: I could not identify it from the last image.
+  turns:
+    - name: inspect_makers_mark_without_assuming_identity
+      authored_completion: "The maker's mark is not readable."
+      query: Can you read the maker's mark on the unidentified device?
+      acceptable_destinations: [observation]
+      admission_expectations: {observation: accept}
+      evidence_expectation: current_view
+      destination_disposition: answer
+      answer_any_of: [not readable]
+
+- name: alert_refers_to_an_earlier_note
+  image: red_left_blue_right
+  turns:
+    - name: start_notes
+      query: Take some notes.
+      authored_completion: "I'm ready. Tell me what you'd like to save."
+      acceptable_destinations: [notes]
+      admission_expectations: {notes: accept}
+      evidence_expectation: none
+      router_invoked: true
+      destination_disposition: focus
+      focus_after: notes
+      destination_actions: {notes: start}
+      answer_expectation: nonempty
+    - name: save_what_to_watch_for
+      query: "Save this note: watch for a yellow triangle."
+      authored_completion: Noted.
+      acceptable_destinations: [notes]
+      admission_expectations: {notes: accept}
+      destination_actions: {notes: capture}
+      focus_before: notes
+      focus_after: notes
+      router_invoked: false
+      context_update_expectations: [{source: conversation-example.foreground-notes, mode: summary}]
+      evidence_expectation: none
+      answer_expectation: nonempty
+    - name: alert_for_what_the_note_mentions
+      query: Alert me once when you see what I mentioned in my notes.
+      authored_completion: I'll alert you once when a yellow triangle is visible.
+      acceptable_destinations: [alerts]
+      admission_expectations: {notes: decline, alerts: accept}
+      destination_actions: {notes: handoff, alerts: start}
+      focus_before: notes
+      evidence_expectation: none
+      destination_disposition: answer
+      answer_expectation: nonempty
+
+- name: one_shot_alert_controls_stay_separate
+  image: red_left_blue_right
+  turns:
+    - name: explicit_alert_start
+      query: Alert me once when a yellow triangle is visible.
+      authored_completion: I'll alert you once when that condition is visible.
+      acceptable_destinations: [alerts]
+      admission_expectations: {alerts: accept}
+      destination_actions: {alerts: start}
+      evidence_expectation: none
+      destination_disposition: answer
+      answer_expectation: nonempty
+    - name: unrelated_question_does_not_replace_alert
+      query: Why do shadows change length during the day?
+      authored_completion: The sun's angle changes as Earth rotates.
+      acceptable_destinations: [conversation]
+      admission_expectations: {conversation: accept}
+      evidence_expectation: none
+      answer_expectation: nonempty
+    - name: visible_question_uses_direct_observation
+      query: What color is the circle on the right now?
+      authored_completion: The circle on the right is blue.
+      acceptable_destinations: [observation]
+      admission_expectations: {observation: accept}
+      evidence_expectation: current_view
+      answer_any_of: [blue]
+    - name: ambiguous_fragment_is_not_a_new_alert
+      query: A triangle over there.
+      authored_completion: What would you like to know about the triangle?
+      acceptable_destinations: [conversation, observation]
+      evidence_expectation: none
+      answer_expectation: nonempty
+    - name: explicit_cancel
+      query: Cancel the visual alert.
+      authored_completion: The visual alert is cancelled.
+      acceptable_destinations: [alerts]
+      admission_expectations: {alerts: accept}
+      destination_actions: {alerts: cancel}
+      evidence_expectation: none
+      destination_disposition: answer
+      answer_expectation: nonempty

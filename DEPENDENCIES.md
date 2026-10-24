@@ -633,6 +633,52 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 
 ### Agent samples
 
+#### `conversation-example` — [`agent-samples/conversation-example/`](agent-samples/conversation-example/)
+
+- Python: `>=3.11,<3.15`
+- Build dependencies:
+  - `hatchling`
+- Runtime dependencies:
+  - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
+  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
+- Optional dependency groups: none
+- Commands:
+  - `conversation_example` → `main:run`
+
+#### `conversation-example-model-servers` — [`agent-samples/conversation-example/model-servers/`](agent-samples/conversation-example/model-servers/)
+
+- Python: `>=3.11,<3.15`
+- Build dependencies:
+  - `hatchling`
+- Runtime dependencies:
+  - `xr-ai-model-server-stack` → [`xr-ai-model-server-stack`](utils/xr-ai-model-server-stack/) (local, editable)
+- Optional dependency groups: none
+- Commands:
+  - `conversation_example_model_servers` → `main:run`
+
+#### `conversation-example-worker` — [`agent-samples/conversation-example/worker/`](agent-samples/conversation-example/worker/)
+
+- Python: `>=3.11,<3.15`
+- Build dependencies:
+  - `hatchling`
+- Runtime dependencies:
+  - `nemo-relay>=0.10.0,<0.11`
+  - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
+  - `xr-ai-conversation` → [`xr-ai-conversation`](agent-sdk/xr-ai-conversation/) (local, editable)
+  - `xr-ai-routing[runtime]` → [`xr-ai-routing`](agent-sdk/xr-ai-routing/) (local, editable)
+  - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
+  - `xr-ai-interaction` → [`xr-ai-interaction`](agent-sdk/xr-ai-interaction/) (local, editable)
+  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
+  - `xr-ai-models[riva]` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
+  - `xr-ai-tools[frames,vision]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
+  - `xr-ai-voice` → [`xr-ai-voice`](agent-sdk/xr-ai-voice/) (local, editable)
+  - `xr-ai-voicegate` → [`xr-ai-voicegate`](utils/xr-ai-voicegate/) (local, editable)
+  - `loguru>=0.7`
+  - `pyyaml>=6.0`
+- Optional dependency groups: none
+- Commands:
+  - `conversation_example_worker` → `conversation_example_worker.__main__:run`
+
 #### `lab-instrument-monitoring` — [`agent-samples/lab-instrument-monitoring/`](agent-samples/lab-instrument-monitoring/)
 
 - Python: `>=3.11,<3.15`
@@ -909,8 +955,8 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Runtime dependencies:
   - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
   - `xr-ai-interaction` → [`xr-ai-interaction`](agent-sdk/xr-ai-interaction/) (local, editable)
-  - `xr-ai-routing` → [`xr-ai-routing`](agent-sdk/xr-ai-routing/) (local, editable)
   - `xr-ai-conversation` → [`xr-ai-conversation`](agent-sdk/xr-ai-conversation/) (local, editable)
+  - `xr-ai-routing` → [`xr-ai-routing`](agent-sdk/xr-ai-routing/) (local, editable)
   - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
   - `xr-ai-models[riva]` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
   - `xr-ai-tools[frames,image-editing,marker-tracking,services,vision]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
@@ -1077,8 +1123,6 @@ Keep non-obvious fan-out in the same change:
   from `xr-ai-vllm` internals.
 - `agent-sdk/xr-ai-hub/` depends only on `pyzmq` and `msgpack`; it has no
   server-side packages.
-- `agent-sdk/xr-ai-interaction/` depends only on `pydantic`, so routing,
-  conversation, and non-voice front ends share its messages without voice media.
 - `agent-sdk/xr-ai-models/` depends only on `xr-ai-logging`, `httpx`, and
   `pyyaml`. In-tree backends use typed OpenAI-compatible HTTP rather than vendor
   SDKs, with one scoped exception: the optional `riva` extra adds
