@@ -105,13 +105,13 @@ def _post_speech(port: int, model: str, text: str) -> bytes:
 async def test_magpie_tts_smoke(tmp_path: Path) -> None:
     if shutil.which("uv") is None:
         pytest.skip("uv not on PATH")
+    subprocess.run(
+        ["uv", "--config-file", str(_REPO_ROOT / "uv.toml"),
+         "sync", "--directory", str(_MAGPIE_PROJECT)],
+        check=True,
+    )
     if not _MAGPIE_BIN.exists():
-        subprocess.run(
-            ["uv", "sync", "--directory", str(_MAGPIE_PROJECT)],
-            check=True,
-        )
-        if not _MAGPIE_BIN.exists():
-            pytest.skip(f"uv sync did not produce {_MAGPIE_BIN}")
+        pytest.fail(f"uv sync did not produce {_MAGPIE_BIN}")
 
     ref_cfg     = yaml.safe_load(_MAGPIE_YAML.read_text())
     model_name  = ref_cfg["model"]
