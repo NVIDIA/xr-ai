@@ -320,13 +320,11 @@ def _drain_output_readers(
 # ── readiness wait ─────────────────────────────────────────────────────────────
 
 class _Cancellation:
-    def __init__(self, initialized: threading.Event | None = None) -> None:
-        self.initialized = initialized
+    def __init__(self) -> None:
         self.signum: int | None = None
 
     def _request(self, signum, _frame) -> None:
-        if self.initialized is not None:
-            self.initialized.clear()
+        # Event methods take non-reentrant locks; cleanup clears readiness.
         # Do not interrupt Popen before its handle is registered for cleanup.
         if self.signum is None:
             self.signum = signum
@@ -631,7 +629,7 @@ def run_stack(
 
     with (
         stack_health(launched, health_port, unchecked_reuse) as initialized,
-        _Cancellation(initialized) as cancellation,
+        _Cancellation() as cancellation,
         tempfile.TemporaryDirectory(prefix="xr-ai-") as _tmpdir,
     ):
         tmpdir = Path(_tmpdir)
