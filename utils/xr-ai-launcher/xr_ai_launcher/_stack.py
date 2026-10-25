@@ -50,7 +50,7 @@ from typing import Sequence, Union
 
 from ._credentials import load_credentials
 from ._failure import FailureContext, emit_failure_summary, failure_exit_status
-from ._health import stack_health
+from ._health import _Readiness, stack_health
 
 _READY_INTERVAL = 5.0   # seconds between progress lines
 _STOP_TIMEOUT   = 20.0  # seconds before SIGKILL during shutdown
@@ -320,16 +320,16 @@ def _drain_output_readers(
 # ── readiness wait ─────────────────────────────────────────────────────────────
 
 class _Cancellation:
-    def __init__(self, initialized: threading.Event | None = None) -> None:
+    def __init__(self, initialized: _Readiness | None = None) -> None:
         self.initialized = initialized
         self.signum: int | None = None
 
     def _request(self, signum, _frame) -> None:
-        if self.initialized is not None:
-            self.initialized.clear()
         # Do not interrupt Popen before its handle is registered for cleanup.
         if self.signum is None:
             self.signum = signum
+        if self.initialized is not None:
+            self.initialized.clear()
 
     def check(self) -> None:
         if self.signum is not None:

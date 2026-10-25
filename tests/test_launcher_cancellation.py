@@ -14,6 +14,42 @@ import xr_ai_launcher._stack as stack
 
 
 @pytest.mark.integration
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX signals")
+def test_overlapping_signals_do_not_deadlock_readiness():
+    # Deliver another signal at each interruption point in clear(), including
+    # inside Event.clear's lock if readiness regresses to a threading.Event.
+    program = """
+import os
+import signal
+import sys
+from xr_ai_launcher._health import stack_health
+from xr_ai_launcher._stack import _Cancellation
+
+with stack_health({}, None) as initialized:
+    initialized.set()
+    clear_code = type(initialized).clear.__code__
+    def interrupt_clear(frame, event, _arg):
+        if frame.f_code is clear_code and event == 'line':
+            os.kill(os.getpid(), signal.SIGTERM)
+        return interrupt_clear
+    with _Cancellation(initialized) as cancellation:
+        sys.settrace(interrupt_clear)
+        try:
+            os.kill(os.getpid(), signal.SIGINT)
+        finally:
+            sys.settrace(None)
+        assert not initialized.is_set()
+        assert cancellation.signum == signal.SIGINT
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", program],
+        env={**os.environ, "PYTHONPATH": os.pathsep.join(sys.path)},
+        capture_output=True, timeout=5,
+    )
+    assert result.returncode == 0, result.stderr.decode()
+
+
+@pytest.mark.integration
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX process groups and signals")
 @pytest.mark.parametrize("signum", [signal.SIGINT, signal.SIGTERM])
 @pytest.mark.parametrize("phase", ["sequential", "parallel", "spawn", "spawn-parallel"])

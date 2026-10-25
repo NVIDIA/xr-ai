@@ -15,12 +15,32 @@ from urllib.parse import urlsplit
 log = logging.getLogger(__name__)
 
 
+class _Readiness:
+    """Main-thread readiness flag read by health handlers, with no waiting API.
+
+    Signal handlers also clear it, so writes must not acquire a lock that an
+    interrupted readiness update or another signal handler might already hold.
+    """
+
+    def __init__(self) -> None:
+        self._ready = False
+
+    def set(self) -> None:
+        self._ready = True
+
+    def clear(self) -> None:
+        self._ready = False
+
+    def is_set(self) -> bool:
+        return self._ready
+
+
 @contextmanager
 def stack_health(
     processes: Mapping[str, Popen], port: int | None, unchecked_reuse: tuple[str, ...] = (),
-) -> Iterator[threading.Event]:
+) -> Iterator[_Readiness]:
     """Serve live process health during one foreground stack's lifetime."""
-    initialized = threading.Event()
+    initialized = _Readiness()
     if port is None:
         yield initialized
         return
