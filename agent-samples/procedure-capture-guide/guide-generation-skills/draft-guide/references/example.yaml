@@ -9,6 +9,12 @@
 # available incomplete and completed views through the actual guide VLM and CLEF,
 # then refine and rerun the draft. The author observes actual responses, never
 # supplies a visual or decision answer itself. Preserve both false positives and missed completions.
+# If Cosmos describes only the center surface, a missed clip check can justify
+# focusing the question on both side edges while preserving the condition.
+# Inspect the first accepted source frames too: describing clips as attached
+# when the images show loose clips is a false positive, not an improvement.
+# Reword a question that assumes presence to ask what is visible at the edges;
+# then revalidate and replay the revised guide before handoff.
 # Identify the voice-bounded SOP packet in review notes, not in guide YAML.
 # No participant-wide raw-media manifest is required.
 # Example evidence: "Center the workpiece in the marked area. Attach two clips,

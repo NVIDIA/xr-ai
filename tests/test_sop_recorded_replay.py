@@ -55,6 +55,39 @@ def make_packet(directory, count=16, color="blue"):
     return packet
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("state", ["empty", "stale", "fresh"])
+async def test_recorded_camera_does_not_fabricate_on_demand_frames(packets, tmp_path, state):
+    from _runtime_harness import Camera
+    from xr_ai_hub import FrameUnavailable
+    from xr_ai_tools.current_frame import CurrentFrameRequest, CurrentFrameTool
+    from xr_ai_tools.image import ImageRegistry
+
+    camera = Camera()
+    images = ImageRegistry()
+    tool = CurrentFrameTool(endpoint=camera, images=images, frame_timeout_s=0.1)
+    if state != "empty":
+        camera.path = tmp_path / "frame.png"
+        Image.new("RGB", (32, 24), "blue").save(camera.path)
+        await camera.publish(timestamp_us=1 if state == "stale" else None)
+    original_frame, original_sequence, original_sources = camera.frame, camera.sequence, dict(camera.sources)
+    request = CurrentFrameRequest(participant_id="guide-eval")
+    try:
+        async with asyncio.timeout(1):
+            if state == "fresh":
+                frame = await tool._get_current_frame(request)
+                assert (frame.sequence, frame.timestamp_us) == (original_frame.seq, original_frame.pts_us)
+            else:
+                with pytest.raises(FrameUnavailable, match="client could not provide a picture"):
+                    await tool._get_current_frame(request)
+        assert camera.frame is original_frame
+        assert camera.sequence == original_sequence
+        assert camera.sources == original_sources
+    finally:
+        tool._captures.close()
+        images.clear()
+
+
 @pytest.mark.parametrize("case", ["empty", "out_of_order", "duplicate", "escape", "index_escape"])
 def test_invalid_packet_evidence_is_rejected(packets, tmp_path, case):
     packet = make_packet(tmp_path, 2)

@@ -106,6 +106,9 @@ Ordinary ordered placement instructions can use visible end states. A current
 view cannot prove a required past motion sequence. Comparing authoring images
 does not give the guide runtime a sequence tool. A plainly narrated orientation is a known
 requirement, not an unknown one merely because its saved image is unavailable.
+When visible placement and a subsequent functional or motion check are distinct
+required outcomes, keep them as separate checks. Block the unsupported outcome
+without also disabling the independently verifiable placement.
 
 For each visual step, write two distinct instructions:
 
@@ -113,6 +116,10 @@ For each visual step, write two distinct instructions:
   Direct attention to the relevant region or objects and ask for concrete
   descriptions: counts, attachment points, contact, orientation, printed labels,
   measurements and units. Ask it to identify hidden or ambiguous details.
+  Identify candidate parts using source-grounded appearance and landmarks,
+  without asserting that they are present or attached in the current view.
+  Ask what is visible and allow absence or uncertainty; a question must not
+  supply a completed scene for Cosmos to repeat.
   Do not ask for YES/NO, ready/not-ready, or a completion verdict. The tool
   does not receive the guide's condition or voice prompt.
 - `evidence.condition` states every fact needed for completion. CLEF judges

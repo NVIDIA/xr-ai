@@ -18,6 +18,7 @@ import json
 import time
 from pathlib import Path
 
+import httpx
 import yaml
 from _scene_rendering import load_scenes, render_scene
 from _visual_expectations import matches_answer, visual_cases
@@ -34,7 +35,10 @@ _PROMPT = _SAMPLE / "worker/procedure_capture_guide_worker/guide/prompts/guide_v
 def score(case: dict, accepted: bool | None, text: str, available: bool) -> dict:
     if not available or accepted is None:
         # An unavailable model is not a correct rejection of a negative fixture.
-        return {"recognition": None, "gate_correct": None, "accepted": None, "status": "unavailable"}
+        return {
+            "recognition": matches_answer(case["answer"], text) if available else None,
+            "gate_correct": None, "accepted": None, "status": "unavailable",
+        }
     return {
         "recognition": matches_answer(case["answer"], text),
         "gate_correct": accepted == case["accept"],
@@ -49,7 +53,8 @@ def summarize(rows: list[dict]) -> dict:
         "attempts": len(rows),
         "scored": len(scored),
         "unavailable": len(rows) - len(scored),
-        "recognition_correct": sum(row["recognition"] is True for row in scored),
+        "recognition_scored": sum(row.get("recognition") is not None for row in rows),
+        "recognition_correct": sum(row.get("recognition") is True for row in rows),
         "gate_correct": sum(row["gate_correct"] is True for row in scored),
         "false_accepts": sum(row["accepted"] is True and not row["expected_accept"] for row in scored),
         "false_rejects": sum(row["accepted"] is False and row["expected_accept"] for row in scored),
@@ -114,23 +119,29 @@ async def evaluate(manifest_path: Path, output: Path, models_path: Path, repeats
                 # Opaque references keep fixture names and expected answers out of model inputs.
                 reference = images.put((output / f'{case["scene"]}.png').read_bytes())
                 before = time.monotonic()
+                text, available, accepted = "", False, None
+                vlm_error = decision_error = None
                 try:
                     async with asyncio.timeout(timeout_s):
                         result = await tool.execute(ImageQueryRequest(image=reference, query=question))
                     text, available = result.text, result.available
-                    accepted = None
-                    if available:
+                except (TimeoutError, ValueError, RuntimeError, httpx.HTTPError) as exc:
+                    vlm_error = {"type": type(exc).__name__, "message": str(exc)}
+                if available:
+                    try:
                         async with asyncio.timeout(timeout_s):
                             accepted = await condition_met(
                                 decisions, condition=step.evidence.condition, observation=text,
                                 frame={"scene": case["scene"], "trial": trial + 1},
                                 step_id=step.id, revision=trial, timeout_s=timeout_s,
                             )
-                except (TimeoutError, ValueError, RuntimeError) as exc:
-                    text, available, accepted = str(exc), False, None
+                    except (TimeoutError, ValueError, RuntimeError, httpx.HTTPError) as exc:
+                        # A failed decision must not erase the successful visual evidence.
+                        decision_error = {"type": type(exc).__name__, "message": str(exc)}
                 row = {
                     "scene": case["scene"], "step": case["step"], "trial": trial + 1,
                     "question": question, "answer": text, "available": available,
+                    "vlm_error": vlm_error, "decision_error": decision_error,
                     "expected_answer": case["answer"], "expected_accept": case["accept"],
                     "condition": step.evidence.condition,
                     "latency_s": time.monotonic() - before,

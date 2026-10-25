@@ -39,7 +39,7 @@ Luna, fabricated tool responses, mock commits, or a mental walkthrough.
 
 ## Run the recorded-camera test
 
-Ensure the target checkout's configured local LLM and VLM servers are running;
+Ensure the target checkout's configured local LLM, VLM, and CLEF decision servers are running;
 the evaluator never starts, stops, or substitutes model servers. Validate the
 YAML, then run the target checkout's
 `agent-samples/procedure-capture-guide/evaluation/guide/evaluate_recorded_packet.py`
@@ -129,6 +129,11 @@ test environment, not evidence that a guide's condition is wrong.
    Separate perception errors from decision errors: correct reasoning cannot
    recover a fact Cosmos confidently misreports. Confidence is diagnostic,
    not a substitute for inspecting the evidence or an extra acceptance cutoff.
+   Inspect the source frames that first caused each completion, including
+   absent or in-progress states. An increased completion count can conceal a
+   false positive; compare the actual depicted result, not just the final frame
+   or the model's confident wording. For a stalled step, identify which required
+   fact is absent from the description and whether the question asked for it.
    Identify false positives, supported completions missed, occlusion, and
    missing negative coverage. Do not weaken requirements to fit a bad demo.
 3. Read executed tool requests and results, guidance state snapshots,
@@ -170,9 +175,15 @@ and untested steps, and trace paths. Separate observed execution from your
 interpretation. List all simulated inputs and excluded layers (STT, TTS,
 browser, hub IPC, and LiveKit); this is not a full audiovisual end-to-end test.
 
-Return actionable findings to the orchestrator without changing the guide. After an
-authorized revision, run the new YAML again; a previous pass cannot validate an
-edit. Count a modification round only when a completed evaluation is followed
+For each failure, return the selected frame IDs, question, Cosmos response,
+condition, CLEF choice, and the supported edit or concrete reason no edit can
+help. Separate question presentation from unresolved task requirements. Do not
+infer that human clarification is required just because the verifier said no.
+
+Return these findings to the orchestrator without changing the guide. Within a
+guide-generation request this resumes revision in the same task, not a final
+user handoff. After the orchestrator revises the draft, run the new YAML again;
+a previous pass cannot validate an edit. Count a modification round only when a completed evaluation is followed
 by a substantive YAML change. Repeated runs, validation-only formatting edits,
 and the last verification without edits are not modification rounds.
 Disclose remaining failures and missing tests for human review without treating

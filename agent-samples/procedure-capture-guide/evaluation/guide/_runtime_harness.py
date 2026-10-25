@@ -21,6 +21,7 @@ from collections.abc import Awaitable, Callable
 from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
+from types import SimpleNamespace
 
 import nemo_relay
 import xr_ai_models
@@ -66,6 +67,7 @@ class Camera:
 
     def __init__(self):
         self.listeners = []
+        self._image_capture_listeners = []
         self.frame = None
         self.path = None
         self.sequence = 0
@@ -77,8 +79,30 @@ class Camera:
     def on_participant(self, _callback):
         pass
 
-    def _on_image_capture(self, _callback):
-        return lambda: None
+    def _on_image_capture(self, callback):
+        self._image_capture_listeners.append(callback)
+
+        def unsubscribe():
+            if callback in self._image_capture_listeners:
+                self._image_capture_listeners.remove(callback)
+
+        return unsubscribe
+
+    async def _request_image_capture(self, request):
+        # Playback cannot take a new still when source frames run out or expire.
+        # Use the client's rejection protocol rather than refreshing old pixels.
+        rejected = SimpleNamespace(
+            participant_id=request.participant_id, request_id=request.request_id,
+            pts_us=time.time_ns() // 1000,
+            mime_type="application/vnd.xr-ai.capture-rejection+json",
+            data=b'{"version":1,"status":"rejected"}',
+        )
+        for callback in tuple(self._image_capture_listeners):
+            await callback(rejected)
+
+    async def _cancel_image_capture(self, _request):
+        # Rejections are immediate; there is no client-side capture to cancel.
+        pass
 
     async def request_frame(self, _signal):
         return self.frame

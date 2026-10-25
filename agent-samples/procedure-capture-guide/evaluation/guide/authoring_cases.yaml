@@ -107,7 +107,7 @@
     - "Retains dial ordering and spring-tab contact requirements without pretending final view proves them."
     - "Flags sequence verification, continuous contact, and ambiguous duration as blockers."
     - "Does not invent sequence_view or choose duration_s 15 from the range."
-    - "Unsupported checks use never-matching evidence and no direct completion commit."
+    - "Unsupported visual checks retain an explicit condition and no completion commit; they do not use a visual regex."
     - "Guide validates structurally but remains draft, with blockers in review notes."
 
 - id: replay_incomplete_demonstration

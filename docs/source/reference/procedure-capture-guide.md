@@ -302,7 +302,13 @@ draft with the captured images and configured local XR-AI models and tools.
 Assess fidelity to the intended task and clarity for someone performing it
 afresh, not just whether the recording passes. Distinguish recording coverage
 gaps, uncertain requirements and actual runtime verification limitations.
-Observe the actual outputs and revise only the guide when findings justify it.
+After a failed run, return to revision within this request. Compare selected
+source images, Cosmos descriptions and CLEF decisions; fix supported question
+or condition defects and rerun. Inspect the first completion's frames for false
+positives as well as missed completions. Do not stop at reporting a failed run
+or let one unsupported check prevent refinement of independently testable steps.
+Preserve unsupported requirements as blockers, and justify any stop without
+revision using the source evidence and actual outputs.
 Revalidate and rerun revised guides without weakening requirements to fit the
 demonstration. Follow the skill's iteration and final-verification rules.
 Report paths, actual results, revision rounds, coverage gaps and approval
@@ -361,6 +367,11 @@ for artifact details and timing limits.
 Use the findings to refine instructions and checks, then rerun from fresh state.
 Default to at most three evaluation-and-update rounds and always verify the
 final revision. Report actual rounds, not retries or formatting-only edits.
+A failed run is an intermediate finding: diagnose the selected frames and both
+model outputs before deciding whether a guide correction is possible. Clarifying
+an observation question does not require changing the task requirements or
+additional approval for the newly authored draft. Check first-completion frames
+for premature acceptance; a higher completion count alone is not improvement.
 Missing models or evidence are blocked tests, never a pass. A fixed recording
 cannot react to guidance, so distinguish timing gaps from guide defects.
 Missing visual evidence in the recording does not by itself invalidate an
@@ -374,7 +385,7 @@ prove a past action sequence, and elapsed time does not prove continuous contact
 Retain unsupported requirements as review blockers rather than weakening them.
 
 Review the YAML and evidence notes before manually setting `task.status` to
-`approved`. Resolve every blocker, including any never-matching draft gate.
+`approved`. Resolve every blocker, including any draft step without a completion commit.
 Switch to `agent-samples/procedure-capture-guide/` and run an approved guide with
 `uv run main.py --mode guide my-procedure-guide/guide.yaml`, then say "start guide".
 
@@ -416,7 +427,7 @@ uv run main.py --mode guide my-procedure-guide/guide.yaml
 uv run main.py --mode guide example-guides/tea-making
 ```
 
-Start the shared models first, as for capture. Guide mode uses the LLM, VLM, STT,
+Start the shared models first, as for capture. Guide mode uses the LLM, VLM, CLEF, STT,
 and TTS endpoints in `yaml/models.json`. Connect using the hub's web
 client URL and enable microphone and camera access. The command line selects
 the guide, but connecting does not start it. Say **start guide** to begin step
@@ -530,7 +541,7 @@ Those tests do not establish accuracy on real tea-making images or appliances.
 
 `example-guides/tea-making/evaluation/run_scenario.py` exercises a manifest's selected guide through
 the actual guide agent, runtime, frame selection, and model
-tools. It uses the sample's configured LLM and VLM. Fixture images replace the
+tools. It uses the sample's configured LLM, VLM, and CLEF. Fixture images replace the
 hub camera endpoint, and typed requests enter the same runtime topic as
 transcribed speech. Microphones, STT, network camera delivery, and audible TTS
 are not covered. The script never manages external model-server processes.
@@ -720,6 +731,11 @@ separately. An unavailable model cannot pass a negative case. Correctly rejectin
 a scene while misreading its contents is not a recognition pass. Repetitions
 measure response variability on the same images, not additional independent scenes.
 Decision scores call the production CLEF verifier on the original description.
+If CLEF fails, the case is unavailable for decision scoring, but its VLM answer
+and recognition score are retained. `recognition_scored` counts usable VLM
+answers; `scored` counts cases with both a usable answer and a CLEF decision.
+Use each count as its corresponding accuracy denominator. Result rows record VLM and decision errors
+separately; later cases continue and the final summary includes the failure.
 Recognition regexes are offline diagnostics only and never authorize progress.
 They can also miss valid paraphrases, so retain and inspect the raw descriptions.
 

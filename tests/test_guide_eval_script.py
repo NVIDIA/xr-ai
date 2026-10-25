@@ -3,6 +3,7 @@
 
 """Test synthetic guide fixtures and evaluation scoring without GPU services."""
 
+import asyncio
 import importlib.util
 import json
 import re
@@ -12,6 +13,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
+import httpx
 import pytest
 import yaml
 from _procedure_guide_helpers import clef_response, stub_decisions
@@ -126,7 +128,7 @@ def test_empty_and_unavailable_runs_cannot_pass(evaluator):
     assert not evaluator.summarize([])["passed"]
     assert evaluator.summarize([{"status": "unavailable"}]) == {
         "attempts": 1, "scored": 0, "unavailable": 1,
-        "recognition_correct": 0, "gate_correct": 0,
+        "recognition_scored": 0, "recognition_correct": 0, "gate_correct": 0,
         "false_accepts": 0, "false_rejects": 0, "passed": False,
     }
 
@@ -214,6 +216,65 @@ async def test_timeout_is_not_a_correct_negative(evaluator, tmp_path, monkeypatc
     assert summary["scored"] == summary["gate_correct"] == 0
     assert not summary["passed"]
     fake_vlm.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("error_type", [httpx.ConnectError, TimeoutError, ValueError, RuntimeError])
+async def test_decision_failure_preserves_visual_evidence_and_finishes_run(
+    evaluator, tmp_path, monkeypatch, error_type,
+):
+    manifest = yaml.safe_load((_TEA_EVAL / "fixtures/visual_expectations.yaml").read_text())
+    manifest["cases"] = [
+        {"scene": "chamomile", "step": "identify", "answer": ".*chamomile.*", "accept": True},
+        {"scene": "green", "step": "identify", "answer": ".*green.*", "accept": False},
+    ]
+    manifest["guide_path"] = str(_SAMPLE / "example-guides/tea-making/guide.yaml")
+    manifest["scenes_file"] = str(_TEA_EVAL / "fixtures/image_scenes.yaml")
+    path = tmp_path / "manifest.yaml"
+    path.write_text(yaml.safe_dump(manifest))
+    vlm = SimpleNamespace(close=AsyncMock())
+    decisions = stub_decisions()
+    decisions.decide.side_effect = [error_type("decision failed"), clef_response("no")]
+    monkeypatch.setattr(evaluator, "make_vlm", lambda *_: vlm)
+    monkeypatch.setattr(evaluator, "make_decision", lambda *_: decisions)
+    descriptions = ["The packet reads chamomile.", "The packet reads green tea."]
+    tool = SimpleNamespace(execute=AsyncMock(side_effect=[
+        SimpleNamespace(text=text, available=True) for text in descriptions
+    ]))
+    monkeypatch.setattr(evaluator, "ImageQueryTool", lambda **_: tool)
+    output = tmp_path / "results"
+    summary = await evaluator.evaluate(path, output, _SAMPLE / "yaml/models.json", 1, 1)
+    rows = [json.loads(line) for line in (output / "results.jsonl").read_text().splitlines()]
+    assert [row["answer"] for row in rows] == descriptions
+    assert rows[0]["available"] and rows[0]["recognition"]
+    assert rows[0]["accepted"] is rows[0]["gate_correct"] is None
+    assert rows[0]["status"] == "unavailable"
+    assert rows[0]["decision_error"] == {"type": error_type.__name__, "message": "decision failed"}
+    assert rows[0]["vlm_error"] is None
+    assert rows[1]["decision_error"] is None
+    assert rows[1]["status"] == "scored" and rows[1]["gate_correct"]
+    assert summary["attempts"] == 2 and summary["scored"] == summary["unavailable"] == 1
+    assert summary["recognition_scored"] == summary["recognition_correct"] == 2
+    assert not summary["passed"]
+    assert json.loads((output / "result.json").read_text()) == summary
+    vlm.close.assert_awaited_once()
+    decisions.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_visual_evaluation_cancellation_propagates_and_closes_models(evaluator, tmp_path, monkeypatch):
+    vlm = SimpleNamespace(close=AsyncMock())
+    decisions = stub_decisions()
+    decisions.decide.side_effect = asyncio.CancelledError()
+    monkeypatch.setattr(evaluator, "make_vlm", lambda *_: vlm)
+    monkeypatch.setattr(evaluator, "make_decision", lambda *_: decisions)
+    tool = SimpleNamespace(execute=AsyncMock(return_value=SimpleNamespace(text="Visible packet", available=True)))
+    monkeypatch.setattr(evaluator, "ImageQueryTool", lambda **_: tool)
+    with pytest.raises(asyncio.CancelledError):
+        await evaluator.evaluate(_TEA_EVAL / "fixtures/visual_expectations.yaml", tmp_path / "cancelled",
+                                 _SAMPLE / "yaml/models.json", 1, 1)
+    vlm.close.assert_awaited_once()
+    decisions.close.assert_awaited_once()
 
 
 @pytest.mark.parametrize("filename", ["scenarios/step_verification.yaml", "scenarios/full_run.yaml"])
