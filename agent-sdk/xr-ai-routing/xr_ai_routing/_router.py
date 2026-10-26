@@ -1172,6 +1172,7 @@ class AgentRouter:
                     f"routing aid name {route_aid.name!r} does not match destination {candidate_name!r}"
                 )
             route_aids.append(route_aid)
+        # Each destination appears once, as its choice; the decision model reads it there.
         criteria = {
             route_aid.name: (
                 f"{route_aid.name} has routing description={route_aid.description!r}; "
@@ -1191,16 +1192,6 @@ class AgentRouter:
                     "recorded_around_utc": _history_timestamp(index),
                 }
                 for index, item in enumerate(turn.history)
-            ],
-            "destinations": [
-                {
-                    "name": route_aid.name,
-                    "description": route_aid.description,
-                    "eligible": route_aid.eligible,
-                    "eligibility": route_aid.eligibility,
-                    "priority": route_aid.priority,
-                }
-                for route_aid in route_aids
             ],
         }
         question = DecisionQuestion(
