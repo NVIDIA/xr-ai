@@ -38,6 +38,8 @@ def _config(tmp_path, *, require_wake=False, enabled=True):
     # An utterance boundary can split a word.
     ["Hey ag", "ent, let's start talking."],
     ["Hey agent, let's start talk", "ing."],
+    # Word boundaries inside the phrase do not matter.
+    ["Hey a gent, let's start talking"],
 ])
 def test_controls_join_phrase_prefixes(parts):
     matcher = _ControlMatcher(_ConversationConfig())
@@ -63,6 +65,13 @@ def test_withheld_fragments_that_are_not_a_control_are_released(key, seconds, re
     assert matcher._released == released
     assert matcher._feed("what time is it", key="a", at_s=10) is None
     assert matcher._released == ""
+
+
+def test_partial_word_fragment_is_withheld_then_released():
+    matcher = _ControlMatcher(_ConversationConfig())
+    assert matcher._feed("He.", key="a", at_s=0) == "pending"
+    assert matcher._feed("went home", key="a", at_s=1) is None
+    assert matcher._released == "He."
 
 
 def test_unrelated_and_empty_transcripts_clear_fragments():

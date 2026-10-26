@@ -625,10 +625,13 @@ def test_next_turn_does_not_inherit_late_finalized_tokens(_streaming_models, mon
     assert not session._speaker_states[3].pending
 
 
+# Real audio confirms the padded " beta" token by token. " delta" confirms
+# its space and diverges; " b" confirms a prefix and leaves the rest pending.
+@pytest.mark.parametrize("real,emitted,pending", [(" delta", "delta", ""), (" b", "", "eta")])
 @pytest.mark.parametrize("mode", ["conversation", "always_on", "wake_only", "hybrid"])
 @pytest.mark.parametrize("diagnostics", [False, True])
 def test_finalized_candidate_reconciliation_remains_required_during_silence(
-    _streaming_models, monkeypatch, mode, diagnostics,
+    _streaming_models, monkeypatch, mode, diagnostics, real, emitted, pending,
 ):
     import torch
     from nemo.collections.asr.parts.utils.rnnt_utils import Hypothesis
@@ -641,7 +644,7 @@ def test_finalized_candidate_reconciliation_remains_required_during_silence(
         step = previous[0].dec_state + 1 if previous else 1
         value = "alpha" if step == 1 else ""
         if step == 3:
-            value = " beta" if kwargs["keep_all_outputs"] else "delta"
+            value = " beta" if kwargs["keep_all_outputs"] else real
         hyp = Hypothesis(y_sequence=torch.tensor([ord(c) for c in value]), dec_state=step)
         return None, [hyp], *models.asr.encoder.get_initial_cache_state(batch_size=1), [hyp]
 
@@ -661,8 +664,8 @@ def test_finalized_candidate_reconciliation_remains_required_during_silence(
     # suffix already consumed by the finalized utterance. Real audio that
     # decodes differently is kept as new words, not a session failure.
     session._feed(bytes(5120))
-    assert not session._speaker_states[3].pending
-    assert session._speaker_states[3].emitted == [ord(c) for c in "delta"]
+    assert session._speaker_states[3].pending == [ord(c) for c in pending]
+    assert session._speaker_states[3].emitted == [ord(c) for c in emitted]
 
 
 @pytest.mark.parametrize("owner", [None, 3])
@@ -692,6 +695,35 @@ def test_utterance_keeps_words_decoded_just_before_its_speaker_is_active(_stream
         events.extend(session._feed(bytes(5120)))
     kind = "one_shot" if owner is None else "transcript"
     assert [e["text"] for e in events if e["kind"] == kind] == ["what time"]
+
+
+@pytest.mark.parametrize("owner", [None, 3])
+def test_finished_utterance_words_do_not_lead_into_the_next(_streaming_models, monkeypatch, owner):
+    import torch
+    from nemo.collections.asr.parts.utils.rnnt_utils import Hypothesis
+    from speaker_stt._inference import _Session
+
+    models, activity, _calls, _masks, _allocations, _text = _streaming_models
+    # " two" is decoded in the quiet that ends the first utterance, inside
+    # the window that leads into the second.
+    words = {1: "one", 2: " two", 4: "three"}
+
+    def decode(**kwargs):
+        previous = kwargs["previous_hypotheses"]
+        step = previous[0].dec_state + 1 if previous else 1
+        value = "" if kwargs["keep_all_outputs"] else words.get(step, "")
+        hyp = Hypothesis(y_sequence=torch.tensor([ord(c) for c in value]), dec_state=step)
+        return None, [hyp], *models.asr.encoder.get_initial_cache_state(batch_size=1), [hyp]
+
+    monkeypatch.setattr(models.asr, "conformer_stream_step", decode)
+    session = _Session(models, _SpeakerConfig(mode="always_on", silence_duration=0.32), audio_origin_us=0)
+    session.selection.owner = owner
+    events = []
+    for speakers in ([3], [], [], [3], [], []):
+        activity[:] = speakers
+        events.extend(session._feed(bytes(5120)))
+    kind = "one_shot" if owner is None else "transcript"
+    assert [e["text"] for e in events if e["kind"] == kind] == ["one two", "three"]
 
 
 def test_final_padding_stays_attributed_to_the_finishing_speaker(_streaming_models):
