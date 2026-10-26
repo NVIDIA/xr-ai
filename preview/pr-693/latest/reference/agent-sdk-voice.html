@@ -738,15 +738,28 @@ misplaced controls are rejected instead of silently replaced by defaults.</p>
 matches <code class="docutils literal notranslate"><span class="pre">let's</span></code>. Exact control prefixes can span final STT results, and a
 boundary may fall inside a word: <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent</span></code> (or <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">ag</span></code>), followed by
 <code class="docutils literal notranslate"><span class="pre">let's</span> <span class="pre">start</span> <span class="pre">talking</span></code> (or <code class="docutils literal notranslate"><span class="pre">ent,</span> <span class="pre">let's</span> <span class="pre">start</span> <span class="pre">talking</span></code>), starts the conversation
-if their speech onsets fall within <code class="docutils literal notranslate"><span class="pre">phrase_window_s</span></code>. A prefix is withheld until
-the phrase completes. If the next utterance is unrelated, the withheld words
-are ordinary speech: in an active conversation they lead that utterance’s
-transcript, and otherwise they are discarded. An unrecognized utterance, an
-expired window, or a disconnect discards them. Quoting the phrase inside a
-longer utterance does not activate it. In conversation and hybrid modes, control
-phrases never become agent queries or transcript-topic events. In wake-only and
-always-on modes, their words are ordinary text subject to that mode’s admission
-policy, not session controls.</p>
+if their speech onsets fall within <code class="docutils literal notranslate"><span class="pre">phrase_window_s</span></code>.</p>
+<p>An utterance that could begin a control phrase is withheld. The same speaker’s
+next utterance within <code class="docutils literal notranslate"><span class="pre">phrase_window_s</span></code> decides what the withheld words were:</p>
+<ul class="simple">
+<li><p>If it completes a control phrase, alone or joined, the control runs.</p></li>
+<li><p>If the joined words could still begin one, they stay withheld. If only the
+new utterance could, it begins a new window with the earlier words ahead of it.</p></li>
+<li><p>If it is a STOP on its own, the STOP runs.</p></li>
+<li><p>Otherwise the withheld words were speech. In an active conversation they lead
+that utterance’s transcript, which is handled as if spoken unsplit: the agent
+query keeps every word, and with <code class="docutils literal notranslate"><span class="pre">require_wake_phrase</span></code> the wake rule applies
+to the joined text. The exception is a standalone wake phrase under
+<code class="docutils literal notranslate"><span class="pre">require_wake_phrase</span></code>: it already opened its follow-up window when withheld,
+so it is not released again.</p></li>
+</ul>
+<p>In every other case the withheld words are discarded: a control or STOP ran,
+no conversation is active, the next utterance comes from another speaker, is
+empty or failed, or does not start within the window, or the participant
+disconnects. Quoting the phrase inside a longer utterance does not activate it.
+In conversation and hybrid modes, control phrases never become agent queries or
+transcript-topic events. In wake-only and always-on modes, their words are
+ordinary text subject to that mode’s admission policy, not session controls.</p>
 <p>These controls work with the sample’s existing batch STT service, including NIM,
 or with speaker ASR. Batch STT controls are participant-scoped and cannot identify
 people sharing one microphone. Speaker ASR attributes each candidate before

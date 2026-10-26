@@ -241,15 +241,29 @@ Matching ignores case, punctuation, apostrophes, and spacing; `let us` also
 matches `let's`. Exact control prefixes can span final STT results, and a
 boundary may fall inside a word: `Hey agent` (or `Hey ag`), followed by
 `let's start talking` (or `ent, let's start talking`), starts the conversation
-if their speech onsets fall within `phrase_window_s`. A prefix is withheld until
-the phrase completes. If the next utterance is unrelated, the withheld words
-are ordinary speech: in an active conversation they lead that utterance's
-transcript, and otherwise they are discarded. An unrecognized utterance, an
-expired window, or a disconnect discards them. Quoting the phrase inside a
-longer utterance does not activate it. In conversation and hybrid modes, control
-phrases never become agent queries or transcript-topic events. In wake-only and
-always-on modes, their words are ordinary text subject to that mode's admission
-policy, not session controls.
+if their speech onsets fall within `phrase_window_s`.
+
+An utterance that could begin a control phrase is withheld. The same speaker's
+next utterance within `phrase_window_s` decides what the withheld words were:
+
+- If it completes a control phrase, alone or joined, the control runs.
+- If the joined words could still begin one, they stay withheld. If only the
+  new utterance could, it begins a new window with the earlier words ahead of it.
+- If it is a STOP on its own, the STOP runs.
+- Otherwise the withheld words were speech. In an active conversation they lead
+  that utterance's transcript, which is handled as if spoken unsplit: the agent
+  query keeps every word, and with `require_wake_phrase` the wake rule applies
+  to the joined text. The exception is a standalone wake phrase under
+  `require_wake_phrase`: it already opened its follow-up window when withheld,
+  so it is not released again.
+
+In every other case the withheld words are discarded: a control or STOP ran,
+no conversation is active, the next utterance comes from another speaker, is
+empty or failed, or does not start within the window, or the participant
+disconnects. Quoting the phrase inside a longer utterance does not activate it.
+In conversation and hybrid modes, control phrases never become agent queries or
+transcript-topic events. In wake-only and always-on modes, their words are
+ordinary text subject to that mode's admission policy, not session controls.
 
 These controls work with the sample's existing batch STT service, including NIM,
 or with speaker ASR. Batch STT controls are participant-scoped and cannot identify
