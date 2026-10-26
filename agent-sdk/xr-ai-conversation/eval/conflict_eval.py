@@ -26,7 +26,7 @@ from _common import (
     standalone_started,
     validate_suite,
 )
-from xr_ai_conversation import Conversation, ConversationContextUpdate
+from xr_ai_conversation import ContextManager, Conversation, ConversationContextUpdate
 from xr_ai_interaction import ResponseOutput
 from xr_ai_routing import AgentTurn
 from xr_ai_runtime import AgentRuntime, Topic
@@ -50,21 +50,25 @@ class _Clock:
 
 async def _seed(
     llm: ScriptedLLM, case: dict[str, Any], clock: _Clock, step_minutes: float
-) -> tuple[Conversation, AgentRuntime]:
+) -> tuple[ContextManager, Conversation, AgentRuntime]:
     summary_topics = case.get("summary_topics", {})
     incremental_topics = case.get("incremental_topics", {})
     runtime = AgentRuntime()
-    conversation = Conversation(
+    manager = ContextManager(
         llm,
-        runtime=runtime,
-        output_topic=Topic("conversation-eval.output", ResponseOutput),
         summary_context_topics=tuple(summary_topics),
         incremental_context_topics=tuple(incremental_topics),
         dialogue_budget_bytes=case.get("dialogue_budget_bytes", 8_000),
         topic_budget_bytes={**summary_topics, **incremental_topics},
     )
+    conversation = Conversation(
+        llm,
+        context=manager,
+        runtime=runtime,
+        output_topic=Topic("conversation-eval.output", ResponseOutput),
+    )
     if summary_topics or incremental_topics:
-        runtime.register("conversation-context", conversation.context_subscriber())
+        runtime.register("conversation-context", manager.subscriber())
     llm.summaries = dict(case.get("summaries", {}))
     await runtime.start()
     for index, step in enumerate(case["steps"]):
@@ -72,7 +76,8 @@ async def _seed(
         if "say" in step:
             llm.answer = step["say"]["assistant"]
             await conversation.answer(
-                AgentTurn(_PARTICIPANT, str(index), step["say"]["user"]), started=standalone_started,
+                AgentTurn(_PARTICIPANT, str(index), step["say"]["user"]),
+                started=standalone_started,
             )
         else:
             publication = step["publish"]
@@ -81,21 +86,21 @@ async def _seed(
                 ConversationContextUpdate(text=publication["text"]),
                 participant_id=_PARTICIPANT,
             )
-        await settle(conversation, _PARTICIPANT)
+        await settle(manager, _PARTICIPANT)
     llm.answer = None
     llm.summaries = {}
     clock.advance(step_minutes)
-    return conversation, runtime
+    return manager, conversation, runtime
 
 
-def _seeding_errors(conversation: Conversation, expect: dict[str, Any]) -> list[str]:
+def _seeding_errors(manager: ContextManager, expect: dict[str, Any]) -> list[str]:
     """Check the seeded context has the shape the case is about."""
 
-    summary, exchanges = conversation._context.dialogue_snapshot(_PARTICIPANT)
+    summary, exchanges = manager._context.dialogue_snapshot(_PARTICIPANT)
     summarized = {"dialogue"} if summary.text else set()
     verbatim = [f"{entry.user}\n{entry.assistant}" for entry in exchanges]
-    summary_topics = {topic.name for topic in conversation._summary_context_topics}
-    for source, background, records in conversation._context.source_snapshots(_PARTICIPANT):
+    summary_topics = {topic.name for topic in manager._summary_context_topics}
+    for source, background, records in manager._context.source_snapshots(_PARTICIPANT):
         if background is not None and source in summary_topics:
             verbatim.append(background.text)
         elif background is not None:
@@ -121,9 +126,9 @@ async def main() -> None:
             clock = _Clock()
             # The runtime and the engine read wall time through time.time_ns().
             with patch("time.time_ns", clock):
-                conversation, runtime = await _seed(scripted, case, clock, suite["step_minutes"])
+                manager, conversation, runtime = await _seed(scripted, case, clock, suite["step_minutes"])
             try:
-                if errors := _seeding_errors(conversation, case.get("expect", {})):
+                if errors := _seeding_errors(manager, case.get("expect", {})):
                     failures.append(f"{case['name']}: seeding {'; '.join(errors)}")
                     print(f"FAIL {case['name']}: seeding {'; '.join(errors)}")
                     continue
@@ -133,6 +138,7 @@ async def main() -> None:
                     )
             finally:
                 await conversation.close()
+                await manager.close()
                 await runtime.stop()
             passed = sum(matches(answer, case) for answer in answers)
             ok = passed >= suite["min_pass_rate"] * samples

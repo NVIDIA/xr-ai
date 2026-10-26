@@ -17,6 +17,38 @@ ports. Open only the externally reachable ports required by the deployment.
 | 8092 | TCP | Optional live agent-event viewer (plain HTTP — bound to 127.0.0.1 by default; do not expose to an untrusted network) |
 | 48322 | TCP | CloudXR WSS proxy (WebRTC profiles; unused by native Apple clients) |
 
+(onnx-runtime-telemetry)=
+## ONNX Runtime telemetry
+
+The voice pipeline uses ONNX Runtime through `xr-ai-vad` for Silero VAD.
+ONNX Runtime 1.31 enables native 1DS telemetry by default in the inspected
+official Python 3.12 wheels for Linux x86_64 and aarch64 and macOS arm64.
+This includes an outbound HTTPS uploader to Microsoft's telemetry service and
+a persistent local device identifier, whose hashed value is sent with telemetry.
+Other platforms and custom builds require separate verification.
+
+If outbound ONNX Runtime telemetry is unwanted, set `ORT_DISABLE_TELEMETRY=1`
+in the launch environment **before starting the process**. From the repository
+root, for example:
+
+```bash
+export ORT_DISABLE_TELEMETRY=1
+uv run --project agent-samples/simple-vlm-example simple_vlm_example
+```
+
+The sample launcher passes the exported setting to its child processes. For
+a service or container deployment, set the variable in the service's or
+container's environment before startup; exporting it only on the host does
+not automatically configure a container. Restart existing processes with the
+setting applied.
+
+The environment opt-out is latched during native telemetry initialization and
+prevents uploader creation, event emission, and device-identifier persistence.
+Calling `onnxruntime.disable_telemetry_events()` later in Python does not undo
+initialization effects and is insufficient for this startup opt-out. Refer to
+the upstream [1DS implementation](https://github.com/microsoft/onnxruntime/blob/v1.31.0/onnxruntime/core/platform/telemetry_1ds.cc)
+and [environment opt-out handling](https://github.com/microsoft/onnxruntime/blob/v1.31.0/onnxruntime/core/platform/telemetry_environment.h).
+
 ## Ubuntu or Debian (`ufw`)
 
 ```bash
