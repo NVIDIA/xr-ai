@@ -130,7 +130,7 @@ class _Selection:
                                "pts_us": self.pts_us, "speaker_id": self.candidate})
             elif action != "start":
                 events.append({
-                    "kind": "transcript", "text": f"{self._controls._released} {text.strip()}".strip(),
+                    "kind": "transcript", "text": text.strip(), "released": self._controls._released,
                     "pts_us": self.pts_us, "speaker_id": self.candidate,
                 })
         else:

@@ -297,6 +297,7 @@ def test_forced_truncation_emits_owner_transcript_without_releasing(_streaming_m
         {
             "kind": "transcript",
             "text": cfg.stop_phrase,
+            "released": "",
             "pts_us": 1_000_000,
             "speaker_id": 7,
         },
