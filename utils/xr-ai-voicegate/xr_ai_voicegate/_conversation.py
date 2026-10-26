@@ -15,6 +15,10 @@ def _normalize(text: str) -> str:
     return re.sub(r"\blet us\b", "lets", " ".join(words))
 
 
+def _letters(text: str) -> str:
+    return _normalize(text).replace(" ", "")
+
+
 @dataclass(frozen=True)
 class _ConversationConfig:
     start_phrase: str = "Hey agent, let's start talking"
@@ -70,34 +74,52 @@ class _ControlMatcher:
         self._key: object = None
         self._started_s = 0.0
         self._words = ""
+        # Fragments withheld as a possible control, as spoken.
+        self._held = ""
+        # Withheld fragments the last feed found were not a control. They are
+        # speech, so the caller puts them before that feed's transcript.
+        self._released = ""
 
     def _reset(self) -> None:
         self._key = None
         self._words = ""
+        self._held = ""
+        self._released = ""
 
     def _feed(self, text: str, *, key: object, at_s: float) -> str | None:
-        words = _normalize(text)
+        self._released = ""
+        # Fragments join on letters, not words: an utterance boundary can fall
+        # inside a word ("hey ag" + "ent, let's start talking").
+        words = _letters(text)
         if not words:
             self._reset()
             return None
-        controls = {"start": _normalize(self.cfg.start_phrase), "stop": _normalize(self.cfg.stop_phrase)}
+        controls = {
+            "start": _letters(self.cfg.start_phrase),
+            "stop": _letters(self.cfg.stop_phrase),
+        }
         if self._words and (key != self._key or not 0 <= at_s - self._started_s <= self.cfg.phrase_window_s):
             self._reset()
-        combined = f"{self._words} {words}" if self._words else words
+        combined = self._words + words
         for action, phrase in controls.items():
             if words == phrase or combined == phrase:
                 self._reset()
                 return action
-        if any(phrase.startswith(combined + " ") for phrase in controls.values()):
+        if any(phrase.startswith(combined) for phrase in controls.values()):
             if not self._words:
                 self._started_s = at_s
             self._words = combined
+            self._held = f"{self._held} {text.strip()}".strip()
             self._key = key
             return "pending"
+        held = self._held
         self._reset()
-        if any(phrase.startswith(words + " ") for phrase in controls.values()):
+        if any(phrase.startswith(words) for phrase in controls.values()):
             self._words = words
+            # The earlier fragments are speech too; they lead this one.
+            self._held = f"{held} {text.strip()}".strip()
             self._key = key
             self._started_s = at_s
             return "pending"
+        self._released = held
         return None

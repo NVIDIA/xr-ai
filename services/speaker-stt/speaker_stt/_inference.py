@@ -30,10 +30,16 @@ if TYPE_CHECKING:
 @dataclass
 class _AsrState:
     cache: tuple[Tensor, Tensor, Tensor]
+    # Tokens of each recent step since the last utterance, newest last.
+    recent: deque[list[int]]
     previous_hypotheses: list[Hypothesis] | None = None
     emitted: list[int] = field(default_factory=list)
     tokens: list[int] = field(default_factory=list)
     pending: list[int] = field(default_factory=list)
+
+    def _lead_in(self) -> list[int]:
+        """Tokens decoded in the quiet steps before this one."""
+        return [token for tokens in list(self.recent)[:-1] for token in tokens]
 
 
 @dataclass
@@ -170,7 +176,11 @@ class _Session:
         self._reset_asr()
 
     def _new_asr(self) -> _AsrState:
-        return _AsrState(self.models.asr.encoder.get_initial_cache_state(batch_size=1))
+        # The decoder can emit a speaker's first word before diarization marks
+        # them active. Words within one silence_duration of activity belong to
+        # the utterance, mirroring the quiet that ends one.
+        lead_in = ceil(self.selection.cfg.silence_duration * 16000 / self.models.hop_samples)
+        return _AsrState(self.models.asr.encoder.get_initial_cache_state(batch_size=1), deque(maxlen=lead_in + 1))
 
     def _speaker_asr(self, speaker: int) -> _AsrState:
         if speaker not in self._speaker_states:
@@ -184,7 +194,7 @@ class _Session:
     def _reset_asr(self) -> None:
         self._asr = self._speaker_asr(self.selection.owner) if self.selection.owner is not None else None
         if self._asr is not None:
-            self._asr.tokens = []
+            self._asr.tokens = self._asr._lead_in()
         self.last_partial = ""
 
     def _decode_streams(
@@ -207,7 +217,7 @@ class _Session:
             try:
                 if speaker not in streams:
                     state = self._speaker_asr(speaker)
-                    state.tokens = []
+                    state.tokens = state._lead_in()
                     streams[speaker] = _DecodedStream(state, pts_us)
                 stream = streams[speaker]
                 stream.duration += seconds
@@ -228,6 +238,7 @@ class _Session:
             texts[speaker] = stream.text
             if finished:
                 completed.append((speaker, stream))
+                stream.asr.recent.clear()
                 del streams[speaker]
         return texts, completed
 
@@ -312,10 +323,15 @@ class _Session:
                 biasing_cfg=hypothesis.biasing_cfg,
             )
         ]
-        while tokens and state.pending:
-            if tokens.pop(0) != state.pending.pop(0):
-                raise RuntimeError("speaker decoder revised finalized audio; reconnect the stream")
+        # The padded suffix is a guess. Real audio confirms it token by token;
+        # once real audio decodes differently, its tokens are new words.
+        while tokens and state.pending and tokens[0] == state.pending[0]:
+            tokens.pop(0)
+            state.pending.pop(0)
+        if tokens:
+            state.pending.clear()
         state.emitted = tokens
+        state.recent.append(tokens)
 
     def _decode(self, predictions, selected, drop, stream, finished) -> str:
         stream.tokens.extend(stream.emitted)
@@ -335,8 +351,11 @@ class _Session:
                 features, lengths = self.buffer.preprocess_audio(frame, device=self.models.device)
                 features = features[:, :, : int(lengths[0])]
                 padded, padded_lengths = self.adapter.forward_pre_encoded(features, lengths, drop)
-                silence = predictions.new_zeros((padded.shape[0], padded.shape[1], 8))
-                self._step_native(padded, padded_lengths, silence, selected, drop, snapshot, True)
+                # The padding flushes the selected speaker's last subwords, so
+                # it stays attributed to them; marking them silent drops those.
+                targets = predictions.new_zeros((padded.shape[0], padded.shape[1], 8))
+                targets[:, :, selected] = 1.0
+                self._step_native(padded, padded_lengths, targets, selected, drop, snapshot, True)
                 additional.extend(snapshot.emitted)
             stream.pending.extend(additional)
             stream.tokens.extend(additional)
@@ -510,6 +529,9 @@ class _Session:
                     text = self.selection.text
                     truncated = self.selection.duration >= self.selection.cfg.max_utterance_s
                     events.extend(self.selection._finish(text, allow_control=not truncated))
+                    # A finished utterance's words cannot lead into the next
+                    # one, including after the stop phrase releases its speaker.
+                    self._asr.recent.clear()
                     self._reset_asr()
                 if self.selection.cfg.diagnostics:
                     events.extend(self._diagnostic_events(active, completed, owner_before, chunk_pts))

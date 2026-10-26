@@ -59,6 +59,7 @@ def test_only_owner_reaches_asr_and_release_requires_owner():
     assert selection._finish("what is that?")[-1] == {
         "kind": "transcript",
         "text": "what is that?",
+        "released": "",
         "pts_us": 300,
         "speaker_id": 6,
     }
@@ -125,3 +126,14 @@ def test_start_and_stop_controls_can_span_utterances():
     assert selection._finish("hey agent")[-1]["kind"] == "control_pending"
     selection._activity({7}, 0.3, 3_000_000)
     assert selection._finish("let's stop talking")[-1] == {"kind": "released"}
+
+
+def test_withheld_fragment_is_released_with_the_next_transcript():
+    selection = _Selection(_SpeakerConfig())
+    selection.owner = 7
+    selection._activity({7}, 0.3, 1_000_000)
+    assert selection._finish("Hey.")[-1]["kind"] == "control_pending"
+    selection._activity({7}, 0.3, 2_000_000)
+    assert selection._finish("How are you?")[-1] == {
+        "kind": "transcript", "text": "How are you?", "released": "Hey.", "pts_us": 2_000_000, "speaker_id": 7,
+    }

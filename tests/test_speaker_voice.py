@@ -39,7 +39,7 @@ from xr_ai_voice._pipeline import _build_voice_pipeline
 from xr_ai_voice._processors.io import _VoiceIOProcessor
 from xr_ai_voice._processors.speaker_stt import _SpeakerSttProcessor
 from xr_ai_voice._processors.vad_stt import VadConfig, VadSttProcessor
-from xr_ai_voice._processors.voice_gate import VoiceGateProcessor
+from xr_ai_voice._processors.voice_gate import _STOP_ACK_TEXT, VoiceGateProcessor
 from xr_ai_voice._speaker_client import _select_speaker_asr, _SpeakerClient
 from xr_ai_voice._transport import HubVoiceTransport
 from xr_ai_voicegate import load_voice_gate_config
@@ -854,17 +854,37 @@ async def test_same_conversation_workflow_through_both_asr_paths(tmp_path, monke
 
         await speak("what is that")
         assert len(accepted) == (0 if require_wake else 1)
-        # A wake phrase split from an ordinary command retains its follow-up window.
+        # A wake phrase split from an ordinary command leads the next transcript,
+        # as if spoken unsplit. When wake phrases are required, it opens only its
+        # follow-up window instead.
+        query = "describe this" if require_wake else "hey agent describe this"
         await speak("hey agent")
         await speak("describe this")
-        assert accepted[-1].text == "describe this"
+        assert accepted[-1].text == query
         count = len(accepted)
+        if require_wake:
+            await speak("hey agent")
+            gate.gate.forget("a")  # Its follow-up window elapses.
+            await speak("describe this")
+            assert len(accepted) == count
+        # A wake phrase split across fragments is still one wake phrase.
+        for part in ("hey", "agent", "describe this"):
+            await speak(part)
+        assert len(accepted) == count + 1 and accepted[-1].text == query
+        count += 1
+        # Released words lead a query, but a STOP is judged on its own utterance.
+        responses = []
+        gate._emit_text_response = AsyncMock(side_effect=lambda pid, text: responses.append(text))
+        await speak("Hey.")
+        await speak("stop")
+        assert responses == [_STOP_ACK_TEXT] and len(accepted) == count
         await speak("hey agent")
         await speak("let's stop talking")
         assert "a" not in gate._conversation_active and len(accepted) == count
         await speak("do not send this")
         assert len(accepted) == count
-        assert [call.args[1] for call in captions.await_args_list] == ["what is that", "describe this"]
+        captioned = [call.args[1] for call in captions.await_args_list]
+        assert captioned == ["what is that", query, *(["describe this"] if require_wake else []), query, "stop"]
         messages = [call.args[0] for call in display.await_args_list]
         assert len(messages) == len(accepted)
         label = "Speaker 7" if use_speaker else "User"
