@@ -253,9 +253,10 @@ next utterance within `phrase_window_s` decides what the withheld words were:
 - Otherwise the withheld words were speech. In an active conversation they lead
   that utterance's transcript, which is handled as if spoken unsplit: the agent
   query keeps every word, and with `require_wake_phrase` the wake rule applies
-  to the joined text. The exception is a standalone wake phrase under
-  `require_wake_phrase`: it already opened its follow-up window when withheld,
-  so it is not released again.
+  to the joined text. The exception is withheld words that together form only
+  a wake phrase under `require_wake_phrase`: they already opened its follow-up
+  window when withheld, so they are not released again. A wake phrase split
+  across final results (`Hey` | `agent`) counts as one.
 
 In every other case the withheld words are discarded: a control or STOP ran,
 no conversation is active, the next utterance comes from another speaker, is

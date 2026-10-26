@@ -749,9 +749,10 @@ new utterance could, it begins a new window with the earlier words ahead of it.<
 <li><p>Otherwise the withheld words were speech. In an active conversation they lead
 that utterance’s transcript, which is handled as if spoken unsplit: the agent
 query keeps every word, and with <code class="docutils literal notranslate"><span class="pre">require_wake_phrase</span></code> the wake rule applies
-to the joined text. The exception is a standalone wake phrase under
-<code class="docutils literal notranslate"><span class="pre">require_wake_phrase</span></code>: it already opened its follow-up window when withheld,
-so it is not released again.</p></li>
+to the joined text. The exception is withheld words that together form only
+a wake phrase under <code class="docutils literal notranslate"><span class="pre">require_wake_phrase</span></code>: they already opened its follow-up
+window when withheld, so they are not released again. A wake phrase split
+across final results (<code class="docutils literal notranslate"><span class="pre">Hey</span></code> | <code class="docutils literal notranslate"><span class="pre">agent</span></code>) counts as one.</p></li>
 </ul>
 <p>In every other case the withheld words are discarded: a control or STOP ran,
 no conversation is active, the next utterance comes from another speaker, is
