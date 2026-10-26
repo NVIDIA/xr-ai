@@ -35,8 +35,8 @@ qualified lock; the reciprocal-license table records exact resolved versions.
 | `livekit-api`  | 0.7.0    | Apache-2.0    | https://github.com/livekit/python-sdks |
 | `numpy`        | 1.24.0   | BSD-3-Clause  | https://github.com/numpy/numpy |
 | `nemo-relay`   | >=0.10.0,<0.11 | Apache-2.0  | https://github.com/NVIDIA/NeMo-Relay |
-| `Pillow`       | 10.0.0   | HPND          | https://github.com/python-pillow/Pillow |
-| `pipecat-ai`   | >=1.6    | BSD-2-Clause  | https://github.com/pipecat-ai/pipecat |
+| `Pillow`       | >=13.0.0 | MIT-CMU          | https://github.com/python-pillow/Pillow |
+| `pipecat-ai`   | >=1.14.0    | BSD-2-Clause  | https://github.com/pipecat-ai/pipecat |
 | `pocket-tts`   | 3.0.2    | MIT           | https://github.com/kyutai-labs/pocket-tts |
 | `num2words`    | 0.5.14   | LGPL-2.1-or-later | https://github.com/savoirfairelinux/num2words |
 | `pycountry`    | 26.2.16  | LGPL-2.1-only | https://github.com/pycountry/pycountry |
@@ -61,6 +61,27 @@ The source package compiles its CUDA extension locally. Its PyTorch,
 torchvision, Pillow, NumPy, Shapely, and Hugging Face Hub dependencies are
 installed only in the OCR container; the host launcher does not import them.
 The alternative OCR NIM image carries NVIDIA's container and model terms.
+
+### Qualified voice and image security refresh
+
+The qualified lock resolves Pipecat 1.14.0 (BSD-2-Clause), Pillow 13.0.0
+(MIT-CMU), and ONNX Runtime 1.31.0 (MIT). Their unmodified license texts and
+artifact provenance are bundled in
+[`pipecat-ai-1.14.0`](third_party_licenses/pipecat-ai-1.14.0/),
+[`pillow-13.0.0`](third_party_licenses/pillow-13.0.0/), and
+[`onnxruntime-1.31.0`](third_party_licenses/onnxruntime-1.31.0/).
+
+Pillow's full Linux wheel notices include its native-library terms. XR AI
+elects the **FTL** option for FreeType: portions of this software are copyright
+© The FreeType Project (www.freetype.org). All rights reserved. Optional
+libimagequant (GPL) and FriBiDi (LGPL) are absent from the inspected official
+CPython 3.12 macOS arm64 and Linux x86_64 and aarch64 wheels; custom builds enabling
+these libraries require a separate review.
+
+ONNX Runtime's complete third-party notices include the Apache-2.0 election
+for Mbed TLS, Apache-2.0 C++ client telemetry, and MIT DeepGEMM notices. The
+license records cover the inspected wheels; other platform artifacts and
+optional execution providers require their own review.
 
 ### Qualified HTTP and JWT security releases
 
@@ -378,6 +399,10 @@ refer to the component disclosures above for applicable license elections.
 | `tqdm-4.70.1` | [`LICENCE`](third_party_licenses/tqdm-4.70.1/LICENCE) |
 | `urllib3-2.8.0` | [`LICENSE.txt`](third_party_licenses/urllib3-2.8.0/LICENSE.txt) |
 | `vllm-0.30.0` | [`LICENSE`](third_party_licenses/vllm-0.30.0/LICENSE) |
+| `pipecat-ai-1.14.0` | [`LICENSE`](third_party_licenses/pipecat-ai-1.14.0/LICENSE) |
+| `pillow-13.0.0` | [`LICENSE`](third_party_licenses/pillow-13.0.0/LICENSE) |
+| `onnxruntime-1.31.0` | [`LICENSE`](third_party_licenses/onnxruntime-1.31.0/LICENSE) |
+| `onnxruntime-1.31.0` | [`LICENSE.thirdparty`](third_party_licenses/onnxruntime-1.31.0/LICENSE.thirdparty) |
 
 ## Updating this file
 

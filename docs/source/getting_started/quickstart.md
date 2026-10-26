@@ -20,6 +20,10 @@ Refer to {doc}`skills` for `run-demo` or development-only preparation with `setu
 
 The remainder of this quickstart is the manual path.
 
+Before launching a voice sample, refer to {ref}`onnx-runtime-telemetry`.
+If outbound ONNX Runtime telemetry is unwanted, export
+`ORT_DISABLE_TELEMETRY=1` in the launch environment before starting the process.
+
 Every sample follows the same pattern: **start the sample's model stack, wait for
 its launcher to report readiness and return, start the sample from the same
 terminal, then connect a client.** Once the sample is ready, any supported
