@@ -205,30 +205,27 @@ third-level entries, before `Earlier releases`. Link to the baseline release's
 archived guide and {doc}`/reference/migration-history`; users skipping releases
 apply earlier guides in release order.
 
-Before adding an entry, check the baseline tag's code and configuration with
-`git show <baseline-tag>:<path>`. Changes affecting only interfaces introduced
-after the baseline belong in their canonical documentation.
-
 A breaking change requires user or operator action to preserve existing
-supported behavior. Consider incompatible changes to APIs, CLI flags and exit
+released behavior. Consider incompatible changes to APIs, CLI flags and exit
 statuses, ports, default-stack contents, configuration keys and defaults, and
 wire messages between separately deployed peers. Include required operator
 actions such as stopping services with the old checkout before updating or
 restarting a reused listener. Compatibility with a still-running older peer is
 a real deployment case.
 
+Before adding a migration entry or compatibility code for an old name, check the
+baseline tag's code and configuration with `git show <baseline-tag>:<path>`. A
+change confined to a feature first added since that tag belongs in its canonical
+documentation and needs no migration entry unless it also affects a released
+contract or requires action for a still-running older peer. Pre-merge PR
+revisions never count as released behavior. Compatibility code is needed only
+for released contracts or a supported independently deployed peer. Refer to
+{doc}`documentation-style` for published URL fragments.
+
 For each breaking change to released behavior, name who is affected, state the
 required action, and include a before-and-after example when useful. Update the
 entry when another change in the same development cycle supersedes it, so the
 instructions lead directly from the baseline release to the final behavior.
-
-A feature first added since the baseline release needs no migration entry for
-its addition, rename, or removal unless it also affects a released contract or
-requires action for a still-running older peer. Pre-merge PR revisions never
-count as released behavior. Check the baseline tag before adding compatibility
-code for an old name; it is needed only for released contracts or a supported
-independently deployed peer. Refer to {doc}`documentation-style` for published
-URL fragments.
 
 Use this checklist for every release:
 

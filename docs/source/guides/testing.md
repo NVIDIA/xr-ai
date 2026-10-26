@@ -116,13 +116,14 @@ indicator; those checks require a physical device and a running server.
 With JDK 17 and the Android SDK configured, run from `client-samples/android`:
 
 ```bash
-./gradlew assembleDebug testDebugUnitTest verifyNettyPin
+./gradlew assembleDebug testDebugUnitTest \
+  verifyNettyPin verifyBuildscriptSecurityVersions
 ```
 
-These are the build, JVM test, and Netty pin verification tasks used by
-`android-build` CI. They need no emulator and do not establish physical camera,
-microphone, or remote playback behavior. Validate affected device behavior on
-hardware and report the device and result separately.
+These are the build, JVM test, Netty pin, and buildscript security checks used
+by `android-build` CI. They need no emulator and do not establish physical
+camera, microphone, or remote playback behavior. Validate affected device
+behavior on hardware and report the device and result separately.
 
 ## Coverage boundaries
 
