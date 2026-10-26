@@ -706,3 +706,29 @@ def test_final_padding_stays_attributed_to_the_finishing_speaker(_streaming_mode
     padding = [mask for call, mask in zip(calls, masks, strict=True) if call["keep_all_outputs"]]
     assert len(padding) == 2 * models.final_padding_hops
     assert all(target.all() and not others.any() for target, others in padding)
+
+
+def test_released_speaker_does_not_carry_its_last_word_into_reenrollment(_streaming_models, monkeypatch):
+    import torch
+    from nemo.collections.asr.parts.utils.rnnt_utils import Hypothesis
+    from speaker_stt._inference import _Session
+
+    models, activity, _calls, _masks, _allocations, _text = _streaming_models
+    # The stop phrase's last word is decoded in the quiet step that ends it.
+    words = {1: "hey agent, let's stop", 2: " talking", 3: "hey agent, let's start talking"}
+
+    def decode(**kwargs):
+        previous = kwargs["previous_hypotheses"]
+        step = previous[0].dec_state + 1 if previous else 1
+        value = "" if kwargs["keep_all_outputs"] else words.get(step, "")
+        hyp = Hypothesis(y_sequence=torch.tensor([ord(c) for c in value]), dec_state=step)
+        return None, [hyp], *models.asr.encoder.get_initial_cache_state(batch_size=1), [hyp]
+
+    monkeypatch.setattr(models.asr, "conformer_stream_step", decode)
+    session = _Session(models, _SpeakerConfig(silence_duration=0.16), audio_origin_us=0)
+    session.selection.owner = 3
+    events = []
+    for speakers in ([3], [], [3], []):
+        activity[:] = speakers
+        events.extend(session._feed(bytes(5120)))
+    assert [e["kind"] for e in events if e["kind"] in {"released", "enrolled"}] == ["released", "enrolled"]

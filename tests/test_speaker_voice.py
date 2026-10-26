@@ -854,17 +854,18 @@ async def test_same_conversation_workflow_through_both_asr_paths(tmp_path, monke
 
         await speak("what is that")
         assert len(accepted) == (0 if require_wake else 1)
-        # A wake phrase split from an ordinary command retains its follow-up window.
+        # A wake phrase split from an ordinary command retains its follow-up
+        # window and leads the next transcript, as if spoken unsplit.
         await speak("hey agent")
         await speak("describe this")
-        assert accepted[-1].text == "describe this"
+        assert accepted[-1].text == ("describe this" if require_wake else "hey agent describe this")
         count = len(accepted)
         await speak("hey agent")
         await speak("let's stop talking")
         assert "a" not in gate._conversation_active and len(accepted) == count
         await speak("do not send this")
         assert len(accepted) == count
-        assert [call.args[1] for call in captions.await_args_list] == ["what is that", "describe this"]
+        assert [call.args[1] for call in captions.await_args_list] == ["what is that", "hey agent describe this"]
         messages = [call.args[0] for call in display.await_args_list]
         assert len(messages) == len(accepted)
         label = "Speaker 7" if use_speaker else "User"

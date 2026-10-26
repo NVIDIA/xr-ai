@@ -287,7 +287,7 @@ class VoiceGateProcessor(FrameProcessor):
             if frame._control_pending:
                 await self._handle_pending_control(pid, frame.text)
             elif active:
-                await self._dispatch_conversation_transcript(frame)
+                await self._dispatch_conversation_transcript(pid, frame.text)
             return
         matcher = self._controls.setdefault(pid, _ControlMatcher(cfg))
         at_s = self._feeding_pts_us / 1_000_000 if self._feeding_pts_us is not None else time.monotonic()
@@ -306,7 +306,7 @@ class VoiceGateProcessor(FrameProcessor):
             await self._handle_pending_control(pid, frame.text)
             return
         if active:
-            await self._dispatch_conversation_transcript(frame)
+            await self._dispatch_conversation_transcript(pid, f"{matcher._released} {frame.text}".strip())
         elif self._mode == "hybrid":
             # Only addressed speech or the existing next-utterance permission
             # may reach the wake gate while closed (including its STOP ladder).
@@ -330,19 +330,17 @@ class VoiceGateProcessor(FrameProcessor):
                 and strip_magic(self._gate._magic_re, text) == ""):
             await self._gate.feed(pid, text)
 
-    async def _dispatch_conversation_transcript(self, frame: TranscriptionFrame) -> None:
+    async def _dispatch_conversation_transcript(self, pid: str, text: str) -> None:
         cfg = self._conversation_cfg
         assert cfg is not None
-        pid = frame.user_id
         if self._on_conversation_transcript is not None:
             await self._on_conversation_transcript(
-                pid, frame.text,
+                pid, text,
                 self._feeding_pts_us if self._feeding_pts_us is not None else time.time_ns() // 1_000,
             )
         if cfg.require_wake_phrase:
-            await self._gate.feed(pid, frame.text)
+            await self._gate.feed(pid, text)
             return
-        text = frame.text
         if text and self._gate._matches_stop(text):
             await self._on_gate_stop(pid)
         elif text:

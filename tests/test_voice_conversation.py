@@ -55,6 +55,16 @@ def test_control_fragments_do_not_cross_source_or_time_window(key, seconds):
     assert matcher._feed("hey agent let's start talking", key=key, at_s=10) == "start"
 
 
+@pytest.mark.parametrize("key,seconds,released", [("a", 1, "Hey."), ("b", 1, ""), ("a", 6.1, "")])
+def test_withheld_fragments_that_are_not_a_control_are_released(key, seconds, released):
+    matcher = _ControlMatcher(_ConversationConfig())
+    assert matcher._feed("Hey.", key="a", at_s=0) == "pending"
+    assert matcher._feed("How are you?", key=key, at_s=seconds) is None
+    assert matcher._released == released
+    assert matcher._feed("what time is it", key="a", at_s=10) is None
+    assert matcher._released == ""
+
+
 def test_unrelated_and_empty_transcripts_clear_fragments():
     matcher = _ControlMatcher(_ConversationConfig())
     for text in ("what time is it", "", "   "):
@@ -133,9 +143,11 @@ async def test_conversation_workflow_with_optional_wake_gate(harness):
 
     await h.speak("what is that")
     assert len(h.accepted) == (0 if h.gate._conversation_cfg.require_wake_phrase else 1)
+    # A withheld wake phrase leads the next transcript, as if spoken unsplit.
     await h.speak("hey agent")
     await h.speak("describe this")
-    assert h.accepted[-1].text == "describe this"
+    require_wake = h.gate._conversation_cfg.require_wake_phrase
+    assert h.accepted[-1].text == ("describe this" if require_wake else "hey agent describe this")
     await h.speak("stop")
     assert "a" in h.gate._conversation_active
     count = len(h.accepted)
@@ -144,7 +156,7 @@ async def test_conversation_workflow_with_optional_wake_gate(harness):
     assert "a" not in h.gate._conversation_active and len(h.accepted) == count
     await h.speak("do not send this")
     assert len(h.accepted) == count
-    assert [call.args[1] for call in h.captions.await_args_list] == ["what is that", "describe this", "stop"]
+    assert [call.args[1] for call in h.captions.await_args_list] == ["what is that", "hey agent describe this", "stop"]
 
 
 @pytest.mark.parametrize("failure", ["", RuntimeError("STT failed")])

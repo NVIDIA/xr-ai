@@ -194,9 +194,6 @@ class _Session:
     def _reset_asr(self) -> None:
         self._asr = self._speaker_asr(self.selection.owner) if self.selection.owner is not None else None
         if self._asr is not None:
-            # A finished utterance's words cannot lead into the next one.
-            if self.selection.candidate is None:
-                self._asr.recent.clear()
             self._asr.tokens = self._asr._lead_in()
         self.last_partial = ""
 
@@ -532,6 +529,9 @@ class _Session:
                     text = self.selection.text
                     truncated = self.selection.duration >= self.selection.cfg.max_utterance_s
                     events.extend(self.selection._finish(text, allow_control=not truncated))
+                    # A finished utterance's words cannot lead into the next
+                    # one, including after the stop phrase releases its speaker.
+                    self._asr.recent.clear()
                     self._reset_asr()
                 if self.selection.cfg.diagnostics:
                     events.extend(self._diagnostic_events(active, completed, owner_before, chunk_pts))

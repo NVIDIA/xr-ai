@@ -70,12 +70,20 @@ class _ControlMatcher:
         self._key: object = None
         self._started_s = 0.0
         self._words = ""
+        # Fragments withheld as a possible control, as spoken.
+        self._held = ""
+        # Withheld fragments the last feed found were not a control. They are
+        # speech, so the caller puts them before that feed's transcript.
+        self._released = ""
 
     def _reset(self) -> None:
         self._key = None
         self._words = ""
+        self._held = ""
+        self._released = ""
 
     def _feed(self, text: str, *, key: object, at_s: float) -> str | None:
+        self._released = ""
         # Fragments join on letters, not words: an utterance boundary can fall
         # inside a word ("hey ag" + "ent, let's start talking").
         words = _normalize(text).replace(" ", "")
@@ -97,12 +105,16 @@ class _ControlMatcher:
             if not self._words:
                 self._started_s = at_s
             self._words = combined
+            self._held = f"{self._held} {text.strip()}".strip()
             self._key = key
             return "pending"
+        held = self._held
         self._reset()
         if any(phrase.startswith(words) for phrase in controls.values()):
             self._words = words
+            self._held = text.strip()
             self._key = key
             self._started_s = at_s
             return "pending"
+        self._released = held
         return None

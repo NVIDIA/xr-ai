@@ -125,3 +125,14 @@ def test_start_and_stop_controls_can_span_utterances():
     assert selection._finish("hey agent")[-1]["kind"] == "control_pending"
     selection._activity({7}, 0.3, 3_000_000)
     assert selection._finish("let's stop talking")[-1] == {"kind": "released"}
+
+
+def test_withheld_fragment_leads_the_next_transcript():
+    selection = _Selection(_SpeakerConfig())
+    selection.owner = 7
+    selection._activity({7}, 0.3, 1_000_000)
+    assert selection._finish("Hey.")[-1]["kind"] == "control_pending"
+    selection._activity({7}, 0.3, 2_000_000)
+    assert selection._finish("How are you?")[-1] == {
+        "kind": "transcript", "text": "Hey. How are you?", "pts_us": 2_000_000, "speaker_id": 7,
+    }
