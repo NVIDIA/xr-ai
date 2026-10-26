@@ -20,10 +20,12 @@ its application code predates the update.
 ### vLLM 0.31 security update
 
 The four vLLM service environments pin `vllm==0.31.0`. Their standalone YAMLs
-and the shared Docker default now use `vllm/vllm-openai:v0.31.0` in place of
-`nvcr.io/nvidia/vllm:26.09-py3`. The upstream image supports Linux x86_64 and
-aarch64 and uses CUDA 13.0. Stop the old model stack before updating and
-restart it with the new configuration. Refresh pip environments with
+and the shared Docker default now use `nvcr.io/nvidia/vllm:26.10.pre1-py3`
+in place of `nvcr.io/nvidia/vllm:26.09-py3`. The NGC preview supports Linux x86_64 and
+aarch64, uses CUDA 13.4, and reports NVIDIA vLLM `0.31.0+88641915`.
+Qualify this preview on the target GPU and model workload before deployment.
+Stop the old model stack before updating and restart it with the new
+configuration. Refresh pip environments with
 `uv --config-file uv.toml sync --project <service-directory>`.
 
 Per-request `mm_processor_kwargs` and `media_io_kwargs` overrides are rejected

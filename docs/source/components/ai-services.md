@@ -622,18 +622,19 @@ flags. Docker-only lifecycle settings such as `vllm_image`, `extra_pip`, and
 ```yaml
 # vlm-server (Cosmos3)
 vllm_backend: docker
-vllm_image:   vllm/vllm-openai:v0.31.0
+vllm_image:   nvcr.io/nvidia/vllm:26.10.pre1-py3
 ```
 
-`vllm_image:` defaults to `vllm/vllm-openai:v0.31.0` for all wrappers.
-The Python environments also pin vLLM 0.31.0. Both runtimes include the fixes
-for CVE-2026-114050 and CVE-2026-114055. Keep per-request multimodal
+`vllm_image:` defaults to `nvcr.io/nvidia/vllm:26.10.pre1-py3` for all wrappers.
+The Python environments also pin vLLM 0.31.0. vLLM 0.31.0 is the upstream fixed
+release for CVE-2026-114050 and CVE-2026-114055. Keep per-request multimodal
 processor overrides disabled; server-level processor configuration remains
 available.
 
-This upstream CUDA 13.0 image includes vLLM 0.31.0 and supports Linux x86_64
-and aarch64. The checked-in Cosmos3 and Nemotron model configurations select
-this image. Nemotron Omni uses its native Mamba and
+This NVIDIA NGC preview uses CUDA 13.4 and reports vLLM
+`0.31.0+88641915` on Linux x86_64 and aarch64. The checked-in Cosmos3 and
+Nemotron model configurations select this image. Qualify the preview on the target GPU and model workload before
+deploying it. Nemotron Omni uses its native Mamba and
 causal-convolution implementations, so the shipped configuration does not
 compile or install `mamba-ssm` or `causal-conv1d`. Override the image to pin
 another tag, an internal mirror, or a custom build.
@@ -644,7 +645,7 @@ starting it with the new image:
 
 ```bash
 uv run --project agent-samples/simple-vlm-example/model-servers simple_vlm_example_model_servers --stop
-docker pull vllm/vllm-openai:v0.31.0
+docker pull nvcr.io/nvidia/vllm:26.10.pre1-py3
 ```
 
 The next launch recreates stale managed containers when their image or command
@@ -700,11 +701,11 @@ Existing `~/.docker/config.json` entries take priority and are not overwritten.
   forwarded, and included in the container fingerprint, so changing one
   recreates a persistent container.
 
-The selected image is built from the vLLM 0.31.0 release:
+The selected NGC preview reports this vLLM version in its image metadata:
 
 | Image | vLLM |
 |---|---:|
-| `vllm/vllm-openai:v0.31.0` | 0.31.0 |
+| `nvcr.io/nvidia/vllm:26.10.pre1-py3` | 0.31.0+88641915 |
 
 - Container name is deterministic per service: `xr-ai-vllm-vlm-server`,
   `xr-ai-vllm-nemotron3-nano-llm-server`,
@@ -745,7 +746,7 @@ cleanup.
   including RTX Blackwell and GB10, the service selects Triton attention for
   both the decoder and vision encoder.
   This reduces cold image latency without depending on a previous container's
-  compilation cache. On x86 SM12 GPUs, it avoids the pinned 26.09 image's
+  compilation cache. On x86 SM12 GPUs, it avoids the NGC image's
   FlashAttention-2 PTX fallback. The ARM image includes native Blackwell kernels,
   so that explanation does not apply to every SM12 deployment. Other GPUs,
   custom images, and pip mode retain vLLM's backend selection. The optional

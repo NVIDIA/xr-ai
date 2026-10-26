@@ -2,9 +2,9 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-Docker container backend for vLLM.
+NGC docker container backend for vLLM.
 
-Runs `docker run <image> vllm serve …` always in the
+Runs `docker run nvcr.io/nvidia/vllm:<tag> vllm serve …` always in the
 foreground, with start_new_session=True so the container escapes the
 launcher's process group and survives stack restarts.  The vLLM process
 is visible to ss(8) on the host via --network host, so cleanup uses the
