@@ -485,7 +485,9 @@ session remains private. Applications that need a shared public
 <code class="docutils literal notranslate"><span class="pre">HubVoiceTransport</span></code> construct and inject one explicitly.</p>
 <p>Set utterance-ending silence once through <code class="docutils literal notranslate"><span class="pre">VadConfig.silence_duration</span></code> passed
 to <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code>. It controls the active backend: Silero VAD for batch STT, or
-per-speaker inactivity for speaker ASR. This value takes precedence over the
+per-speaker inactivity for speaker ASR. For speaker ASR, words decoded within
+the same interval before a speaker becomes active also open their utterance,
+since the decoder can lead diarization. This value takes precedence over the
 voice-gate YAML’s <code class="docutils literal notranslate"><span class="pre">speaker.silence_duration</span></code>; direct speaker sessions retain
 their own configuration. Other <code class="docutils literal notranslate"><span class="pre">VadConfig</span></code> fields apply only to batch STT.
 Speaker ASR checks inactivity at model-chunk boundaries, so the threshold is
@@ -732,11 +734,15 @@ misplaced controls are rejected instead of silently replaced by defaults.</p>
 <span class="w">  </span><span class="nt">phrase_window_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">6.0</span>
 </pre></div>
 </div>
-<p>Matching ignores case, punctuation, and apostrophes; <code class="docutils literal notranslate"><span class="pre">let</span> <span class="pre">us</span></code> also matches
-<code class="docutils literal notranslate"><span class="pre">let's</span></code>. Exact control prefixes can span final STT results: <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent</span></code>, followed
-by <code class="docutils literal notranslate"><span class="pre">let's</span> <span class="pre">start</span> <span class="pre">talking</span></code>, starts the conversation if their speech onsets fall
-within <code class="docutils literal notranslate"><span class="pre">phrase_window_s</span></code>. An unrelated or unrecognized utterance, an expired
-window, or a disconnect discards pending fragments. Quoting the phrase inside a
+<p>Matching ignores case, punctuation, apostrophes, and spacing; <code class="docutils literal notranslate"><span class="pre">let</span> <span class="pre">us</span></code> also
+matches <code class="docutils literal notranslate"><span class="pre">let's</span></code>. Exact control prefixes can span final STT results, and a
+boundary may fall inside a word: <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent</span></code> (or <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">ag</span></code>), followed by
+<code class="docutils literal notranslate"><span class="pre">let's</span> <span class="pre">start</span> <span class="pre">talking</span></code> (or <code class="docutils literal notranslate"><span class="pre">ent,</span> <span class="pre">let's</span> <span class="pre">start</span> <span class="pre">talking</span></code>), starts the conversation
+if their speech onsets fall within <code class="docutils literal notranslate"><span class="pre">phrase_window_s</span></code>. A prefix is withheld until
+the phrase completes. If the next utterance is unrelated, the withheld words
+are ordinary speech: in an active conversation they lead that utterance’s
+transcript, and otherwise they are discarded. An unrecognized utterance, an
+expired window, or a disconnect discards them. Quoting the phrase inside a
 longer utterance does not activate it. In conversation and hybrid modes, control
 phrases never become agent queries or transcript-topic events. In wake-only and
 always-on modes, their words are ordinary text subject to that mode’s admission

@@ -51,7 +51,9 @@ session remains private. Applications that need a shared public
 
 Set utterance-ending silence once through `VadConfig.silence_duration` passed
 to `VoiceAgent`. It controls the active backend: Silero VAD for batch STT, or
-per-speaker inactivity for speaker ASR. This value takes precedence over the
+per-speaker inactivity for speaker ASR. For speaker ASR, words decoded within
+the same interval before a speaker becomes active also open their utterance,
+since the decoder can lead diarization. This value takes precedence over the
 voice-gate YAML's `speaker.silence_duration`; direct speaker sessions retain
 their own configuration. Other `VadConfig` fields apply only to batch STT.
 Speaker ASR checks inactivity at model-chunk boundaries, so the threshold is
@@ -235,11 +237,15 @@ conversation:
   phrase_window_s: 6.0
 ```
 
-Matching ignores case, punctuation, and apostrophes; `let us` also matches
-`let's`. Exact control prefixes can span final STT results: `Hey agent`, followed
-by `let's start talking`, starts the conversation if their speech onsets fall
-within `phrase_window_s`. An unrelated or unrecognized utterance, an expired
-window, or a disconnect discards pending fragments. Quoting the phrase inside a
+Matching ignores case, punctuation, apostrophes, and spacing; `let us` also
+matches `let's`. Exact control prefixes can span final STT results, and a
+boundary may fall inside a word: `Hey agent` (or `Hey ag`), followed by
+`let's start talking` (or `ent, let's start talking`), starts the conversation
+if their speech onsets fall within `phrase_window_s`. A prefix is withheld until
+the phrase completes. If the next utterance is unrelated, the withheld words
+are ordinary speech: in an active conversation they lead that utterance's
+transcript, and otherwise they are discarded. An unrecognized utterance, an
+expired window, or a disconnect discards them. Quoting the phrase inside a
 longer utterance does not activate it. In conversation and hybrid modes, control
 phrases never become agent queries or transcript-topic events. In wake-only and
 always-on modes, their words are ordinary text subject to that mode's admission
