@@ -51,7 +51,9 @@ session remains private. Applications that need a shared public
 
 Set utterance-ending silence once through `VadConfig.silence_duration` passed
 to `VoiceAgent`. It controls the active backend: Silero VAD for batch STT, or
-per-speaker inactivity for speaker ASR. This value takes precedence over the
+per-speaker inactivity for speaker ASR. For speaker ASR, words decoded within
+the same interval before a speaker becomes active also open their utterance,
+since the decoder can lead diarization. This value takes precedence over the
 voice-gate YAML's `speaker.silence_duration`; direct speaker sessions retain
 their own configuration. Other `VadConfig` fields apply only to batch STT.
 Speaker ASR checks inactivity at model-chunk boundaries, so the threshold is
@@ -235,15 +237,34 @@ conversation:
   phrase_window_s: 6.0
 ```
 
-Matching ignores case, punctuation, and apostrophes; `let us` also matches
-`let's`. Exact control prefixes can span final STT results: `Hey agent`, followed
-by `let's start talking`, starts the conversation if their speech onsets fall
-within `phrase_window_s`. An unrelated or unrecognized utterance, an expired
-window, or a disconnect discards pending fragments. Quoting the phrase inside a
-longer utterance does not activate it. In conversation and hybrid modes, control
-phrases never become agent queries or transcript-topic events. In wake-only and
-always-on modes, their words are ordinary text subject to that mode's admission
-policy, not session controls.
+Matching ignores case, punctuation, apostrophes, and spacing; `let us` also
+matches `let's`. Exact control prefixes can span final STT results, and a
+boundary may fall inside a word: `Hey agent` (or `Hey ag`), followed by
+`let's start talking` (or `ent, let's start talking`), starts the conversation
+if their speech onsets fall within `phrase_window_s`.
+
+An utterance that could begin a control phrase is withheld. The same speaker's
+next utterance within `phrase_window_s` decides what the withheld words were:
+
+- If it completes a control phrase, alone or joined, the control runs.
+- If the joined words could still begin one, they stay withheld. If only the
+  new utterance could, it begins a new window with the earlier words ahead of it.
+- If it is a STOP on its own, the STOP runs.
+- Otherwise the withheld words were speech. In an active conversation they lead
+  that utterance's transcript, which is handled as if spoken unsplit: the agent
+  query keeps every word, and with `require_wake_phrase` the wake rule applies
+  to the joined text. The exception is withheld words that together form only
+  a wake phrase under `require_wake_phrase`: they already opened its follow-up
+  window when withheld, so they are not released again. A wake phrase split
+  across final results (`Hey` | `agent`) counts as one.
+
+In every other case the withheld words are discarded: a control or STOP ran,
+no conversation is active, the next utterance comes from another speaker, is
+empty or failed, or does not start within the window, or the participant
+disconnects. Quoting the phrase inside a longer utterance does not activate it.
+In conversation and hybrid modes, control phrases never become agent queries or
+transcript-topic events. In wake-only and always-on modes, their words are
+ordinary text subject to that mode's admission policy, not session controls.
 
 These controls work with the sample's existing batch STT service, including NIM,
 or with speaker ASR. Batch STT controls are participant-scoped and cannot identify
