@@ -36,6 +36,12 @@ exclude-newer = "2026-10-22T21:39:43Z"
 [options.exclude-newer-package]
 pipecat-ai = "2026-10-24T01:24:20.438725Z"
 
+[manifest]
+overrides = [
+    { name = "hydra-core", specifier = "==1.3.7" },
+    { name = "lightning", git = "https://github.com/Lightning-AI/pytorch-lightning?rev=771017e4f39b314b49abd4a1d65905c74268d248" },
+]
+
 [[package]]
 name = "absl-py"
 version = "2.5.1"
@@ -53,7 +59,7 @@ dependencies = [
     { name = "huggingface-hub" },
     { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
-    { name = "packaging", version = "24.2", source = { registry = "https://pypi.org/simple" } },
+    { name = "packaging" },
     { name = "psutil" },
     { name = "pyyaml" },
     { name = "safetensors" },
@@ -192,7 +198,7 @@ dependencies = [
     { name = "humanize" },
     { name = "msgspec" },
     { name = "overrides" },
-    { name = "packaging", version = "24.2", source = { registry = "https://pypi.org/simple" } },
+    { name = "packaging" },
     { name = "pydantic" },
     { name = "python-dateutil" },
     { name = "pyyaml" },
@@ -1216,12 +1222,12 @@ source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "dill" },
     { name = "filelock" },
-    { name = "fsspec", version = "2025.12.0", source = { registry = "https://pypi.org/simple" }, extra = ["http"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
+    { name = "fsspec", version = "2026.7.0", source = { registry = "https://pypi.org/simple" }, extra = ["http"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
     { name = "huggingface-hub" },
     { name = "multiprocess" },
     { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
-    { name = "packaging", version = "24.2", source = { registry = "https://pypi.org/simple" } },
+    { name = "packaging" },
     { name = "pandas" },
     { name = "pyarrow" },
     { name = "pyyaml" },
@@ -1634,7 +1640,7 @@ dependencies = [
     { name = "nvidia-cudnn-frontend" },
     { name = "nvidia-cutlass-dsl" },
     { name = "nvidia-ml-py" },
-    { name = "packaging", version = "26.3", source = { registry = "https://pypi.org/simple" } },
+    { name = "packaging" },
     { name = "requests" },
     { name = "tabulate" },
     { name = "torch" },
@@ -1761,7 +1767,7 @@ wheels = [
 
 [[package]]
 name = "fsspec"
-version = "2025.12.0"
+version = "2026.7.0"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
     "python_full_version >= '3.13' and sys_platform == 'win32'",
@@ -1774,9 +1780,9 @@ resolution-markers = [
     "python_full_version < '3.12' and sys_platform == 'emscripten'",
     "python_full_version < '3.12' and sys_platform != 'emscripten' and sys_platform != 'win32'",
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/b6/27/954057b0d1f53f086f681755207dda6de6c660ce133c829158e8e8fe7895/fsspec-2025.12.0.tar.gz", hash = "sha256:c505de011584597b1060ff778bb664c1bc022e87921b0e4f10cc9c44f9635973", size = 309748, upload-time = "2025-12-03T15:23:42.687Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/00/78/f34251dadb8f3921264a1d9b8946f5e542014ee2614b285261b4e40e6775/fsspec-2026.7.0.tar.gz", hash = "sha256:c803c40f4cf860b49dea58ee3e1c33cb9c790520e233537e1340049f89b82a88", size = 317040, upload-time = "2026-07-28T16:34:51.052Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/51/c7/b64cae5dba3a1b138d7123ec36bb5ccd39d39939f18454407e5468f4763f/fsspec-2025.12.0-py3-none-any.whl", hash = "sha256:8bf1fe301b7d8acfa6e8571e3b1c3d158f909666642431cc78a1b7b4dbc5ec5b", size = 201422, upload-time = "2025-12-03T15:23:41.434Z" },
+    { url = "https://files.pythonhosted.org/packages/fd/3c/6a2bf344106328fd04963664a60b9bb6496fc25df8e962fcdc1367285fb9/fsspec-2026.7.0-py3-none-any.whl", hash = "sha256:b57ddbafedfaef7018c1ecab32aa200a9d7ca26b77965f64e48b70061249d279", size = 206583, upload-time = "2026-07-28T16:34:49.538Z" },
 ]
 
 [package.optional-dependencies]
@@ -1947,8 +1953,8 @@ name = "httpcore2"
 version = "2.16.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "h11", marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository' or extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
-    { name = "truststore", marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository' or extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
+    { name = "h11", marker = "(sys_platform != 'emscripten' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (sys_platform == 'emscripten' and extra == 'extra-25-xr-ai-dependency-manifest-vllm') or (extra != 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
+    { name = "truststore", marker = "(sys_platform != 'emscripten' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (sys_platform == 'emscripten' and extra == 'extra-25-xr-ai-dependency-manifest-vllm') or (extra != 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/c0/61/afa9d6b7452f9eca73f73d45324eb0bb52f098fd5e6049bf6b8263be9b4e/httpcore2-2.16.0.tar.gz", hash = "sha256:c72cd0413563b17e1cd8354677dff887466f8ec2551679759e93126534428643", size = 69886, upload-time = "2026-10-21T07:09:45.31Z" }
 wheels = [
@@ -2050,12 +2056,11 @@ source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click", marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository' or extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
     { name = "filelock", marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository' or extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
-    { name = "fsspec", version = "2025.12.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
+    { name = "fsspec", version = "2026.7.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
     { name = "fsspec", version = "2026.9.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
     { name = "hf-xet", marker = "(platform_machine == 'AMD64' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (platform_machine == 'AMD64' and extra == 'extra-25-xr-ai-dependency-manifest-vllm') or (platform_machine == 'ARM64' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (platform_machine == 'ARM64' and extra == 'extra-25-xr-ai-dependency-manifest-vllm') or (platform_machine == 'aarch64' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (platform_machine == 'aarch64' and extra == 'extra-25-xr-ai-dependency-manifest-vllm') or (platform_machine == 'amd64' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (platform_machine == 'amd64' and extra == 'extra-25-xr-ai-dependency-manifest-vllm') or (platform_machine == 'arm64' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (platform_machine == 'arm64' and extra == 'extra-25-xr-ai-dependency-manifest-vllm') or (platform_machine == 'x86_64' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (platform_machine == 'x86_64' and extra == 'extra-25-xr-ai-dependency-manifest-vllm') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
     { name = "httpx2", marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository' or extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
-    { name = "packaging", version = "24.2", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
-    { name = "packaging", version = "26.3", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
+    { name = "packaging", marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository' or extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
     { name = "pyyaml", marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository' or extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
     { name = "tqdm", marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository' or extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
     { name = "typing-extensions", marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository' or extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
@@ -2109,16 +2114,16 @@ cu13 = [
 
 [[package]]
 name = "hydra-core"
-version = "1.3.2"
+version = "1.3.7"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "antlr4-python3-runtime" },
     { name = "omegaconf" },
-    { name = "packaging", version = "24.2", source = { registry = "https://pypi.org/simple" } },
+    { name = "packaging" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/6d/8e/07e42bc434a847154083b315779b0a81d567154504624e181caf2c71cd98/hydra-core-1.3.2.tar.gz", hash = "sha256:8a878ed67216997c3e9d88a8e72e7b4767e81af37afb4ea3334b269a4390a824", size = 3263494, upload-time = "2023-02-23T18:33:43.03Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/5c/a9/fe2c936f36881e3197a8800f5bfba078d7846d54eb5d009b445eda1ee281/hydra_core-1.3.7.tar.gz", hash = "sha256:d4ff629c7e23b64a9db5fe5b027cf7c55b633b737f03be51ef41b77ed016f75e", size = 3278662, upload-time = "2026-09-14T18:02:55.528Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c6/50/e0edd38dcd63fb26a8547f13d28f7a008bc4a3fd4eb4ff030673f22ad41a/hydra_core-1.3.2-py3-none-any.whl", hash = "sha256:fa0238a9e31df3373b35b0bfb672c34cc92718d21f81311d8996a16de1141d8b", size = 154547, upload-time = "2023-02-23T18:33:40.801Z" },
+    { url = "https://files.pythonhosted.org/packages/25/0c/21890c10cc94da917c8e47efc1c55cd3e56a1d25ab5947bdd35abaf9fdc1/hydra_core-1.3.7-py3-none-any.whl", hash = "sha256:83606c4a05c770f1e026e0489875f28989829d151799eabd8cfa8cbe82164515", size = 168790, upload-time = "2026-09-14T18:02:53.661Z" },
 ]
 
 [[package]]
@@ -2587,7 +2592,7 @@ name = "lazy-loader"
 version = "0.6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "packaging", version = "24.2", source = { registry = "https://pypi.org/simple" } },
+    { name = "packaging" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/19/8c/0f2ff2a8b7513e68871a74740c17a504b0488c679b379e6445ebb7bd78dc/lazy_loader-0.6.tar.gz", hash = "sha256:2f4b7824d6401958639008a0cae20c776b61dff619accd6890693e2de8260167", size = 18438, upload-time = "2026-09-21T21:31:32.982Z" }
 wheels = [
@@ -2605,7 +2610,7 @@ dependencies = [
     { name = "intervaltree" },
     { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
-    { name = "packaging", version = "24.2", source = { registry = "https://pypi.org/simple" } },
+    { name = "packaging" },
     { name = "pyyaml" },
     { name = "soundfile" },
     { name = "tabulate" },
@@ -2679,12 +2684,12 @@ wheels = [
 
 [[package]]
 name = "lightning"
-version = "2.4.0"
-source = { git = "https://github.com/Lightning-AI/pytorch-lightning?tag=2.4.0#2129fdf3622e39ba46be4e1139af408e7e951cf3" }
+version = "2.6.6"
+source = { git = "https://github.com/Lightning-AI/pytorch-lightning?rev=771017e4f39b314b49abd4a1d65905c74268d248#771017e4f39b314b49abd4a1d65905c74268d248" }
 dependencies = [
-    { name = "fsspec", version = "2025.12.0", source = { registry = "https://pypi.org/simple" }, extra = ["http"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
+    { name = "fsspec", version = "2026.7.0", source = { registry = "https://pypi.org/simple" }, extra = ["http"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
     { name = "lightning-utilities" },
-    { name = "packaging", version = "24.2", source = { registry = "https://pypi.org/simple" } },
+    { name = "packaging" },
     { name = "pytorch-lightning" },
     { name = "pyyaml" },
     { name = "torch" },
@@ -2698,7 +2703,7 @@ name = "lightning-utilities"
 version = "0.15.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "packaging", version = "24.2", source = { registry = "https://pypi.org/simple" } },
+    { name = "packaging" },
     { name = "typing-extensions" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/f1/45/7fa8f56b17dc0f0a41ec70dd307ecd6787254483549843bef4c30ab5adce/lightning_utilities-0.15.3.tar.gz", hash = "sha256:792ae0204c79f6859721ac7f386c237a33b0ed06ba775009cb894e010a842033", size = 33553, upload-time = "2026-02-22T14:48:53.348Z" }
@@ -2799,7 +2804,7 @@ version = "0.11.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "interegular" },
-    { name = "packaging", version = "26.3", source = { registry = "https://pypi.org/simple" } },
+    { name = "packaging" },
     { name = "pydantic" },
     { name = "pyyaml" },
 ]
@@ -2923,13 +2928,16 @@ version = "0.1.0"
 source = { editable = "../services/magpie-tts" }
 dependencies = [
     { name = "fastapi" },
+    { name = "fsspec", version = "2026.7.0", source = { registry = "https://pypi.org/simple" } },
     { name = "hf-xet" },
     { name = "huggingface-hub" },
+    { name = "hydra-core" },
     { name = "lightning" },
     { name = "multidict" },
     { name = "nemo-toolkit", extra = ["tts"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
     { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
+    { name = "nv-one-logger-pytorch-lightning-integration" },
     { name = "pytorch-lightning" },
     { name = "pyyaml" },
     { name = "soundfile" },
@@ -2943,12 +2951,15 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.111" },
+    { name = "fsspec", specifier = ">=2026.6.0" },
     { name = "hf-xet", specifier = ">=1.1.2,<2.0.0" },
     { name = "huggingface-hub", specifier = ">=0.32.0" },
-    { name = "lightning", git = "https://github.com/Lightning-AI/pytorch-lightning?tag=2.4.0" },
+    { name = "hydra-core", specifier = ">=1.3.7" },
+    { name = "lightning", git = "https://github.com/Lightning-AI/pytorch-lightning?rev=771017e4f39b314b49abd4a1d65905c74268d248" },
     { name = "multidict", specifier = ">=6.9.1" },
-    { name = "nemo-toolkit", extras = ["tts"], specifier = ">=2.5" },
+    { name = "nemo-toolkit", extras = ["tts"], url = "https://github.com/yanziz-nvidia/Speech/archive/f047d87f41761e55bf2baf61967cbc687eeb1754.tar.gz" },
     { name = "numpy", specifier = ">=1.24" },
+    { name = "nv-one-logger-pytorch-lightning-integration", git = "https://github.com/yanziz-nvidia/nv-one-logger?subdirectory=nv_one_logger%2Fone_logger_pytorch_lightning_integration&rev=665328ee4697b1c488ef58d4597dfad34d33f759" },
     { name = "pytorch-lightning", specifier = ">=2.6.6" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "soundfile", specifier = ">=0.12" },
@@ -3050,7 +3061,7 @@ dependencies = [
     { name = "kiwisolver" },
     { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
-    { name = "packaging", version = "24.2", source = { registry = "https://pypi.org/simple" } },
+    { name = "packaging" },
     { name = "pillow" },
     { name = "pyparsing" },
     { name = "python-dateutil" },
@@ -3407,7 +3418,7 @@ dependencies = [
     { name = "cuda-pathfinder" },
     { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-vllm') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-vllm') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
-    { name = "packaging", version = "26.3", source = { registry = "https://pypi.org/simple" } },
+    { name = "packaging" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ad/74/86fc2839835b6fc60e99dd459fe3b673390159c52afb14658e74bc03734b/nccl4py-0.6.0-cp311-cp311-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:db38bdd6c1df2f915eebb75aef16e7a3b968bb1b6767e6019a1e194187fdad16", size = 3693333, upload-time = "2026-09-23T17:13:27.644Z" },
@@ -3460,11 +3471,11 @@ wheels = [
 [[package]]
 name = "nemo-toolkit"
 version = "3.0.0"
-source = { registry = "https://pypi.org/simple" }
+source = { url = "https://github.com/yanziz-nvidia/Speech/archive/f047d87f41761e55bf2baf61967cbc687eeb1754.tar.gz" }
 dependencies = [
     { name = "aistore" },
     { name = "cuda-bindings", marker = "sys_platform != 'darwin'" },
-    { name = "fsspec", version = "2025.12.0", source = { registry = "https://pypi.org/simple" } },
+    { name = "fsspec", version = "2026.7.0", source = { registry = "https://pypi.org/simple" } },
     { name = "huggingface-hub" },
     { name = "numba", marker = "sys_platform == 'darwin'" },
     { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
@@ -3479,10 +3490,7 @@ dependencies = [
     { name = "tqdm" },
     { name = "wrapt" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/65/59/878ea11e14f22e1ccb282470ff4a984b8c9184d9e29a29338ebcf414cbea/nemo_toolkit-3.0.0.tar.gz", hash = "sha256:d4cf6d3fc3c3bf28b29efbdeb3d2a32ea2564a642269effd56d9b7a6fe087d91", size = 2260552, upload-time = "2026-08-07T00:12:30.987Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/a5/85/78f14fbd6c3988adcf34a353cabb4b9b7af9532a25c6fe7ec19029374787/nemo_toolkit-3.0.0-py3-none-any.whl", hash = "sha256:f1d8238e35909464cf426e5792af3113a7060de419f194b83bedd81cbe909394", size = 2829794, upload-time = "2026-08-07T00:12:28.629Z" },
-]
+sdist = { hash = "sha256:317f1cf64e6ea64ba2eb4a2a8c5128dd54185b5a474af5044eeb8bc27bb83ddd" }
 
 [package.optional-dependencies]
 asr = [
@@ -3499,7 +3507,7 @@ asr = [
     { name = "nv-one-logger-pytorch-lightning-integration" },
     { name = "nv-one-logger-training-telemetry" },
     { name = "omegaconf" },
-    { name = "packaging", version = "24.2", source = { registry = "https://pypi.org/simple" } },
+    { name = "packaging" },
     { name = "pandas" },
     { name = "sacrebleu" },
     { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.12' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
@@ -3531,7 +3539,7 @@ tts = [
     { name = "nv-one-logger-pytorch-lightning-integration" },
     { name = "nv-one-logger-training-telemetry" },
     { name = "omegaconf" },
-    { name = "packaging", version = "24.2", source = { registry = "https://pypi.org/simple" } },
+    { name = "packaging" },
     { name = "pandas" },
     { name = "pyopenjtalk" },
     { name = "pypinyin" },
@@ -3547,6 +3555,247 @@ tts = [
     { name = "webdataset" },
     { name = "whisper-normalizer" },
 ]
+
+[package.metadata]
+requires-dist = [
+    { name = "aistore" },
+    { name = "braceexpand", marker = "extra == 'all'" },
+    { name = "braceexpand", marker = "extra == 'asr'" },
+    { name = "braceexpand", marker = "extra == 'asr-only'" },
+    { name = "braceexpand", marker = "extra == 'speechlm2'" },
+    { name = "braceexpand", marker = "extra == 'tts'" },
+    { name = "causal-conv1d", marker = "extra == 'compiled'", specifier = "==1.6.2.post1" },
+    { name = "causal-conv1d", marker = "extra == 'compiled-a100'", specifier = "==1.6.2.post1" },
+    { name = "cuda-bindings", marker = "sys_platform != 'darwin'" },
+    { name = "cuda-python", marker = "sys_platform != 'darwin' and extra == 'cu12'", specifier = ">=12,<13" },
+    { name = "cuda-python", marker = "sys_platform != 'darwin' and extra == 'cu13'", specifier = ">=13,<14" },
+    { name = "datasets", marker = "extra == 'all'", specifier = ">=3.2.0" },
+    { name = "datasets", marker = "extra == 'asr'", specifier = ">=3.2.0" },
+    { name = "datasets", marker = "extra == 'audio'", specifier = ">=3.2.0" },
+    { name = "datasets", marker = "extra == 'common'", specifier = ">=3.2.0" },
+    { name = "datasets", marker = "extra == 'common-only'", specifier = ">=3.2.0" },
+    { name = "datasets", marker = "extra == 'speechlm2'", specifier = ">=3.2.0" },
+    { name = "datasets", marker = "extra == 'tts'", specifier = ">=3.2.0" },
+    { name = "deep-ep", marker = "extra == 'compiled'", specifier = "==1.2.1" },
+    { name = "einops", marker = "extra == 'all'" },
+    { name = "einops", marker = "extra == 'asr'" },
+    { name = "einops", marker = "extra == 'asr-only'" },
+    { name = "einops", marker = "extra == 'audio'" },
+    { name = "einops", marker = "extra == 'common'" },
+    { name = "einops", marker = "extra == 'common-only'" },
+    { name = "einops", marker = "extra == 'speechlm2'" },
+    { name = "einops", marker = "extra == 'tts'" },
+    { name = "flash-attn", marker = "extra == 'compiled'", specifier = "==2.8.3" },
+    { name = "flash-attn", marker = "extra == 'compiled-a100'", specifier = "==2.8.3" },
+    { name = "flashoptim", marker = "extra == 'all'" },
+    { name = "flashoptim", marker = "extra == 'speechlm2'" },
+    { name = "flashoptim", marker = "extra == 'speechlm2-only'" },
+    { name = "fsspec", specifier = ">=2024.12.0" },
+    { name = "huggingface-hub", specifier = ">=0.24" },
+    { name = "hydra-core", marker = "extra == 'all'", specifier = ">1.3,<=1.3.2" },
+    { name = "hydra-core", marker = "extra == 'asr'", specifier = ">1.3,<=1.3.2" },
+    { name = "hydra-core", marker = "extra == 'audio'", specifier = ">1.3,<=1.3.2" },
+    { name = "hydra-core", marker = "extra == 'common'", specifier = ">1.3,<=1.3.2" },
+    { name = "hydra-core", marker = "extra == 'core'", specifier = ">1.3,<=1.3.2" },
+    { name = "hydra-core", marker = "extra == 'lightning'", specifier = ">1.3,<=1.3.2" },
+    { name = "hydra-core", marker = "extra == 'speechlm2'", specifier = ">1.3,<=1.3.2" },
+    { name = "hydra-core", marker = "extra == 'tts'", specifier = ">1.3,<=1.3.2" },
+    { name = "janome", marker = "extra == 'all'" },
+    { name = "janome", marker = "extra == 'speechlm2'" },
+    { name = "janome", marker = "extra == 'tts'" },
+    { name = "jieba", marker = "extra == 'all'" },
+    { name = "jieba", marker = "extra == 'speechlm2'" },
+    { name = "jieba", marker = "extra == 'tts'" },
+    { name = "kaldialign", marker = "extra == 'all'" },
+    { name = "kaldialign", marker = "extra == 'asr'" },
+    { name = "kaldialign", marker = "extra == 'asr-only'" },
+    { name = "kaldialign", marker = "extra == 'speechlm2'" },
+    { name = "kaldialign", marker = "extra == 'tts'" },
+    { name = "lhotse", marker = "extra == 'all'", specifier = ">=1.33.0" },
+    { name = "lhotse", marker = "extra == 'asr'", specifier = ">=1.33.0" },
+    { name = "lhotse", marker = "extra == 'asr-only'", specifier = ">=1.33.0" },
+    { name = "lhotse", marker = "extra == 'audio'", specifier = ">=1.33.0" },
+    { name = "lhotse", marker = "extra == 'speechlm2'", specifier = ">=1.33.0" },
+    { name = "lhotse", marker = "extra == 'tts'", specifier = ">=1.33.0" },
+    { name = "librosa", marker = "extra == 'all'" },
+    { name = "librosa", marker = "extra == 'all'", specifier = ">=0.10.0" },
+    { name = "librosa", marker = "extra == 'all'", specifier = ">=0.10.1" },
+    { name = "librosa", marker = "extra == 'asr'", specifier = ">=0.10.1" },
+    { name = "librosa", marker = "extra == 'asr-only'", specifier = ">=0.10.1" },
+    { name = "librosa", marker = "extra == 'audio'", specifier = ">=0.10.0" },
+    { name = "librosa", marker = "extra == 'speechlm2'" },
+    { name = "librosa", marker = "extra == 'speechlm2'", specifier = ">=0.10.1" },
+    { name = "librosa", marker = "extra == 'tts'" },
+    { name = "librosa", marker = "extra == 'tts'", specifier = ">=0.10.1" },
+    { name = "lightning", marker = "extra == 'all'", specifier = ">2.2.1,<=2.4.0" },
+    { name = "lightning", marker = "extra == 'asr'", specifier = ">2.2.1,<=2.4.0" },
+    { name = "lightning", marker = "extra == 'audio'", specifier = ">2.2.1,<=2.4.0" },
+    { name = "lightning", marker = "extra == 'common'", specifier = ">2.2.1,<=2.4.0" },
+    { name = "lightning", marker = "extra == 'core'", specifier = ">2.2.1,<=2.4.0" },
+    { name = "lightning", marker = "extra == 'lightning'", specifier = ">2.2.1,<=2.4.0" },
+    { name = "lightning", marker = "extra == 'speechlm2'", specifier = ">2.2.1,<=2.4.0" },
+    { name = "lightning", marker = "extra == 'tts'", specifier = ">2.2.1,<=2.4.0" },
+    { name = "mamba-ssm", marker = "extra == 'compiled'", specifier = "==2.3.2.post1" },
+    { name = "mamba-ssm", marker = "extra == 'compiled-a100'", specifier = "==2.3.2.post1" },
+    { name = "matplotlib", marker = "extra == 'all'" },
+    { name = "matplotlib", marker = "extra == 'audio'" },
+    { name = "matplotlib", marker = "extra == 'speechlm2'" },
+    { name = "matplotlib", marker = "extra == 'tts'" },
+    { name = "nemo-automodel", marker = "extra == 'all'" },
+    { name = "nemo-automodel", marker = "extra == 'speechlm2'" },
+    { name = "nemo-automodel", marker = "extra == 'speechlm2-only'" },
+    { name = "nemo-text-processing", marker = "'aarch' not in platform_machine and 'arm' not in platform_machine and sys_platform != 'darwin' and extra == 'all'" },
+    { name = "nemo-text-processing", marker = "'aarch' not in platform_machine and 'arm' not in platform_machine and sys_platform != 'darwin' and extra == 'speechlm2'" },
+    { name = "nemo-text-processing", marker = "'aarch' not in platform_machine and 'arm' not in platform_machine and sys_platform != 'darwin' and extra == 'tts'" },
+    { name = "nltk", marker = "extra == 'all'" },
+    { name = "nltk", marker = "extra == 'speechlm2'" },
+    { name = "nltk", marker = "extra == 'tts'" },
+    { name = "numba", marker = "sys_platform == 'darwin'" },
+    { name = "numba-cuda", extras = ["cu12"], marker = "sys_platform != 'darwin' and extra == 'cu12'" },
+    { name = "numba-cuda", extras = ["cu13"], marker = "sys_platform != 'darwin' and extra == 'cu13'" },
+    { name = "numpy", specifier = ">=1.22" },
+    { name = "nv-grouped-gemm", marker = "extra == 'compiled'", specifier = "==1.1.4.post8" },
+    { name = "nv-grouped-gemm", marker = "extra == 'compiled-a100'", specifier = "==1.1.4.post8" },
+    { name = "nv-one-logger-core", marker = "extra == 'all'", specifier = ">=2.3.1" },
+    { name = "nv-one-logger-core", marker = "extra == 'asr'", specifier = ">=2.3.1" },
+    { name = "nv-one-logger-core", marker = "extra == 'audio'", specifier = ">=2.3.1" },
+    { name = "nv-one-logger-core", marker = "extra == 'common'", specifier = ">=2.3.1" },
+    { name = "nv-one-logger-core", marker = "extra == 'core'", specifier = ">=2.3.1" },
+    { name = "nv-one-logger-core", marker = "extra == 'lightning'", specifier = ">=2.3.1" },
+    { name = "nv-one-logger-core", marker = "extra == 'speechlm2'", specifier = ">=2.3.1" },
+    { name = "nv-one-logger-core", marker = "extra == 'tts'", specifier = ">=2.3.1" },
+    { name = "nv-one-logger-pytorch-lightning-integration", marker = "extra == 'all'", specifier = ">=2.3.1" },
+    { name = "nv-one-logger-pytorch-lightning-integration", marker = "extra == 'asr'", specifier = ">=2.3.1" },
+    { name = "nv-one-logger-pytorch-lightning-integration", marker = "extra == 'audio'", specifier = ">=2.3.1" },
+    { name = "nv-one-logger-pytorch-lightning-integration", marker = "extra == 'common'", specifier = ">=2.3.1" },
+    { name = "nv-one-logger-pytorch-lightning-integration", marker = "extra == 'core'", specifier = ">=2.3.1" },
+    { name = "nv-one-logger-pytorch-lightning-integration", marker = "extra == 'lightning'", specifier = ">=2.3.1" },
+    { name = "nv-one-logger-pytorch-lightning-integration", marker = "extra == 'speechlm2'", specifier = ">=2.3.1" },
+    { name = "nv-one-logger-pytorch-lightning-integration", marker = "extra == 'tts'", specifier = ">=2.3.1" },
+    { name = "nv-one-logger-training-telemetry", marker = "extra == 'all'", specifier = ">=2.3.1" },
+    { name = "nv-one-logger-training-telemetry", marker = "extra == 'asr'", specifier = ">=2.3.1" },
+    { name = "nv-one-logger-training-telemetry", marker = "extra == 'audio'", specifier = ">=2.3.1" },
+    { name = "nv-one-logger-training-telemetry", marker = "extra == 'common'", specifier = ">=2.3.1" },
+    { name = "nv-one-logger-training-telemetry", marker = "extra == 'core'", specifier = ">=2.3.1" },
+    { name = "nv-one-logger-training-telemetry", marker = "extra == 'lightning'", specifier = ">=2.3.1" },
+    { name = "nv-one-logger-training-telemetry", marker = "extra == 'speechlm2'", specifier = ">=2.3.1" },
+    { name = "nv-one-logger-training-telemetry", marker = "extra == 'tts'", specifier = ">=2.3.1" },
+    { name = "omegaconf", marker = "extra == 'all'", specifier = "<=2.3" },
+    { name = "omegaconf", marker = "extra == 'asr'", specifier = "<=2.3" },
+    { name = "omegaconf", marker = "extra == 'audio'", specifier = "<=2.3" },
+    { name = "omegaconf", marker = "extra == 'common'", specifier = "<=2.3" },
+    { name = "omegaconf", marker = "extra == 'core'", specifier = "<=2.3" },
+    { name = "omegaconf", marker = "extra == 'lightning'", specifier = "<=2.3" },
+    { name = "omegaconf", marker = "extra == 'speechlm2'", specifier = "<=2.3" },
+    { name = "omegaconf", marker = "extra == 'tts'", specifier = "<=2.3" },
+    { name = "onnx", specifier = ">=1.7.0" },
+    { name = "onnx-ir", marker = "extra == 'compiled'", specifier = "==0.2.1" },
+    { name = "onnx-ir", marker = "extra == 'compiled-a100'", specifier = "==0.2.1" },
+    { name = "onnxscript", marker = "extra == 'compiled'", specifier = "==0.7.0" },
+    { name = "onnxscript", marker = "extra == 'compiled-a100'", specifier = "==0.7.0" },
+    { name = "packaging", marker = "extra == 'all'" },
+    { name = "packaging", marker = "extra == 'asr'" },
+    { name = "packaging", marker = "extra == 'asr-only'" },
+    { name = "packaging", marker = "extra == 'speechlm2'" },
+    { name = "packaging", marker = "extra == 'tts'" },
+    { name = "pandas", marker = "extra == 'all'" },
+    { name = "pandas", marker = "extra == 'asr'" },
+    { name = "pandas", marker = "extra == 'audio'" },
+    { name = "pandas", marker = "extra == 'common'" },
+    { name = "pandas", marker = "extra == 'common-only'" },
+    { name = "pandas", marker = "extra == 'speechlm2'" },
+    { name = "pandas", marker = "extra == 'tts'" },
+    { name = "peft", marker = "extra == 'all'", specifier = "<=0.18.0" },
+    { name = "peft", marker = "extra == 'speechlm2'", specifier = "<=0.18.0" },
+    { name = "peft", marker = "extra == 'speechlm2-only'", specifier = "<=0.18.0" },
+    { name = "pesq", marker = "(platform_machine != 'x86_64' and extra == 'all') or (sys_platform != 'darwin' and extra == 'all')" },
+    { name = "pesq", marker = "(platform_machine != 'x86_64' and extra == 'audio') or (sys_platform != 'darwin' and extra == 'audio')" },
+    { name = "pyopenjtalk", marker = "extra == 'all'" },
+    { name = "pyopenjtalk", marker = "extra == 'speechlm2'" },
+    { name = "pyopenjtalk", marker = "extra == 'tts'" },
+    { name = "pypinyin", marker = "extra == 'all'" },
+    { name = "pypinyin", marker = "extra == 'speechlm2'" },
+    { name = "pypinyin", marker = "extra == 'tts'" },
+    { name = "pypinyin-dict", marker = "extra == 'all'" },
+    { name = "pypinyin-dict", marker = "extra == 'speechlm2'" },
+    { name = "pypinyin-dict", marker = "extra == 'tts'" },
+    { name = "pystoi", marker = "extra == 'all'" },
+    { name = "pystoi", marker = "extra == 'audio'" },
+    { name = "sacrebleu", marker = "extra == 'all'" },
+    { name = "sacrebleu", marker = "extra == 'asr'" },
+    { name = "sacrebleu", marker = "extra == 'asr-only'" },
+    { name = "sacrebleu", marker = "extra == 'speechlm2'" },
+    { name = "sacrebleu", marker = "extra == 'tts'" },
+    { name = "scikit-learn" },
+    { name = "scipy", marker = "extra == 'all'", specifier = ">=0.14" },
+    { name = "scipy", marker = "extra == 'asr'", specifier = ">=0.14" },
+    { name = "scipy", marker = "extra == 'asr-only'", specifier = ">=0.14" },
+    { name = "scipy", marker = "extra == 'audio'", specifier = ">=0.14" },
+    { name = "scipy", marker = "extra == 'speechlm2'", specifier = ">=0.14" },
+    { name = "scipy", marker = "extra == 'tts'", specifier = ">=0.14" },
+    { name = "sentencepiece", marker = "extra == 'all'", specifier = "<1.0.0" },
+    { name = "sentencepiece", marker = "extra == 'asr'", specifier = "<1.0.0" },
+    { name = "sentencepiece", marker = "extra == 'audio'", specifier = "<1.0.0" },
+    { name = "sentencepiece", marker = "extra == 'common'", specifier = "<1.0.0" },
+    { name = "sentencepiece", marker = "extra == 'common-only'", specifier = "<1.0.0" },
+    { name = "sentencepiece", marker = "extra == 'speechlm2'", specifier = "<1.0.0" },
+    { name = "sentencepiece", marker = "extra == 'tts'", specifier = "<1.0.0" },
+    { name = "setuptools", specifier = ">=70.0.0" },
+    { name = "smart-open" },
+    { name = "soundfile", marker = "extra == 'all'" },
+    { name = "soundfile", marker = "extra == 'asr'" },
+    { name = "soundfile", marker = "extra == 'asr-only'" },
+    { name = "soundfile", marker = "extra == 'audio'" },
+    { name = "soundfile", marker = "extra == 'speechlm2'" },
+    { name = "soundfile", marker = "extra == 'tts'" },
+    { name = "tensorboard" },
+    { name = "text-unidecode" },
+    { name = "torch", specifier = ">=2.6.0" },
+    { name = "torch", marker = "sys_platform == 'linux' and extra == 'cu12'", specifier = "==2.12.0+cu126" },
+    { name = "torch", marker = "sys_platform == 'linux' and extra == 'cu13'", specifier = "==2.12.0+cu132" },
+    { name = "torchmetrics", marker = "extra == 'all'", specifier = ">=0.11.0" },
+    { name = "torchmetrics", marker = "extra == 'asr'", specifier = ">=0.11.0" },
+    { name = "torchmetrics", marker = "extra == 'audio'", specifier = ">=0.11.0" },
+    { name = "torchmetrics", marker = "extra == 'common'", specifier = ">=0.11.0" },
+    { name = "torchmetrics", marker = "extra == 'core'", specifier = ">=0.11.0" },
+    { name = "torchmetrics", marker = "extra == 'lightning'", specifier = ">=0.11.0" },
+    { name = "torchmetrics", marker = "extra == 'speechlm2'", specifier = ">=0.11.0" },
+    { name = "torchmetrics", marker = "extra == 'tts'", specifier = ">=0.11.0" },
+    { name = "tqdm", specifier = ">=4.41.0" },
+    { name = "transformer-engine", extras = ["core-cu12", "pytorch"], marker = "extra == 'compiled-a100'", specifier = "==2.15" },
+    { name = "transformer-engine", extras = ["core-cu13", "pytorch"], marker = "extra == 'compiled'", specifier = "==2.15" },
+    { name = "transformers", marker = "extra == 'all'" },
+    { name = "transformers", marker = "extra == 'asr'" },
+    { name = "transformers", marker = "extra == 'audio'" },
+    { name = "transformers", marker = "extra == 'common'" },
+    { name = "transformers", marker = "extra == 'core'" },
+    { name = "transformers", marker = "extra == 'lightning'" },
+    { name = "transformers", marker = "extra == 'speechlm2'" },
+    { name = "transformers", marker = "extra == 'tts'" },
+    { name = "wandb", marker = "extra == 'all'" },
+    { name = "wandb", marker = "extra == 'asr'" },
+    { name = "wandb", marker = "extra == 'audio'" },
+    { name = "wandb", marker = "extra == 'common'" },
+    { name = "wandb", marker = "extra == 'core'" },
+    { name = "wandb", marker = "extra == 'lightning'" },
+    { name = "wandb", marker = "extra == 'speechlm2'" },
+    { name = "wandb", marker = "extra == 'tts'" },
+    { name = "webdataset", marker = "extra == 'all'", specifier = ">=0.2.86" },
+    { name = "webdataset", marker = "extra == 'asr'", specifier = ">=0.2.86" },
+    { name = "webdataset", marker = "extra == 'audio'", specifier = ">=0.2.86" },
+    { name = "webdataset", marker = "extra == 'common'", specifier = ">=0.2.86" },
+    { name = "webdataset", marker = "extra == 'core'", specifier = ">=0.2.86" },
+    { name = "webdataset", marker = "extra == 'lightning'", specifier = ">=0.2.86" },
+    { name = "webdataset", marker = "extra == 'speechlm2'", specifier = ">=0.2.86" },
+    { name = "webdataset", marker = "extra == 'tts'", specifier = ">=0.2.86" },
+    { name = "whisper-normalizer", marker = "extra == 'all'" },
+    { name = "whisper-normalizer", marker = "extra == 'asr'" },
+    { name = "whisper-normalizer", marker = "extra == 'asr-only'" },
+    { name = "whisper-normalizer", marker = "extra == 'speechlm2'" },
+    { name = "whisper-normalizer", marker = "extra == 'tts'" },
+    { name = "wrapt" },
+]
+provides-extras = ["core", "lightning", "common-only", "asr-only", "tts", "audio", "speechlm2-only", "all", "cu12", "cu13", "compiled", "compiled-a100", "common", "asr", "speechlm2"]
 
 [[package]]
 name = "nemotron-omni-llm-server"
@@ -3901,17 +4150,13 @@ wheels = [
 [[package]]
 name = "nv-one-logger-pytorch-lightning-integration"
 version = "2.3.1"
-source = { registry = "https://pypi.org/simple" }
+source = { git = "https://github.com/yanziz-nvidia/nv-one-logger?subdirectory=nv_one_logger%2Fone_logger_pytorch_lightning_integration&rev=665328ee4697b1c488ef58d4597dfad34d33f759#665328ee4697b1c488ef58d4597dfad34d33f759" }
 dependencies = [
     { name = "lightning" },
     { name = "nv-one-logger-core" },
     { name = "nv-one-logger-training-telemetry" },
     { name = "setuptools" },
     { name = "strenum" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/0c/d0/3475b7ab17d367362f650fb0419e8669f41e63c1018f4a8ac2fbecfd2e85/nv_one_logger_pytorch_lightning_integration-2.3.1.tar.gz", hash = "sha256:b32d99b6a8f02a16538bcade939b0a7edd7249e936aacefe336b5519447340c3", size = 10979, upload-time = "2025-10-29T21:22:10.464Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/f0/56/01a55efb365b6864646b4ac941a1d9de66f024e880764510ba5a7a63f62c/nv_one_logger_pytorch_lightning_integration-2.3.1-py3-none-any.whl", hash = "sha256:f92904055fb0082516480cc1e3dd0bb6cedb2b033985ebfd4814b9cbf7da2cb2", size = 9822, upload-time = "2025-10-29T21:22:09.37Z" },
 ]
 
 [[package]]
@@ -4451,7 +4696,7 @@ dependencies = [
     { name = "flatbuffers" },
     { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
-    { name = "packaging", version = "24.2", source = { registry = "https://pypi.org/simple" } },
+    { name = "packaging" },
     { name = "protobuf", version = "6.33.5", source = { registry = "https://pypi.org/simple" } },
 ]
 wheels = [
@@ -4755,42 +5000,8 @@ wheels = [
 
 [[package]]
 name = "packaging"
-version = "24.2"
-source = { registry = "https://pypi.org/simple" }
-resolution-markers = [
-    "python_full_version >= '3.13' and sys_platform == 'win32'",
-    "python_full_version >= '3.13' and sys_platform == 'emscripten'",
-    "python_full_version >= '3.13' and sys_platform != 'emscripten' and sys_platform != 'win32'",
-    "python_full_version == '3.12.*' and sys_platform == 'win32'",
-    "python_full_version == '3.12.*' and sys_platform == 'emscripten'",
-    "python_full_version == '3.12.*' and sys_platform != 'emscripten' and sys_platform != 'win32'",
-    "python_full_version < '3.12' and sys_platform == 'win32'",
-    "python_full_version < '3.12' and sys_platform == 'emscripten'",
-    "python_full_version < '3.12' and sys_platform != 'emscripten' and sys_platform != 'win32'",
-]
-sdist = { url = "https://files.pythonhosted.org/packages/d0/63/68dbb6eb2de9cb10ee4c9c14a0148804425e13c4fb20d61cce69f53106da/packaging-24.2.tar.gz", hash = "sha256:c228a6dc5e932d346bc5739379109d49e8853dd8223571c7c5b55260edc0b97f", size = 163950, upload-time = "2024-11-08T09:47:47.202Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/88/ef/eb23f262cca3c0c4eb7ab1933c3b1f03d021f2c48f54763065b6f0e321be/packaging-24.2-py3-none-any.whl", hash = "sha256:09abb1bccd265c01f4a3aa3f7a7db064b36514d2cba19a2f694fe6150451a759", size = 65451, upload-time = "2024-11-08T09:47:44.722Z" },
-]
-
-[[package]]
-name = "packaging"
 version = "26.3"
 source = { registry = "https://pypi.org/simple" }
-resolution-markers = [
-    "python_full_version >= '3.13' and platform_machine == 's390x' and sys_platform == 'darwin'",
-    "python_full_version == '3.12.*' and platform_machine == 's390x' and sys_platform == 'darwin'",
-    "python_full_version >= '3.13' and platform_machine == 's390x' and sys_platform != 'darwin'",
-    "python_full_version == '3.12.*' and platform_machine == 's390x' and sys_platform != 'darwin'",
-    "python_full_version >= '3.13' and platform_machine != 's390x' and sys_platform == 'darwin'",
-    "python_full_version == '3.12.*' and platform_machine != 's390x' and sys_platform == 'darwin'",
-    "python_full_version >= '3.13' and platform_machine != 's390x' and sys_platform != 'darwin'",
-    "python_full_version == '3.12.*' and platform_machine != 's390x' and sys_platform != 'darwin'",
-    "python_full_version < '3.12' and platform_machine == 's390x' and sys_platform == 'darwin'",
-    "python_full_version < '3.12' and platform_machine == 's390x' and sys_platform != 'darwin'",
-    "python_full_version < '3.12' and platform_machine != 's390x' and sys_platform == 'darwin'",
-    "python_full_version < '3.12' and platform_machine != 's390x' and sys_platform != 'darwin'",
-]
 sdist = { url = "https://files.pythonhosted.org/packages/7d/fa/3944b40b07da9ce895c0e6303a5ab7d53da063554f534556b134a54d6093/packaging-26.3.tar.gz", hash = "sha256:94edc256424af38762eb31306eed28beb9f0efc50a8837492c9d6fd6004aed79", size = 313412, upload-time = "2026-08-04T18:15:28.737Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/63/34/ba1c580383c9eada3711951fef0795c80b829a078d72188184bcab9dd527/packaging-26.3-py3-none-any.whl", hash = "sha256:d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c", size = 129956, upload-time = "2026-08-04T18:15:27.159Z" },
@@ -5010,7 +5221,7 @@ name = "pooch"
 version = "1.9.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "packaging", version = "24.2", source = { registry = "https://pypi.org/simple" } },
+    { name = "packaging" },
     { name = "platformdirs" },
     { name = "requests" },
 ]
@@ -5655,7 +5866,7 @@ source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "colorama", marker = "sys_platform == 'win32'" },
     { name = "iniconfig" },
-    { name = "packaging", version = "24.2", source = { registry = "https://pypi.org/simple" } },
+    { name = "packaging" },
     { name = "pluggy" },
     { name = "pygments" },
 ]
@@ -5722,9 +5933,9 @@ name = "pytorch-lightning"
 version = "2.6.6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "fsspec", version = "2025.12.0", source = { registry = "https://pypi.org/simple" }, extra = ["http"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
+    { name = "fsspec", version = "2026.7.0", source = { registry = "https://pypi.org/simple" }, extra = ["http"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
     { name = "lightning-utilities" },
-    { name = "packaging", version = "24.2", source = { registry = "https://pypi.org/simple" } },
+    { name = "packaging" },
     { name = "pyyaml" },
     { name = "torch" },
     { name = "torchmetrics" },
@@ -6455,7 +6666,7 @@ name = "silero-vad"
 version = "6.2.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "packaging", version = "24.2", source = { registry = "https://pypi.org/simple" } },
+    { name = "packaging" },
     { name = "torch" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/32/17/df6bfc8f659fc5c1e082c18275be67c5a581bd2d07734a65b141fc983ccf/silero_vad-6.2.3.tar.gz", hash = "sha256:d7a23b09202be4953915cb9173089bb307eed0418a9bd4794d9ec5af07fa1996", size = 29276676, upload-time = "2026-09-23T11:37:22.208Z" }
@@ -6678,11 +6889,14 @@ version = "0.1.0"
 source = { editable = "../services/stt-server" }
 dependencies = [
     { name = "fastapi" },
+    { name = "fsspec", version = "2026.7.0", source = { registry = "https://pypi.org/simple" } },
     { name = "hf-xet" },
     { name = "huggingface-hub" },
+    { name = "hydra-core" },
     { name = "lightning" },
     { name = "multidict" },
     { name = "nemo-toolkit", extra = ["asr"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
+    { name = "nv-one-logger-pytorch-lightning-integration" },
     { name = "python-multipart" },
     { name = "pytorch-lightning" },
     { name = "pyyaml" },
@@ -6696,11 +6910,14 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.111" },
+    { name = "fsspec", specifier = ">=2026.6.0" },
     { name = "hf-xet", specifier = ">=1.1.2,<2.0.0" },
     { name = "huggingface-hub", specifier = ">=0.32.0" },
-    { name = "lightning", git = "https://github.com/Lightning-AI/pytorch-lightning?tag=2.4.0" },
+    { name = "hydra-core", specifier = ">=1.3.7" },
+    { name = "lightning", git = "https://github.com/Lightning-AI/pytorch-lightning?rev=771017e4f39b314b49abd4a1d65905c74268d248" },
     { name = "multidict", specifier = ">=6.9.1" },
-    { name = "nemo-toolkit", extras = ["asr"], specifier = ">=2.5" },
+    { name = "nemo-toolkit", extras = ["asr"], url = "https://github.com/yanziz-nvidia/Speech/archive/f047d87f41761e55bf2baf61967cbc687eeb1754.tar.gz" },
+    { name = "nv-one-logger-pytorch-lightning-integration", git = "https://github.com/yanziz-nvidia/nv-one-logger?subdirectory=nv_one_logger%2Fone_logger_pytorch_lightning_integration&rev=665328ee4697b1c488ef58d4597dfad34d33f759" },
     { name = "python-multipart", specifier = ">=0.0.9" },
     { name = "pytorch-lightning", specifier = ">=2.6.6" },
     { name = "pyyaml", specifier = ">=6.0" },
@@ -6823,7 +7040,7 @@ dependencies = [
     { name = "markdown" },
     { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
-    { name = "packaging", version = "24.2", source = { registry = "https://pypi.org/simple" } },
+    { name = "packaging" },
     { name = "pillow" },
     { name = "protobuf", version = "6.33.5", source = { registry = "https://pypi.org/simple" } },
     { name = "setuptools" },
@@ -7054,7 +7271,7 @@ dependencies = [
     { name = "cuda-bindings", marker = "(sys_platform == 'linux' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (sys_platform == 'linux' and extra == 'extra-25-xr-ai-dependency-manifest-vllm') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
     { name = "cuda-toolkit", extra = ["cublas", "cudart", "cufft", "cufile", "cupti", "curand", "cusolver", "cusparse", "nvjitlink", "nvrtc", "nvtx"], marker = "(sys_platform == 'linux' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (sys_platform == 'linux' and extra == 'extra-25-xr-ai-dependency-manifest-vllm') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
     { name = "filelock", marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository' or extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
-    { name = "fsspec", version = "2025.12.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
+    { name = "fsspec", version = "2026.7.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
     { name = "fsspec", version = "2026.9.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
     { name = "jinja2", marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository' or extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
     { name = "networkx", version = "3.6.1", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.12' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (python_full_version < '3.12' and extra == 'extra-25-xr-ai-dependency-manifest-vllm') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
@@ -7156,7 +7373,7 @@ dependencies = [
     { name = "lightning-utilities" },
     { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
-    { name = "packaging", version = "24.2", source = { registry = "https://pypi.org/simple" } },
+    { name = "packaging" },
     { name = "torch" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/81/34/39b8b749333db56c0585d7a11fa62a283c087bb1dfc897d69fb8cedbefb1/torchmetrics-1.9.0.tar.gz", hash = "sha256:a488609948600df52d3db4fcdab02e62aab2a85ef34da67037dc3e65b8512faa", size = 581765, upload-time = "2026-03-09T17:41:22.443Z" }
@@ -7209,8 +7426,7 @@ dependencies = [
     { name = "huggingface-hub", marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository' or extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
     { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (python_full_version < '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-vllm') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (python_full_version >= '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-vllm') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
-    { name = "packaging", version = "24.2", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
-    { name = "packaging", version = "26.3", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
+    { name = "packaging", marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository' or extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
     { name = "pyyaml", marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository' or extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
     { name = "regex", marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository' or extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
     { name = "safetensors", marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository' or extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
@@ -7544,7 +7760,7 @@ dependencies = [
     { name = "opentelemetry-api" },
     { name = "opentelemetry-exporter-otlp-proto-http" },
     { name = "opentelemetry-sdk" },
-    { name = "packaging", version = "24.2", source = { registry = "https://pypi.org/simple" } },
+    { name = "packaging" },
     { name = "platformdirs" },
     { name = "protobuf", version = "6.33.5", source = { registry = "https://pypi.org/simple" } },
     { name = "pydantic" },

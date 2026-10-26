@@ -433,13 +433,16 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `hydra-core>=1.3.7`
+  - `fsspec>=2026.6.0`
   - `multidict>=6.9.1`
   - `werkzeug>=3.1.9`
   - `pytorch-lightning>=2.6.6`
+  - `nv-one-logger-pytorch-lightning-integration==2.3.1` (source: `https://github.com/yanziz-nvidia/nv-one-logger, rev=665328ee4697b1c488ef58d4597dfad34d33f759`)
   - `urllib3>=2.8.0`
   - `transformers>=5.17.0`
-  - `nemo_toolkit[tts]>=2.5`
-  - `lightning>2.2.1,<=2.4.0` (source: `https://github.com/Lightning-AI/pytorch-lightning, tag=2.4.0`)
+  - `nemo_toolkit[tts]>=2.5` (source: `https://github.com/yanziz-nvidia/Speech/archive/f047d87f41761e55bf2baf61967cbc687eeb1754.tar.gz`)
+  - `lightning>=2.6.6` (source: `https://github.com/Lightning-AI/pytorch-lightning, rev=771017e4f39b314b49abd4a1d65905c74268d248`)
   - `soundfile>=0.12`
   - `numpy>=1.24`
   - `fastapi>=0.111`
@@ -552,9 +555,12 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `hydra-core>=1.3.7`
+  - `fsspec>=2026.6.0`
   - `multidict>=6.9.1`
   - `werkzeug>=3.1.9`
   - `pytorch-lightning>=2.6.6`
+  - `nv-one-logger-pytorch-lightning-integration==2.3.1` (source: `https://github.com/yanziz-nvidia/nv-one-logger, rev=665328ee4697b1c488ef58d4597dfad34d33f759`)
   - `fastapi>=0.115.0`
   - `uvicorn[standard]>=0.34.0`
   - `anyio>=4.8.0`
@@ -563,8 +569,8 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
   - `xr-ai-voicegate` → [`xr-ai-voicegate`](utils/xr-ai-voicegate/) (local, editable)
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
   - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
-  - `nemo-toolkit[asr]` (source: `https://github.com/NVIDIA-NeMo/Speech, rev=1688cc3d6a9ade854f544987810c53f605dc86fc`)
-  - `lightning>2.2.1,<=2.4.0` (source: `https://github.com/Lightning-AI/pytorch-lightning, tag=2.4.0`)
+  - `nemo-toolkit[asr]` (source: `https://github.com/yanziz-nvidia/Speech/archive/d7939d46c647d64db180e9f291e058855cd75d3a.tar.gz`)
+  - `lightning>=2.6.6` (source: `https://github.com/Lightning-AI/pytorch-lightning, rev=771017e4f39b314b49abd4a1d65905c74268d248`)
   - `lhotse==2.0.0a6` (source: `https://files.pythonhosted.org/packages/18/ae/8ba7ee0b1db7fadf8de8f58121723a6b1ae3d88bdb0a1ffeee165b62d4ba/lhotse-2.0.0a6-py3-none-any.whl`)
 - Optional dependency groups: none
 - Commands:
@@ -576,13 +582,16 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `hydra-core>=1.3.7`
+  - `fsspec>=2026.6.0`
   - `multidict>=6.9.1`
   - `werkzeug>=3.1.9`
   - `pytorch-lightning>=2.6.6`
+  - `nv-one-logger-pytorch-lightning-integration==2.3.1` (source: `https://github.com/yanziz-nvidia/nv-one-logger, rev=665328ee4697b1c488ef58d4597dfad34d33f759`)
   - `urllib3>=2.8.0`
   - `transformers>=5.17.0`
-  - `nemo_toolkit[asr]>=2.5`
-  - `lightning>2.2.1,<=2.4.0` (source: `https://github.com/Lightning-AI/pytorch-lightning, tag=2.4.0`)
+  - `nemo_toolkit[asr]>=2.5` (source: `https://github.com/yanziz-nvidia/Speech/archive/f047d87f41761e55bf2baf61967cbc687eeb1754.tar.gz`)
+  - `lightning>=2.6.6` (source: `https://github.com/Lightning-AI/pytorch-lightning, rev=771017e4f39b314b49abd4a1d65905c74268d248`)
   - `fastapi>=0.111`
   - `uvicorn[standard]>=0.29`
   - `python-multipart>=0.0.9`

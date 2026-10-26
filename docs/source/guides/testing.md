@@ -80,6 +80,57 @@ require a local `busybox` image. They use uniquely named, labelled throwaway
 containers; CPU runs do not contact Docker during their collection. The nightly
 workflow retains its separate dedicated-runner cleanup policy.
 
+## NeMo service qualification
+
+The STT, Magpie TTS, and speaker STT projects override NeMo's Hydra and
+Lightning compatibility caps to use Hydra 1.3.7, Lightning 2.6.6, and fsspec
+2026.7.0. Successful lock resolution and CPU tests do not establish
+compatibility with real model checkpoints or CUDA inference. Qualify all three
+services on the intended Linux GPU before deploying this dependency stack.
+
+The projects also pin compatibility source revisions of NeMo and OneLogger.
+These revisions retain OneLogger signature validation and fix the deprecated
+Neptune logger import. Use the declared sources when synchronizing; edits to an
+installed environment do not qualify a reproducible dependency stack. Refer to
+the repository
+[third-party notices](https://github.com/NVIDIA/xr-ai/blob/main/THIRD_PARTY_NOTICES.md#nemo-dependency-security-overrides)
+for source revisions and license provenance.
+
+From the repository root, synchronize each isolated inference environment:
+
+```bash
+uv --config-file uv.toml sync --project services/stt-server
+uv --config-file uv.toml sync --project services/magpie-tts
+uv --config-file uv.toml sync --project services/speaker-stt
+```
+
+Check real imports and checkpoint instantiator protection before downloading
+or loading models. The dependency gate enforces the security version floors
+and checks that both Lightning namespaces reject an untrusted instantiator
+and still call a trusted one with `weights_only=True`. Then run the STT and
+Magpie GPU smoke tests serially on an idle test host:
+
+```bash
+bash tests/run_local_gpu_tests.sh test_gpu_nemo_dependencies.py
+bash tests/run_local_gpu_tests.sh test_gpu_stt_server.py test_gpu_magpie_tts.py
+```
+
+Confirm that the tests execute rather than skip. The STT smoke test uses a
+sine wave and checks endpoint wiring; it does not measure recognition quality.
+Also transcribe a known speech recording, synthesize and listen to Magpie
+output, and compare startup time, inference latency, and GPU memory with the
+previous environment. Exercise both cached checkpoint restoration and the
+model-download path.
+
+The CPU speaker tests substitute model objects. For speaker STT, run the real
+service with its pinned ASR and diarization checkpoints and test streaming
+speech, two-speaker overlap, enrollment, interruption, session reset, and
+reconnection. Confirm speaker attribution, transcript ordering, bounded memory,
+and final decoding. Refer to {doc}`/components/ai-services` for the private
+speaker service and its configuration. Record exact revisions, resolved
+versions, hardware, test inputs, results, and remaining failures with the
+qualification evidence.
+
 ## Apple microphone transaction tests
 
 With Xcode 26.3 or newer selected, run the real StreamKit package tests on an

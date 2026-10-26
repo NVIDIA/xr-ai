@@ -12,13 +12,17 @@ from __future__ import annotations
 
 import argparse
 import difflib
+import json
+import posixpath
 import subprocess
 import tomllib
 from collections.abc import Sequence
 from pathlib import Path
 
 from generate_dependency_map import MANIFEST_DIRECTORY, Project, discover_projects
+from packaging.requirements import Requirement
 from packaging.specifiers import SpecifierSet
+from packaging.utils import canonicalize_name
 from packaging.version import Version
 
 MANIFEST_NAME = "xr-ai-dependency-manifest"
@@ -34,7 +38,7 @@ VLLM_PROJECTS = frozenset(
         "vlm-server",
     }
 )
-# Speaker STT pins a different NeMo Speech Git revision and lhotse artifact
+# Speaker STT pins a different NeMo Speech commit archive and lhotse artifact
 # from the repository ASR services; uv cannot combine those sources in one lock.
 EXCLUDED_PROJECTS = frozenset({"xr-ai-speaker-stt"})
 
@@ -85,6 +89,25 @@ def common_python_range(ranges: Sequence[str]) -> str:
     return f">=3.{minors[0]},<3.{minors[-1] + 1}"
 
 
+def manifest_overrides(projects: Sequence[Project]) -> list[str]:
+    """Apply included services' overrides to both inventory extras.
+
+    This aggregate inventories isolated services; its overrides are global to
+    the lock, not scoped to the service declaring them. Nonidentical requirement
+    strings are rejected rather than attempting to merge resolution policies.
+    """
+
+    overrides: dict[str, str] = {}
+    for project in projects:
+        data = tomllib.loads((project.directory / "pyproject.toml").read_text())
+        for specification in data.get("tool", {}).get("uv", {}).get("override-dependencies", []):
+            name = canonicalize_name(Requirement(specification).name)
+            if name in overrides and overrides[name] != specification:
+                raise ValueError(f"conflicting override for {name}: {overrides[name]!r} and {specification!r}")
+            overrides[name] = specification
+    return [overrides[name] for name in sorted(overrides)]
+
+
 def manifest_toml(projects: Sequence[Project]) -> str:
     """Return the manifest pyproject.toml aggregating *projects*."""
 
@@ -92,6 +115,23 @@ def manifest_toml(projects: Sequence[Project]) -> str:
     if not members:
         raise ValueError("no projects found to aggregate")
     python_range = common_python_range([project.requires_python for project in members])
+    overrides = manifest_overrides(members)
+    override_names = {canonicalize_name(Requirement(item).name) for item in overrides}
+    # Root overrides do not inherit a member's source declaration.
+    override_sources: dict[str, object] = {}
+    for project in members:
+        for source_name, source in project.uv_sources.items():
+            name = canonicalize_name(source_name)
+            if name not in override_names:
+                continue
+            if isinstance(source, dict) and "path" in source:
+                source = dict(source)
+                source["path"] = posixpath.normpath(posixpath.join(
+                    "..", project.relative_directory.as_posix(), source["path"],
+                ))
+            if name in override_sources and override_sources[name] != source:
+                raise ValueError(f"conflicting source for {name}: {override_sources[name]!r} and {source!r}")
+            override_sources[name] = source
 
     repository_dependencies = []
     vllm_dependencies = []
@@ -104,12 +144,16 @@ def manifest_toml(projects: Sequence[Project]) -> str:
     # would otherwise read as nested tables.
     keys = [f'"{project.name}"' for project in members]
     width = max(len(key) for key in keys)
-    # Every source is editable: the projects depend on each other as editable
+    # Repository projects are editable: they depend on each other as editable
     # paths, and mixing modes resolves to conflicting URLs.
     sources = [
         f'{key:<{width}} = {{ path = "../{project.relative_directory.as_posix()}", editable = true }}'
         for key, project in zip(keys, members, strict=True)
     ]
+    for name, source in sorted(override_sources.items()):
+        if name in {canonicalize_name(project.name) for project in members}:
+            raise ValueError(f"override source conflicts with repository project: {name}")
+        sources.append(f"{json.dumps(name)} = {_source_toml(source)}")
 
     lines = [
         _HEADER,
@@ -131,11 +175,22 @@ def manifest_toml(projects: Sequence[Project]) -> str:
         "[tool.uv]",
         "package = false",
         'conflicts = [[{ extra = "repository" }, { extra = "vllm" }]]',
+        *([f"override-dependencies = {overrides!r}"] if overrides else []),
         "",
         "[tool.uv.sources]",
         *sources,
     ]
     return "\n".join(lines) + "\n"
+
+
+def _source_toml(value: object) -> str:
+    if isinstance(value, dict):
+        return "{ " + ", ".join(f"{json.dumps(key)} = {_source_toml(item)}" for key, item in value.items()) + " }"
+    if isinstance(value, list):
+        return "[" + ", ".join(_source_toml(item) for item in value) + "]"
+    if isinstance(value, (str, bool)):
+        return json.dumps(value)
+    raise ValueError(f"unsupported override source value: {value!r}")
 
 
 def lock_manifest(root: Path) -> None:
