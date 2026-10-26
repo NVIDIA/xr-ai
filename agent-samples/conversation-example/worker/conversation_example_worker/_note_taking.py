@@ -6,13 +6,11 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator, Awaitable, Callable
-from contextlib import asynccontextmanager
-from datetime import UTC, datetime
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 from loguru import logger
-from xr_ai_conversation import Conversation, ConversationContextUpdate
+from xr_ai_conversation import ConversationContextUpdate
 from xr_ai_interaction import ResponseOutput, ResponseOutputs
 from xr_ai_models import DecisionQuestion, DecisionService
 from xr_ai_routing import Admission, AgentTurn, DestinationResult, RoutableAgent, RoutingAid
@@ -25,7 +23,8 @@ ContextPublisher = Callable[[str, ConversationContextUpdate], Awaitable[None]]
 Emit = Callable[[str], Awaitable[None]]
 
 _CONTROL = (Path(__file__).parent / "prompts/note_control.txt").read_text(encoding="utf-8").strip()
-_DESCRIPTION = (
+# Static, so the routing request stays the same size however many notes are saved.
+_ROUTING = (
     "A participant-scoped note-taking destination. It starts only when explicitly requested, captures "
     "user-authored notes, and stays focused until the participant finishes, including across a question "
     "answered by another destination. It does not provide general knowledge or inspect the current camera."
@@ -49,68 +48,45 @@ _UNFOCUSED_ACTIONS = {
 }
 _NOTED = "Noted."
 _NOT_SHARED = "I saved that note here, but couldn't share it with general conversation."
-_TOO_LONG = "That note is too long for the available note space, so I didn't save it."
 _STARTED = "I’m ready to take notes."
 _FINISHED = "Note-taking is finished."
+_NO_NOTES = "There are no notes in this session yet."
 _NO_ANSWER = DestinationResult("answer", "")
 
 
 class NoteTakingAgent(RoutableAgent):
     """Keep participant-authored notes in an explicit, focused session.
 
-    Admission classifies the current request and focus mode, independently of
-    saved content. Save acknowledgments follow successful local storage.
+    Every note is kept until the participant leaves and is read back in full. Each saved
+    note is also published as one incremental context update, so general conversation
+    sees recent notes verbatim and older ones in its rolling summary.
     """
 
     def __init__(
         self,
-        conversation: Conversation,
         decisions: DecisionService,
         *,
         runtime: AgentRuntime,
         output_topic: Topic[ResponseOutput],
-        context_budget_bytes: int,
-        publish_context: ContextPublisher | None = None,
+        publish_note: ContextPublisher | None = None,
     ) -> None:
-        if context_budget_bytes <= 0:
-            raise ValueError("context_budget_bytes must be positive")
-        self._conversation = conversation
         self._decisions = decisions
-        self._context_budget_bytes = context_budget_bytes
-        self._publish_context = publish_context
+        self._publish_note = publish_note
         self._outputs = ResponseOutputs(runtime, output_topic, source="notes", closed_errors=(RuntimeClosedError,))
         self._pending: dict[str, tuple[str, str, bool]] = {}
         self._notes: dict[str, list[str]] = {}
-        self._active_participants: set[str] = set()
 
     # RoutableAgent contract.
 
     def routing_aid(self, participant_id: str) -> RoutingAid:
-        notes = self._notes.get(participant_id, ())
-        description = _DESCRIPTION
-        if notes:
-            cue = f"Latest saved note (context only; the note session may be closed): {notes[-1]}"
-            candidate = f"{description}\n{cue}"
-            if len(candidate.encode("utf-8")) <= self._context_budget_bytes:
-                description = candidate
-        return RoutingAid(name="notes", description=description)
-
-    async def participant_joined(self, participant_id: str) -> None:
-        """Publish the note capability and initial participant-specific state."""
-
-        await self._publish_context_snapshot(participant_id)
+        return RoutingAid(name="notes", description=_ROUTING)
 
     async def admit(self, turn: AgentTurn, *, focused: bool) -> Admission:
         action = await self._classify(turn, focused=focused)
         if action == "handoff" or (not focused and action not in {"start", "capture"}):
             return Admission("decline")
         self._pending[turn.participant_id] = (turn.turn_id, action, focused)
-        try:
-            return await self._conversation.admit(turn, focused=focused)
-        except BaseException:
-            # Clear provisional action state before propagating failure or cancellation.
-            self._pending.pop(turn.participant_id, None)
-            raise
+        return Admission("accept")
 
     async def answer(self, turn: AgentTurn, *, started: Callable[[], Awaitable[None]]) -> DestinationResult:
         pending = self._pending.pop(turn.participant_id, None)
@@ -125,28 +101,31 @@ class NoteTakingAgent(RoutableAgent):
                 await reply.send(text)
 
         if action == "capture":
-            return await self._capture(turn, emit)
-        if action in ("start", "finish"):
-            return await self._set_session(turn, emit, starting=action == "start")
+            text = await self._save_note(turn.participant_id, turn.query)
+            await emit(text)
+            return DestinationResult("focus", text)
+        if action == "start":
+            await emit(_STARTED)
+            return DestinationResult("focus", _STARTED)
+        if action == "finish":
+            await emit(_FINISHED)
+            return DestinationResult("release", _FINISHED)
         if action == "readback":
-            return await self._read_back(turn, emit, was_focused=was_focused)
+            text = self._read_back(turn.participant_id)
+            await emit(text)
+            return DestinationResult("focus" if was_focused else "answer", text)
         raise ValueError(f"invalid note action {action!r}")
 
     async def release(self, participant_id: str) -> None:
         self._pending.pop(participant_id, None)
-        if participant_id in self._active_participants:
-            self._active_participants.discard(participant_id)
-            await self._publish_note_status(participant_id)
 
     async def participant_left(self, participant_id: str) -> None:
         self._pending.pop(participant_id, None)
         self._notes.pop(participant_id, None)
-        self._active_participants.discard(participant_id)
 
     # Note actions.
 
     async def _classify(self, turn: AgentTurn, *, focused: bool) -> str:
-        # Admission chooses a current action; saved content belongs to readback and shared context.
         question = DecisionQuestion(instructions=_CONTROL, criteria=_FOCUSED_ACTIONS if focused else _UNFOCUSED_ACTIONS)
         state = {"request": turn.query, "destination": {"name": "notes", "focused": focused}}
         answer = await decide(
@@ -154,77 +133,28 @@ class NoteTakingAgent(RoutableAgent):
         )
         return answer.choice
 
-    async def _capture(self, turn: AgentTurn, emit: Emit) -> DestinationResult:
-        async with self._session(turn.participant_id, active=True):
-            text = await self._save_note(turn.participant_id, turn.query)
-            await emit(text)
-        return DestinationResult("focus", text)
-
-    async def _set_session(self, turn: AgentTurn, emit: Emit, *, starting: bool) -> DestinationResult:
-        async with self._session(turn.participant_id, active=starting):
-            await self._publish_note_status(turn.participant_id)
-            text = _STARTED if starting else _FINISHED
-            await emit(text)
-        return DestinationResult("focus" if starting else "release", text)
-
-    async def _read_back(self, turn: AgentTurn, emit: Emit, *, was_focused: bool) -> DestinationResult:
-        notes = self._notes.get(turn.participant_id, ())
-        text = "Your notes: " + "; ".join(notes) if notes else "There are no notes in this session yet."
-        await emit(text)
-        return DestinationResult("focus" if was_focused else "answer", text)
-
-    @asynccontextmanager
-    async def _session(self, participant_id: str, *, active: bool) -> AsyncIterator[None]:
-        """Set session activity for an action, restoring it if the action does not complete."""
-
-        was_active = participant_id in self._active_participants
-        if active:
-            self._active_participants.add(participant_id)
-        else:
-            self._active_participants.discard(participant_id)
-        try:
-            yield
-        except BaseException:
-            await self._restore_note_activity(participant_id, was_active)
-            raise
-
     async def _save_note(self, participant_id: str, text: str) -> str:
-        """Store a note, share the updated notes, and return the acknowledgment to speak."""
+        """Store a note, share it with general conversation, and return the acknowledgment to speak."""
 
-        if not self._append_note(participant_id, text):
-            await self._publish_note_status(participant_id)
-            return _TOO_LONG
+        note = text.strip()
+        self._notes.setdefault(participant_id, []).append(note)
         # The note is saved locally either way; failed sharing only changes the acknowledgment.
-        return _NOTED if await self._publish_note_status(participant_id) else _NOT_SHARED
+        return _NOTED if await self._share(participant_id, note) else _NOT_SHARED
 
-    # Note storage and context publication.
+    def _read_back(self, participant_id: str) -> str:
+        notes = self._notes.get(participant_id)
+        return "Your notes: " + "; ".join(notes) if notes else _NO_NOTES
 
-    def _append_note(self, participant_id: str, text: str) -> bool:
-        timestamp = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
-        note = f"{timestamp} — {text.strip()}"
-        if len(note.encode("utf-8")) > self._context_budget_bytes:
-            return False
-        notes = self._notes.setdefault(participant_id, [])
-        notes.append(note)
-        while notes and len("\n".join(notes).encode("utf-8")) > self._context_budget_bytes:
-            notes.pop(0)
-        return True
+    async def _share(self, participant_id: str, note: str) -> bool:
+        """Publish one saved note; return whether it was shared."""
 
-    async def _publish_context_snapshot(self, participant_id: str) -> None:
-        if self._publish_context is None:
-            return
-        notes = self._notes.get(participant_id, ())
-        state = "active" if participant_id in self._active_participants else "not active"
-        text = (
-            "Capability: capture and review participant-authored notes when explicitly requested. "
-            f"Session status: {state}.\n"
-            + ("Saved notes:\n" + "\n".join(notes) if notes else "No notes have been saved in this session.")
-        )
+        if self._publish_note is None:
+            return True
         publisher = asyncio.create_task(
-            self._publish_context(participant_id, ConversationContextUpdate(text=text)),
+            self._publish_note(participant_id, ConversationContextUpdate(text=note)),
             name=f"conversation-example-note-context:{participant_id}",
         )
-        # A started publication always finishes, so shared context never lags a cancelled action.
+        # A started publication always finishes, so shared context never misses a saved note.
         try:
             await wait_despite_cancellation({publisher})
         except asyncio.CancelledError:
@@ -233,34 +163,15 @@ class NoteTakingAgent(RoutableAgent):
                     "note context publication failed while draining cancellation participant={!r}", participant_id
                 )
             raise
-        publisher.result()
-
-    async def _publish_note_status(self, participant_id: str) -> bool:
-        """Share the notes snapshot; return whether it was shared, without failing the note action."""
-
         try:
-            await self._publish_context_snapshot(participant_id)
+            publisher.result()
         except RuntimeClosedError:
             return False
         except ExceptionGroup:
+            # A failed context subscriber; the note is saved, so only the acknowledgment changes.
             logger.exception("note context publication failed participant={!r}", participant_id)
             return False
         return True
-
-    async def _restore_note_activity(self, participant_id: str, was_active: bool) -> None:
-        """Restore pre-turn activity when an action cannot commit its disposition."""
-
-        if was_active:
-            self._active_participants.add(participant_id)
-        else:
-            self._active_participants.discard(participant_id)
-        try:
-            await self._publish_context_snapshot(participant_id)
-        except asyncio.CancelledError:
-            # Snapshot publication drains its child before propagating cancellation.
-            pass
-        except Exception:  # noqa: BLE001 -- rollback must not replace the action's original failure.
-            logger.exception("note activity rollback publication failed participant={!r}", participant_id)
 
 
 __all__ = ["NoteTakingAgent"]

@@ -29,17 +29,12 @@ min_speech:        0.1    # minimum seconds of speech before STT is called
 # after that long idle. Applied by VoiceAgent.
 idle_timeout_secs: 0
 
-# Runtime context topics shared with general conversation. Topic behavior is
-# selected here; publishers send only source-owned `text`. Summaries replace a
-# source section; incremental updates append and compact asynchronously per source.
-summary_context_topics:
-  - conversation-example.alert-capability
-  - conversation-example.foreground-notes
-  - conversation-example.observation-capability
-incremental_context_topics: []
-# Total general-conversation budget, divided evenly across dialogue and each
-# configured context topic. Also bounds sample-owned cues and saved notes.
+# General-conversation context budget, split evenly between completed dialogue
+# and saved notes. Each keeps recent entries verbatim and summarizes older ones.
 context_budget_bytes: 12000
+# Completed history the router sends with each routing decision. Clef accepts
+# at most 4,096 tokens per request, including the routing prompt and destinations.
+routing_history_budget_bytes: 8000
 # Input limit for one asynchronous context compaction request.
 compaction_input_budget_bytes: 12000
 

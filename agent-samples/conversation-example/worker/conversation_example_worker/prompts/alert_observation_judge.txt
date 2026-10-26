@@ -1,0 +1,1 @@
+Judge only whether the written observation establishes the requested visible condition. Use yes only when the observation directly supports it; otherwise use no. A single observation from one still image cannot establish motion, an event, a change over time, or a previous state; such conditions mean no.

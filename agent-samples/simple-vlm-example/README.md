@@ -5,8 +5,6 @@
 
 # Simple VLM example
 
-TODO: Deprecate this sample after the `conversation-example` migration is complete.
-
 This sample is the smallest complete voice-and-vision application in the
 repository. A participant can ask a spoken or typed question about the current
 camera view. The worker uses an existing live video frame when the client is

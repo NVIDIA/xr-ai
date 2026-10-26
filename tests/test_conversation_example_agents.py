@@ -17,7 +17,7 @@ from _conversation_output import CaptureRuntime, capture_emit
 from _conversation_output import CapturingAgentRouter as AgentRouter
 from _conversation_output import handle as _handle
 from xr_ai_models import ChatStreamEvent
-from xr_ai_runtime import AgentRuntime, Topic
+from xr_ai_runtime import AgentRuntime
 from xr_ai_voice import VOICE_OUTPUT_TOPIC
 
 _ROOT = Path(__file__).resolve().parents[1]
@@ -27,10 +27,10 @@ from conversation_example_worker._note_taking import NoteTakingAgent  # noqa: E4
 from conversation_example_worker._visual_agents import (  # noqa: E402
     VisualObservationAgent,
 )
+from conversation_example_worker.app import NOTES_CONTEXT_TOPIC  # noqa: E402
 from xr_ai_conversation import (  # noqa: E402
     ContextManager,
     Conversation,
-    ConversationContextUpdate,
 )
 from xr_ai_routing import (  # noqa: E402
     Admission,
@@ -208,13 +208,7 @@ async def test_observation_native_admission_overrides_poisoned_history_without_g
     decisions = _RouteDecisions("observation")
     observation = VisualObservationAgent(frames, vision, runtime=CaptureRuntime(), output_topic=VOICE_OUTPUT_TOPIC)
     conversation = _Conversation("conversation")
-    notes = NoteTakingAgent(
-        _Conversation("notes"),
-        _Decisions(),
-        context_budget_bytes=4096,
-        runtime=CaptureRuntime(),
-        output_topic=VOICE_OUTPUT_TOPIC,
-    )
+    notes = NoteTakingAgent(_Decisions(), runtime=CaptureRuntime(), output_topic=VOICE_OUTPUT_TOPIC)
     router = AgentRouter(
         {
             "conversation": conversation,
@@ -259,85 +253,50 @@ async def test_observation_native_admission_overrides_poisoned_history_without_g
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("transition", ["start", "capture", "finish"])
-async def test_cancelled_note_transition_keeps_reported_activity_aligned_with_focus(transition):
-    status_publishing = asyncio.Event()
+async def test_cancelled_capture_keeps_and_shares_the_note():
+    publishing = asyncio.Event()
     release_publication = asyncio.Event()
     updates = []
 
     async def publish(_participant_id, update):
         updates.append(update.text)
-        should_block = (
-            (transition == "start" and "Session status: active" in update.text)
-            or (transition == "capture" and "Cancellation should not discard this note." in update.text)
-            or (transition == "finish" and "Session status: not active" in update.text)
-        )
-        if should_block:
-            status_publishing.set()
-            await release_publication.wait()
+        publishing.set()
+        await release_publication.wait()
 
-    note_action = {
-        "start": "start",
-        "capture": "capture",
-        "finish": "finish",
-    }[transition]
-    actions = _Decisions("start", note_action) if transition != "start" else _Decisions("start")
     notes = NoteTakingAgent(
-        _Conversation("notes"),
-        actions,
-        context_budget_bytes=4_096,
-        publish_context=publish,
-        runtime=CaptureRuntime(),
-        output_topic=VOICE_OUTPUT_TOPIC,
+        _Decisions("start", "capture"), publish_note=publish, runtime=CaptureRuntime(), output_topic=VOICE_OUTPUT_TOPIC
     )
-    router = AgentRouter(
-        {"conversation": _Conversation(), "notes": notes},
-        _RouteDecisions("notes"),
-    )
+    router = AgentRouter({"conversation": _Conversation(), "notes": notes}, _RouteDecisions("notes"))
 
     async def emit(_source, _text):
         return None
 
-    if transition != "start":
-        started = await _handle(router, AgentTurn("alice", "start", "Start taking notes"), emit=emit)
-        assert started.disposition == "focus"
-
-    query = {
-        "start": "Start taking notes",
-        "capture": "Cancellation should not discard this note.",
-        "finish": "Finish note-taking",
-    }[transition]
-    response = asyncio.create_task(_handle(router, AgentTurn("alice", transition, query), emit=emit))
-    await asyncio.wait_for(status_publishing.wait(), timeout=1)
+    started = await _handle(router, AgentTurn("alice", "start", "Start taking notes"), emit=emit)
+    assert started.disposition == "focus"
+    note = "Cancellation should not discard this note."
+    response = asyncio.create_task(_handle(router, AgentTurn("alice", "capture", note), emit=emit))
+    await asyncio.wait_for(publishing.wait(), timeout=1)
     response.cancel()
     release_publication.set()
     await asyncio.gather(response, return_exceptions=True)
 
-    expected_active = transition != "start"
-    assert ("alice" in notes._active_participants) is expected_active  # noqa: SLF001
-    assert (router._focus.get("alice") == "notes") is expected_active  # noqa: SLF001
-    latest = updates[-1]
-    assert ("Session status: active" in latest) is expected_active
-    if transition == "capture":
-        assert "Cancellation should not discard this note." in latest
-        assert "Cancellation should not discard this note." in notes.routing_aid("alice").description
+    # The started publication finished despite cancellation, so shared context has the saved note.
+    assert updates == [note]
+    assert notes._read_back("alice") == f"Your notes: {note}"  # noqa: SLF001
     await router.stop()
 
 
 @pytest.mark.asyncio
 async def test_note_question_handoff_preserves_focus_until_explicit_finish():
-    note_conversation = _Conversation("notes")
     conversation = _Conversation("conversation")
     published = []
 
     async def publish_note(participant_id, update):
-        published.append((participant_id, update))
+        published.append((participant_id, update.text))
 
     notes = NoteTakingAgent(
-        note_conversation,
         _Decisions("start", "capture", "handoff", "capture", "finish"),
-        context_budget_bytes=4096,
-        publish_context=publish_note,
+        publish_note=publish_note,
         runtime=CaptureRuntime(),
         output_topic=VOICE_OUTPUT_TOPIC,
     )
@@ -347,7 +306,6 @@ async def test_note_question_handoff_preserves_focus_until_explicit_finish():
     await _turn(router, "Take some notes.")
     captured, _ = await _turn(router, "Record that the headset text should stay legible.")
     assert captured.disposition == "focus"
-    assert "headset text should stay legible" in notes.routing_aid("alice").description
 
     query = "How should I evaluate AR/VR text legibility?"
     result, output = await _turn(router, query)
@@ -358,31 +316,25 @@ async def test_note_question_handoff_preserves_focus_until_explicit_finish():
     # directly; it does not ask the router to choose a second time.
     assert len(decisions.calls) == 1
     assert output == [("conversation", "Answered by conversation.")]
-    assert "headset text should stay legible" in notes.routing_aid("alice").description
-    assert len(published) == 2
-    assert "Session status: active" in published[0][1].text
-    assert "headset text should stay legible" in published[1][1].text
-    assert "Session status: active" in published[-1][1].text
     resumed, _ = await _turn(router, "Record that the controls need larger targets.")
     assert resumed.disposition == "focus"
-    assert "controls need larger targets" in notes.routing_aid("alice").description
     assert len(conversation.answers) == 1
     finished, _ = await _turn(router, "Finish taking notes.")
     assert finished.disposition == "release"
-    assert "Session status: not active" in published[-1][1].text
+    # Each saved note is shared once; session controls publish nothing.
+    assert published == [
+        ("alice", "Record that the headset text should stay legible."),
+        ("alice", "Record that the controls need larger targets."),
+    ]
     await _turn(router, "What is a rainbow?")
     assert conversation.answers[-1].query == "What is a rainbow?"
     await router.stop()
 
 
 @pytest.mark.asyncio
-async def test_note_context_is_participant_scoped_and_cleared_on_departure():
+async def test_notes_are_participant_scoped_and_cleared_on_departure():
     notes = NoteTakingAgent(
-        _Conversation("notes"),
-        _Decisions("start", "capture", "start", "capture"),
-        context_budget_bytes=4096,
-        runtime=CaptureRuntime(),
-        output_topic=VOICE_OUTPUT_TOPIC,
+        _Decisions("start", "capture", "start", "capture"), runtime=CaptureRuntime(), output_topic=VOICE_OUTPUT_TOPIC
     )
     decisions = _RouteDecisions("notes", "notes", "notes", "notes")
     router = AgentRouter({"conversation": _Conversation(), "notes": notes}, decisions)
@@ -392,21 +344,19 @@ async def test_note_context_is_participant_scoped_and_cleared_on_departure():
     await _turn(router, "Take some notes.", participant="bob")
     await _turn(router, "Record a separate room note.", participant="bob")
 
-    alice_aid = notes.routing_aid("alice").description
-    bob_aid = notes.routing_aid("bob").description
-    assert "headset note" in alice_aid
-    assert "room note" not in alice_aid
-    assert "room note" in bob_aid
-    assert "headset note" not in bob_aid
+    assert notes._read_back("alice") == "Your notes: Record a short headset note."  # noqa: SLF001
+    assert notes._read_back("bob") == "Your notes: Record a separate room note."  # noqa: SLF001
+    # The routing description never carries note content.
+    assert notes.routing_aid("alice") == notes.routing_aid("bob")
 
     await router.participant_left("alice")
-    assert "Latest completed note" not in notes.routing_aid("alice").description
-    assert "room note" in notes.routing_aid("bob").description
+    assert notes._read_back("alice") == "There are no notes in this session yet."  # noqa: SLF001
+    assert notes._read_back("bob") == "Your notes: Record a separate room note."  # noqa: SLF001
     await router.stop()
 
 
 @pytest.mark.asyncio
-async def test_note_topic_reaches_general_conversation_after_focus_finishes():
+async def test_saved_notes_reach_general_conversation_after_focus_finishes():
     class CapturingLLM:
         def __init__(self):
             self.messages = []
@@ -420,14 +370,13 @@ async def test_note_topic_reaches_general_conversation_after_focus_finishes():
 
             return events()
 
-    note_topic = Topic("conversation-example.foreground-notes", ConversationContextUpdate)
     runtime = AgentRuntime()
     llm = CapturingLLM()
     manager = ContextManager(
         llm,
-        summary_context_topics=(note_topic.name,),
+        incremental_context_topics=(NOTES_CONTEXT_TOPIC.name,),
         dialogue_budget_bytes=2048,
-        topic_budget_bytes={note_topic.name: 2048},
+        topic_budget_bytes=2048,
         compaction_input_budget_bytes=4096,
     )
     general_conversation = Conversation(
@@ -438,29 +387,18 @@ async def test_note_topic_reaches_general_conversation_after_focus_finishes():
         output_topic=VOICE_OUTPUT_TOPIC,
     )
     runtime.register("general-context", manager.subscriber())
-    note_conversation = _Conversation("notes")
-
-    published = []
 
     async def publish_note(participant_id, update):
-        published.append(update)
-        await runtime.publish(note_topic, update, participant_id=participant_id)
+        await runtime.publish(NOTES_CONTEXT_TOPIC, update, participant_id=participant_id)
 
     notes = NoteTakingAgent(
-        note_conversation,
         _Decisions("start", "capture", "capture", "finish"),
-        context_budget_bytes=4096,
-        publish_context=publish_note,
+        publish_note=publish_note,
         runtime=CaptureRuntime(),
         output_topic=VOICE_OUTPUT_TOPIC,
     )
-    decisions = _RouteDecisions("notes", "conversation")
     router = AgentRouter(
-        {
-            "conversation": general_conversation,
-            "notes": notes,
-        },
-        decisions,
+        {"conversation": general_conversation, "notes": notes}, _RouteDecisions("notes", "conversation")
     )
 
     async with runtime:
@@ -469,17 +407,13 @@ async def test_note_topic_reaches_general_conversation_after_focus_finishes():
         await _turn(router, note)
         second_note = "Record that the demo starts at the east entrance."
         await _turn(router, second_note)
-        assert len(published) == 3
-        assert "Session status: active" in published[0].text
-        assert note in published[1].text
-        assert note in published[2].text and second_note in published[2].text
         await _turn(router, "I'm finished taking notes.")
         result, _ = await _turn(router, "What did I note about reading the display?")
 
     assert result.disposition == "answer"
     assert len(llm.messages) == 1
     prompt = "\n".join(str(message.content) for message in llm.messages[0])
-    assert "Source conversation-example.foreground-notes" in prompt
+    assert f"Source {NOTES_CONTEXT_TOPIC.name}" in prompt
     assert note in prompt
     assert second_note in prompt
     await general_conversation.close()

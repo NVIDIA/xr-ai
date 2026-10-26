@@ -14,6 +14,7 @@ from loguru import logger
 from xr_ai_models import ChatMessage, LLMService
 from xr_ai_routing import AgentExchange
 
+_MAX_TOKENS = 256
 _COMPILE = (Path(__file__).parent / "prompts" / "alert_compile.txt").read_text(encoding="utf-8").strip()
 
 
@@ -51,7 +52,10 @@ async def compile_alert(
         (
             ChatMessage(role="system", content=_COMPILE),
             ChatMessage(role="user", content="\n\n".join(sections)),
-        )
+        ),
+        # A short JSON extraction; reasoning would delay the reply and anything waiting on the alert lock.
+        enable_thinking=False,
+        max_tokens=_MAX_TOKENS,
     )
     return _parse(response.content)
 

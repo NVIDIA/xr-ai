@@ -31,9 +31,8 @@ class WorkerConfig:
     min_speech: float
     silero_threshold: float
     idle_timeout_secs: float | None
-    summary_context_topics: tuple[str, ...]
-    incremental_context_topics: tuple[str, ...]
     context_budget_bytes: int
+    routing_history_budget_bytes: int
     compaction_input_budget_bytes: int
     acknowledgment_delay_secs: float | None = None
     alert_check_interval_secs: float = 1.0
@@ -86,6 +85,10 @@ def load_config(path: Path | None) -> WorkerConfig:
         raise ValueError(
             "alert intervals must be finite and satisfy 0 <= alert_check_interval_secs <= alert_confirm_interval_secs"
         )
+    context_budget_bytes = int(data.get("context_budget_bytes", 12_000))
+    routing_history_budget_bytes = int(data.get("routing_history_budget_bytes", 8_000))
+    if context_budget_bytes < 2 or routing_history_budget_bytes <= 0:
+        raise ValueError("context_budget_bytes and routing_history_budget_bytes must be positive")
     return WorkerConfig(
         models_config=_resolve(path, "models.json"),
         voice_gate_yaml=_resolve(
@@ -99,9 +102,8 @@ def load_config(path: Path | None) -> WorkerConfig:
         min_speech=float(data.get("min_speech", 0.1)),
         silero_threshold=float(data.get("silero_threshold", 0.5)),
         idle_timeout_secs=float(idle_timeout) if idle_timeout else None,
-        summary_context_topics=tuple(str(name) for name in data.get("summary_context_topics", ())),
-        incremental_context_topics=tuple(str(name) for name in data.get("incremental_context_topics", ())),
-        context_budget_bytes=int(data.get("context_budget_bytes", 12_000)),
+        context_budget_bytes=context_budget_bytes,
+        routing_history_budget_bytes=routing_history_budget_bytes,
         compaction_input_budget_bytes=int(data.get("compaction_input_budget_bytes", 12_000)),
         acknowledgment_delay_secs=acknowledgment_delay_secs,
         alert_check_interval_secs=alert_check_interval_secs,

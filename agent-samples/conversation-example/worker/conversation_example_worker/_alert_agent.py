@@ -13,7 +13,7 @@ from pathlib import Path
 
 import nemo_relay
 from loguru import logger
-from xr_ai_conversation import ContextManager, ConversationContextUpdate
+from xr_ai_conversation import ContextManager
 from xr_ai_interaction import ResponseOutput, ResponseOutputs
 from xr_ai_models import DecisionQuestion, DecisionService, ImageInput, LLMService, VLMService
 from xr_ai_routing import Admission, AgentTurn, DestinationResult, RoutableAgent, RoutingAid
@@ -27,8 +27,6 @@ from ._alert_compile import CompiledAlert, compile_alert
 from ._decisions import decide
 from ._tasks import wait_despite_cancellation
 
-ALERT_CAPABILITY_TOPIC = Topic("conversation-example.alert-capability", ConversationContextUpdate)
-_CAPABILITY = "Capability: alert you once when a requested visual condition is seen, or cancel a pending visual alert."
 _ROUTING = (
     "Set a one-shot background visual alert ONLY when explicitly asked to notify the user when a specific "
     "visible condition occurs, including a condition they gave earlier or noted; cancel an existing alert on an "
@@ -81,7 +79,6 @@ class VisualAlertAgent(RoutableAgent):
         frames: CurrentFrameTool,
         images: ImageRegistry,
         decisions: DecisionService,
-        publish_capability: Callable[[str, ConversationContextUpdate], Awaitable[None]],
         *,
         vlm: VLMService,
         llm: LLMService,
@@ -107,7 +104,6 @@ class VisualAlertAgent(RoutableAgent):
         self._frames = frames
         self._images = images
         self._decisions = decisions
-        self._publish_capability = publish_capability
         self._vlm = vlm
         self._llm = llm
         self._context = context
@@ -125,10 +121,6 @@ class VisualAlertAgent(RoutableAgent):
 
     def routing_aid(self, participant_id: str) -> RoutingAid:
         return RoutingAid("alerts", _ROUTING, eligibility="active" if participant_id in self._jobs else "available")
-
-    async def participant_joined(self, participant_id: str) -> None:
-        """Publish static capability only, without job state or observations."""
-        await self._publish_capability(participant_id, ConversationContextUpdate(text=_CAPABILITY))
 
     async def admit(self, turn: AgentTurn, *, focused: bool) -> Admission:
         del focused

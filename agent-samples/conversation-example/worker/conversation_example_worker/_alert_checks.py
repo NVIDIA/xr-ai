@@ -42,22 +42,13 @@ _DIRECT = DecisionQuestion(
     },
 )
 _OBSERVED = DecisionQuestion(
-    instructions=(
-        "Judge only whether the written observation establishes the requested visible condition. "
-        "Use yes only when the observation directly supports it; otherwise use no. A single observation "
-        "from one still image cannot establish motion, an event, a change over time, or a previous state; "
-        "such conditions mean no."
-    ),
+    instructions=(_PROMPTS / "alert_observation_judge.txt").read_text(encoding="utf-8").strip(),
     criteria={
         "yes": "The observation clearly establishes the requested visible condition.",
         "no": "The observation is absent, uncertain, obscured, or does not establish the condition.",
     },
 )
-_OBSERVATION_PROMPT = (
-    "Describe only visible evidence relevant to the requested alert condition. Say when evidence is absent, "
-    "unclear, or obscured. Use this single current still image only. Do not infer motion, an event, a change "
-    "over time, a previous state, or anything outside this image. Be concise and factual."
-)
+_OBSERVATION_PROMPT = (_PROMPTS / "alert_observation.txt").read_text(encoding="utf-8").strip()
 
 
 @dataclass(frozen=True, slots=True)

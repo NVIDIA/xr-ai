@@ -38,11 +38,9 @@ Selected destination
 VoiceAgent
 ```
 
-`_app.py` constructs and registers the router, voice agent, and configured
-conversation context subscriber. It supplies participant initialization and
-cleanup hooks for the sample's capability snapshots, notes, alerts, and frame
-resources. The router initializes those resources before a participant's first
-query, even when that query arrives before the participant-joined event.
+`app.py` constructs and registers the router, voice agent, and conversation
+context subscriber. It supplies the router's participant cleanup hook, which
+clears the sample's notes, alerts, conversation context, and frame resources.
 
 ## Composition
 
@@ -105,14 +103,16 @@ recognition accuracy. A single still image cannot establish motion, a change
 over time, or a previous state; conditions requiring that evidence do not
 trigger.
 
-Conversation receives a static description of alert capability, never the
-job's observations or matching state. The alert condition and current image
-stay inside the background job.
+Conversation's instructions describe what alerts can do; conversation never
+receives a job's observations or matching state. The alert condition and current
+image stay inside the background job.
 
 Foreground notes start explicitly, capture dictated text, and retain focus until
 a finish. A question handoff declines only that query so another destination can
-answer; the next turn returns to note capture. Saved notes remain available to
-general conversation afterward.
+answer; the next turn returns to note capture. Every saved note is kept until
+the participant leaves and is read back in full, and each one is also shared
+with general conversation. The notes routing description is static, so the
+router's request does not grow with saved notes.
 A decline gives the router one bounded reroute; unresolved routing clarifies or
 uses the eligible default conversation destination. Alerts do not take focus
 and can run while a participant is taking notes or asking another agent a
@@ -152,28 +152,18 @@ conversation destination state, AgentRouter history, and source-context
 tasks. This is the reference composition for streamed conversation and
 current-view visual questions.
 
-The application owns two `ContextManager` instances, one for the general
-conversation and one for the notes conversation, and clears both when a
-participant leaves. The general conversation's manager subscribes to named
-runtime context topics configured in `yaml/conversation_example_worker.yaml`. The alert agent publishes only a static capability summary. The notes
-destination publishes its bounded note list as a replaceable summary.
-Publishers send text-only `ConversationContextUpdate` values. Only the general
-conversation subscribes to the note topic. Incremental sources are compacted in
-the background per participant and source; the resulting summary replaces the
-compacted records for that source. A summary update larger than its topic budget
-is clipped at its start and end before storage. Incremental updates remain
-stored while compaction runs; when too much uncompacted context is present, the
-oldest updates are omitted from an answer request but retained for later
-compaction. The rendered dialogue/context and compaction input budgets are
-UTF-8 byte budgets, not token limits.
-The sample maps `context_budget_bytes` across the general conversation's
-dialogue and each configured context topic. With the three default topics, a
-12,000-byte setting gives 3,000 bytes to dialogue and each topic, preserving
-the sample's total context allowance. The same setting also bounds
-sample-owned notes and shared context before publication.
+The application owns the general conversation's `ContextManager` and clears it
+when a participant leaves. It holds two sections: completed dialogue and the
+`conversation-example.notes` incremental topic, on which the notes destination
+publishes each saved note as one text-only `ConversationContextUpdate`. Each
+section keeps recent entries verbatim and folds older ones into a rolling
+summary written in the background per participant, so conversation and alert
+compilation see recent notes exactly and older notes summarized. When too much
+uncompacted context is present, the oldest updates are omitted from an answer
+request but retained for later compaction. `context_budget_bytes` is split
+evenly between the two sections; with the default 12,000 bytes, each gets 6,000.
 `compaction_input_budget_bytes` separately limits one summary request; its
-default is 12,000 bytes. The notes conversation has no context topics and uses
-the full configured context budget for dialogue.
+default is 12,000 bytes. These are UTF-8 byte budgets, not token limits.
 
 Conversation prompts show the current time and coarse minute-rounded timestamps
 for completed exchanges and named context where available. FE-owned turns use
@@ -190,9 +180,9 @@ The worker package is under
 | File | Responsibility |
 |---|---|
 | `__main__.py` | Parses launcher arguments and starts the worker |
-| `_app.py` | Composition root for `VoiceAgent`, `AgentRouter`, route agents, services, and readiness |
+| `app.py` | Composition root for `VoiceAgent`, `AgentRouter`, route agents, services, and readiness |
 | `_topics.py` | Names the sample-owned voice input and lifecycle topics |
-| `_config.py` | Resolves worker, model, voice-gate, and prompt settings |
+| `config.py` | Resolves worker, model, voice-gate, and prompt settings |
 | `prompts/note_control.txt` | Note action instructions for dictation, question handoff, readback, and finish |
 | `_note_taking.py` | Implements the sample-owned focused note-taking destination |
 | `_alert_agent.py` | Owns one-shot background visual alerts: requests, the paced watch, announcement, and job lifecycle |
@@ -202,11 +192,15 @@ The worker package is under
 | `_tasks.py` | Waits for owned tasks without letting caller cancellation interrupt their cleanup |
 | `_visual_agents.py` | Implements direct current-image observation |
 | `prompts/system.txt` | Defines the default VLM instruction |
-| `prompts/alert_control.txt`, `prompts/alert_compile.txt`, `prompts/alert_relevance.txt`, `prompts/alert_condition.txt`, `prompts/alert_description.txt` | Start/cancel admission, request compilation, frame screening, and evidence matching |
+| `prompts/alert_control.txt`, `prompts/alert_compile.txt`, `prompts/alert_relevance.txt`, `prompts/alert_condition.txt`, `prompts/alert_observation.txt`, `prompts/alert_observation_judge.txt`, `prompts/alert_description.txt` | Start/cancel admission, request compilation, frame screening, direct and observation-based condition checks, and the triggered description |
 | `prompts/conversation.txt` | Application instructions for the conversation destination |
-| `prompts/note_taking.txt` | Note role description; the note agent owns control responses and save acknowledgments |
-| `eval/conversation-cases.yaml` | Single-turn Clef routing and direct-answer evaluation inputs |
-| `eval/conversation-flows.yaml` | Ordered multi-turn routing, focus, and context-update cases |
+
+The decision eval is under `agent-samples/conversation-example/eval/`:
+
+| File | Responsibility |
+|---|---|
+| `run_decision_eval.py` | Runs every flow through the router against the configured Clef service and fails below a pass rate |
+| `conversation-flows.yaml` | Ordered participant sessions with expected routing, admission, control actions, and focus |
 
 ## Behavior validation
 
@@ -221,26 +215,29 @@ uv --config-file uv.toml run --project tests pytest \
   tests/test_conversation_example_visual_destinations.py \
   tests/test_conversation_example_agents.py \
   tests/test_conversation_example_alerts.py \
-  tests/test_conversation_example_flows.py \
   tests/test_conversation_example_decision_eval.py
 ```
 
-| Behavior | Deterministic contract | Corpus/model layer |
-|---|---|---|
-| Routing, native admission, decline/reroute, default fallback, focus, cancellation | `test_xr_ai_routing.py` | Raw choice, effective destination, disposition, and invoked admissions |
-| Completed history, named context, byte budgets, compaction, acknowledgment races | `test_xr_ai_conversation.py` | Context sources and answer checks when captured |
-| Current-frame-only observation and camera/tool failures | `test_conversation_example_visual_destinations.py`, `test_conversation_example_worker.py` | Current-view tool/evidence expectations in both corpora |
-| One-shot matching, failure, cancellation, participant isolation | `test_conversation_example_alerts.py` | Actual job lifecycle and attributed output |
-| Note capture, readback, focus, release/handoff, overflow, context sharing | `test_conversation_example_worker.py`, `test_conversation_example_agents.py` | Note actions, focus transitions, and context-source expectations |
-| Decision evaluator fixture loading, call limits, teacher-forced history, and not-scored output | `test_conversation_example_decision_eval.py` | Typed Clef route and control decisions |
-| Sample wiring, readiness, Relay attribution and voice-stream boundaries | `test_conversation_example_worker.py` | Not scored unless the run captures those stages |
+| Behavior | Deterministic contract |
+|---|---|
+| Routing, native admission, decline/reroute, default fallback, focus, cancellation | `test_xr_ai_routing.py` |
+| Completed history, named context, byte budgets, compaction, acknowledgment races | `test_xr_ai_conversation.py` |
+| Current-frame-only observation and camera/tool failures | `test_conversation_example_visual_destinations.py`, `test_conversation_example_worker.py` |
+| One-shot matching, failure, cancellation, participant isolation | `test_conversation_example_alerts.py` |
+| Note capture, readback, focus, release/handoff, context sharing | `test_conversation_example_worker.py`, `test_conversation_example_agents.py` |
+| Decision eval scoring with fixture-faithful and wrong decisions | `test_conversation_example_decision_eval.py` |
+| Sample wiring, readiness, Relay attribution and voice-stream boundaries | `test_conversation_example_worker.py` |
 
-The ordered flow corpus separates raw router choice, effective destination,
-invoked admission and control decisions, evidence/tool use, and answer checks.
-A layer with no captured trace is reported as not scored.
-
-Run the bounded decision-only pass from the repository root when the configured
-Clef router is available:
+The decision eval scores the routing and control decisions that the configured
+Clef model makes. It sends every turn of `eval/conversation-flows.yaml` through
+`AgentRouter.handle()` with the sample's four destinations. Answers are
+teacher-forced: the conversation LLM and the observation VLM return each turn's
+authored completion, which later turns see as completed history. Each turn
+checks the destination that answered, the router's first choice, named
+admissions and native control actions, the answer's disposition, and router
+focus. A turn passes when every check it specifies passes; the run exits
+nonzero when fewer than 80% of turns pass. Run it from the repository root when
+the configured Clef router is available:
 
 ```bash
 uv --config-file uv.toml run --project agent-samples/conversation-example/worker \
@@ -248,41 +245,16 @@ uv --config-file uv.toml run --project agent-samples/conversation-example/worker
   --output /tmp/conversation-example-decision-eval.jsonl
 ```
 
-Add `--preflight-only` to validate fixture counts, required authored context,
-and the decision-call cap without contacting a model. The JSONL output contains
-typed decision requests/responses and per-turn raw choice, effective selection,
-invoked native admissions/actions, and explicit not-scored fields. Histories
-marked as authored are teacher-forced inputs; they are not model outputs. This
-pass does not invoke answer generation, image tools, voice services, or
-compaction, so those layers remain unscored. Per-turn `published_context_*`
-fields record updates emitted by sample destinations; the decision-only runner
-does not start an `AgentRuntime` subscriber and does not claim those updates were
-consumed by a conversation prompt. Prior authored conversation completions seed
-the same bounded private routing cue used after a completed production answer.
-If a run stops after a fixture precondition fails, `--resume-from` can preserve
-its raw decisions and continue untouched flows. It requires matching fixture,
-model-config, and production-source hashes; the output records both evaluator
-hashes when resume handling itself changed.
-
-Flow histories are teacher-forced inputs. A seeded exchange is labeled as
-authored state, not as an answer generated during the evaluation. Between turns,
-focus and alert controls follow the actual native control decisions; fixture
-expectations for those states are scored separately. The corpus's
-answer checks are lexical smoke checks; they do not establish semantic answer
-quality. `eval/alert-conditions.yaml` supplies separate yes/no image-condition
-cases, including absent, uncertain, and non-observable motion evidence, plus a
-backup text-judge case for motion that one frame cannot establish. Hosted
-tests must supply and inspect the actual image bytes. Model-decision runs do not
-establish camera grounding unless they
-include a completed frame/query result, and the deterministic image fixtures do
-not reproduce a participant's live camera stream.
+`--output` writes one JSON record per turn with its checks and every decision
+choice. Answer quality, alert compilation, and the alert frame checks are not
+scored: alert compilation returns a fixed watch, and alert jobs never receive a
+frame.
 
 Router uncertainty still probes the highest-probability currently eligible
 destination through its normal admission step. It produces router clarification
 only when no usable eligible probability remains; a selected destination can
-still ask its own clarification question during admission. The decision-only
-evaluator follows the same distinction and excludes a default destination that
-already declined the same request from fallback.
+still ask its own clarification question during admission. A default
+destination that already declined the same request is excluded from fallback.
 
 ## Readiness
 
@@ -304,7 +276,7 @@ layout works without command-line configuration arguments.
 
 | File | Owns |
 |---|---|
-| `yaml/conversation_example_worker.yaml` | Frame freshness and wait limits, VAD, idle timeout, optional context topics (including note sharing) and byte budgets, route-aware acknowledgment delay, alert check and confirm intervals, and prompt overrides |
+| `yaml/conversation_example_worker.yaml` | Frame freshness and wait limits, VAD, idle timeout, conversation context and routing history byte budgets, route-aware acknowledgment delay, alert check and confirm intervals, and prompt overrides |
 | `yaml/voice_gate.yaml` | Conversation controls, optional wake phrases, listening chime, and follow-up window |
 | `yaml/models.json` | LLM/VLM/STT/TTS/Clef adapters, endpoints, and conversation generation defaults |
 | `yaml/device_io_hub.yaml` | LiveKit room and ports, web and token servers, and network behavior |
@@ -335,15 +307,12 @@ and a 64-token output limit; the conversation model settings are unchanged.
 Acknowledgment text is restricted to a short “Let me think through …” goal
 restatement. Nonconforming generated text is dropped without retrying.
 
-The default `summary_context_topics` list includes
-`conversation-example.alert-capability`, `conversation-example.foreground-notes`,
-and `conversation-example.observation-capability`. Alert and direct-vision
-capabilities are static. Notes publish participant-scoped saved notes and session
-state. These summaries are context, not health checks or proof of camera input.
-No alert observations or active-job state are sent to conversation. Remove a
-topic from the list to disable that feed; focused note capture and readback
-continue to use local notes. `incremental_context_topics` is for append-only
-context sources that conversation compacts.
+`routing_history_budget_bytes` (default 8,000) limits the completed history the
+router sends with each routing decision. Clef accepts at most 4,096 tokens per
+request, and the routing prompt and the four destination descriptions use about
+800 of them, so the default leaves room for history that tokenizes less
+efficiently than English. Raise it only together with the Clef service's
+`max_length`.
 
 Changing an entry in `models.json` changes only the client adapter or endpoint
 that this sample uses. It does not reconfigure or restart the shared server.

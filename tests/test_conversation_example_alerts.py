@@ -201,12 +201,8 @@ def _agent(
     confirm_interval_secs=3.0,
 ):
     output = output or _Output()
-    capabilities = []
     sleeps = []
     llm = llm or _LLM()
-
-    async def publish(participant, update):
-        capabilities.append((participant, update.text))
 
     async def sleep(delay):
         sleeps.append(delay)
@@ -216,7 +212,6 @@ def _agent(
         frames,
         images or _Images(),
         decisions,
-        publish,
         vlm=vlm or _VLM(),
         llm=llm,
         context=context or ContextManager(llm),
@@ -227,7 +222,7 @@ def _agent(
         sleep=sleep,
     )
     agent.sleeps = sleeps
-    return agent, output, capabilities
+    return agent, output
 
 
 @pytest.fixture(autouse=True)
@@ -279,8 +274,7 @@ async def test_alert_speaks_once_after_matching_and_never_publishes_observations
     frames = _Frames((gate, None))
     images = _Images()
     decisions = _Decisions("start", fast=("no", 1.0), backup=("yes", 0.9))
-    agent, output, capabilities = _agent(decisions, frames, images)
-    await agent.participant_joined("alice")
+    agent, output = _agent(decisions, frames, images)
     await _start(agent)
     job = agent._jobs["alice"]
     await asyncio.wait_for(output.background.wait(), 1)
@@ -295,8 +289,6 @@ async def test_alert_speaks_once_after_matching_and_never_publishes_observations
     assert [description.text for description in descriptions] == ["The lamp is blue."]
     assert alerts[0][1] == {"participant_id": "alice", "source": "alerts"}
     assert len(frames.calls) == 1 and len(images.resolved) == 1
-    assert len(capabilities) == 1
-    assert "lamp" not in capabilities[0][1]
     assert not agent._jobs
     assert frames.active == 0
 
@@ -309,7 +301,7 @@ async def test_unavailable_evidence_stops_without_alert_or_condition_decision(fa
     frames = _Frames((gate, failure_value), (gate, failure_value))
     images = _Images(unavailable=failure == "media")
     decisions = _Decisions("start")
-    agent, output, _ = _agent(decisions, frames, images)
+    agent, output = _agent(decisions, frames, images)
     await _start(agent)
     job = agent._jobs["alice"]
     await asyncio.wait_for(output.background.wait(), 1)
@@ -325,7 +317,7 @@ async def test_unavailable_evidence_stops_without_alert_or_condition_decision(fa
 @pytest.mark.asyncio
 async def test_cancel_and_declined_fragment_preserve_participant_isolation():
     frames = _Frames()
-    agent, output, _ = _agent(_Decisions("start", "start", "decline", "cancel"), frames)
+    agent, output = _agent(_Decisions("start", "start", "decline", "cancel"), frames)
     await _start(agent, "alice")
     await _next_call(frames)
     await _start(agent, "bob")
@@ -346,7 +338,7 @@ async def test_cancel_and_declined_fragment_preserve_participant_isolation():
 
 @pytest.mark.asyncio
 async def test_shutdown_during_start_ack_cannot_create_a_late_job():
-    agent, _, _ = _agent(_Decisions("start"), _Frames())
+    agent, _ = _agent(_Decisions("start"), _Frames())
     turn = AgentTurn("alice", "start", "Alert me when the parcel is visible.")
     await agent.admit(turn, focused=False)
     entered, resume = asyncio.Event(), asyncio.Event()
@@ -366,7 +358,7 @@ async def test_shutdown_during_start_ack_cannot_create_a_late_job():
 @pytest.mark.asyncio
 async def test_failed_alert_publication_is_not_retried_as_another_message():
     gate = _open()
-    agent, output, _ = _agent(
+    agent, output = _agent(
         _Decisions("start", fast=("yes", 0.99)),
         _Frames((gate, None)),
         output=_Output(fail_background=True),
@@ -385,7 +377,7 @@ async def test_failed_alert_publication_is_not_retried_as_another_message():
 async def test_cancel_drains_followup_after_notice_without_more_spoken_output():
     vlm = _VLM()
     vlm.resume = asyncio.Event()
-    agent, output, _ = _agent(_Decisions("start", fast=("yes", 0.99)), _Frames((_open(), None)), vlm=vlm)
+    agent, output = _agent(_Decisions("start", fast=("yes", 0.99)), _Frames((_open(), None)), vlm=vlm)
     await _start(agent)
     job = agent._jobs["alice"]
     await asyncio.wait_for(output.background.wait(), 1)
@@ -402,7 +394,7 @@ async def test_cancel_drains_followup_after_notice_without_more_spoken_output():
 async def test_description_service_failure_does_not_repeat_the_initial_alert():
     vlm = _VLM()
     vlm.error = RuntimeError("description unavailable")
-    agent, output, _ = _agent(_Decisions("start", fast=("yes", 0.99)), _Frames((_open(), None)), vlm=vlm)
+    agent, output = _agent(_Decisions("start", fast=("yes", 0.99)), _Frames((_open(), None)), vlm=vlm)
     await _start(agent)
     job = agent._jobs["alice"]
     await asyncio.wait_for(job.task, 1)
@@ -416,7 +408,7 @@ async def test_direct_no_allows_observation_positive_on_the_same_frame():
     frames = _Frames((_open(), None))
     vlm = _VLM()
     decisions = _Decisions("start", fast=("no", 1.0), backup=("yes", 1.0))
-    agent, output, _ = _agent(decisions, frames, vlm=vlm)
+    agent, output = _agent(decisions, frames, vlm=vlm)
     await _start(agent)
     job = agent._jobs["alice"]
     await asyncio.wait_for(job.task, 1)
@@ -433,7 +425,7 @@ async def test_fast_positive_survives_observation_service_failure():
     vlm = _VLM()
     vlm.error = RuntimeError("Cosmos unavailable")
     decisions = _Decisions("start", fast=("yes", 1.0), backup=("yes", 1.0))
-    agent, output, _ = _agent(decisions, _Frames((_open(), None)), vlm=vlm)
+    agent, output = _agent(decisions, _Frames((_open(), None)), vlm=vlm)
     await _start(agent)
     await asyncio.wait_for(agent._jobs["alice"].task, 1)
     assert sum(message.text == "Alert" for message, _ in output.messages) == 1
@@ -451,7 +443,7 @@ async def test_both_confirmations_failing_retires_the_alert():
                 raise RuntimeError("Clef unavailable")
             return await super().decide(state, questions, **kwargs)
 
-    agent, output, _ = _agent(FailingDirect("start"), _Frames((_open(), None)), vlm=vlm)
+    agent, output = _agent(FailingDirect("start"), _Frames((_open(), None)), vlm=vlm)
     await _start(agent)
     await asyncio.wait_for(agent._jobs["alice"].task, 1)
     assert _spoken(output)[-1] == "I couldn't check the visual alert. It has stopped."
@@ -461,7 +453,7 @@ async def test_both_confirmations_failing_retires_the_alert():
 @pytest.mark.asyncio
 async def test_both_paths_positive_publish_exactly_one_alert():
     decisions = _Decisions("start", fast=("yes", 1.0), backup=("yes", 1.0), synchronize=True)
-    agent, output, _ = _agent(decisions, _Frames((_open(), None)))
+    agent, output = _agent(decisions, _Frames((_open(), None)))
     await _start(agent)
     job = agent._jobs["alice"]
     await asyncio.wait_for(job.task, 1)
@@ -484,7 +476,7 @@ def _slow_sibling_cleanup():
 async def test_alert_is_announced_after_the_sibling_check_finishes():
     vlm, fast_gate, decisions = _slow_sibling_cleanup()
     frames = _Frames((_open(), None))
-    agent, output, _ = _agent(decisions, frames, vlm=vlm)
+    agent, output = _agent(decisions, frames, vlm=vlm)
     await _start(agent)
     job = agent._jobs["alice"]
     await asyncio.wait_for(vlm.observation_started.wait(), 1)
@@ -500,7 +492,7 @@ async def test_alert_is_announced_after_the_sibling_check_finishes():
 @pytest.mark.asyncio
 async def test_departure_during_sibling_cleanup_waits_for_that_cleanup():
     vlm, fast_gate, decisions = _slow_sibling_cleanup()
-    agent, output, _ = _agent(decisions, _Frames((_open(), None)), vlm=vlm)
+    agent, output = _agent(decisions, _Frames((_open(), None)), vlm=vlm)
     await _start(agent)
     await asyncio.wait_for(vlm.observation_started.wait(), 1)
     fast_gate.set()
@@ -532,7 +524,7 @@ async def test_losing_check_failing_during_cleanup_is_logged_not_left_unretrieve
     logs = []
     sink = logger.add(logs.append, format="{message}", level="WARNING")
     try:
-        agent, output, _ = _agent(decisions, _Frames((_open(), None)), vlm=vlm)
+        agent, output = _agent(decisions, _Frames((_open(), None)), vlm=vlm)
         await _start(agent)
         job = agent._jobs["alice"]
         await asyncio.wait_for(vlm.observation_started.wait(), 1)
@@ -556,7 +548,7 @@ async def test_late_yes_after_replacement_cannot_claim_or_publish():
     decisions = _Decisions(
         "start", "start", fast=("yes", 1.0), backup=("no", 1.0), fast_gate=fast_gate, ignore_fast_cancel=True
     )
-    agent, output, _ = _agent(decisions, frames)
+    agent, output = _agent(decisions, frames)
     await _start(agent, turn_id="first")
     old_job = agent._jobs["alice"]
     await asyncio.wait_for(decisions.fast_called.wait(), 1)
@@ -576,7 +568,7 @@ async def test_only_a_screened_frame_runs_cosmos_and_the_condition_checks():
     frames = _Frames((gate, None), (gate, None), (gate, None))
     vlm = _VLM()
     decisions = _Decisions("start", relevance=["no", "no", "yes"], fast=("yes", 1.0), backup=("yes", 1.0))
-    agent, output, _ = _agent(decisions, frames, vlm=vlm)
+    agent, output = _agent(decisions, frames, vlm=vlm)
     await _start(agent)
     await asyncio.wait_for(agent._jobs["alice"].task, 1)
     paths = decisions.paths()
@@ -593,7 +585,7 @@ async def test_unscreened_frames_never_run_cosmos_or_condition_checks():
     frames = _Frames((gate, None), (gate, None), (gate, None))
     vlm = _VLM()
     decisions = _Decisions("start", relevance="no", fast=("yes", 1.0), backup=("yes", 1.0))
-    agent, output, _ = _agent(decisions, frames, vlm=vlm)
+    agent, output = _agent(decisions, frames, vlm=vlm)
     await _start(agent)
     for _ in range(3):
         await _next_call(frames)
@@ -611,7 +603,7 @@ async def test_checks_are_paced_and_a_screened_frame_waits_longer():
     decisions = _Decisions(
         "start", relevance=["no", "yes", "yes"], fast=[("no", 1.0), ("yes", 1.0)], backup=("no", 1.0)
     )
-    agent, _, _ = _agent(decisions, frames, check_interval_secs=1.0, confirm_interval_secs=5.0)
+    agent, _ = _agent(decisions, frames, check_interval_secs=1.0, confirm_interval_secs=5.0)
     await _start(agent)
     await asyncio.wait_for(agent._jobs["alice"].task, 1)
     # Frame 1 is screened out, frame 2 is screened in but not confirmed, frame 3 confirms.
@@ -635,7 +627,7 @@ async def test_request_is_compiled_with_recent_exchanges_and_saved_context():
     context = ContextManager(llm, summary_context_topics=("notes",))
     await context.update("alice", "notes", ConversationContextUpdate(text="Watch for the red cable."), mode="summary")
     decisions = _Decisions("start", relevance="no")
-    agent, output, _ = _agent(decisions, _Frames((_open(), None)), llm=llm, context=context)
+    agent, output = _agent(decisions, _Frames((_open(), None)), llm=llm, context=context)
     history = (AgentExchange("My spare part is the red cable.", "Noted."),)
 
     await _start(agent, request="Alert me about what I mentioned in my notes.", history=history)
@@ -660,7 +652,7 @@ async def test_request_is_compiled_with_recent_exchanges_and_saved_context():
 async def test_unresolvable_request_starts_no_alert_and_keeps_a_running_one(compiled):
     llm = _LLM(_READY, compiled)
     frames = _Frames()
-    agent, output, _ = _agent(_Decisions("start", "start"), frames, llm=llm)
+    agent, output = _agent(_Decisions("start", "start"), frames, llm=llm)
     await _start(agent, turn_id="first")
     running = agent._jobs["alice"]
     await _next_call(frames)
@@ -682,7 +674,7 @@ async def test_departure_during_compilation_leaves_no_alert_running():
             await resume.wait()
             return await super().chat(messages, **kwargs)
 
-    agent, _, _ = _agent(_Decisions("start"), _Frames(), llm=SlowLLM())
+    agent, _ = _agent(_Decisions("start"), _Frames(), llm=SlowLLM())
     turn = AgentTurn("alice", "start", "Alert me when the lamp is blue.")
     await agent.admit(turn, focused=False)
 

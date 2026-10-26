@@ -12,7 +12,6 @@ import asyncio
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 
-from xr_ai_conversation import ConversationContextUpdate
 from xr_ai_hub import FrameUnavailable
 from xr_ai_interaction import ResponseOutput, ResponseOutputs
 from xr_ai_routing import (
@@ -28,11 +27,6 @@ from xr_ai_tools.vision import ImageQueryRequest, StreamingImageQueryTool
 
 _NO_CAMERA = "I couldn't get a current camera frame. Please try again."
 _NO_VISUAL_EVIDENCE = "I couldn't inspect the current view right now. Please try again."
-ContextPublisher = Callable[[str, ConversationContextUpdate], Awaitable[None]]
-OBSERVATION_CONTEXT_TOPIC = Topic("conversation-example.observation-capability", ConversationContextUpdate)
-_OBSERVATION_CAPABILITY = (
-    "Capability: answer questions about objects, text, colors, counts, and positions in the current view."
-)
 
 
 class VisualObservationAgent(RoutableAgent):
@@ -42,7 +36,6 @@ class VisualObservationAgent(RoutableAgent):
         self,
         frames: CurrentFrameTool,
         vision: StreamingImageQueryTool,
-        publish_context: ContextPublisher | None = None,
         *,
         runtime: AgentRuntime,
         output_topic: Topic[ResponseOutput],
@@ -52,16 +45,6 @@ class VisualObservationAgent(RoutableAgent):
         )
         self._frames = frames
         self._vision = vision
-        self._publish_context = publish_context
-
-    async def participant_joined(self, participant_id: str) -> None:
-        """Publish this route's capability without claiming the camera is ready."""
-
-        if self._publish_context is not None:
-            await self._publish_context(
-                participant_id,
-                ConversationContextUpdate(text=_OBSERVATION_CAPABILITY),
-            )
 
     # RoutableAgent contract: answer uses one captured current frame per request.
     def routing_aid(self, _participant_id: str) -> RoutingAid:

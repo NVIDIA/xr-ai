@@ -14,7 +14,7 @@ import pytest
 from xr_ai_conversation import ContextManager, Conversation
 from xr_ai_interaction import ResponseOutput, UserQuery
 from xr_ai_models import ChatStreamEvent
-from xr_ai_routing import AgentRouter, RoutingAid
+from xr_ai_routing import AgentRouter
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, Topic, subscribe
 from xr_ai_tools.image import ImageReference
 
@@ -115,19 +115,11 @@ def _stack(runtime, route, mode):
     model = _Model(mode)
     manager = ContextManager(model)
     general = Conversation(model, context=manager, runtime=runtime, output_topic=_OUTPUT)
-    manager = ContextManager(model)
-    notes = Conversation(
-        model,
-        context=manager,
-        routing=RoutingAid(name="notes", description="Focused note-taking destination."),
-        runtime=runtime,
-        output_topic=_OUTPUT,
-    )
     decisions = _Decisions(route)
     destinations = {
         "conversation": general,
         "observation": VisualObservationAgent(_Frames(), model, runtime=runtime, output_topic=_OUTPUT),
-        "notes": NoteTakingAgent(notes, decisions, runtime=runtime, output_topic=_OUTPUT, context_budget_bytes=4096),
+        "notes": NoteTakingAgent(decisions, runtime=runtime, output_topic=_OUTPUT),
     }
     idle = asyncio.Event()
 
@@ -138,7 +130,7 @@ def _stack(runtime, route, mode):
     router = AgentRouter(destinations, decisions, query_topic=USER_QUERY_TOPIC, output_topic=_OUTPUT, set_status=status)
     runtime.register("router", router.runtime_subscriber())
     output = runtime.register("output", _Output())
-    return router, model, output, idle, (general, notes)
+    return router, model, output, idle, (general,)
 
 
 async def _query(runtime, idle, text, timestamp):
@@ -224,16 +216,12 @@ async def test_alert_cancel_publishes_one_finite_attributed_response():
     runtime = AgentRuntime()
     decisions = _Decisions("alerts")
 
-    async def publish_capability(_participant, _update):
-        pass
-
     manager = ContextManager(_Model("done"))
     general = Conversation(_Model("done"), context=manager, runtime=runtime, output_topic=_OUTPUT)
     alerts = VisualAlertAgent(
         _Frames(),
         None,
         decisions,
-        publish_capability,
         vlm=None,
         llm=_Model("done"),
         context=manager,

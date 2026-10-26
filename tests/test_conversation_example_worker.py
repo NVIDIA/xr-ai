@@ -46,11 +46,7 @@ _WORKER_DIR = _SAMPLE_DIR / "worker"
 sys.path.insert(0, str(_WORKER_DIR))
 
 from conversation_example_worker import __main__ as worker_main  # noqa: E402  # pyright: ignore[reportMissingImports]
-from conversation_example_worker import _app as app  # noqa: E402  # pyright: ignore[reportMissingImports]
-from conversation_example_worker._app import (  # noqa: E402  # pyright: ignore[reportMissingImports]
-    _CONVERSATION_INSTRUCTIONS,
-)
-from conversation_example_worker._config import load_config  # noqa: E402  # pyright: ignore[reportMissingImports]
+from conversation_example_worker import app  # noqa: E402  # pyright: ignore[reportMissingImports]
 from conversation_example_worker._note_taking import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     NoteTakingAgent,
 )
@@ -61,6 +57,10 @@ from conversation_example_worker._topics import (  # noqa: E402  # pyright: igno
     USER_QUERY_TOPIC,
 )
 from conversation_example_worker._visual_agents import VisualObservationAgent  # noqa: E402
+from conversation_example_worker.app import (  # noqa: E402  # pyright: ignore[reportMissingImports]
+    _CONVERSATION_INSTRUCTIONS,
+)
+from conversation_example_worker.config import load_config  # noqa: E402  # pyright: ignore[reportMissingImports]
 from xr_ai_conversation import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     ContextManager,
     Conversation,
@@ -74,7 +74,6 @@ from xr_ai_routing import (  # noqa: E402  # pyright: ignore[reportMissingImport
     RoutingAid,
 )
 from xr_ai_tools import Tool  # noqa: E402
-from xr_ai_tools import current_frame as current_frame_module  # noqa: E402
 from xr_ai_tools.current_frame import (  # noqa: E402
     CurrentFrameRequest,
     CurrentFrameTool,
@@ -82,9 +81,6 @@ from xr_ai_tools.current_frame import (  # noqa: E402
 )
 from xr_ai_tools.image import ImageReference, ImageRegistry  # noqa: E402
 from xr_ai_tools.vision import (  # noqa: E402
-    ImageQueryRequest,
-    ImageQueryResult,
-    ImageQueryTool,
     StreamingImageQueryTool,
 )
 
@@ -493,48 +489,47 @@ async def test_conversation_keeps_early_context_after_interleaved_router_history
     await conversation.close()
 
 
-@pytest.mark.asyncio
-async def test_notes_capture_readback_and_finish_preserve_context_until_departure() -> None:
-    class NoteDecisions:
-        def __init__(self) -> None:
-            self.choices = iter(("start", "capture", "readback", "finish"))
-            self.states = []
+class _NoteDecisions:
+    """Answer each note-action decision with the next scripted choice."""
 
-        async def decide(self, state, questions, *, timeout=None):
-            self.states.append(state)
-            question = questions["note_action"]
-            choice = next(self.choices)
-            assert choice in question.criteria
-            return DecisionResponse(
-                answers={"note_action": DecisionAnswer(choice, 1.0, {choice: 1.0})},
-                model="fake",
-                usage={},
-                raw={},
-            )
+    def __init__(self, *choices: str) -> None:
+        self.choices = iter(choices)
+        self.states = []
 
-    llm = _ConversationService()
-    manager = ContextManager(llm)
-    conversation = Conversation(
-        llm,
-        context=manager,
-        routing=RoutingAid(name="notes", description="Focused note-taking destination."),
+    async def decide(self, state, questions, *, timeout=None):
+        self.states.append(state)
+        choice = next(self.choices)
+        assert choice in questions["note_action"].criteria
+        return DecisionResponse(
+            answers={"note_action": DecisionAnswer(choice, 1.0, {choice: 1.0})}, model="fake", usage={}, raw={}
+        )
+
+
+def _notes(decisions, publish_note=None) -> NoteTakingAgent:
+    return NoteTakingAgent(
+        decisions,  # type: ignore[arg-type]
+        publish_note=publish_note,
         runtime=CaptureRuntime(),
         output_topic=VOICE_OUTPUT_TOPIC,
     )
-    decisions = NoteDecisions()
+
+
+async def _ignore(_source, _text):
+    return None
+
+
+_NOTE = "The demo showed an AR overlay."
+
+
+@pytest.mark.asyncio
+async def test_notes_capture_readback_and_finish_until_departure() -> None:
+    decisions = _NoteDecisions("start", "capture", "readback", "finish")
     published = []
 
-    async def publish_context(participant_id, update):
-        published.append((participant_id, update))
+    async def publish_note(participant_id, update):
+        published.append((participant_id, update.text))
 
-    destination = NoteTakingAgent(
-        conversation,
-        decisions,  # type: ignore[arg-type]
-        context_budget_bytes=500,
-        publish_context=publish_context,
-        runtime=CaptureRuntime(),
-        output_topic=VOICE_OUTPUT_TOPIC,
-    )
+    destination = _notes(decisions, publish_note)
     emitted = []
 
     async def emit(source, text):
@@ -542,95 +537,53 @@ async def test_notes_capture_readback_and_finish_preserve_context_until_departur
 
     start = AgentTurn("alice", "start", "Take some notes.")
     assert (await destination.admit(start, focused=False)).disposition == "accept"
-    started = await _answer(destination, start, emit=emit)
-    assert started.disposition == "focus"
+    assert (await _answer(destination, start, emit=emit)).disposition == "focus"
 
-    continuation = AgentTurn("alice", "continue", "The demo showed an AR overlay on the map.", history=())
-    assert (await destination.admit(continuation, focused=True)).disposition == "accept"
-    continued = await _answer(destination, continuation, emit=emit)
-    assert continued.disposition == "focus"
+    capture = AgentTurn("alice", "capture", _NOTE)
+    assert (await destination.admit(capture, focused=True)).disposition == "accept"
+    assert (await _answer(destination, capture, emit=emit)).disposition == "focus"
 
-    readback = AgentTurn("alice", "readback", "Read back my notes.", history=())
+    readback = AgentTurn("alice", "readback", "Read back my notes.")
     assert (await destination.admit(readback, focused=True)).disposition == "accept"
     reviewed = await _answer(destination, readback, emit=emit)
     assert reviewed.disposition == "focus"
-    assert "AR overlay on the map" in reviewed.text
+    assert reviewed.text == f"Your notes: {_NOTE}"
 
-    exit_turn = AgentTurn("alice", "exit", "That's all for the notes.", history=())
-    assert (await destination.admit(exit_turn, focused=True)).disposition == "accept"
-    exited = await _answer(destination, exit_turn, emit=emit)
-    assert exited.disposition == "release"
+    finish = AgentTurn("alice", "finish", "That's all for the notes.")
+    assert (await destination.admit(finish, focused=True)).disposition == "accept"
+    assert (await _answer(destination, finish, emit=emit)).disposition == "release"
     assert len(decisions.states) == 4
     assert [source for source, _ in emitted] == ["notes"] * 4
-    assert len(published) == 3
-    assert published[0][0] == "alice"
-    assert "Session status: active" in published[0][1].text
-    assert "AR overlay on the map" in published[1][1].text
-    assert "Session status: not active" in published[2][1].text
-    assert "AR overlay on the map" in published[2][1].text
-    assert "AR overlay on the map" in destination.routing_aid("alice").description
-    assert "AR overlay on the map" not in destination.routing_aid("bob").description
+    # Only the saved note is shared; session controls publish nothing.
+    assert published == [("alice", _NOTE)]
     await destination.participant_left("alice")
-    assert "AR overlay on the map" not in destination.routing_aid("alice").description
+    assert destination._read_back("alice") == "There are no notes in this session yet."  # noqa: SLF001
 
 
 @pytest.mark.asyncio
-async def test_note_capture_commits_after_acceptance_and_drains_context_publish_on_cancel() -> None:
+async def test_note_capture_drains_context_publish_on_cancel() -> None:
     entered_publish = asyncio.Event()
     finish_publish = asyncio.Event()
     published = []
 
-    class CaptureDecision:
-        async def decide(self, _state, questions, *, timeout=None):
-            assert "capture" in questions["note_action"].criteria
-            return DecisionResponse(
-                answers={"note_action": DecisionAnswer("capture", 1.0, {"capture": 1.0})},
-                model="fake",
-                usage={},
-                raw={},
-            )
-
-    async def publish_context(participant_id, update):
+    async def publish_note(participant_id, update):
         entered_publish.set()
         await finish_publish.wait()
-        published.append((participant_id, update))
+        published.append((participant_id, update.text))
 
-    manager = ContextManager(_ConversationService())
-    conversation = Conversation(
-        _ConversationService(),
-        context=manager,
-        routing=RoutingAid(name="notes", description="Focused note-taking destination."),
-        runtime=CaptureRuntime(),
-        output_topic=VOICE_OUTPUT_TOPIC,
-    )
-    destination = NoteTakingAgent(
-        conversation,
-        CaptureDecision(),  # type: ignore[arg-type]
-        context_budget_bytes=500,
-        publish_context=publish_context,
-        runtime=CaptureRuntime(),
-        output_topic=VOICE_OUTPUT_TOPIC,
-    )
-    turn = AgentTurn("alice", "capture", "The demo showed an AR overlay.")
+    destination = _notes(_NoteDecisions("capture"), publish_note)
+    turn = AgentTurn("alice", "capture", _NOTE)
     assert (await destination.admit(turn, focused=True)).disposition == "accept"
 
-    async def emit(_source, _text):
-        return None
-
-    task = asyncio.create_task(_answer(destination, turn, emit=emit))
+    task = asyncio.create_task(_answer(destination, turn, emit=_ignore))
     await entered_publish.wait()
     task.cancel()
     finish_publish.set()
     with pytest.raises(asyncio.CancelledError):
         await task
 
-    assert len(published) == 2
-    assert published[0][0] == "alice"
-    assert "The demo showed an AR overlay." in published[0][1].text
-    assert "Session status: active" in published[0][1].text
-    assert "Session status: not active" in published[1][1].text
-    assert "The demo showed an AR overlay." in published[1][1].text
-    assert "The demo showed an AR overlay." in destination.routing_aid("alice").description
+    assert published == [("alice", _NOTE)]
+    assert destination._read_back("alice") == f"Your notes: {_NOTE}"  # noqa: SLF001
 
 
 @pytest.mark.asyncio
@@ -643,45 +596,19 @@ async def test_note_capture_logs_child_publish_failure_and_preserves_caller_canc
     publisher_failed = asyncio.Event()
     log_stream = io.StringIO()
 
-    class CaptureDecision:
-        async def decide(self, _state, questions, *, timeout=None):
-            assert "capture" in questions["note_action"].criteria
-            return DecisionResponse(
-                answers={"note_action": DecisionAnswer("capture", 1.0, {"capture": 1.0})},
-                model="fake",
-                usage={},
-                raw={},
-            )
-
     async def failing_publisher(_participant_id, _update):
         entered_publish.set()
         await release_publisher.wait()
         publisher_failed.set()
         raise RuntimeError("child publisher failed")
 
-    destination = NoteTakingAgent(
-        Conversation(
-            _ConversationService(),  # type: ignore[arg-type]
-            context=ContextManager(_ConversationService()),  # type: ignore[arg-type]
-            routing=RoutingAid(name="notes", description="Focused note-taking destination."),
-            runtime=CaptureRuntime(),
-            output_topic=VOICE_OUTPUT_TOPIC,
-        ),
-        CaptureDecision(),  # type: ignore[arg-type]
-        context_budget_bytes=500,
-        publish_context=failing_publisher,
-        runtime=CaptureRuntime(),
-        output_topic=VOICE_OUTPUT_TOPIC,
-    )
-    turn = AgentTurn("alice", "capture", "The demo showed an AR overlay.")
+    destination = _notes(_NoteDecisions("capture"), failing_publisher)
+    turn = AgentTurn("alice", "capture", _NOTE)
     assert (await destination.admit(turn, focused=True)).disposition == "accept"
-
-    async def emit(_source, _text):
-        return None
 
     sink_id = logger.add(log_stream, format="{message}\n{exception}")
     try:
-        task = asyncio.create_task(_answer(destination, turn, emit=emit))
+        task = asyncio.create_task(_answer(destination, turn, emit=_ignore))
         await entered_publish.wait()
         if release_before_cancel:
             release_publisher.set()
@@ -697,48 +624,22 @@ async def test_note_capture_logs_child_publish_failure_and_preserves_caller_canc
 
     assert "child publisher failed" in log_stream.getvalue()
     assert "note context publication failed while draining cancellation" in log_stream.getvalue()
-    assert "The demo showed an AR overlay" in destination.routing_aid("alice").description
+    assert destination._read_back("alice") == f"Your notes: {_NOTE}"  # noqa: SLF001
 
 
 @pytest.mark.asyncio
 async def test_note_capture_propagates_programming_error_from_context_publisher() -> None:
-    class CaptureDecision:
-        async def decide(self, _state, questions, *, timeout=None):
-            assert "capture" in questions["note_action"].criteria
-            return DecisionResponse(
-                answers={"note_action": DecisionAnswer("capture", 1.0, {"capture": 1.0})},
-                model="fake",
-                usage={},
-                raw={},
-            )
-
     async def broken_publisher(_participant_id, _update):
         raise RuntimeError("publisher programming error")
 
-    destination = NoteTakingAgent(
-        Conversation(
-            _ConversationService(),  # type: ignore[arg-type]
-            context=ContextManager(_ConversationService()),  # type: ignore[arg-type]
-            routing=RoutingAid(name="notes", description="Focused note-taking destination."),
-            runtime=CaptureRuntime(),
-            output_topic=VOICE_OUTPUT_TOPIC,
-        ),
-        CaptureDecision(),  # type: ignore[arg-type]
-        context_budget_bytes=500,
-        publish_context=broken_publisher,
-        runtime=CaptureRuntime(),
-        output_topic=VOICE_OUTPUT_TOPIC,
-    )
-    turn = AgentTurn("alice", "capture", "The demo showed an AR overlay.")
+    destination = _notes(_NoteDecisions("capture"), broken_publisher)
+    turn = AgentTurn("alice", "capture", _NOTE)
     assert (await destination.admit(turn, focused=True)).disposition == "accept"
 
-    async def emit(_source, _text):
-        return None
-
     with pytest.raises(RuntimeError, match="publisher programming error"):
-        await _answer(destination, turn, emit=emit)
+        await _answer(destination, turn, emit=_ignore)
 
-    assert "The demo showed an AR overlay" in destination.routing_aid("alice").description
+    assert destination._read_back("alice") == f"Your notes: {_NOTE}"  # noqa: SLF001
 
 
 @pytest.mark.asyncio
@@ -750,119 +651,28 @@ async def test_note_capture_logs_runtime_publisher_exception_group_and_keeps_not
         async def fail(self, _update: ConversationContextUpdate, _ctx) -> None:
             raise RuntimeError("subscriber programming error")
 
-    class CaptureDecision:
-        async def decide(self, _state, questions, *, timeout=None):
-            assert "capture" in questions["note_action"].criteria
-            return DecisionResponse(
-                answers={"note_action": DecisionAnswer("capture", 1.0, {"capture": 1.0})},
-                model="fake",
-                usage={},
-                raw={},
-            )
-
     runtime = AgentRuntime()
     runtime.register("failing-context-subscriber", FailingSubscriber())
 
-    async def publish_context(participant_id, update):
+    async def publish_note(participant_id, update):
         await runtime.publish(note_topic, update, participant_id=participant_id)
 
-    manager = ContextManager(_ConversationService())
-    general = Conversation(
-        _ConversationService(),
-        context=manager,
-        routing=RoutingAid(name="conversation", description="General conversation and follow-up help."),
-        runtime=CaptureRuntime(),
-        output_topic=VOICE_OUTPUT_TOPIC,
-    )
-    destination = NoteTakingAgent(
-        Conversation(
-            _ConversationService(),  # type: ignore[arg-type]
-            context=ContextManager(_ConversationService()),  # type: ignore[arg-type]
-            routing=RoutingAid(name="notes", description="Focused note-taking destination."),
-            runtime=CaptureRuntime(),
-            output_topic=VOICE_OUTPUT_TOPIC,
-        ),
-        CaptureDecision(),  # type: ignore[arg-type]
-        context_budget_bytes=500,
-        publish_context=publish_context,
-        runtime=CaptureRuntime(),
-        output_topic=VOICE_OUTPUT_TOPIC,
-    )
-    turn = AgentTurn("alice", "capture", "The demo showed an AR overlay.")
+    destination = _notes(_NoteDecisions("capture"), publish_note)
+    turn = AgentTurn("alice", "capture", _NOTE)
     log_stream = io.StringIO()
     sink_id = logger.add(log_stream, format="{message}\n{exception}")
     try:
         async with runtime:
-
-            async def emit(_source, _text):
-                return None
-
-            answer = await _answer(
-                general,
-                AgentTurn("alice", "answer", "Can you explain that?"),
-                emit=emit,
-            )
             assert (await destination.admit(turn, focused=True)).disposition == "accept"
-            result = await _answer(destination, turn, emit=emit)
+            result = await _answer(destination, turn, emit=_ignore)
     finally:
         logger.remove(sink_id)
 
-    assert answer.disposition == "answer"
-    assert "Hello there." in answer.text
-    assert general.routing_aid("alice").description == "General conversation and follow-up help."
     assert result.disposition == "focus"
     assert "couldn't share it" in result.text
-    assert "The demo showed an AR overlay" in destination.routing_aid("alice").description
+    assert destination._read_back("alice") == f"Your notes: {_NOTE}"  # noqa: SLF001
     assert "note context publication failed" in log_stream.getvalue()
     assert "subscriber programming error" in log_stream.getvalue()
-
-
-@pytest.mark.asyncio
-async def test_over_budget_note_is_refused_without_partial_capture() -> None:
-    class CaptureDecision:
-        async def decide(self, _state, _questions, *, timeout=None):
-            return DecisionResponse(
-                answers={"note_action": DecisionAnswer("capture", 1.0, {"capture": 1.0})},
-                model="fake",
-                usage={},
-                raw={},
-            )
-
-    manager = ContextManager(_ConversationService())
-    conversation = Conversation(
-        _ConversationService(),
-        context=manager,
-        routing=RoutingAid(name="notes", description="Focused note-taking destination."),
-        runtime=CaptureRuntime(),
-        output_topic=VOICE_OUTPUT_TOPIC,
-    )
-    published = []
-
-    async def publish_context(participant_id, update):
-        published.append((participant_id, update))
-
-    destination = NoteTakingAgent(
-        conversation,
-        CaptureDecision(),  # type: ignore[arg-type]
-        context_budget_bytes=80,
-        publish_context=publish_context,
-        runtime=CaptureRuntime(),
-        output_topic=VOICE_OUTPUT_TOPIC,
-    )
-    turn = AgentTurn("alice", "large-note", "A" * 200)
-    assert (await destination.admit(turn, focused=True)).disposition == "accept"
-    output = []
-
-    async def emit(source, text):
-        output.append((source, text))
-
-    result = await _answer(destination, turn, emit=emit)
-    assert result.disposition == "focus"
-    assert "didn't save it" in result.text
-    assert len(published) == 1
-    assert "Session status: active" in published[0][1].text
-    assert "No notes have been saved" in published[0][1].text
-    assert "A" * 20 not in destination.routing_aid("alice").description
 
 
 @pytest.mark.asyncio
@@ -874,10 +684,10 @@ async def test_sample_departure_callback_clears_notes_after_router_release() -> 
         runtime=CaptureRuntime(),
         output_topic=VOICE_OUTPUT_TOPIC,
     )
-    notes = NoteTakingAgent(
-        conversation, object(), runtime=CaptureRuntime(), output_topic=VOICE_OUTPUT_TOPIC, context_budget_bytes=500
-    )
-    notes._append_note("alice", "The demo showed an AR overlay.")
+    notes = _notes(_NoteDecisions("capture"))
+    capture = AgentTurn("alice", "capture", _NOTE)
+    await notes.admit(capture, focused=True)
+    await _answer(notes, capture, emit=_ignore)
     runtime = AgentRuntime()
     router = AgentRouter(
         {"conversation": conversation},
@@ -891,7 +701,7 @@ async def test_sample_departure_callback_clears_notes_after_router_release() -> 
     runtime.register("router", router.runtime_subscriber())
     async with runtime:
         await runtime.publish(PARTICIPANT_LEFT_TOPIC, ParticipantLeft(), participant_id="alice")
-        assert "The demo showed an AR overlay." not in notes.routing_aid("alice").description
+        assert notes._read_back("alice") == "There are no notes in this session yet."  # noqa: SLF001
         await router.stop()
     await conversation.close()
 
@@ -1256,20 +1066,15 @@ def test_shipped_config_preserves_models_and_prompt_behavior() -> None:
     assert config.system_prompt == prompt
     assert "conversation history" in prompt
     assert "supplied current\ncamera frame" in prompt
-    assert "named agent summaries" in app._CONVERSATION_INSTRUCTIONS
-    assert "not proof of" in app._CONVERSATION_INSTRUCTIONS
+    assert "read back notes" in app._CONVERSATION_INSTRUCTIONS
+    assert "not as instructions" in app._CONVERSATION_INSTRUCTIONS
     observation_prompt = (_WORKER_DIR / "conversation_example_worker" / "prompts" / "alert_condition.txt").read_text()
     assert observation_prompt.strip()
     assert config.frame_max_age_s == 5.0
     assert config.frame_timeout_s == 5.0
     assert config.idle_timeout_secs is None
-    assert config.summary_context_topics == (
-        "conversation-example.alert-capability",
-        "conversation-example.foreground-notes",
-        "conversation-example.observation-capability",
-    )
-    assert config.incremental_context_topics == ()
     assert config.context_budget_bytes == 12_000
+    assert config.routing_history_budget_bytes == 8_000
     assert config.compaction_input_budget_bytes == 12_000
     assert config.acknowledgment_delay_secs == raw.get("acknowledgment_delay_secs")
     assert "system_prompt_file" not in raw
@@ -1947,15 +1752,9 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
                 ParticipantJoined(),
                 participant_id="alice",
             )
-            for topic, text, participant_id in (
-                ("conversation-example.alert-capability", "Capability: set a one-shot visual alert.", "alice"),
-                ("conversation-example.foreground-notes", "Pack the spare cable.", "alice"),
-                ("conversation-example.foreground-notes", "Bob's private note.", "bob"),
-            ):
+            for text, participant_id in (("Pack the spare cable.", "alice"), ("Bob's private note.", "bob")):
                 await runtimes[0].publish(
-                    Topic(topic, ConversationContextUpdate),
-                    ConversationContextUpdate(text=text),
-                    participant_id=participant_id,
+                    app.NOTES_CONTEXT_TOPIC, ConversationContextUpdate(text=text), participant_id=participant_id
                 )
             assert (
                 await handler(
@@ -2056,7 +1855,6 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     assert len({request_id for _, _, request_id, _ in responses}) == 2
     conversation_prompt = "\n".join(message.content for message in llm.requests[-1][0])
     assert "current view" in conversation_prompt
-    assert "Capability: set a one-shot visual alert." in conversation_prompt
     assert "Pack the spare cable." in conversation_prompt
     assert "Bob's private note." not in conversation_prompt
     assert all(task.done() for task in response_tasks)
@@ -2081,223 +1879,6 @@ async def test_relay_event_log_excludes_stream_chunks(tmp_path) -> None:
     assert "llm.chunk" not in names
     assert "turn.summary" in names
     assert names.count("test-turn") == 2
-
-
-async def test_selected_frame_returns_a_complete_agent_observation() -> None:
-    endpoint = _LiveEndpoint()
-    vlm = _StreamingVlm()
-    images = ImageRegistry()
-    frames = CurrentFrameTool(
-        endpoint=cast(ProcessorEndpoint, endpoint),
-        images=images,
-    )
-    vision = ImageQueryTool(
-        images=images,
-        vlm=cast(VLMService, vlm),
-        system_prompt="Answer briefly.",
-    )
-    assert endpoint.frame_callback is not None
-    await endpoint.frame_callback(
-        FrameSignal(
-            slot=0,
-            seq=1,
-            pts_us=time.time_ns() // 1_000,
-            width=2,
-            height=2,
-            fmt=PixelFormat.RGB24,
-            data_sz=12,
-            participant_id="alice",
-            track_id="camera",
-        )
-    )
-    events = []
-    subscriber = "conversation-example-finite-vision"
-    intercept = "conversation-example-finite-vision-header"
-
-    def add_header(_name, request, annotated):
-        headers = dict(request.headers)
-        headers["X-Relay-Session"] = "turn-8"
-        return nemo_relay.LLMRequestInterceptOutcome(
-            nemo_relay.LLMRequest(headers, request.content),
-            annotated,
-        )
-
-    nemo_relay.subscribers.register(subscriber, events.append)
-    nemo_relay.intercepts.register_llm_request(intercept, 0, False, add_header)
-    try:
-        frame = await frames.execute(CurrentFrameRequest(participant_id="alice"))
-        result = await vision.execute(
-            ImageQueryRequest(image=frame.image, query="What is shown?"),
-        )
-        await nemo_relay.subscribers.flush_async()
-    finally:
-        nemo_relay.intercepts.deregister_llm_request(intercept)
-        nemo_relay.subscribers.deregister(subscriber)
-
-    assert result == ImageQueryResult(text="a blue square")
-    images, question, system_prompt, headers = vlm.ask_calls[0]
-    assert len(images) == 1
-    assert isinstance(images[0], bytes)
-    assert question == "What is shown?"
-    assert system_prompt == "Answer briefly."
-    assert headers["X-Relay-Session"] == "turn-8"
-    assert {"tool", "llm"} <= {getattr(event, "category", None) for event in events}
-    llm_events = [event.to_json() for event in events if getattr(event, "category", None) == "llm"]
-    assert llm_events
-    assert any("<redacted:image>" in event for event in llm_events)
-
-
-async def test_selected_frame_streams_typed_image_query_chunks() -> None:
-    endpoint = _LiveEndpoint()
-    vlm = _StreamingVlm()
-    images = ImageRegistry()
-    frames = CurrentFrameTool(
-        endpoint=cast(ProcessorEndpoint, endpoint),
-        images=images,
-    )
-    vision = StreamingImageQueryTool(
-        images=images,
-        vlm=cast(VLMService, vlm),
-        system_prompt="Answer briefly.",
-    )
-    assert endpoint.frame_callback is not None
-    await endpoint.frame_callback(
-        FrameSignal(
-            slot=0,
-            seq=1,
-            pts_us=time.time_ns() // 1_000,
-            width=2,
-            height=2,
-            fmt=PixelFormat.RGB24,
-            data_sz=12,
-            participant_id="alice",
-            track_id="camera",
-        )
-    )
-    events = []
-    subscriber = "conversation-example-image-query"
-    intercept = "conversation-example-image-query-header"
-
-    def add_header(_name, request, annotated):
-        headers = dict(request.headers)
-        headers["X-Relay-Session"] = "turn-7"
-        return nemo_relay.LLMRequestInterceptOutcome(
-            nemo_relay.LLMRequest(headers, request.content),
-            annotated,
-        )
-
-    nemo_relay.subscribers.register(subscriber, events.append)
-    nemo_relay.intercepts.register_llm_request(intercept, 0, False, add_header)
-    try:
-        frame = await frames.execute(CurrentFrameRequest(participant_id="alice"))
-        chunks = [chunk async for chunk in vision.stream(ImageQueryRequest(image=frame.image, query="What is shown?"))]
-        await nemo_relay.subscribers.flush_async()
-    finally:
-        nemo_relay.intercepts.deregister_llm_request(intercept)
-        nemo_relay.subscribers.deregister(subscriber)
-
-    assert [chunk.text for chunk in chunks] == ["a ", "blue ", "square"]
-    images, question, system_prompt, headers = vlm.calls[0]
-    assert len(images) == 1
-    assert isinstance(images[0], bytes)
-    assert question == "What is shown?"
-    assert system_prompt == "Answer briefly."
-    assert headers["X-Relay-Session"] == "turn-7"
-    assert {"tool", "llm"} <= {getattr(event, "category", None) for event in events}
-    llm_events = [event.to_json() for event in events if getattr(event, "category", None) == "llm"]
-    assert llm_events
-    assert any("<redacted:image>" in event for event in llm_events)
-
-
-async def test_streaming_image_query_stops_after_a_partial_failure() -> None:
-    class _PartialFailureVlm:
-        def __init__(self) -> None:
-            self.calls = []
-
-        async def stream_images(
-            self,
-            images,
-            question: str,
-            *,
-            system_prompt: str = "",
-            headers=None,
-        ):
-            self.calls.append((images, question, system_prompt, dict(headers or {})))
-            yield "The object is "
-            raise RuntimeError("stream disconnected")
-
-    images = ImageRegistry()
-    vision = StreamingImageQueryTool(
-        images=images,
-        vlm=cast(VLMService, _PartialFailureVlm()),
-    )
-
-    chunks = [
-        chunk.text
-        async for chunk in vision.stream(
-            ImageQueryRequest(
-                image=images.put(b"frame"),
-                query="What is shown?",
-            ),
-        )
-    ]
-
-    assert chunks == ["The object is "]
-
-
-async def test_streaming_image_query_reports_failure_before_any_output() -> None:
-    class _ImmediateFailureVlm:
-        async def stream_images(self, *_args, **_kwargs):
-            if False:
-                yield ""
-            raise RuntimeError("stream unavailable")
-
-    images = ImageRegistry()
-    vision = StreamingImageQueryTool(
-        images=images,
-        vlm=cast(VLMService, _ImmediateFailureVlm()),
-    )
-
-    chunks = [
-        chunk.text
-        async for chunk in vision.stream(
-            ImageQueryRequest(
-                image=images.put(b"frame"),
-                query="What is shown?",
-            ),
-        )
-    ]
-
-    assert chunks == ["VLM server unavailable — please retry."]
-
-
-async def test_current_frame_tool_propagates_conversion_errors(monkeypatch) -> None:
-    endpoint = _LiveEndpoint()
-    frames = CurrentFrameTool(
-        endpoint=cast(ProcessorEndpoint, endpoint),
-        images=ImageRegistry(),
-    )
-    await endpoint.frame_callback(
-        FrameSignal(
-            slot=0,
-            seq=1,
-            pts_us=time.time_ns() // 1_000,
-            width=2,
-            height=2,
-            fmt=PixelFormat.RGB24,
-            data_sz=12,
-            participant_id="alice",
-            track_id="camera",
-        )
-    )
-
-    def malformed_frame(_frame):
-        raise ValueError("malformed pixels")
-
-    monkeypatch.setattr(current_frame_module, "frame_to_pil", malformed_frame)
-
-    with pytest.raises(ValueError, match="malformed pixels"):
-        await frames.execute(CurrentFrameRequest(participant_id="alice"))
 
 
 async def test_sample_runtime_streams_vision_through_voice_agent(monkeypatch) -> None:
