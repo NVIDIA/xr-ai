@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import asyncio
+import gc
 import json
 import sys
 from collections import deque
@@ -14,6 +15,7 @@ from types import SimpleNamespace
 
 import nemo_relay
 import pytest
+from loguru import logger
 from test_conversation_example_agents import _Frames, _next_call
 from xr_ai_conversation import ContextManager, ConversationContextUpdate
 from xr_ai_hub import FrameUnavailable
@@ -58,6 +60,7 @@ class _VLM:
         self.observation_cleanup = asyncio.Event()
         self.release_observation_cleanup = asyncio.Event()
         self.observation_cleaned = asyncio.Event()
+        self.cleanup_error = None
 
     async def ask_images(self, images, question, **kwargs):
         self.observed_images.append((tuple(images), question))
@@ -69,6 +72,8 @@ class _VLM:
                 self.observation_cleanup.set()
                 await self.release_observation_cleanup.wait()
                 self.observation_cleaned.set()
+                if self.cleanup_error is not None:
+                    raise self.cleanup_error from None
                 raise
         if self.error is not None:
             raise self.error
@@ -514,6 +519,34 @@ async def test_departure_during_sibling_cleanup_waits_for_that_cleanup():
     assert vlm.observation_cleaned.is_set()
     assert not agent._jobs
     assert not any(message.text == "Alert" for message, _ in output.messages)
+
+
+@pytest.mark.asyncio
+async def test_losing_check_failing_during_cleanup_is_logged_not_left_unretrieved():
+    vlm, fast_gate, decisions = _slow_sibling_cleanup()
+    vlm.cleanup_error = RuntimeError("Cosmos cleanup failed")
+    vlm.release_observation_cleanup.set()
+    unretrieved = []
+    loop = asyncio.get_running_loop()
+    loop.set_exception_handler(lambda _loop, context: unretrieved.append(context))
+    logs = []
+    sink = logger.add(logs.append, format="{message}", level="WARNING")
+    try:
+        agent, output, _ = _agent(decisions, _Frames((_open(), None)), vlm=vlm)
+        await _start(agent)
+        job = agent._jobs["alice"]
+        await asyncio.wait_for(vlm.observation_started.wait(), 1)
+        fast_gate.set()
+        await asyncio.wait_for(job.task, 1)
+        del job
+        gc.collect()
+    finally:
+        logger.remove(sink)
+        loop.set_exception_handler(None)
+
+    assert sum(message.text == "Alert" for message, _ in output.messages) == 1
+    assert any("alert-cosmos-clef" in line and "Cosmos cleanup failed" in line for line in logs), logs
+    assert not unretrieved
 
 
 @pytest.mark.asyncio

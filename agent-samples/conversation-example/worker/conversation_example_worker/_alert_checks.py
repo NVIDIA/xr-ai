@@ -169,21 +169,18 @@ async def _first_trigger(
         asyncio.create_task(check, name=name, context=nemo_relay.fork_asyncio_context())
         for name, check in checks.items()
     }
+    seen: set[asyncio.Task[Trigger | None]] = set()
     failures = 0
     try:
         pending = tasks
         while pending:
             done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
             for task in done:
+                seen.add(task)
                 error = asyncio.CancelledError() if task.cancelled() else task.exception()
                 if error is not None:
                     failures += 1
-                    logger.warning(
-                        "visual alert check failed participant={!r} path={!r}: {}",
-                        participant_id,
-                        task.get_name(),
-                        error,
-                    )
+                    _log_check_failure(participant_id, task, error)
                 elif (trigger := task.result()) is not None:
                     return trigger
     finally:
@@ -191,10 +188,20 @@ async def _first_trigger(
         # watch itself is cancelled again during that cleanup.
         for task in tasks:
             task.cancel()
-        await wait_despite_cancellation(tasks)
+        try:
+            await wait_despite_cancellation(tasks)
+        finally:
+            # A loser can fail while cleaning up; read its outcome so the failure is logged here.
+            for task in tasks - seen:
+                if not task.cancelled() and (error := task.exception()) is not None:
+                    _log_check_failure(participant_id, task, error)
     if failures == len(checks):
         raise RuntimeError("all visual alert checks failed")
     return None
+
+
+def _log_check_failure(participant_id: str, task: asyncio.Task[Any], error: BaseException) -> None:
+    logger.warning("visual alert check failed participant={!r} path={!r}: {}", participant_id, task.get_name(), error)
 
 
 def _trace_trigger(participant_id: str, trigger: Trigger) -> None:
