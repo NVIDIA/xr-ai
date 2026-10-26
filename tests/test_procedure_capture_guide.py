@@ -19,7 +19,7 @@ import pytest
 from PIL import Image
 from xr_ai_hub import FrameUnavailable, ParticipantEvent
 from xr_ai_hub._capture import CAPTURE_STT_TOPIC
-from xr_ai_interaction import UserQuery
+from xr_ai_interaction import ParticipantJoined, UserQuery
 from xr_ai_models import load_models_config
 from xr_ai_runtime import AgentRuntime
 from xr_ai_tools.current_frame import ImageFrame
@@ -29,10 +29,19 @@ from xr_ai_voice import VOICE_OUTPUT_TOPIC
 _SAMPLE = Path(__file__).resolve().parents[1] / "agent-samples/procedure-capture-guide"
 sys.path.insert(0, str(_SAMPLE / "worker"))
 
-from procedure_capture_guide_worker.capture.agent import CAPTURE_INPUT_TOPIC, CaptureAgent  # noqa: E402
+from procedure_capture_guide_worker.capture.agent import (  # noqa: E402
+    CAPTURE_INPUT_TOPIC,
+    CAPTURE_JOINED_TOPIC,
+    CaptureAgent,
+)
 from procedure_capture_guide_worker.capture.captioning import caption_query  # noqa: E402
 from procedure_capture_guide_worker.capture.capturing import _Capture  # noqa: E402
 from procedure_capture_guide_worker.config import load_config  # noqa: E402
+
+_CAPTURE_WELCOME = (
+    "Say start capture to start the recording and demonstrate your procedure. "
+    "To finish recording, say stop capture."
+)
 
 
 @pytest.mark.parametrize("session_recording", [False, True])
@@ -323,14 +332,57 @@ async def test_join_is_idle_and_voice_can_record_multiple_sessions(demo):
         assert not demo.capture_backend.is_capturing("user")
         assert narration(state) == ["Place the cup"]
     assert len(list((demo.root / "sessions").iterdir())) == 2
-    assert announcements(demo) == [
-        "Capture started.", "Capture stopped.",
-    ] * 2
-    for call in demo.output.await_args_list:
+    assert announcements(demo) == ["Capture started.", "Capture stopped."] * 2
+    for index, call in enumerate(demo.output.await_args_list):
         assert call.args[0] == VOICE_OUTPUT_TOPIC
         assert call.kwargs["participant_id"] == "user"
+        if call.args[1].kind == "withdraw":
+            continue
         assert call.args[1].kind == "reply"
+        assert index > 0
+        previous = demo.output.await_args_list[index - 1]
+        assert previous.kwargs["participant_id"] == call.kwargs["participant_id"]
+        if call.args[1].final:
+            assert previous.args[1].response_id == call.args[1].response_id
+        else:
+            assert previous.args[1].kind == "withdraw"
         assert call.args[1].request_id.startswith("request-")
+
+
+@pytest.mark.parametrize("hub_first", [False, True])
+async def test_welcome_uses_voice_join_regardless_of_endpoint_order(demo, hub_first):
+    ctx = SimpleNamespace(metadata=SimpleNamespace(participant_id="user"), publish=demo.output)
+    if hub_first:
+        await demo.capture.receive(joined())
+    await demo.capture.participant_joined(ParticipantJoined(), ctx)
+    if not hub_first:
+        await demo.capture.receive(joined())
+    assert announcements(demo) == [_CAPTURE_WELCOME]
+    assert demo.output.await_args.args[1].kind == "update"
+    await speak(demo, "Hello")
+    await speak(demo, "What can you do?")
+    await speak(demo, "stop capture")
+    assert announcements(demo) == [_CAPTURE_WELCOME]
+    assert not demo.capture_backend.is_capturing("user")
+    demo.frames.execute.assert_not_awaited()
+    await demo.capture.receive(joined())  # Raw lifecycle replay does not speak.
+    assert announcements(demo) == [_CAPTURE_WELCOME]
+    await speak(demo, "start capture")
+    await demo.capture.participant_joined(ParticipantJoined(), ctx)
+    await speak(demo, "What can you do?")  # Narration, not an idle question.
+    assert announcements(demo) == [_CAPTURE_WELCOME, "Capture started."]
+    await speak(demo, "stop capture")
+    await speak(demo, "What can you do?")
+    await speak(demo, "stop capture")
+    assert announcements(demo) == [_CAPTURE_WELCOME, "Capture started.", "Capture stopped."]
+    await demo.capture.receive(ParticipantEvent("user", False, 2, participant_session_id="session"))
+    await demo.capture.receive(joined(session="new", pts_us=3))
+    await demo.capture.participant_joined(ParticipantJoined(), ctx)
+    assert announcements(demo)[-1] == _CAPTURE_WELCOME
+    await demo.capture.close()
+    count = len(announcements(demo))
+    await demo.capture.participant_joined(ParticipantJoined(), ctx)
+    assert len(announcements(demo)) == count
 
 
 @pytest.mark.parametrize("disconnect", [False, True])
@@ -399,6 +451,8 @@ async def test_runtime_shutdown_during_stop_announcement_preserves_stop_record(d
     class BlockedOutput(Agent):
         @subscribe(VOICE_OUTPUT_TOPIC)
         async def output(self, message: ResponseOutput, ctx: RuntimeContext):
+            if message.kind == "withdraw":
+                return
             assert message.text == "Capture stopped."
             entered.set()
             await asyncio.Future()
@@ -552,8 +606,10 @@ async def test_app_drains_voice_transcripts_and_recordings_before_endpoint_close
 
     def make_voice(**kwargs):
         assert set(kwargs["probes"]) == {"stt", "tts", "vlm"}
+        assert kwargs["participant_joined_topic"] == CAPTURE_JOINED_TOPIC
         voice = real_voice(transport=transport, **kwargs)
         monkeypatch.setattr(voice._session, "enqueue_reply", spoken)
+        monkeypatch.setattr(voice._session, "withdraw_updates", AsyncMock())
         voices.append(voice)
         return voice
 
@@ -614,16 +670,24 @@ async def test_app_drains_voice_transcripts_and_recordings_before_endpoint_close
 
 
 @pytest.mark.parametrize("raw_transcript_first", [True, False])
-async def test_recording_acknowledgements_follow_voice_input(demo, monkeypatch, raw_transcript_first):
+@pytest.mark.parametrize("queued_greeting", [None, "start", "hello"])
+async def test_recording_acknowledgements_follow_voice_input(demo, monkeypatch, raw_transcript_first, queued_greeting):
     """Exercise both STT delivery paths through real gate, I/O, runtime, and TTS."""
     import wave
 
-    from pipecat.frames.frames import EndFrame, OutputAudioRawFrame, TranscriptionFrame, TTSStoppedFrame
+    from pipecat.frames.frames import (
+        EndFrame,
+        OutputAudioRawFrame,
+        TranscriptionFrame,
+        TTSStoppedFrame,
+        UserStartedSpeakingFrame,
+    )
     from pipecat.pipeline.pipeline import Pipeline
     from pipecat.pipeline.worker import PipelineWorker
-    from pipecat.processors.frame_processor import FrameProcessor
+    from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
     from pipecat.workers.runner import WorkerRunner
     from xr_ai_voice import VadConfig, VoiceAgent
+    from xr_ai_voice._frames import ParticipantJoinedFrame, _OutputDoneFrame
     from xr_ai_voice._processors import StreamingTtsProcessor, VoiceGateProcessor, _VoiceIOProcessor
     from xr_ai_voicegate import load_voice_gate_config
 
@@ -642,6 +706,7 @@ async def test_recording_acknowledgements_follow_voice_input(demo, monkeypatch, 
         vad=VadConfig(stop_probe_after_s=0),
         voice_gate=load_voice_gate_config(_SAMPLE / "yaml/voice_gate.yaml"),
         transport=transport, text_input=False,
+        participant_joined_topic=CAPTURE_JOINED_TOPIC,
     )
     boundaries = asyncio.Queue()
     audio_frames = []
@@ -649,6 +714,10 @@ async def test_recording_acknowledgements_follow_voice_input(demo, monkeypatch, 
     class OutputSink(FrameProcessor):
         async def process_frame(self, frame, direction):
             await super().process_frame(frame, direction)
+            if isinstance(frame, _OutputDoneFrame):
+                # Mirror the output transport's acknowledgement after audio drains.
+                await self.push_frame(frame, FrameDirection.UPSTREAM)
+                return
             if isinstance(frame, OutputAudioRawFrame):
                 audio_frames.append(frame)
             elif isinstance(frame, TTSStoppedFrame):
@@ -663,7 +732,7 @@ async def test_recording_acknowledgements_follow_voice_input(demo, monkeypatch, 
             delivered.set()
 
         gate = VoiceGateProcessor(cfg=voice._session.voice_gate, tts=tts)
-        voice_io = _VoiceIOProcessor(accept)
+        voice_io = _VoiceIOProcessor(accept, on_participant_joined=kwargs["on_participant_joined"])
         voice._session._io_processor = voice_io
         pipeline = Pipeline([
             gate, voice_io,
@@ -681,8 +750,8 @@ async def test_recording_acknowledgements_follow_voice_input(demo, monkeypatch, 
         async def on_started(*args):
             started.set()
 
-        async def utterance(text, acknowledgement=False):
-            ts = time.time_ns() // 1000
+        async def utterance(text, acknowledgement=False, timestamp_us=None):
+            ts = time.time_ns() // 1000 if timestamp_us is None else timestamp_us
             delivered.clear()
             if raw_transcript_first:
                 previous_action = demo.capture._tails.get("user")
@@ -695,7 +764,8 @@ async def test_recording_acknowledgements_follow_voice_input(demo, monkeypatch, 
             frame.pts = ts * 1000
             await worker.queue_frame(frame)
             await delivered.wait()
-            await asyncio.shield(demo.capture._tails["user"])
+            if tail := demo.capture._tails.get("user"):
+                await asyncio.shield(tail)
             if acknowledgement:
                 boundary = await boundaries.get()
                 assert boundary.transport_destination == "user"
@@ -710,12 +780,29 @@ async def test_recording_acknowledgements_follow_voice_input(demo, monkeypatch, 
             async with asyncio.timeout(5):
                 await started.wait()
                 await demo.capture.receive(joined())
-                for _ in range(2):
-                    await utterance("Start capture.", acknowledgement=True)
+                early_timestamp = time.time_ns() // 1000
+                if queued_greeting:
+                    speaking = UserStartedSpeakingFrame()
+                    speaking.transport_source = "user"
+                    await worker.queue_frame(speaking)
+                await worker.queue_frame(ParticipantJoinedFrame(participant_id="user"))
+                if queued_greeting:
+                    while not voice_io._pending_updates.get("user"):
+                        await asyncio.sleep(0)
+                    if queued_greeting == "hello":
+                        await utterance("Hello", acknowledgement=True, timestamp_us=early_timestamp)
+                else:
+                    await boundaries.get()
+                    await utterance("What can you do?")
+                for iteration in range(2):
+                    await utterance(
+                        "Start capture.", acknowledgement=True,
+                        timestamp_us=early_timestamp if queued_greeting == "start" and iteration == 0 else None,
+                    )
                     state = demo.capture_backend._sessions["user"]
                     await utterance("Place a cup")
                     await utterance("Stop capture.", acknowledgement=True)
-                    await utterance("Stop capture.")  # Already stopped: no duplicate reply.
+                    await utterance("Stop capture.")  # Already idle: stay silent.
                     assert packet(state)["status"] == "complete"
                     assert narration(state) == ["Place a cup"]
                 await demo.capture.close()
@@ -734,15 +821,21 @@ async def test_recording_acknowledgements_follow_voice_input(demo, monkeypatch, 
     async with runtime:
         await voice.run(runtime)
 
-    expected = ["Capture started.", "Capture stopped."] * 2
-    assert [call.args[0] for call in tts.synthesize.await_args_list] == expected
+    # Voice may begin the queued greeting as the user's utterance ends, before
+    # the start command is dispatched. It must never follow "Capture started."
+    expected = [_CAPTURE_WELCOME] + ["Capture started.", "Capture stopped."] * 2
+    sentences = [sentence + "." for text in expected for sentence in text.removesuffix(".").split(". ")]
+    assert [call.args[0] for call in tts.synthesize.await_args_list] == sentences
     assert audio_frames and all(frame.transport_destination == "user" for frame in audio_frames)
     echoes = [call.args[0].data.decode() for call in transport.send_return_data.await_args_list
               if call.args[0].topic == "agent.response"]
     assert echoes == expected
     transcripts = [call.args[0].data.decode() for call in transport.send_return_data.await_args_list
                    if call.args[0].topic == CAPTURE_STT_TOPIC]
-    assert transcripts == ["Start capture.", "Place a cup", "Stop capture.", "Stop capture."] * 2
+    initial_transcripts = {None: ["What can you do?"], "start": [], "hello": ["Hello"]}
+    assert transcripts == initial_transcripts[queued_greeting] + [
+        "Start capture.", "Place a cup", "Stop capture.", "Stop capture.",
+    ] * 2
 
 
 async def test_participants_are_independent(demo):

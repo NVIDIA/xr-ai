@@ -64,7 +64,8 @@ the microphone and use live video or on-demand image capture. Say **start
 capture**, narrate the demonstration, then say **stop capture**. Repeat
 these commands to record another task without reconnecting. The worker announces
 "Capture started." and "Capture stopped.", and stays silent during narration
-and finalization.
+and finalization. On connection, the worker explains these commands once.
+Other speech while idle does not trigger a reply.
 
 To choose where packets are saved, launch with `uv run main.py --mode capture --output-root PATH`.
 

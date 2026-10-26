@@ -3,9 +3,9 @@
 
 """Control procedure capture from spoken commands and participant connections.
 
-CaptureAgent receives accepted speech from VoiceAgent, handles "start capture"
-and "stop capture", and sends spoken acknowledgements. It passes narration to
-the capture backend in capturing.py and finalizes active capture on disconnect.
+CaptureAgent welcomes participants on connection, handles "start capture" and "stop
+capture", and sends spoken acknowledgements. It passes narration to the capture
+backend in capturing.py and finalizes active capture on disconnect.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 
 from loguru import logger
 from xr_ai_hub import ParticipantEvent
-from xr_ai_interaction import ResponseOutputs, UserQuery
+from xr_ai_interaction import ParticipantJoined, ResponseOutputs, UserQuery
 from xr_ai_runtime import Agent, RuntimeContext, Topic, subscribe
 from xr_ai_voice import VOICE_OUTPUT_TOPIC
 
@@ -25,6 +25,11 @@ from .capturing import _Capture
 
 _COMMAND = re.compile(r"\s*(start|stop)\s+capture[.!?]*\s*", re.IGNORECASE)
 CAPTURE_INPUT_TOPIC = Topic("task.capture.input", UserQuery)
+CAPTURE_JOINED_TOPIC = Topic("task.capture.joined", ParticipantJoined)
+_WELCOME = (
+    "Say start capture to start the recording and demonstrate your procedure. "
+    "To finish recording, say stop capture."
+)
 
 
 @dataclass
@@ -78,8 +83,12 @@ class CaptureAgent(Agent):
         if self._closed or connection.cancelled.is_set() or self._connections.get(pid) is not connection:
             return
         try:
+            outputs = ResponseOutputs(ctx, VOICE_OUTPUT_TOPIC)
+            # Drop a still-unheard greeting before any spoken reply. This does
+            # not interrupt a greeting whose audio has already started.
+            await outputs.withdraw(pid)
             # Preserve the order of start and stop acknowledgements.
-            reply = ResponseOutputs(ctx, VOICE_OUTPUT_TOPIC).reply(pid, request_id=ctx.metadata.message_id)
+            reply = outputs.reply(pid, request_id=ctx.metadata.message_id)
             async with reply:
                 await reply.send(text)
         except (Exception, BaseExceptionGroup):
@@ -129,6 +138,18 @@ class CaptureAgent(Agent):
                 await asyncio.shield(task)
 
         return wait()
+
+    @subscribe(CAPTURE_JOINED_TOPIC)
+    async def participant_joined(self, _event: ParticipantJoined, ctx: RuntimeContext) -> None:
+        # The voice event arrives when speech output is ready. Raw hub events
+        # still own capture lifecycle and may arrive through a different endpoint.
+        # Voice joins lack a session ID: on rapid reconnect, an old recording
+        # still awaiting its hub leave can suppress the new connection greeting.
+        pid = ctx.metadata.participant_id
+        connection = self._connections.get(pid)
+        if self._closed or (connection is not None and connection.recording is not None):
+            return
+        await ResponseOutputs(ctx, VOICE_OUTPUT_TOPIC).update(pid, _WELCOME)
 
     @subscribe(CAPTURE_INPUT_TOPIC)
     async def on_input(self, transcript: UserQuery, ctx: RuntimeContext) -> None:
