@@ -52,7 +52,8 @@ class _Selection:
             if not text.strip():
                 self._wake_until.pop(speaker, None)
                 continue
-            tail = strip_magic(self._wake_pattern, text)
+            # A withheld wake phrase may be split across fragments.
+            tail = strip_magic(self._wake_pattern, matcher._held if action == "pending" else text)
             if self.cfg.mode == "hybrid" and action == "pending" and tail != "":
                 continue
             followup = until is not None and pts_us < until
@@ -126,7 +127,7 @@ class _Selection:
                 self.owner = None
                 events.append({"kind": "released"})
             elif action == "pending":
-                events.append({"kind": "control_pending", "text": text.strip(),
+                events.append({"kind": "control_pending", "text": self._controls._held,
                                "pts_us": self.pts_us, "speaker_id": self.candidate})
             elif action != "start":
                 events.append({

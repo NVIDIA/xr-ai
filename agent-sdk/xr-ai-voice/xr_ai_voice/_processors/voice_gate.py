@@ -303,7 +303,7 @@ class VoiceGateProcessor(FrameProcessor):
                 await self._set_conversation_active(pid, False)
             return
         if action == "pending":
-            await self._handle_pending_control(pid, frame.text)
+            await self._handle_pending_control(pid, matcher._held)
             return
         if active:
             await self._dispatch_conversation_transcript(pid, frame.text, matcher._released)
@@ -317,18 +317,19 @@ class VoiceGateProcessor(FrameProcessor):
             ):
                 await self._gate.feed(pid, frame.text)
 
-    async def _handle_pending_control(self, pid: str, text: str) -> None:
+    async def _handle_pending_control(self, pid: str, held: str) -> None:
         cfg = self._conversation_cfg
         assert cfg is not None
         # A withheld control is still the next utterance. Its phrase fragments
         # live in the control matcher, not in the temporary query permission.
         self._gate.forget(pid)
-        # A standalone wake phrase can also start a control. Preserve its
+        # Everything withheld so far may be a standalone wake phrase, even when
+        # split across fragments, and can also start a control. Preserve its
         # follow-up window while withholding the possible control prefix.
         if (((pid in self._conversation_active and cfg.require_wake_phrase)
              or (self._mode == "hybrid" and pid not in self._conversation_active))
-                and strip_magic(self._gate._magic_re, text) == ""):
-            await self._gate.feed(pid, text)
+                and strip_magic(self._gate._magic_re, held) == ""):
+            await self._gate.feed(pid, held)
 
     async def _dispatch_conversation_transcript(self, pid: str, text: str, released: str) -> None:
         cfg = self._conversation_cfg

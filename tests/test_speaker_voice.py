@@ -867,6 +867,11 @@ async def test_same_conversation_workflow_through_both_asr_paths(tmp_path, monke
             gate.gate.forget("a")  # Its follow-up window elapses.
             await speak("describe this")
             assert len(accepted) == count
+        # A wake phrase split across fragments is still one wake phrase.
+        for part in ("hey", "agent", "describe this"):
+            await speak(part)
+        assert len(accepted) == count + 1 and accepted[-1].text == query
+        count += 1
         # Released words lead a query, but a STOP is judged on its own utterance.
         responses = []
         gate._emit_text_response = AsyncMock(side_effect=lambda pid, text: responses.append(text))
@@ -879,7 +884,7 @@ async def test_same_conversation_workflow_through_both_asr_paths(tmp_path, monke
         await speak("do not send this")
         assert len(accepted) == count
         captioned = [call.args[1] for call in captions.await_args_list]
-        assert captioned == ["what is that", query, *(["describe this"] if require_wake else []), "stop"]
+        assert captioned == ["what is that", query, *(["describe this"] if require_wake else []), query, "stop"]
         messages = [call.args[0] for call in display.await_args_list]
         assert len(messages) == len(accepted)
         label = "Speaker 7" if use_speaker else "User"
