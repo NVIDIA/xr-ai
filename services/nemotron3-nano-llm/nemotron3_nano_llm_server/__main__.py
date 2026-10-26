@@ -6,8 +6,8 @@ nemotron3_nano_llm_server — vLLM launcher for Nemotron-3-Nano-30B.
 
 Selects the FP8 or NVFP4 model variant based on GPU compute capability,
 downloads the nano_v3 reasoning-parser plugin once, and dispatches through
-``xr_ai_vllm.serve`` to either the pip-installed ``vllm`` CLI or the NGC
-``nvcr.io/nvidia/vllm`` docker container (per ``vllm_backend`` in YAML).
+``xr_ai_vllm.serve`` to either the pip-installed ``vllm`` CLI or the configured
+Docker container (per ``vllm_backend`` in YAML).
 
 Accepts ``--config <path>.yaml`` (auto-passed by xr-ai-launcher).
 
@@ -27,8 +27,8 @@ Config keys
     enforce_eager:           bool   Skip CUDA graph capture (default: true).
     parser_url:              str    URL to fetch nano_v3_reasoning_parser.py.
     vllm_backend:            str    "pip" (default) or "docker".
-    vllm_image:              str    NGC image when vllm_backend=docker
-                                    (default: nvcr.io/nvidia/vllm:26.09-py3).
+    vllm_image:              str    Docker image when vllm_backend=docker
+                                    (default: vllm/vllm-openai:v0.31.0).
     spark_uma:               bool   Enable DGX Spark compatibility settings
                                     (docker backend only; default: auto-detect).
 """

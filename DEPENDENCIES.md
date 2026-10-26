@@ -415,7 +415,7 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
   - `urllib3>=2.8.0`
   - `pyjwt>=2.15.1`
   - `transformers>=5.17.0`
-  - `vllm>=0.30.0`
+  - `vllm==0.31.0`
   - `mcp>=2.2.0`
   - `pillow>=13.0.0`
   - `pyyaml>=6.0`
@@ -462,7 +462,7 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
   - `urllib3>=2.8.0`
   - `pyjwt>=2.15.1`
   - `transformers>=5.17.0`
-  - `vllm>=0.30.0`
+  - `vllm==0.31.0`
   - `mcp>=2.2.0`
   - `pillow>=13.0.0`
   - `pyyaml>=6.0`
@@ -484,7 +484,7 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
   - `urllib3>=2.8.0`
   - `pyjwt>=2.15.1`
   - `transformers>=5.17.0`
-  - `vllm>=0.30.0`
+  - `vllm==0.31.0`
   - `mcp>=2.2.0`
   - `pillow>=13.0.0`
   - `pyyaml>=6.0`
@@ -620,7 +620,7 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
   - `urllib3>=2.8.0`
   - `pyjwt>=2.15.1`
   - `transformers>=5.17.0`
-  - `vllm>=0.30.0`
+  - `vllm==0.31.0`
   - `mcp>=2.2.0`
   - `pillow>=13.0.0`
   - `pyyaml>=6.0`

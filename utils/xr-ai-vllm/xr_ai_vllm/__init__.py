@@ -7,7 +7,7 @@ xr-ai-vllm — pluggable vLLM backend for xr-ai inference services.
 Lets each vLLM-backed service host vllm via either:
 
 * `pip`    — pip-installed `vllm` CLI in the wrapper's venv (default; today's behavior).
-* `docker` — `docker run nvcr.io/nvidia/vllm:<tag> vllm serve …` (NGC container).
+* `docker` — `docker run <image> vllm serve …` (configured container).
 
 The choice is per-server, set via `vllm_backend: pip|docker` in the service's
 YAML. Both paths honor identical config keys (model, ports, vllm flags); only
@@ -57,8 +57,8 @@ from ._config import (
 
 log = logging.getLogger(__name__)
 
-DEFAULT_IMAGE = "nvcr.io/nvidia/vllm:26.09-py3"
-"""Default NGC vLLM image used when a service does not override ``vllm_image``.
+DEFAULT_IMAGE = "vllm/vllm-openai:v0.31.0"
+"""Default upstream vLLM image used when a service does not override ``vllm_image``.
 
 Individual services may pin a newer image when required by their model.
 """

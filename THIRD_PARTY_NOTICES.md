@@ -92,23 +92,24 @@ both under the MIT license. Unmodified upstream license texts are bundled in
 attributions. Each directory records the SHA-256-verified artifact URL and
 copied-file hashes.
 
-### Qualified pip vLLM security refresh
+### vLLM security dependency refresh
 
-The release security refresh resolves the following versions. The linked
+The vLLM 0.31.0 security refresh resolves the following versions. The linked
 license texts were copied without modification from SHA-256-verified upstream
 artifacts; each directory records the artifact URL and hashes.
 
 | Component | Resolved version | License and notices |
 |---|---|---|
-| `vllm` | 0.30.0 | Apache-2.0; [upstream license](third_party_licenses/vllm-0.30.0/) |
-| `huggingface-hub` | 2.2.0 | Apache-2.0; [upstream license](third_party_licenses/huggingface-hub-2.2.0/) |
-| `flashinfer-python` | 0.6.18.post1 | Apache-2.0; [upstream license](third_party_licenses/flashinfer-python-0.6.18.post1/) |
+| `vllm` | 0.31.0 | Apache-2.0; [upstream license](third_party_licenses/vllm-0.31.0/) |
+| `huggingface-hub` | 1.33.0 | Apache-2.0; [upstream license](third_party_licenses/huggingface-hub-1.33.0/) |
+| `flashinfer-python` | 0.7.0.post1 | Apache-2.0; [upstream license](third_party_licenses/flashinfer-python-0.7.0.post1/) |
+| `nccl-extensions` | 0.1.0 | Apache-2.0; [upstream license](third_party_licenses/nccl-extensions-0.1.0/) |
 | `instanttensor` | 0.2.2 | Apache-2.0; [upstream license](third_party_licenses/instanttensor-0.2.2/) |
 | `quack-kernels` | 0.6.5 | Apache-2.0; [upstream license](third_party_licenses/quack-kernels-0.6.5/) |
-| `protobuf` | 7.36.2 | BSD-3-Clause; [upstream license](third_party_licenses/protobuf-7.36.2/) |
+| `protobuf` | 7.36.1 | BSD-3-Clause; [upstream license](third_party_licenses/protobuf-7.36.1/) |
 | `nvidia-cutlass-dsl` | 4.7.1 | NVIDIA Software License Agreement; [upstream EULA](third_party_licenses/nvidia-cutlass-dsl-4.7.1/) |
 
-`instanttensor` is a new transitive dependency of vLLM. CUTLASS DSL is
+`nccl-extensions` is an Apache-2.0 dependency of FlashInfer. CUTLASS DSL is
 proprietary software downloaded by users, rather than part of XR AI's source
 release. Its `libs-base`, `libs-core`, `libs-cu12`, and `libs-cu13` dependencies
 also resolve to 4.7.1; their upstream package metadata identifies the NVIDIA
@@ -219,7 +220,7 @@ artifact and SHA-256 hashes for the copied texts.
 | `matplotlib` | 3.11.2 | Matplotlib License 1.3+ and additional font/library terms; [license texts](third_party_licenses/matplotlib-3.11.2/) | Magpie TTS → `nemo-toolkit[tts]` → `matplotlib` |
 | `regex` | 2026.9.29 | Apache-2.0 AND CNRI-Python; [license text](third_party_licenses/regex-2026.9.29/) | Voice SDK → `nltk`; model dependencies → `transformers` / `nemo-text-processing` |
 | `supervisor` | 4.3.0 | BSD-derived Repoze license, including its modification notice clause; [license text](third_party_licenses/supervisor-4.3.0/) | Model services → `vllm` → `model-hosting-container-standards` → `supervisor` |
-| `humming-kernels` | 0.1.12 | Apache-2.0; [license text](third_party_licenses/humming-kernels-0.1.12/) | Model services → `vllm` → `humming-kernels` |
+| `humming-kernels` | 0.1.16 | Apache-2.0; [license text](third_party_licenses/humming-kernels-0.1.16/) | Model services → `vllm` → `humming-kernels` |
 | `quack-kernels` | 0.6.5 | Apache-2.0; [license text](third_party_licenses/quack-kernels-0.6.5/) | Model services → `vllm` → `quack-kernels` |
 | `torchcodec` | 0.17.0 | BSD-3-Clause and platform-specific bundled-library terms, including NVIDIA CUDA EULA for Linux nvJPEG; [license texts and platform scope](third_party_licenses/torchcodec-0.17.0/) | Model services → `vllm` → `torchcodec` |
 
@@ -339,9 +340,6 @@ refer to the component disclosures above for applicable license elections.
 | Component | Preserved license file |
 |---|---|
 | `certifi-2026.10.19` | [`LICENSE`](third_party_licenses/certifi-2026.10.19/LICENSE) |
-| `flashinfer-python-0.6.18.post1` | [`LICENSE`](third_party_licenses/flashinfer-python-0.6.18.post1/LICENSE) |
-| `huggingface-hub-2.2.0` | [`LICENSE`](third_party_licenses/huggingface-hub-2.2.0/LICENSE) |
-| `humming-kernels-0.1.12` | [`LICENSE`](third_party_licenses/humming-kernels-0.1.12/LICENSE) |
 | `instanttensor-0.2.2` | [`LICENSE`](third_party_licenses/instanttensor-0.2.2/LICENSE) |
 | `libsndfile-1.2.2` | [`COPYING`](third_party_licenses/libsndfile-1.2.2/COPYING) |
 | `llvmlite-0.47.0` | [`LICENSE`](third_party_licenses/llvmlite-0.47.0/LICENSE) |
@@ -370,7 +368,6 @@ refer to the component disclosures above for applicable license elections.
 | `nvtx-0.2.15` | [`LICENSE.txt`](third_party_licenses/nvtx-0.2.15/LICENSE.txt) |
 | `opencv-python-headless-5.0.0.93` | [`LICENSE-3RD-PARTY.txt`](third_party_licenses/opencv-python-headless-5.0.0.93/LICENSE-3RD-PARTY.txt) |
 | `opencv-python-headless-5.0.0.93` | [`LICENSE.txt`](third_party_licenses/opencv-python-headless-5.0.0.93/LICENSE.txt) |
-| `protobuf-7.36.2` | [`LICENSE`](third_party_licenses/protobuf-7.36.2/LICENSE) |
 | `pycountry-26.2.16` | [`LICENSE.txt`](third_party_licenses/pycountry-26.2.16/LICENSE.txt) |
 | `pyjwt-2.15.1` | [`LICENSE`](third_party_licenses/pyjwt-2.15.1/LICENSE) |
 | `pyzmq-27.2.0` | [`LICENSE`](third_party_licenses/pyzmq-27.2.0/LICENSE) |
@@ -398,11 +395,16 @@ refer to the component disclosures above for applicable license elections.
 | `torchcodec-0.17.0` | [`LICENSE.zlib`](third_party_licenses/torchcodec-0.17.0/LICENSE.zlib) |
 | `tqdm-4.70.1` | [`LICENCE`](third_party_licenses/tqdm-4.70.1/LICENCE) |
 | `urllib3-2.8.0` | [`LICENSE.txt`](third_party_licenses/urllib3-2.8.0/LICENSE.txt) |
-| `vllm-0.30.0` | [`LICENSE`](third_party_licenses/vllm-0.30.0/LICENSE) |
 | `pipecat-ai-1.14.0` | [`LICENSE`](third_party_licenses/pipecat-ai-1.14.0/LICENSE) |
 | `pillow-13.0.0` | [`LICENSE`](third_party_licenses/pillow-13.0.0/LICENSE) |
 | `onnxruntime-1.31.0` | [`LICENSE`](third_party_licenses/onnxruntime-1.31.0/LICENSE) |
 | `onnxruntime-1.31.0` | [`LICENSE.thirdparty`](third_party_licenses/onnxruntime-1.31.0/LICENSE.thirdparty) |
+| `vllm-0.31.0` | [`LICENSE`](third_party_licenses/vllm-0.31.0/LICENSE) |
+| `huggingface-hub-1.33.0` | [`LICENSE`](third_party_licenses/huggingface-hub-1.33.0/LICENSE) |
+| `flashinfer-python-0.7.0.post1` | [`LICENSE`](third_party_licenses/flashinfer-python-0.7.0.post1/LICENSE) |
+| `humming-kernels-0.1.16` | [`LICENSE`](third_party_licenses/humming-kernels-0.1.16/LICENSE) |
+| `protobuf-7.36.1` | [`LICENSE`](third_party_licenses/protobuf-7.36.1/LICENSE) |
+| `nccl-extensions-0.1.0` | [`LICENSE.txt`](third_party_licenses/nccl-extensions-0.1.0/LICENSE.txt) |
 
 ## Updating this file
 

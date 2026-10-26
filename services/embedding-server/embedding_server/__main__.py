@@ -5,7 +5,7 @@
 embedding_server — vLLM launcher for nvidia/Nemotron-3-Embed-1B-BF16.
 
 Reads config and dispatches through ``xr_ai_vllm.serve`` to either the
-pip-installed ``vllm`` CLI or the NGC ``nvcr.io/nvidia/vllm`` docker container
+pip-installed ``vllm`` CLI or the configured Docker container
 (per ``vllm_backend`` in YAML). The model config selects vLLM's pooling runner
 and exposes ``/v1/embeddings``; chat/completions is not available.
 
@@ -27,8 +27,8 @@ Config keys
     attention_backend:       str    Optional vLLM --attention-backend; omitted
                                     by default so vLLM selects the backend.
     vllm_backend:            str    "pip" (default) or "docker".
-    vllm_image:              str    NGC image when vllm_backend=docker
-                                    (default: nvcr.io/nvidia/vllm:26.09-py3).
+    vllm_image:              str    Docker image when vllm_backend=docker
+                                    (default: vllm/vllm-openai:v0.31.0).
     spark_uma:               bool   Enable DGX Spark cold-start safeguards
                                     (docker backend only; default: false).
 """

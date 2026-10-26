@@ -35,9 +35,9 @@ enforce_eager:          true
 # attention_backend: TRITON_ATTN
 
 # vLLM runtime. If this key is omitted, the wrapper falls back to pip;
-# the checked-in configuration below selects the NGC Docker container.
+# the checked-in configuration below selects the upstream Docker container.
 #   pip     — vllm CLI from this wrapper's venv (today's behavior)
-#   docker  — `docker run nvcr.io/nvidia/vllm:<tag> vllm serve …`
+#   docker  — `docker run <vllm_image> vllm serve …`
 # Both honor the same config keys above; only the runtime hosting vllm differs.
 # docker mode requires Docker Engine + NVIDIA Container Toolkit and a
 # `docker login nvcr.io` (or NGC_API_KEY in the environment).
@@ -45,4 +45,4 @@ vllm_backend: docker
 
 # Container image used when vllm_backend: docker.  Override to pin a different
 # tag, an internal mirror, or a custom build.
-vllm_image: nvcr.io/nvidia/vllm:26.09-py3
+vllm_image: vllm/vllm-openai:v0.31.0

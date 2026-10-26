@@ -622,12 +622,18 @@ flags. Docker-only lifecycle settings such as `vllm_image`, `extra_pip`, and
 ```yaml
 # vlm-server (Cosmos3)
 vllm_backend: docker
-vllm_image:   nvcr.io/nvidia/vllm:26.09-py3
+vllm_image:   vllm/vllm-openai:v0.31.0
 ```
 
-`vllm_image:` defaults to `nvcr.io/nvidia/vllm:26.09-py3` for all wrappers.
-This image includes NVIDIA-patched vLLM 0.29.0. The checked-in Cosmos3 and
-Nemotron model configurations select this image. Nemotron Omni uses its native Mamba and
+`vllm_image:` defaults to `vllm/vllm-openai:v0.31.0` for all wrappers.
+The Python environments also pin vLLM 0.31.0. Both runtimes include the fixes
+for CVE-2026-114050 and CVE-2026-114055. Keep per-request multimodal
+processor overrides disabled; server-level processor configuration remains
+available.
+
+This upstream CUDA 13.0 image includes vLLM 0.31.0 and supports Linux x86_64
+and aarch64. The checked-in Cosmos3 and Nemotron model configurations select
+this image. Nemotron Omni uses its native Mamba and
 causal-convolution implementations, so the shipped configuration does not
 compile or install `mamba-ssm` or `causal-conv1d`. Override the image to pin
 another tag, an internal mirror, or a custom build.
@@ -638,13 +644,13 @@ starting it with the new image:
 
 ```bash
 uv run --project agent-samples/simple-vlm-example/model-servers simple_vlm_example_model_servers --stop
-docker pull nvcr.io/nvidia/vllm:26.09-py3
+docker pull vllm/vllm-openai:v0.31.0
 ```
 
 The next launch recreates stale managed containers when their image or command
 fingerprint differs. After the new stack starts successfully, reclaim disk from
 an old image with `docker image rm <old-vllm-image>`. Keep the shared model cache;
-the 26.09 stack reuses compatible weights and downloads any missing artifacts.
+the updated stack reuses compatible weights and downloads any missing artifacts.
 ::::
 
 ### docker mode — prerequisites
@@ -694,11 +700,11 @@ Existing `~/.docker/config.json` entries take priority and are not overwritten.
   forwarded, and included in the container fingerprint, so changing one
   recreates a persistent container.
 
-The selected image reports this in-container vLLM version:
+The selected image is built from the vLLM 0.31.0 release:
 
 | Image | vLLM |
 |---|---:|
-| `nvcr.io/nvidia/vllm:26.09-py3` | 0.29.0+5013de39 |
+| `vllm/vllm-openai:v0.31.0` | 0.31.0 |
 
 - Container name is deterministic per service: `xr-ai-vllm-vlm-server`,
   `xr-ai-vllm-nemotron3-nano-llm-server`,

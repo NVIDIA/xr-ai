@@ -17,7 +17,8 @@ dependencies = [
     "pyjwt>=2.15.1",
     # CVE-2026-80047: check remote-code consent before caching custom generation code.
     "transformers>=5.17.0",
-    "vllm>=0.30.0",
+    # CVE-2026-114050 and CVE-2026-114055: fixed multimodal cache and request validation.
+    "vllm==0.31.0",
     # CVE-2026-59951: reclaim stateful Streamable HTTP sessions.
     "mcp>=2.2.0",
     "pillow>=13.0.0",

@@ -5,8 +5,8 @@
 vlm_server — vLLM launcher for Cosmos3 Nano Reasoner (or another vLLM VLM).
 
 Reads config, builds vLLM serve flags, and dispatches through ``xr_ai_vllm.serve``
-to either the pip-installed ``vllm`` CLI or the NGC ``nvcr.io/nvidia/vllm``
-docker container — picked per-YAML via ``vllm_backend: pip|docker``.
+to either the pip-installed ``vllm`` CLI or the configured Docker
+container — picked per-YAML via ``vllm_backend: pip|docker``.
 
 Serves vLLM's OpenAI-compatible /v1/chat/completions endpoint; images are
 passed as base64 data URLs in the ``image_url`` content block.
@@ -42,8 +42,8 @@ Config keys
                                     0 skips vLLM's video activation profiling
                                     at startup.
     vllm_backend:            str    "pip" (default) or "docker".
-    vllm_image:              str    NGC image when vllm_backend=docker
-                                    (default: nvcr.io/nvidia/vllm:26.09-py3).
+    vllm_image:              str    Docker image when vllm_backend=docker
+                                    (default: vllm/vllm-openai:v0.31.0).
     spark_uma:               bool   Enable DGX Spark cold-start safeguards
                                     (docker backend only; default: false).
 """

@@ -21,7 +21,8 @@ dependencies = [
     # tool-call parser, the nano_v3 reasoning parser plugin, and the
     # FlashInfer NVFP4 MoE kernels. 0.27.0 is the security floor that fixes
     # CVE-2026-73558 while retaining the model-card-required features.
-    "vllm>=0.30.0",
+    # CVE-2026-114050 and CVE-2026-114055: fixed multimodal cache and request validation.
+    "vllm==0.31.0",
     # CVE-2026-59951: reclaim stateful Streamable HTTP sessions.
     "mcp>=2.2.0",
     "pillow>=13.0.0",
