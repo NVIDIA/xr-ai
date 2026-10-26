@@ -47,11 +47,9 @@ saving silently; processing errors are logged. Disconnecting finalizes the packe
 without announcements.
 
 On connection, capture mode says: "Say start capture to start the recording and
-demonstrate your procedure. To finish recording, say stop capture." While idle,
-later utterances other than **start capture** repeat this hint, including **stop
-capture** when no capture is active. An utterance timestamped before the welcome
-does not queue a duplicate hint. The hint is not appended to "Capture stopped."
-and is not spoken during an active capture.
+demonstrate your procedure. To finish recording, say stop capture." This welcome
+is only sent on connection. Other speech while idle does not trigger a reply,
+and the welcome is not repeated after "Capture stopped."
 
 To stop the sample, press Ctrl+C. The shared model servers remain running.
 To stop the services selected by this sample's deployment:

@@ -3,7 +3,7 @@
 
 """Control procedure capture from spoken commands and participant connections.
 
-CaptureAgent welcomes idle participants, handles "start capture" and "stop
+CaptureAgent welcomes participants on connection, handles "start capture" and "stop
 capture", and sends spoken acknowledgements. It passes narration to the capture
 backend in capturing.py and finalizes active capture on disconnect.
 """
@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import asyncio
 import re
-import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 
@@ -41,8 +40,6 @@ class _Connection:
     # Accepted input identity, including a start still queued behind finalization.
     # It can differ from CaptureAgent._sessions, which tracks backend ownership.
     recording: _Recording | None = None
-    # A stop restores idle state but must not revive reminders from before a start.
-    capture_generation: int = 0
 
 
 @dataclass
@@ -64,8 +61,6 @@ class CaptureAgent(Agent):
         self._sessions: dict[str, _Recording] = {}
         self._tails: dict[str, asyncio.Task[None]] = {}
         self._connections: dict[str, _Connection] = {}
-        # Voice can greet before the capture endpoint receives the hub join.
-        self._welcomed_at_us: dict[str, int] = {}
         self._closed = False
 
     def _enqueue(self, pid: str, action: Callable[[], Awaitable[None]]) -> asyncio.Task[None] | None:
@@ -121,7 +116,6 @@ class CaptureAgent(Agent):
             elif not event.joined and duplicate:
                 connection.cancelled.set()
                 self._connections.pop(pid, None)
-                self._welcomed_at_us.pop(pid, None)
 
         async def apply() -> None:
             if not event.joined and not duplicate:
@@ -155,7 +149,6 @@ class CaptureAgent(Agent):
         connection = self._connections.get(pid)
         if self._closed or (connection is not None and connection.recording is not None):
             return
-        self._welcomed_at_us[pid] = time.time_ns() // 1000
         await ResponseOutputs(ctx, VOICE_OUTPUT_TOPIC).update(pid, _WELCOME)
 
     @subscribe(CAPTURE_INPUT_TOPIC)
@@ -179,7 +172,6 @@ class CaptureAgent(Agent):
                 return
             recording = _Recording(connection)
             connection.recording = recording
-            connection.capture_generation += 1
 
             async def start() -> None:
                 if self._closed or connection.cancelled.is_set():
@@ -197,7 +189,7 @@ class CaptureAgent(Agent):
                         self._forget(pid, recording)
 
             self._enqueue(pid, start)
-        elif command and recording is not None:
+        elif command:
             connection.recording = None
 
             async def finish() -> None:
@@ -218,18 +210,6 @@ class CaptureAgent(Agent):
                     await self._capture_backend.capture_transcript(pid, transcript.text, transcript.timestamp_us)
 
             self._enqueue(pid, narrate)
-        else:
-            generation = connection.capture_generation
-
-            async def remind() -> None:
-                # Speech predating the welcome is already answered by that hint,
-                # even if the voice pipeline begins playing it before dispatch.
-                if transcript.timestamp_us <= self._welcomed_at_us.get(pid, -1):
-                    return
-                if connection.recording is None and connection.capture_generation == generation:
-                    await self._say(pid, connection, ctx, _WELCOME)
-
-            self._enqueue(pid, remind)
         # Return promptly; this owner drains per-participant writes and boundaries.
 
     async def close(self) -> None:
@@ -248,6 +228,5 @@ class CaptureAgent(Agent):
             finally:
                 for pid in self._connections.keys() | self._sessions.keys():
                     self._capture_backend.release(pid)
-                self._welcomed_at_us.clear()
                 self._connections.clear()
                 self._sessions.clear()

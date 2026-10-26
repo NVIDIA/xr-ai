@@ -311,7 +311,7 @@ async def test_join_is_idle_and_voice_can_record_multiple_sessions(demo):
     assert not list((demo.root / "sessions").iterdir())
     demo.frames.execute.assert_not_awaited()
     demo.captioner.execute.assert_not_awaited()
-    assert announcements(demo) == [_CAPTURE_WELCOME] * 2
+    assert announcements(demo) == []
     for _ in range(2):
         await speak(demo, " Start  CAPTURE! ")
         state = demo.capture_backend._sessions["user"]
@@ -332,9 +332,7 @@ async def test_join_is_idle_and_voice_can_record_multiple_sessions(demo):
         assert not demo.capture_backend.is_capturing("user")
         assert narration(state) == ["Place the cup"]
     assert len(list((demo.root / "sessions").iterdir())) == 2
-    assert announcements(demo) == [_CAPTURE_WELCOME] * 2 + [
-        "Capture started.", "Capture stopped.", _CAPTURE_WELCOME,
-    ] * 2
+    assert announcements(demo) == ["Capture started.", "Capture stopped."] * 2
     for index, call in enumerate(demo.output.await_args_list):
         assert call.args[0] == VOICE_OUTPUT_TOPIC
         assert call.kwargs["participant_id"] == "user"
@@ -356,13 +354,14 @@ async def test_welcome_uses_voice_join_regardless_of_endpoint_order(demo, hub_fi
     ctx = SimpleNamespace(metadata=SimpleNamespace(participant_id="user"), publish=demo.output)
     if hub_first:
         await demo.capture.receive(joined())
-    early_timestamp = time.time_ns() // 1000
     await demo.capture.participant_joined(ParticipantJoined(), ctx)
     if not hub_first:
         await demo.capture.receive(joined())
     assert announcements(demo) == [_CAPTURE_WELCOME]
     assert demo.output.await_args.args[1].kind == "update"
-    await speak(demo, "Hello", timestamp_us=early_timestamp)
+    await speak(demo, "Hello")
+    await speak(demo, "What can you do?")
+    await speak(demo, "stop capture")
     assert announcements(demo) == [_CAPTURE_WELCOME]
     assert not demo.capture_backend.is_capturing("user")
     demo.frames.execute.assert_not_awaited()
@@ -373,6 +372,8 @@ async def test_welcome_uses_voice_join_regardless_of_endpoint_order(demo, hub_fi
     await speak(demo, "What can you do?")  # Narration, not an idle question.
     assert announcements(demo) == [_CAPTURE_WELCOME, "Capture started."]
     await speak(demo, "stop capture")
+    await speak(demo, "What can you do?")
+    await speak(demo, "stop capture")
     assert announcements(demo) == [_CAPTURE_WELCOME, "Capture started.", "Capture stopped."]
     await demo.capture.receive(ParticipantEvent("user", False, 2, participant_session_id="session"))
     await demo.capture.receive(joined(session="new", pts_us=3))
@@ -382,77 +383,6 @@ async def test_welcome_uses_voice_join_regardless_of_endpoint_order(demo, hub_fi
     count = len(announcements(demo))
     await demo.capture.participant_joined(ParticipantJoined(), ctx)
     assert len(announcements(demo)) == count
-
-
-@pytest.mark.parametrize("transition", ["start", "start_stop", "disconnect"])
-async def test_queued_idle_hint_does_not_follow_capture_start_or_departure(demo, transition):
-    await demo.capture.receive(joined())
-    release = asyncio.Event()
-    demo.capture._enqueue("user", release.wait)
-    await speak(demo, "What can you do?", wait=False)
-    departure = None
-    if transition in {"start", "start_stop"}:
-        await speak(demo, "start capture", wait=False)
-        if transition == "start_stop":
-            await speak(demo, "stop capture", wait=False)
-    else:
-        departure = demo.capture.receive(ParticipantEvent("user", False, 2, participant_session_id="session"))
-    release.set()
-    await asyncio.shield(demo.capture._tails["user"])
-    if departure is not None:
-        await departure
-    expected = {"start": ["Capture started."], "start_stop": ["Capture started.", "Capture stopped."], "disconnect": []}
-    assert announcements(demo) == expected[transition]
-
-
-async def test_intervening_capture_permanently_invalidates_hint_queued_during_finalization(demo, monkeypatch):
-    from xr_ai_interaction import ResponseOutput
-    from xr_ai_runtime import Agent, RuntimeContext, subscribe
-
-    spoken = []
-
-    class Output(Agent):
-        @subscribe(VOICE_OUTPUT_TOPIC)
-        async def output(self, message: ResponseOutput, ctx: RuntimeContext):
-            if message.text:
-                spoken.append(message.text)
-
-    entered, release = asyncio.Event(), asyncio.Event()
-    original = demo.capture_backend._finalize
-
-    async def delayed(*args, **kwargs):
-        entered.set()
-        await release.wait()
-        await original(*args, **kwargs)
-
-    monkeypatch.setattr(demo.capture_backend, "_finalize", delayed)
-    runtime = AgentRuntime()
-    runtime.register("capture", demo.capture)
-    runtime.register("output", Output())
-
-    async def dispatch(text, *, wait=True):
-        await runtime.publish(
-            CAPTURE_INPUT_TOPIC, UserQuery(text=text, timestamp_us=time.time_ns() // 1000), participant_id="user",
-        )
-        if wait:
-            await asyncio.wait_for(asyncio.shield(demo.capture._tails["user"]), 2)
-
-    async with runtime:
-        await demo.capture.receive(joined())
-        try:
-            await dispatch("start capture")
-            await dispatch("stop capture", wait=False)
-            await asyncio.wait_for(entered.wait(), 2)
-            await dispatch("What can you do?", wait=False)
-            await dispatch("start capture", wait=False)
-            await dispatch("stop capture", wait=False)
-        finally:
-            release.set()
-            await asyncio.wait_for(asyncio.shield(demo.capture._tails["user"]), 2)
-        assert spoken == ["Capture started.", "Capture stopped."] * 2
-        # A new question in the new idle period must still receive a reminder.
-        await dispatch("What can you do?")
-        assert spoken == ["Capture started.", "Capture stopped."] * 2 + [_CAPTURE_WELCOME]
 
 
 @pytest.mark.parametrize("disconnect", [False, True])
@@ -863,7 +793,7 @@ async def test_recording_acknowledgements_follow_voice_input(demo, monkeypatch, 
                         await utterance("Hello", acknowledgement=True, timestamp_us=early_timestamp)
                 else:
                     await boundaries.get()
-                    await utterance("What can you do?", acknowledgement=True)
+                    await utterance("What can you do?")
                 for iteration in range(2):
                     await utterance(
                         "Start capture.", acknowledgement=True,
@@ -872,7 +802,7 @@ async def test_recording_acknowledgements_follow_voice_input(demo, monkeypatch, 
                     state = demo.capture_backend._sessions["user"]
                     await utterance("Place a cup")
                     await utterance("Stop capture.", acknowledgement=True)
-                    await utterance("Stop capture.", acknowledgement=True)  # Already idle: explain how to capture.
+                    await utterance("Stop capture.")  # Already idle: stay silent.
                     assert packet(state)["status"] == "complete"
                     assert narration(state) == ["Place a cup"]
                 await demo.capture.close()
@@ -893,9 +823,7 @@ async def test_recording_acknowledgements_follow_voice_input(demo, monkeypatch, 
 
     # Voice may begin the queued greeting as the user's utterance ends, before
     # the start command is dispatched. It must never follow "Capture started."
-    expected = [_CAPTURE_WELCOME] * (1 if queued_greeting else 2) + [
-        "Capture started.", "Capture stopped.", _CAPTURE_WELCOME,
-    ] * 2
+    expected = [_CAPTURE_WELCOME] + ["Capture started.", "Capture stopped."] * 2
     sentences = [sentence + "." for text in expected for sentence in text.removesuffix(".").split(". ")]
     assert [call.args[0] for call in tts.synthesize.await_args_list] == sentences
     assert audio_frames and all(frame.transport_destination == "user" for frame in audio_frames)
