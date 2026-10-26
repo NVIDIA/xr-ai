@@ -503,6 +503,10 @@ and stays silent during narration. After <strong>stop capture</strong>, it says
 “Capture stopped.” The evidence packet, transcript, and summary then finish
 saving silently; processing errors are logged. Disconnecting finalizes the packet
 without announcements.</p>
+<p>On connection, capture mode says: “Say start capture to start the recording and
+demonstrate your procedure. To finish recording, say stop capture.” This welcome
+is only sent on connection. Other speech while idle does not trigger a reply,
+and the welcome is not repeated after “Capture stopped.”</p>
 <p>To stop the sample, press Ctrl+C. The shared model servers remain running.
 To stop the services selected by this sample’s deployment:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-servers<span class="w"> </span>procedure_capture_guide_model_servers<span class="w"> </span>--stop
