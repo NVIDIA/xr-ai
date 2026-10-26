@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Import real NeMo classes from each isolated inference environment.
+"""Check real NeMo imports and checkpoint protection in each inference environment.
 
 These qualification tests require the Linux GPU stack but no model downloads.
 They catch integration failures that lock resolution and model stand-ins miss.
@@ -46,6 +46,8 @@ def test_nemo_inference_dependencies_import(service: str, imports: str) -> None:
         "assert torch.cuda.is_available(), 'CUDA unavailable for NeMo qualification'\n"
         "import hydra, lightning.pytorch\n"
         + imports
+        + "\nimport runpy\n"
+        + f"runpy.run_path({str(_ROOT / 'tests/_probe_lightning_checkpoint.py')!r}, run_name='__main__')\n"
     )
     result = subprocess.run(
         [str(project / ".venv/bin/python"), "-c", probe],
@@ -54,4 +56,4 @@ def test_nemo_inference_dependencies_import(service: str, imports: str) -> None:
         timeout=240,
         check=False,
     )
-    assert result.returncode == 0, f"{service} imports failed:\n{result.stdout}\n{result.stderr}"
+    assert result.returncode == 0, f"{service} dependency qualification failed:\n{result.stdout}\n{result.stderr}"

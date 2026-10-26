@@ -406,3 +406,39 @@ def test_manifest_rejects_conflicting_service_overrides(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="conflicting override for hydra-core"):
         _render(tmp_path)
+
+
+def test_manifest_preserves_override_source_identity(tmp_path: Path) -> None:
+    source = 'lightning = { git = "https://example.com/lightning", rev = "abc123" }'
+    for name in ("stt", "tts"):
+        _write_project(tmp_path, f"services/{name}", name=name, dependencies=("lightning",), sources=source)
+        with (tmp_path / f"services/{name}/pyproject.toml").open("a") as project:
+            project.write('\n[tool.uv]\noverride-dependencies = ["lightning==2.6.6"]\n')
+
+    data = tomllib.loads(_render(tmp_path))
+    assert data["tool"]["uv"]["sources"]["lightning"] == {
+        "git": "https://example.com/lightning", "rev": "abc123",
+    }
+
+
+def test_manifest_rejects_conflicting_override_sources(tmp_path: Path) -> None:
+    for name, revision in (("stt", "abc123"), ("tts", "def456")):
+        _write_project(
+            tmp_path, f"services/{name}", name=name, dependencies=("lightning",),
+            sources=f'lightning = {{ git = "https://example.com/lightning", rev = "{revision}" }}',
+        )
+        with (tmp_path / f"services/{name}/pyproject.toml").open("a") as project:
+            project.write('\n[tool.uv]\noverride-dependencies = ["lightning==2.6.6"]\n')
+
+    with pytest.raises(ValueError, match="conflicting source for lightning"):
+        _render(tmp_path)
+
+
+@pytest.mark.parametrize("service", ["stt-server", "magpie-tts", "speaker-stt"])
+def test_manifest_lock_preserves_lightning_git_source(service: str) -> None:
+    lock = tomllib.loads((_ROOT / MANIFEST / "uv.lock").read_text())
+    lightning = [package for package in lock["package"] if package["name"] == "lightning"]
+    assert len(lightning) == 1
+    project = tomllib.loads((_ROOT / "services" / service / "pyproject.toml").read_text())
+    source = project["tool"]["uv"]["sources"]["lightning"]
+    assert lightning[0]["source"]["git"] == f"{source['git']}?rev={source['rev']}#{source['rev']}"
