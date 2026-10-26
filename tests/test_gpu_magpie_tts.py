@@ -10,8 +10,8 @@ synthesis request through the OpenAI-compatible
 ``POST /v1/audio/speech`` endpoint.
 
 Marked ``gpu``: NeMo MagpieTTSModel loads ~1 GiB onto CUDA and synthesis
-takes seconds on CPU; CI skips it. Also skipped cleanly if the magpie
-venv hasn't been ``uv sync``'d.
+takes seconds on CPU; CI skips it. The test synchronizes the service environment
+before launch and fails if dependency installation fails.
 """
 from __future__ import annotations
 

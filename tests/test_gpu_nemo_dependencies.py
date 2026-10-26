@@ -37,13 +37,19 @@ def test_nemo_inference_dependencies_import(service: str, imports: str) -> None:
     project = _ROOT / "services" / service
     subprocess.run(
         ["uv", "--config-file", str(_ROOT / "uv.toml"), "sync",
-         "--python", "3.12", "--project", str(project)],
+         "--project", str(project)],
         check=True,
         timeout=1200,
     )
     probe = (
         "import torch\n"
         "assert torch.cuda.is_available(), 'CUDA unavailable for NeMo qualification'\n"
+        "from importlib.metadata import version\n"
+        "from packaging.version import Version\n"
+        "for package, minimum in [('hydra-core', '1.3.7'), ('lightning', '2.6.6'), "
+        "('pytorch-lightning', '2.6.6'), ('fsspec', '2026.6.0')]:\n"
+        "    actual = version(package)\n"
+        "    assert Version(actual) >= Version(minimum), f'{package} {actual} is below {minimum}'\n"
         "import hydra, lightning.pytorch\n"
         + imports
         + "\nimport runpy\n"

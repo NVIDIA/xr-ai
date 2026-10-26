@@ -83,8 +83,8 @@ workflow retains its separate dedicated-runner cleanup policy.
 ## NeMo service qualification
 
 The STT, Magpie TTS, and speaker STT projects override NeMo's Hydra and
-Lightning compatibility caps to use Hydra 1.3.7, Lightning 2.6.6, and a patched
-fsspec release. Successful lock resolution and CPU tests do not establish
+Lightning compatibility caps to use Hydra 1.3.7, Lightning 2.6.6, and fsspec
+2026.7.0. Successful lock resolution and CPU tests do not establish
 compatibility with real model checkpoints or CUDA inference. Qualify all three
 services on the intended Linux GPU before deploying this dependency stack.
 
@@ -105,10 +105,10 @@ uv --config-file uv.toml sync --project services/speaker-stt
 ```
 
 Check real imports and checkpoint instantiator protection before downloading
-or loading models. The dependency gate checks that both Lightning namespaces
-reject an untrusted instantiator and still call a trusted one with
-`weights_only=True`. Then run the STT and Magpie GPU smoke tests serially on an
-idle test host:
+or loading models. The dependency gate enforces the security version floors
+and checks that both Lightning namespaces reject an untrusted instantiator
+and still call a trusted one with `weights_only=True`. Then run the STT and
+Magpie GPU smoke tests serially on an idle test host:
 
 ```bash
 bash tests/run_local_gpu_tests.sh test_gpu_nemo_dependencies.py

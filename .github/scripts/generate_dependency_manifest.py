@@ -38,7 +38,7 @@ VLLM_PROJECTS = frozenset(
         "vlm-server",
     }
 )
-# Speaker STT pins a different NeMo Speech Git revision and lhotse artifact
+# Speaker STT pins a different NeMo Speech commit archive and lhotse artifact
 # from the repository ASR services; uv cannot combine those sources in one lock.
 EXCLUDED_PROJECTS = frozenset({"xr-ai-speaker-stt"})
 
@@ -90,7 +90,12 @@ def common_python_range(ranges: Sequence[str]) -> str:
 
 
 def manifest_overrides(projects: Sequence[Project]) -> list[str]:
-    """Carry service overrides into the inventory's root resolution context."""
+    """Apply included services' overrides to both inventory extras.
+
+    This aggregate inventories isolated services; its overrides are global to
+    the lock, not scoped to the service declaring them. Nonidentical requirement
+    strings are rejected rather than attempting to merge resolution policies.
+    """
 
     overrides: dict[str, str] = {}
     for project in projects:

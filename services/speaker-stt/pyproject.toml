@@ -31,7 +31,7 @@ speaker_stt = "speaker_stt.__main__:_run"
 
 [tool.uv]
 # NeMo caps Hydra at 1.3.2 and Lightning at 2.4.0. These explicit overrides
-# require GPU qualification; the patched umbrella package also permits fsspec 2026.
+# require GPU qualification; the upstream umbrella release also permits fsspec 2026.
 override-dependencies = ["hydra-core==1.3.7", "lightning==2.6.6"]
 environments = ["sys_platform == 'linux'"]
 
