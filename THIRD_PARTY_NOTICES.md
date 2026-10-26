@@ -100,6 +100,7 @@ artifacts; each directory records the artifact URL and hashes.
 
 | Component | Resolved version | License and notices |
 |---|---|---|
+| `oss-harmony` | 0.0.11 | Apache-2.0; [upstream license](third_party_licenses/oss-harmony-0.0.11/) |
 | `vllm` | 0.31.0 | Apache-2.0; [upstream license](third_party_licenses/vllm-0.31.0/) |
 | `huggingface-hub` | 1.33.0 | Apache-2.0; [upstream license](third_party_licenses/huggingface-hub-1.33.0/) |
 | `flashinfer-python` | 0.7.0.post1 | Apache-2.0; [upstream license](third_party_licenses/flashinfer-python-0.7.0.post1/) |
@@ -405,6 +406,7 @@ refer to the component disclosures above for applicable license elections.
 | `humming-kernels-0.1.16` | [`LICENSE`](third_party_licenses/humming-kernels-0.1.16/LICENSE) |
 | `protobuf-7.36.1` | [`LICENSE`](third_party_licenses/protobuf-7.36.1/LICENSE) |
 | `nccl-extensions-0.1.0` | [`LICENSE.txt`](third_party_licenses/nccl-extensions-0.1.0/LICENSE.txt) |
+| `oss-harmony-0.0.11` | [`LICENSE`](third_party_licenses/oss-harmony-0.0.11/LICENSE) |
 
 ## Updating this file
 

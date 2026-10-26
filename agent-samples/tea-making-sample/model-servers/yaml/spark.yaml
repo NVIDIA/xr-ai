@@ -16,6 +16,6 @@ omni:
 embedding:
   gpu_memory_utilization: 0.08
   spark_uma: true
-  # Avoid FlashAttention kernels incompatible with GB10 SM121 on driver 580
-  # in NGC vLLM container builds. Other GPU profiles retain auto-selection.
+  # NGC 26.09 had incompatible FlashAttention kernels on GB10 SM121/driver 580.
+  # Retain Triton pending NGC 26.10 preview qualification on this profile.
   attention_backend: TRITON_ATTN

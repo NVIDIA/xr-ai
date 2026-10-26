@@ -163,9 +163,9 @@ def run() -> None:
     if mm_encoder_tp_mode:
         extra_serve_args.extend(["--mm-encoder-tp-mode", str(mm_encoder_tp_mode)])
 
-    # On x86 SM12, the pinned image's SM80-only FA2 binary can trigger lengthy
-    # PTX compilation. Triton also reduces cold image latency on ARM GB10,
-    # whose image includes native Blackwell kernels instead.
+    # NGC 26.09 measurements showed lengthy FA2 PTX compilation on x86 SM12
+    # and lower cold image latency with Triton on ARM GB10. Retain this
+    # conservative default pending qualification of NGC 26.10 preview.
     use_sm12_triton = (
         model == _COSMOS3_NANO_MODEL and backend == "docker"
         and image == DEFAULT_IMAGE and gpu_compute_major() == 12

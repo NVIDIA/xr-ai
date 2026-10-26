@@ -633,11 +633,16 @@ available.
 
 This NVIDIA NGC preview uses CUDA 13.4 and reports vLLM
 `0.31.0+88641915` on Linux x86_64 and aarch64. The checked-in Cosmos3 and
-Nemotron model configurations select this image. Qualify the preview on the target GPU and model workload before
-deploying it. Nemotron Omni uses its native Mamba and
-causal-convolution implementations, so the shipped configuration does not
-compile or install `mamba-ssm` or `causal-conv1d`. Override the image to pin
-another tag, an internal mirror, or a custom build.
+Nemotron model configurations select this image. Qualify the preview on the
+target GPU and model workload before deploying it. Nemotron Omni uses its
+native Mamba and causal-convolution implementations, so the shipped
+configuration does not compile or install `mamba-ssm` or `causal-conv1d`.
+Override the image to pin another tag, an internal mirror, or a custom build.
+
+The preview tag is mutable. The observed multi-architecture manifest digest is
+`sha256:cb38bbefdbc3e9fe045f931dd72cbd58cd48985c7e09916bcc6c15c10f39b929`.
+For reproducible deployments, append `@sha256:<digest>` to the image reference
+in each service configuration and qualify that exact manifest.
 
 ::::{important}
 When upgrading an existing checkout, stop the persistent model stack before
@@ -745,11 +750,13 @@ cleanup.
   When serving `nvidia/Cosmos3-Nano` with the default Docker image on SM12 GPUs,
   including RTX Blackwell and GB10, the service selects Triton attention for
   both the decoder and vision encoder.
-  This reduces cold image latency without depending on a previous container's
-  compilation cache. On x86 SM12 GPUs, it avoids the NGC image's
-  FlashAttention-2 PTX fallback. The ARM image includes native Blackwell kernels,
-  so that explanation does not apply to every SM12 deployment. Other GPUs,
-  custom images, and pip mode retain vLLM's backend selection. The optional
+  Measurements on NGC 26.09 showed lower cold image latency with Triton:
+  the x86 image fell back to FlashAttention-2 PTX compilation, while the ARM
+  image included native Blackwell kernels. This conservative default is
+  retained for the NGC 26.10 preview pending GPU qualification; those kernel
+  properties and latency results have not been reverified on the preview.
+  Other GPUs, custom images, and pip mode retain vLLM's backend selection.
+  The optional
   `attention_backend` and
   `mm_encoder_attn_backend` YAML keys override each component independently;
   explicit `auto` restores vLLM's selection. Cold starts still include model

@@ -18,6 +18,8 @@ dependencies = [
     # CVE-2026-80047: check remote-code consent before caching custom generation code.
     "transformers>=5.17.0",
     # CVE-2026-114050 and CVE-2026-114055: fixed multimodal cache and request validation.
+    # Qualify this exact release with the NGC preview; patch upgrades require
+    # requalification too, so keep the four service environments aligned.
     "vllm==0.31.0",
     # CVE-2026-59951: reclaim stateful Streamable HTTP sessions.
     "mcp>=2.2.0",
