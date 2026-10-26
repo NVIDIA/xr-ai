@@ -107,7 +107,7 @@ artifacts; each directory records the artifact URL and hashes.
 | `nccl-extensions` | 0.1.0 | Apache-2.0; [upstream license](third_party_licenses/nccl-extensions-0.1.0/) |
 | `instanttensor` | 0.2.2 | Apache-2.0; [upstream license](third_party_licenses/instanttensor-0.2.2/) |
 | `quack-kernels` | 0.6.5 | Apache-2.0; [upstream license](third_party_licenses/quack-kernels-0.6.5/) |
-| `protobuf` | 7.36.1 | BSD-3-Clause; [upstream license](third_party_licenses/protobuf-7.36.1/) |
+| `protobuf` | 7.36.2 (non-s390x), 7.36.1 (s390x) | BSD-3-Clause; [7.36.2 license](third_party_licenses/protobuf-7.36.2/), [7.36.1 license](third_party_licenses/protobuf-7.36.1/) |
 | `nvidia-cutlass-dsl` | 4.7.1 | NVIDIA Software License Agreement; [upstream EULA](third_party_licenses/nvidia-cutlass-dsl-4.7.1/) |
 
 `nccl-extensions` is an Apache-2.0 dependency of FlashInfer. CUTLASS DSL is
@@ -115,7 +115,9 @@ proprietary software downloaded by users, rather than part of XR AI's source
 release. Its `libs-base`, `libs-core`, `libs-cu12`, and `libs-cu13` dependencies
 also resolve to 4.7.1; their upstream package metadata identifies the NVIDIA
 proprietary license. The BSD license of CUTLASS C++ does not replace the DSL
-EULA. The lock also retains protobuf 6.33.5 for a separate dependency branch.
+EULA. The vLLM environments preserve protobuf 7.36.2 outside s390x; vLLM
+0.31.0 requires 7.36.1 on s390x. The lock also retains protobuf 6.33.5 for
+a separate dependency branch.
 
 ### Speaker enrollment runtime and models
 
@@ -407,6 +409,7 @@ refer to the component disclosures above for applicable license elections.
 | `protobuf-7.36.1` | [`LICENSE`](third_party_licenses/protobuf-7.36.1/LICENSE) |
 | `nccl-extensions-0.1.0` | [`LICENSE.txt`](third_party_licenses/nccl-extensions-0.1.0/LICENSE.txt) |
 | `oss-harmony-0.0.11` | [`LICENSE`](third_party_licenses/oss-harmony-0.0.11/LICENSE) |
+| `protobuf-7.36.2` | [`LICENSE`](third_party_licenses/protobuf-7.36.2/LICENSE) |
 
 ## Updating this file
 

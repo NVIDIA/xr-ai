@@ -21,6 +21,9 @@ dependencies = [
     # Qualify this exact release with the NGC preview; patch upgrades require
     # requalification too, so keep the four service environments aligned.
     "vllm==0.31.0",
+    # Preserve the qualified protobuf patch where vLLM does not pin s390x.
+    "protobuf>=7.36.2; platform_machine != 's390x'",
+    "protobuf==7.36.1; platform_machine == 's390x'",
     # CVE-2026-59951: reclaim stateful Streamable HTTP sessions.
     "mcp>=2.2.0",
     "pillow>=13.0.0",
