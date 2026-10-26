@@ -488,6 +488,9 @@ status, and stop instructions.
 </div>
 <p>Refer to <a class="reference internal" href="skills.html"><span class="doc">Skills</span></a> for <code class="docutils literal notranslate"><span class="pre">run-demo</span></code> or development-only preparation with <code class="docutils literal notranslate"><span class="pre">setup</span></code>.</p>
 <p>The remainder of this quickstart is the manual path.</p>
+<p>Before launching a voice sample, refer to <a class="reference internal" href="networking.html#onnx-runtime-telemetry"><span class="std std-ref">ONNX Runtime telemetry</span></a>.
+If outbound ONNX Runtime telemetry is unwanted, export
+<code class="docutils literal notranslate"><span class="pre">ORT_DISABLE_TELEMETRY=1</span></code> in the launch environment before starting the process.</p>
 <p>Every sample follows the same pattern: <strong>start the sample’s model stack, wait for
 its launcher to report readiness and return, start the sample from the same
 terminal, then connect a client.</strong> Once the sample is ready, any supported

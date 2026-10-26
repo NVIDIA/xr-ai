@@ -481,6 +481,33 @@ ports. Open only the externally reachable ports required by the deployment.</p>
 </tbody>
 </table>
 </div>
+<section id="onnx-runtime-telemetry">
+<span id="id1"></span><h2>ONNX Runtime telemetry<a class="headerlink" href="#onnx-runtime-telemetry" title="Link to this heading">#</a></h2>
+<p>The voice pipeline uses ONNX Runtime through <code class="docutils literal notranslate"><span class="pre">xr-ai-vad</span></code> for Silero VAD.
+ONNX Runtime 1.31 enables native 1DS telemetry by default in the inspected
+official Python 3.12 wheels for Linux x86_64 and aarch64 and macOS arm64.
+This includes an outbound HTTPS uploader to Microsoft’s telemetry service and
+a persistent local device identifier, whose hashed value is sent with telemetry.
+Other platforms and custom builds require separate verification.</p>
+<p>If outbound ONNX Runtime telemetry is unwanted, set <code class="docutils literal notranslate"><span class="pre">ORT_DISABLE_TELEMETRY=1</span></code>
+in the launch environment <strong>before starting the process</strong>. From the repository
+root, for example:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">export</span><span class="w"> </span><span class="nv">ORT_DISABLE_TELEMETRY</span><span class="o">=</span><span class="m">1</span>
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/simple-vlm-example<span class="w"> </span>simple_vlm_example
+</pre></div>
+</div>
+<p>The sample launcher passes the exported setting to its child processes. For
+a service or container deployment, set the variable in the service’s or
+container’s environment before startup; exporting it only on the host does
+not automatically configure a container. Restart existing processes with the
+setting applied.</p>
+<p>The environment opt-out is latched during native telemetry initialization and
+prevents uploader creation, event emission, and device-identifier persistence.
+Calling <code class="docutils literal notranslate"><span class="pre">onnxruntime.disable_telemetry_events()</span></code> later in Python does not undo
+initialization effects and is insufficient for this startup opt-out. Refer to
+the upstream <a class="reference external" href="https://github.com/microsoft/onnxruntime/blob/v1.31.0/onnxruntime/core/platform/telemetry_1ds.cc">1DS implementation</a>
+and <a class="reference external" href="https://github.com/microsoft/onnxruntime/blob/v1.31.0/onnxruntime/core/platform/telemetry_environment.h">environment opt-out handling</a>.</p>
+</section>
 <section id="ubuntu-or-debian-ufw">
 <h2>Ubuntu or Debian (<code class="docutils literal notranslate"><span class="pre">ufw</span></code>)<a class="headerlink" href="#ubuntu-or-debian-ufw" title="Link to this heading">#</a></h2>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo<span class="w"> </span>ufw<span class="w"> </span>allow<span class="w"> </span><span class="m">7881</span>/tcp<span class="w">     </span><span class="c1"># WebRTC TCP fallback</span>
@@ -677,7 +704,7 @@ bypass certificate-chain validation regardless of <code class="docutils literal 
 Until the certificate is trusted at the OS level, the wss handshake fails.</p>
 </div>
 <section id="linux-native-certificate-trust">
-<span id="id1"></span><h3>Linux native certificate trust<a class="headerlink" href="#linux-native-certificate-trust" title="Link to this heading">#</a></h3>
+<span id="id2"></span><h3>Linux native certificate trust<a class="headerlink" href="#linux-native-certificate-trust" title="Link to this heading">#</a></h3>
 <p>The native C++ client validates the hub through the Linux system CA bundle.
 Before connecting, ensure the address passed to <code class="docutils literal notranslate"><span class="pre">--host</span></code> appears in the server
 leaf’s subject alternative names. If the native client uses another IP address
@@ -749,6 +776,7 @@ certificate with one from a public CA by setting <code class="docutils literal n
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#onnx-runtime-telemetry">ONNX Runtime telemetry</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#ubuntu-or-debian-ufw">Ubuntu or Debian (<code class="docutils literal notranslate"><span class="pre">ufw</span></code>)</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#cloud-vms-behind-nat">Cloud VMs behind NAT</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#deployment-owned-hub-configuration">Deployment-owned hub configuration</a></li>
