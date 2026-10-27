@@ -17,7 +17,8 @@ from .hand_motion import HandPose, match_hand
 
 
 def _circle_region(points: list[tuple[float, float]], width: int, height: int,
-                   settings: CircleSettings, diagnostics: GestureDiagnostics | None = None) -> ImageRegion | None:
+                   settings: CircleSettings, diagnostics: GestureDiagnostics | None = None,
+                   segments: list[tuple[tuple[float, float], tuple[float, float]]] | None = None) -> ImageRegion | None:
     def reject(reason):
         if diagnostics:
             diagnostics.count(reason)
@@ -57,7 +58,10 @@ def _circle_region(points: list[tuple[float, float]], width: int, height: int,
     if any(abs(math.hypot(*v) / radius - 1) > settings.radial_tolerance for v in vectors):
         return reject("circle_radial_error")
     turns = []
-    for a, b in zip(vectors[:-1], vectors[1:], strict=True):
+    observed_segments = segments if segments is not None else list(zip(points[:-1], points[1:], strict=True))
+    for start, end in observed_segments:
+        a = (start[0] - center[0], start[1] - center[1])
+        b = (end[0] - center[0], end[1] - center[1])
         if math.dist(a, b) > settings.max_segment_radius * radius * (1 + 1e-9):
             return reject("circle_sparse_segment")
         turns.append(math.atan2(a[0] * b[1] - a[1] * b[0], a[0] * b[0] + a[1] * b[1]))
@@ -73,18 +77,22 @@ def _circle_region(points: list[tuple[float, float]], width: int, height: int,
 class PinchCircleTrigger:
     """Recognize a closed pinched trace once; require stable release to rearm."""
 
-    def __init__(self, settings: CircleSettings, *, release_s: float = 0.4, max_gap_s: float = 0.5,
+    def __init__(self, settings: CircleSettings, *, release_s: float = 0.4, max_gap_s: float | None = None,
                  diagnostics: GestureDiagnostics | None = None) -> None:
         self._settings = settings
         self._diagnostics = diagnostics or GestureDiagnostics()
+        hand_gap_s = settings.occlusion_grace_s if max_gap_s is None else max_gap_s
         self._grip = GripHysteresis(pinch_ratio=settings.pinch_ratio, release_ratio=settings.release_ratio,
-                                    dwell_s=release_s, max_gap_s=max_gap_s)
-        self._max_gap_us = max_gap_s * 1_000_000
+                                    dwell_s=release_s, max_gap_s=hand_gap_s)
+        self._max_gap_us = hand_gap_s * 1_000_000
         self._last_seen: int | None = None
         self._timestamp = -1
         self._short_side = 0
         self._points: list[tuple[float, float]] = []
         self._candidate_points: list[tuple[float, float]] = []
+        self._segments: list[tuple[tuple[float, float], tuple[float, float]]] = []
+        self._candidate_segments: list[tuple[tuple[float, float], tuple[float, float]]] = []
+        self._interrupted = False
         self.hand: HandPose | None = None
         self._ready = True
         self._completed_latch = False
@@ -103,6 +111,7 @@ class PinchCircleTrigger:
 
     def unavailable(self) -> None:
         self._grip.unavailable()
+        self._interrupted = True
 
     def reset(self) -> None:
         self._diagnostics.count("circle_reset")
@@ -111,19 +120,30 @@ class PinchCircleTrigger:
         self.unavailable()
         self._points.clear()
         self._candidate_points.clear()
+        self._segments.clear()
+        self._candidate_segments.clear()
+        self._interrupted = False
         self.hand = None
+        self._last_seen = None
         # Recognition owns the release latch. Failed acquisition discards its
         # path and permits normal pinch entry, without continuing old motion.
-        self._grip.reset(require_open=self._completed_latch)
+        # Tracking loss cancels a stroke, never the remembered physical grip.
         self._diagnostics.grip(self._grip.state.value)
         self._ready = not self._completed_latch
+
+    def _append(self, points, segments, pointer) -> None:
+        if points and not self._interrupted and points[-1] != pointer:
+            segments.append((points[-1], pointer))
+        points.append(pointer)
+        self._interrupted = False
 
     def observe(self, observation: HandTrackingResult, timestamp_us: int) -> ImageRegion | None:
         if timestamp_us <= self._timestamp:
             return None
         self._timestamp = timestamp_us
         if self._last_seen is not None and timestamp_us - self._last_seen > self._max_gap_us:
-            self._diagnostics.count("tracking_gap")
+            if self.active:
+                self._diagnostics.count("circle_occlusion_cancelled")
             self.reset()
         pose = match_hand(observation, self.hand, self._settings.max_jump_palm, self._diagnostics)
         if pose is None:
@@ -141,39 +161,47 @@ class PinchCircleTrigger:
             return None
         if self._grip.state is Grip.OPEN and not self._grip.entry_pending(timestamp_us):
             self._candidate_points.clear()
+            self._candidate_segments.clear()
         trajectory = self._points or self._candidate_points
-        if trajectory and math.dist(pointer, trajectory[-1]) > self._settings.max_jump_palm * pose.scale:
+        previous = trajectory[-1] if trajectory else None
+        if previous is not None and math.dist(pointer, previous) > self._settings.max_jump_palm * pose.scale:
             self._diagnostics.count("pointer_jump")
             self._grip.observe(None, timestamp_us)
             self.unavailable()
             return None
         self.hand = pose
+        returning = self._interrupted
         was_open = self._grip.state is Grip.OPEN
         strong_pinch = ratio is not None and ratio <= self._settings.pinch_ratio
         if was_open and strong_pinch and self._ready:
             if not self._candidate_points or pointer != self._candidate_points[-1]:
-                self._candidate_points.append(pointer)
+                self._append(self._candidate_points, self._candidate_segments, pointer)
                 self._diagnostics.count("entry_pointer_added")
             if len(self._candidate_points) > self._settings.max_points:
                 self.reset()
                 return None
         elif not was_open or (ratio is not None and ratio >= self._settings.release_ratio):
             self._candidate_points.clear()
+            self._candidate_segments.clear()
         closed = self._grip.observe(ratio, timestamp_us)
         self._diagnostics.grip(self._grip.state.value)
         self._diagnostics.count("evidence_closed" if strong_pinch else "evidence_open"
                                 if ratio >= self._settings.release_ratio else "evidence_band")
         if closed and was_open:
             self._points = self._candidate_points
+            self._segments = self._candidate_segments
             self._candidate_points = []
+            self._candidate_segments = []
         if self._grip.state is Grip.UNKNOWN:
             self._points.clear()
+            self._segments.clear()
             self._ready = False
         if self._grip.state is Grip.OPEN:
             if not was_open:
                 self._ready = True
                 self._completed_latch = False
             self._points.clear()
+            self._segments.clear()
         self._last_seen = timestamp_us
         if not closed or not self._ready:
             self._diagnostics.count("grip_or_rearm_wait")
@@ -185,13 +213,18 @@ class PinchCircleTrigger:
             if len(self._points) >= self._settings.max_points:
                 self.reset()
                 return None
-            self._points.append(pointer)
+            self._append(self._points, self._segments, pointer)
             self._diagnostics.count("pointer_added")
         self._diagnostics.number("circle_points", len(self._points))
-        region = _circle_region(self._points, width, height, self._settings, self._diagnostics)
+        if returning:
+            self._interrupted = False
+            self._diagnostics.count("circle_reacquired")
+            return None
+        region = _circle_region(self._points, width, height, self._settings, self._diagnostics, self._segments)
         if region is not None:
             self._diagnostics.count("circle_recognized")
             self._points = []
+            self._segments.clear()
             self._ready = False
             self._completed_latch = True
         return region

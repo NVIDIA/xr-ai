@@ -177,7 +177,7 @@ class RegionSelector:
             max_gap_s=settings.max_gap_s, movement_tolerance=settings.movement_tolerance,
         )
         self._circle = PinchCircleTrigger(settings.circle, release_s=settings.release_s,
-                                          max_gap_s=settings.max_gap_s, diagnostics=diagnostics)
+                                          max_gap_s=settings.circle.occlusion_grace_s, diagnostics=diagnostics)
         self.circle_selected = False
         self._timestamp = -1
         self._dimensions: tuple[int, int] | None = None

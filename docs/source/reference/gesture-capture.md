@@ -82,7 +82,8 @@ Unrelated distant hands do not need to disappear. A bystander inside the selecti
 may still obscure the target; the VLM is instructed to report obstruction.
 Box capture remains immediate, inside the framing fingers.
 
-Grip state is OPEN, PINCHED or UNKNOWN. Two accepted closed observations enter
+Grip memory is OPEN or PINCHED; missing observations supply unknown evidence,
+not a new release or engagement. Two accepted closed observations enter
 PINCHED; duplicates and missing/outlier observations cannot supply the second
 sample. Strong closed candidate points are retained, so pinch-and-immediately-draw
 keeps its first arc without a stationary hold. Once pinched, the gap between
@@ -92,9 +93,19 @@ motion. Uncertain grip distance does not mean the pointer disappeared.
 Only sustained positive open evidence over `release_s` (default 0.4s) releases
 the grip. An open outlier suppresses that sample without releasing; intermediate
 or missing evidence breaks release confirmation. Missing/ambiguous/outlier pointer
-observations add no trajectory points. Tracking loss beyond `max_gap_s` discards
-an **unrecognized** attempt and all its points. Recovered valid pinch input may
-start a fresh attempt through normal entry confirmation, without first opening.
+observations add no trajectory points. `circle.occlusion_grace_s` (default 2s)
+retains confirmed grip and the current path while the hand is missing, ambiguous
+or implausible on otherwise fresh video. The progress hum continues during this
+bounded pause. Reacquisition must match the existing spatial continuity limits;
+a distant/ambiguous hand cannot continue the path. A reliable return position is
+retained for the fit, bounds and point count, but cannot recognize on that first
+return. The unobserved segment to it contributes no angular travel; subsequent
+observed segments count toward circle completion.
+
+Longer occlusion **cancels the stroke attempt**, discarding its points; it never
+means OPEN/release, recognizes a circle or submits a query. Confirmed grip memory
+survives, so a recovered held pinch can retry a fresh path without a synthetic
+new engagement. Only positive stable OPEN evidence disengages.
 Once a circle has been **recognized**, its release latch survives tracking loss:
 a held pinch cannot trigger another turn until visible, sustained open evidence
 rearms it. Pending capture/query/response cooldown remains in force.
@@ -108,10 +119,11 @@ produce incorrect landmarks. These limitations require physical-camera testing.
 
 Recognized circle selections and pending clearance are independent of subsequent
 grip uncertainty: the existing spatial clear-or-timeout policy continues. Brief
-absent, ambiguous or implausible observations retain the candidate/path for
-`max_gap_s`, measured since the last accepted observation. They add no trajectory
-points and break release confirmation. Longer loss discards failed acquisition;
-recovery starts a fresh path, while recognized turns still require open to rearm. Duplicate
+absent, ambiguous or implausible observations retain the box candidate for
+`max_gap_s`, and the circle path for `circle.occlusion_grace_s`, measured since
+the last accepted hand observation. They add no trajectory
+points and break release confirmation. Longer hand loss discards failed acquisition
+but preserves deliberate grip state; recognized turns still require open to rearm. Duplicate
 frames cannot advance hold, release, drawing or clearance. Source changes,
 dimension changes and long video gaps cancel pending selections rather than
 querying an old frame.
@@ -129,6 +141,12 @@ Defaults sample every 80 ms and require eight distinct points, allowing faster
 natural traces than the previous 150 ms/twelve-point policy. This increases
 potential CPU use; inference time also limits actual cadence. Thresholds are demo
 tuning values, not measured recognition accuracy; qualify on the target camera.
+
+The timeouts serve separate purposes: `circle.occlusion_grace_s: 2.0` tolerates
+hand-observation loss before recognition, `max_gap_s: 0.5` still bounds actual
+video/source continuity and box acquisition, and `circle.clear_timeout_s: 2.0`
+still controls best-effort hand clearance **after** recognition. Increasing hand
+grace does not permit stale camera frames or extend pending capture indefinitely.
 
 ## Audio feedback and cooldown
 

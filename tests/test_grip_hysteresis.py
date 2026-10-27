@@ -35,21 +35,21 @@ def test_two_closed_observations_enter_and_band_retains_observed_motion():
     assert grip.state is Grip.OPEN
 
 
-def test_missing_pointer_timeout_cancels_and_held_pinch_cannot_rearm():
+def test_missing_observations_retain_grip_until_positive_open_evidence():
     grip = _grip()
     grip.observe(0.1, 0)
     assert grip.observe(0.1, 80_000)
     assert not grip.observe(None, 240_000)
     assert grip.state is Grip.PINCHED
     assert not grip.observe(None, 640_000)
-    assert grip.state is Grip.UNKNOWN
+    assert grip.state is Grip.PINCHED
     for timestamp in (720_000, 800_000, 880_000):
-        assert not grip.observe(0.1, timestamp)
-    assert grip.state is Grip.UNKNOWN
+        assert grip.observe(0.1, timestamp)
+    assert grip.state is Grip.PINCHED
     grip.observe(0.8, 960_000)
     grip.observe(None, 1_040_000)
     grip.observe(0.8, 1_120_000)
-    assert grip.state is Grip.UNKNOWN
+    assert grip.state is Grip.PINCHED
     grip.observe(0.8, 1_320_000)
     assert grip.state is Grip.OPEN
 
@@ -107,9 +107,9 @@ def test_band_motion_is_observed_but_missing_pointer_is_never_invented():
     missing.hands.clear()
     assert trigger.observe(missing, 320_000) is None
     assert trigger._points == before
-    assert trigger.observe(missing, 880_000) is None
+    assert trigger.observe(missing, 2_880_000) is None
     assert not trigger.active
-    results = [trigger.observe(_pinch(*p), 960_000 + i * 80_000)
+    results = [trigger.observe(_pinch(*p), 2_960_000 + i * 80_000)
                for i, p in enumerate(_path(360, 14))]
     assert sum(result is not None for result in results) == 1
 
@@ -130,18 +130,18 @@ def test_failed_trace_recovers_from_six_closed_samples_without_reusing_old_strok
         assert trigger.observe(_pinch(*point), (i + 1) * 80_000) is None
     missing = _pinch(200, 100)
     missing.hands.clear()
-    assert trigger.observe(missing, 1_200_000) is None
+    assert trigger.observe(missing, 2_800_000) is None
     assert not trigger.active
     # The old implementation blocked these indefinitely after FAILED loss.
     for i, ratio in enumerate((.038, .16, .22, .301, .18, .27, .11, .2)):
         observation = _pinch(*path[0])
         observation.hands[0].landmarks[4].x = (path[0][0] - ratio * 20) / 400
         observation.hands[0].landmarks[8].x = (path[0][0] + ratio * 20) / 400
-        assert trigger.observe(observation, 1_280_000 + i * 80_000) is None
+        assert trigger.observe(observation, 2_880_000 + i * 80_000) is None
     assert trigger._grip.state is Grip.PINCHED
     assert trigger._points == [path[0]]
     # Only the new complete trajectory can recognize; none of the old arc survives.
-    results = [trigger.observe(_pinch(*point), 1_920_000 + i * 80_000)
+    results = [trigger.observe(_pinch(*point), 3_520_000 + i * 80_000)
                for i, point in enumerate(path)]
     assert sum(region is not None for region in results) == 1
 

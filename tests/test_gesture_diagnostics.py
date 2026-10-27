@@ -90,8 +90,9 @@ def test_real_selector_reasons_distinguish_missing_association_grip_and_geometry
     assert counts['no_hands_returned'] == 1
     assert counts['association_ambiguous'] == 1
     assert counts['associated'] >= 2 and counts['association_no_usable_nearby_hand'] == 1
-    assert counts['grip_to_pinched'] == counts['grip_to_open'] == 1
-    assert counts['fresh_attempt_after_loss'] == 1
+    assert counts['grip_to_pinched'] == 1
+    assert 'grip_to_open' not in counts
+    assert counts['circle_reset'] >= 1
     assert counts['circle_min_points'] >= 1 and counts['selector_dimensions_or_frame_gap'] == 1
 
 
@@ -187,7 +188,7 @@ def test_rearm_diagnostics_distinguish_loss_from_completed_turn(monkeypatch, cap
     lost = PinchCircleTrigger(CircleSettings(), diagnostics=diagnostics)
     lost.observe(_pinch(200, 100), 80_000)
     lost.observe(_pinch(200, 100), 160_000)
-    assert lost.observe(_pinch(200, 100), 800_000) is None
+    assert lost.observe(_pinch(200, 100), 2_800_000) is None
     completed = PinchCircleTrigger(CircleSettings(), diagnostics=diagnostics)
     for i, point in enumerate(_path(310, 14)):
         completed.observe(_pinch(*point), (i + 1) * 80_000)

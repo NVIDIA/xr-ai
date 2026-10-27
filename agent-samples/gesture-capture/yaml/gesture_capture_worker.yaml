@@ -54,6 +54,8 @@ circle:
   # Wait for mostly-clear hand overlap, stable for release_s, or capture anyway.
   clear_overlap: 0.2
   clear_timeout_s: 2.0
+  # Keep drawing armed through missing/ambiguous hands on fresh video frames.
+  occlusion_grace_s: 2.0
   max_backtrack: 0.15
   # Largest trajectory segment divided by radius; rejects sparsely observed arcs.
   max_segment_radius: 1.0

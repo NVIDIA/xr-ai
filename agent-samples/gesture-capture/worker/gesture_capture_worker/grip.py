@@ -22,13 +22,11 @@ class GripHysteresis:
         self._release_start: int | None = None
         self._closed_samples = 0
         self._last_closed: int | None = None
-        self._last_observation: int | None = None
         self._timestamp = -1
 
     def reset(self, *, require_open: bool = True) -> None:
         """A completed interaction requires open; failed acquisition may start fresh."""
         self.state = Grip.UNKNOWN if require_open else Grip.OPEN
-        self._last_observation = None
         self.unavailable()
 
     def entry_pending(self, timestamp_us: int) -> bool:
@@ -44,12 +42,9 @@ class GripHysteresis:
         if timestamp_us <= self._timestamp:
             return False
         self._timestamp = timestamp_us
-        if self._last_observation is not None and timestamp_us - self._last_observation > self._gap_us:
-            self.reset()
         if ratio is None:
             self.unavailable()
             return False
-        self._last_observation = timestamp_us
         if not self.entry_pending(timestamp_us):
             self._closed_samples = 0
         if ratio >= self._release:

@@ -462,7 +462,7 @@ def test_circle_brief_misses_keep_path_but_sustained_loss_cancels(hand_count):
     assert len(results) == 1
     timestamp = _release(selector, 260, 100, timestamp)
     timestamp = _trace(selector, path[:12], timestamp)
-    for _ in range(6):
+    for _ in range(22):
         timestamp += 100_000
         assert selector.observe(missing, timestamp) is None
     timestamp = _trace(selector, path[12:], timestamp)

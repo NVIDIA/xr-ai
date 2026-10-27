@@ -44,6 +44,10 @@ def test_fast_near_circle_survives_label_flicker_ghost_and_dropouts(degrees):
             timestamp += 80_000
             assert trigger.observe(HandTrackingResult(width=400, height=200, hands=[]), timestamp) is None
             timestamp += 80_000
+            # Reacquire at the actual paused position; unseen movement is not
+            # allowed to supply a circle arc. The anchor is not a sampled point.
+            assert trigger.observe(_pinch(*_path(degrees, 14)[i - 1]), timestamp) is None
+            timestamp += 80_000
         if i == 7:
             observation.hands += _pinch(20, 20).hands
         result = trigger.observe(observation, timestamp)
@@ -65,9 +69,9 @@ def test_sustained_outliers_do_not_extend_trace_grace():
     path = _path(360, 16)
     for i, p in enumerate(path[:8]):
         assert trigger.observe(_pinch(*p), (i + 1) * 80_000) is None
-    for i in range(8, 17):
+    for i in range(8, 37):
         assert trigger.observe(_pinch(0, 0), (i + 1) * 80_000) is None
-    for i, p in enumerate(path[8:], 18):
+    for i, p in enumerate(path[8:], 38):
         assert trigger.observe(_pinch(*p), (i + 1) * 80_000) is None
 
 

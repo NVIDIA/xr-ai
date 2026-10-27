@@ -13,8 +13,10 @@ and worker and reuses a separately running VLM service. A circle chimes when
 recognized; move the drawing hand clear and keep the camera steady. Capture uses
 a newer frame after stable clearance or a 2-second best-effort timeout. Box capture
 remains immediate. Both gestures stay in cooldown through response delivery.
-A circle lost before recognition can restart from a fresh pinch path; after
-recognition, open the pinch to rearm.
+Circle hand occlusions pause drawing for up to 2 seconds on fresh video; longer
+loss cancels the stroke while retaining grip for a fresh retry. Only stable open
+fingers release it; after recognition, open the pinch to rearm. Camera freshness
+remains 0.5 seconds, separately from the 2-second post-recognition clear wait.
 
 Refer to the [gesture-capture guide](https://nvidia.github.io/xr-ai/main/reference/gesture-capture.html)
 for model provisioning, licenses, browser requirements, alignment, and behavior.

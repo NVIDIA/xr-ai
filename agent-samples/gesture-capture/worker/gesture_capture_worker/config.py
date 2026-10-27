@@ -20,6 +20,7 @@ class CircleSettings(BaseModel):
     radial_tolerance: float = Field(default=0.35, gt=0, lt=1)
     closure_tolerance: float = Field(default=1.0, gt=0, lt=2)
     min_sweep_deg: float = Field(default=300, ge=300, le=360)
+    occlusion_grace_s: float = Field(default=2.0, gt=0)
     clear_timeout_s: float = Field(default=2.0, gt=0)
     clear_overlap: float = Field(default=0.2, ge=0, lt=1)
     max_backtrack: float = Field(default=0.15, ge=0, lt=1)
