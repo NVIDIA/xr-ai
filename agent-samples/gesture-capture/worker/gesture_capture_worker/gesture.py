@@ -117,6 +117,10 @@ class CameraBoxTrigger:
         self._last_timestamp = -1
         self._last_positive = -1
 
+    @property
+    def in_progress(self) -> bool:
+        return self._candidate is not None and not self._latched
+
     def observe(self, region: ImageRegion | None, timestamp_us: int) -> ImageRegion | None:
         if timestamp_us <= self._last_timestamp:
             return None
@@ -173,6 +177,10 @@ class RegionSelector:
         self._circle = PinchCircleTrigger(settings.circle, release_s=settings.release_s, max_gap_s=settings.max_gap_s)
         self._timestamp = -1
         self._dimensions: tuple[int, int] | None = None
+
+    @property
+    def in_progress(self) -> bool:
+        return self._circle.drawing or self._box.in_progress
 
     def observe(self, observation: HandTrackingResult, timestamp_us: int) -> ImageRegion | None:
         if timestamp_us <= self._timestamp:

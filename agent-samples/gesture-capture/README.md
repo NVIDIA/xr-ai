@@ -5,8 +5,8 @@
 
 # Gesture capture
 
-Hold a box with both hands' index fingers and thumbs, or pinch and draw a circle
-then release, to ask the VLM about that section of the camera view. Both gestures
+Hold a box with both hands' index fingers and thumbs, or pinch and draw a closed
+circle, to ask the VLM about that section of the camera view. Both gestures
 query a crop of the selected streamed frame by default. Optional aligned-photo
 mode requests a separate higher-resolution photograph. This sample starts a hub
 and worker and reuses a separately running VLM service.
@@ -75,7 +75,9 @@ uv run main.py
 ```
 
 Open the hub's authenticated web URL, select **Live** camera mode, and form
-the gesture. The client displays the text reply on `gesture.response`.
+the gesture. A quiet progress hum becomes a chime at recognition; permit browser
+audio playback to hear it. The client displays the text reply on `gesture.response`.
+Wait for the answer, then relax the box pose or open the pinch to rearm.
 
 To enable higher-resolution stills, verify matching photo and video framing,
 then set `aligned_photo: true` in `yaml/gesture_capture_worker.yaml`. That mode

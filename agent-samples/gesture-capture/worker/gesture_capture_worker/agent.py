@@ -12,6 +12,7 @@ from xr_ai_tools.still_capture import StillCaptureRequest, StillCaptureTool
 from xr_ai_tools.vision import ImageQueryRequest, ImageQueryTool
 
 from .config import Settings
+from .feedback import GestureFeedback
 from .gesture import RegionSelector
 
 
@@ -21,7 +22,7 @@ class GestureCaptureAgent:
     def __init__(
         self, *, frames: CurrentFrameTool, hands: HandTrackingTool,
         capture: StillCaptureTool, crop: ImageCropTool, query: ImageQueryTool,
-        selector: RegionSelector, settings: Settings,
+        selector: RegionSelector, settings: Settings, feedback: GestureFeedback | None = None,
     ) -> None:
         self._frames = frames
         self._hands = hands
@@ -31,8 +32,12 @@ class GestureCaptureAgent:
         self._selector = selector
         self._settings = settings
         self._last_frame = None
+        self._feedback = feedback
+        self._turn_active = False
 
     async def step(self, participant_id: str) -> str | None:
+        if self._turn_active:
+            return None
         frame = await self._frames.execute(CurrentFrameRequest(participant_id=participant_id, allow_capture=False))
         identity = (frame.track_id, frame.sequence, frame.timestamp_us)
         if identity == self._last_frame:
@@ -43,7 +48,12 @@ class GestureCaptureAgent:
         hands = await self._hands.execute(HandTrackingRequest(image=frame.image))
         region = self._selector.observe(hands, frame.timestamp_us)
         if region is None:
+            if self._feedback:
+                await self._feedback.update(self._selector.in_progress)
             return None
+        self._turn_active = True
+        if self._feedback:
+            await self._feedback.recognized()
         source = frame
         if self._settings.aligned_photo:
             source = await self._capture.execute(StillCaptureRequest(participant_id=participant_id))
@@ -55,3 +65,7 @@ class GestureCaptureAgent:
 
     def unavailable(self) -> None:
         self._selector.unavailable()
+
+    async def finish_turn(self) -> None:
+        """Release cooldown after result delivery or failure, preserving gesture rearm."""
+        self._turn_active = False

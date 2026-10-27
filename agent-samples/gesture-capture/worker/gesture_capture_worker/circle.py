@@ -46,7 +46,7 @@ def _circle_region(points: list[tuple[float, float]], width: int, height: int,
 
 
 class PinchCircleTrigger:
-    """Trace while pinched; submit a closed circular trace on observed release."""
+    """Recognize a closed pinched trace once; require stable release to rearm."""
 
     def __init__(self, settings: CircleSettings, *, release_s: float = 0.4, max_gap_s: float = 0.5) -> None:
         self._settings = settings
@@ -55,6 +55,7 @@ class PinchCircleTrigger:
         self._release_start: int | None = None
         self._last_seen: int | None = None
         self._timestamp = -1
+        self._short_side = 0
         self._points: list[tuple[float, float]] = []
         self._handedness: str | None = None
         self._ready = True
@@ -62,6 +63,13 @@ class PinchCircleTrigger:
     @property
     def active(self) -> bool:
         return bool(self._points)
+
+    @property
+    def drawing(self) -> bool:
+        if len(self._points) < 2:
+            return False
+        xs, ys = zip(*self._points, strict=True)
+        return max(max(xs) - min(xs), max(ys) - min(ys)) >= self._settings.min_diameter * self._short_side
 
     def unavailable(self) -> None:
         self._release_start = None
@@ -84,6 +92,7 @@ class PinchCircleTrigger:
             return None
         hand = observation.hands[0]
         width, height = observation.width, observation.height
+        self._short_side = min(width, height)
         points = [(p.x * width, p.y * height) for p in hand.landmarks]
         palm = math.dist(points[5], points[17])
         if palm == 0:
@@ -104,11 +113,10 @@ class PinchCircleTrigger:
                 self._release_start = timestamp_us
             if timestamp_us - self._release_start < self._release_us:
                 return None
-            trace = self._points
             self._points = []
             self._handedness = None
             self._ready = True
-            return _circle_region(trace, width, height, self._settings)
+            return None
         self._release_start = None
         if not self._ready:
             return None
@@ -121,4 +129,8 @@ class PinchCircleTrigger:
             return None
         self._handedness = hand.handedness
         self._points.append(pointer)
-        return None
+        region = _circle_region(self._points, width, height, self._settings)
+        if region is not None:
+            self._points = []
+            self._ready = False
+        return region

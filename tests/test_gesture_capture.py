@@ -193,6 +193,7 @@ async def test_sample_composes_tools_with_selected_video_or_aligned_photo(gestur
             answer = await agent.step("alice")
             if answer is not None:
                 answers.append(answer)
+                await agent.finish_turn()
         return answers
 
     if aligned_photo and photo_size == (4000, 3000):
@@ -324,6 +325,8 @@ async def test_worker_roster_is_idempotent_and_departure_drains_polling(monkeypa
     class Agent:
         def __init__(self, **kwargs):
             constructed.append(self)
+        async def finish_turn(self):
+            pass
         async def step(self, participant_id):
             polling.set()
             try:
@@ -380,47 +383,47 @@ def _circle_points(*, reverse=False, turns=1):
              100 + 60 * math.sin(direction * i * math.tau / 24)) for i in range(24 * turns + 1)]
 
 
-def _trace(trigger, path, timestamp=0):
+def _trace(trigger, path, timestamp=0, *, completed=None):
     for x, y in path:
         timestamp += 100_000
-        assert trigger.observe(_pinch(x, y), timestamp) is None
+        region = trigger.observe(_pinch(x, y), timestamp)
+        if completed is None:
+            assert region is None
+        elif region is not None:
+            completed.append(region)
     return timestamp
 
 
 def _release(trigger, x, y, timestamp):
-    results = []
     for _ in range(5):
         timestamp += 100_000
-        region = trigger.observe(_pinch(x, y, released=True), timestamp)
-        if region is not None:
-            results.append(region)
-    return timestamp, results
+        assert trigger.observe(_pinch(x, y, released=True), timestamp) is None
+    return timestamp
 
 
 @pytest.mark.parametrize("reverse", [False, True])
-def test_circle_submits_on_stable_release_and_repeats_after_new_pinch(reverse):
+def test_circle_completes_while_pinched_once_and_stable_release_rearms(reverse):
     trigger = PinchCircleTrigger(CircleSettings())
     timestamp = 0
     for _ in range(2):
-        timestamp = _trace(trigger, _circle_points(reverse=reverse), timestamp)
-        timestamp, results = _release(trigger, 260, 100, timestamp)
+        results = []
+        timestamp = _trace(trigger, _circle_points(reverse=reverse, turns=2), timestamp, completed=results)
         assert results == [ImageRegion(left=0.35, top=0.2, right=0.65, bottom=0.8)]
+        timestamp = _release(trigger, 260, 100, timestamp)
 
 
 @pytest.mark.parametrize("path", [
     [(200, 100)] * 30,
     _circle_points()[:18],
-    _circle_points(turns=2),
     [(180 + i * 3, 100) for i in range(25)],
     [(200 + 60 * math.cos(i * math.tau / 24), 100 + 15 * math.sin(i * math.tau / 24)) for i in range(25)],
     [point for _ in range(4) for point in [(140, 40), (260, 40), (260, 160), (140, 160)]],
-    [*_circle_points(), *_circle_points(reverse=True)],
+    [*_circle_points()[:18], *_circle_points()[17:8:-1], *_circle_points()[9:]],
 ])
 def test_invalid_traces_never_submit(path):
     trigger = PinchCircleTrigger(CircleSettings())
     timestamp = _trace(trigger, path)
-    _, results = _release(trigger, *path[-1], timestamp)
-    assert results == []
+    _release(trigger, *path[-1], timestamp)
 
 
 @pytest.mark.parametrize("interruption", ["handedness", "jump", "gap", "dimensions"])
@@ -440,10 +443,9 @@ def test_circle_source_interruptions_cancel_until_observed_release(interruption)
         observation.width = 800
     assert selector.observe(observation, timestamp) is None
     timestamp = _trace(selector, _circle_points(), timestamp)
-    timestamp, results = _release(selector, 260, 100, timestamp)
-    assert results == []
-    timestamp = _trace(selector, _circle_points(), timestamp)
-    _, results = _release(selector, 260, 100, timestamp)
+    timestamp = _release(selector, 260, 100, timestamp)
+    results = []
+    _trace(selector, _circle_points(), timestamp, completed=results)
     assert len(results) == 1
 
 
@@ -455,46 +457,57 @@ def test_circle_brief_misses_keep_path_but_sustained_loss_cancels(hand_count):
     missing = _pinch(*path[11])
     missing.hands = [] if hand_count == 0 else missing.hands * 2
     assert selector.observe(missing, timestamp + 100_000) is None
-    timestamp = _trace(selector, path[12:], timestamp + 100_000)
-    timestamp, results = _release(selector, 260, 100, timestamp)
+    results = []
+    timestamp = _trace(selector, path[12:], timestamp + 100_000, completed=results)
     assert len(results) == 1
+    timestamp = _release(selector, 260, 100, timestamp)
     timestamp = _trace(selector, path[:12], timestamp)
     for _ in range(6):
         timestamp += 100_000
         assert selector.observe(missing, timestamp) is None
     timestamp = _trace(selector, path[12:], timestamp)
-    _, results = _release(selector, 260, 100, timestamp)
-    assert results == []
+    _release(selector, 260, 100, timestamp)
 
 
-def test_circle_release_hysteresis_ignores_single_frame_open_and_threshold_noise():
+def test_circle_rearm_hysteresis_ignores_single_frame_open_and_threshold_noise():
     trigger = PinchCircleTrigger(CircleSettings())
-    timestamp = _trace(trigger, _circle_points())
+    results = []
+    timestamp = _trace(trigger, _circle_points(), completed=results)
+    assert len(results) == 1
     assert trigger.observe(_pinch(260, 100, released=True), timestamp + 100_000) is None
     assert trigger.observe(_pinch(260, 100), timestamp + 200_000) is None
     intermediate = _pinch(260, 100)
     intermediate.hands[0].landmarks[4].x -= 0.01
-    intermediate.hands[0].landmarks[8].x += 0.01  # 0.3 palm widths: between enter and exit.
+    intermediate.hands[0].landmarks[8].x += 0.01
     assert trigger.observe(intermediate, timestamp + 300_000) is None
-    timestamp, results = _release(trigger, 260, 100, timestamp + 300_000)
+    timestamp = _trace(trigger, _circle_points(), timestamp + 300_000)
+    timestamp = _release(trigger, 260, 100, timestamp)
+    results = []
+    _trace(trigger, _circle_points(), timestamp, completed=results)
     assert len(results) == 1
-    _, results = _release(trigger, 260, 100, timestamp)
-    assert results == []
 
 
 def test_circle_sample_limit_cancels_without_truncating_start():
     trigger = PinchCircleTrigger(CircleSettings(max_points=16))
     timestamp = _trace(trigger, _circle_points())
-    _, results = _release(trigger, 260, 100, timestamp)
-    assert results == []
+    _release(trigger, 260, 100, timestamp)
 
 
 def test_circle_duplicate_frames_do_not_complete_a_trace():
     selector = RegionSelector(_settings())
     for x, y in _circle_points():
         assert selector.observe(_pinch(x, y), 100_000) is None
-    _, results = _release(selector, x, y, 100_000)
-    assert results == []
+    _release(selector, x, y, 100_000)
+
+
+def test_stationary_pinch_stays_quiet_until_drawing_progresses():
+    selector = RegionSelector(_settings())
+    timestamp = _trace(selector, [(200, 100)] * 20)
+    assert not selector.in_progress
+    assert selector.observe(_pinch(201, 100), timestamp + 100_000) is None
+    assert not selector.in_progress
+    assert selector.observe(_pinch(230, 100), timestamp + 200_000) is None
+    assert selector.in_progress
 
 
 def test_box_candidate_and_latch_survive_brief_missing_or_noisy_geometry():
@@ -528,16 +541,19 @@ def test_box_reacquisition_requires_consistent_region_and_bounded_loss():
     assert trigger.observe(moved, 1_500_000) is None
 
 
-def test_unknown_frame_interrupts_circle_release_confirmation():
+def test_unknown_frame_interrupts_circle_rearm_confirmation():
     selector = RegionSelector(_settings())
-    timestamp = _trace(selector, _circle_points())
+    timestamp = _trace(selector, _circle_points(), completed=[])
     assert selector.observe(_pinch(260, 100, released=True), timestamp + 100_000) is None
     missing = HandTrackingResult(width=400, height=200, hands=[])
     assert selector.observe(missing, timestamp + 200_000) is None
     assert selector.observe(_pinch(260, 100, released=True), timestamp + 300_000) is None
     assert selector.observe(_pinch(260, 100, released=True), timestamp + 500_000) is None
-    assert selector.observe(_pinch(260, 100, released=True), timestamp + 700_000) is not None
-    assert selector.observe(_pinch(260, 100, released=True), timestamp + 800_000) is None
+    timestamp = _trace(selector, _circle_points(), timestamp + 500_000)
+    timestamp = _release(selector, 260, 100, timestamp)
+    results = []
+    _trace(selector, _circle_points(), timestamp, completed=results)
+    assert len(results) == 1
 
 
 def test_active_circle_does_not_acquire_box_from_brief_hand_transition():
@@ -547,8 +563,8 @@ def test_active_circle_does_not_acquire_box_from_brief_hand_transition():
     for _ in range(3):
         timestamp += 100_000
         assert selector.observe(_box(), timestamp) is None
-    timestamp = _trace(selector, path[12:], timestamp)
-    _, results = _release(selector, 260, 100, timestamp)
+    results = []
+    _trace(selector, path[12:], timestamp, completed=results)
     assert len(results) == 1
 
 

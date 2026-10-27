@@ -7,6 +7,8 @@ model_path: ../models/hand_landmarker.task
 models: models.json
 # Demonstration settings, requiring tuning on the target camera.
 poll_interval_s: 0.15
+# Gentle progress hum and recognition chime through the participant audio track.
+gesture_audio: true
 hold_s: 0.6
 release_s: 0.4
 # Break hold/release continuity if new observations are separated by this gap.
@@ -27,7 +29,7 @@ finger_clearance_ratio: 0.5
 aligned_photo: false
 query: "Describe the selected region and explain what is notable about it."
 
-# Pinch with one hand, trace a circle, and release to submit its bounding rectangle.
+# Pinch and draw a closed circle to query immediately; stable unpinch rearms.
 # All values below are demonstration settings needing target-camera tuning.
 circle:
   # Thumb/index distance divided by index-to-pinky MCP palm width.

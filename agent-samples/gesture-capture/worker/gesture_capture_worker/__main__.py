@@ -25,6 +25,7 @@ from xr_ai_tools.vision import ImageQueryTool
 
 from .agent import GestureCaptureAgent
 from .config import Settings, load_settings
+from .feedback import GestureFeedback
 from .gesture import RegionSelector
 
 _LOG = logging.getLogger(__name__)
@@ -55,9 +56,11 @@ async def _run(settings: Settings, ready_file: Path | None) -> None:
         stopped = asyncio.Event()
 
         async def poll(participant_id: str) -> None:
+            feedback = GestureFeedback(endpoint, participant_id, enabled=settings.gesture_audio,
+                                       max_gap_s=settings.max_gap_s)
             agent = GestureCaptureAgent(
                 frames=frames, hands=hands, capture=capture, crop=crop, query=query,
-                selector=RegionSelector(settings),
+                selector=RegionSelector(settings), feedback=feedback,
                 settings=settings,
             )
             try:
@@ -71,15 +74,19 @@ async def _run(settings: Settings, ready_file: Path | None) -> None:
                             ))
                     except FrameUnavailable:
                         agent.unavailable()
+                        await feedback.stop()
                     except Exception:  # noqa: BLE001 — per-participant application boundary
                         # A failed observation/action must not kill other participants
                         # or rearm a held gesture. The user releases before retrying.
                         agent.unavailable()
+                        await feedback.stop()
                         _LOG.exception("Gesture capture failed for %s", participant_id)
                     finally:
+                        await agent.finish_turn()
                         images.release_owner(participant_id)
                     await asyncio.sleep(settings.poll_interval_s)
             finally:
+                await feedback.close()
                 frames.release(participant_id)
 
         async def participant(event: ParticipantEvent) -> None:
@@ -122,7 +129,7 @@ async def _run(settings: Settings, ready_file: Path | None) -> None:
 
 
 def run() -> None:
-    parser = argparse.ArgumentParser(description="Box or pinch-circle gesture → still photo → region VLM query.")
+    parser = argparse.ArgumentParser(description="Box or pinch-circle gesture → selected image → region VLM query.")
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--ready-file", type=Path)
     args = parser.parse_args()

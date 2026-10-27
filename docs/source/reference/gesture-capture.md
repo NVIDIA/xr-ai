@@ -60,21 +60,23 @@ inward clearance is estimated from its distal joint-to-tip length using
 this is an approximation requiring camera-specific tuning, not segmentation.
 The crop is the largest centered axis-aligned rectangle inside all four inferred
 inward finger boundaries. For a rotated frame it excludes the outer bounding
-rectangle's corner regions rather than accidentally including the fingers. Relax both hands' pose while they
-are visible to rearm it. Missing hands alone do not count as an intentional
+rectangle's corner regions rather than accidentally including the fingers. Relax
+both hands' pose while they are visible to rearm it. Missing hands alone do not count as an intentional
 release of a held box.
 
 For the circle gesture, pinch thumb and index finger with one hand visible,
-move the pinch point around the desired section in a closed circle, and hold
-the pinch open briefly to submit. Either drawing direction works. The sample
+move the pinch point around the desired section in a closed circle. Recognition
+and the query happen as soon as the loop is valid, while still pinched. Either
+drawing direction works. Open the pinch steadily afterward to rearm. The sample
 uses the trace's bounding rectangle, rather than masking the exact circle.
 It rejects tiny loops, open arcs, elongated shapes, large radial deviations,
-sparse motion, multiple revolutions, and excessive backtracking. Keep the target
+sparse motion and excessive backtracking before completion. Further revolutions
+while the same pinch remains held cannot trigger another query. Keep the target
 and camera steady until the photograph finishes.
 
 Pinch entry and exit have different palm-scaled distance thresholds. The
-`release_s` setting debounces release for both gestures. A one-frame open pinch
-cannot submit a trace. Brief absent or ambiguous detections preserve the box
+`release_s` setting debounces rearm for both gestures. A one-frame open pinch
+cannot rearm a completed trace. Brief absent or ambiguous detections preserve the box
 candidate or circle path up to `max_gap_s`; they add no trajectory points and
 break release confirmation. Longer loss cancels acquisition. A cancelled circle
 requires an observed open pinch before another trace can begin. Duplicate frames
@@ -86,6 +88,27 @@ implausible pointer jumps cancel the trace. IMAGE-mode handedness is a classifie
 label, not a stable hand identity, so switching between nearby hands with the
 same label cannot always be detected. Changed camera tracks or dimensions reset
 source continuity. These heuristics require target-camera qualification.
+
+## Audio feedback and cooldown
+
+With `gesture_audio: true`, each participant hears a quiet hum while a valid
+box hold is being acquired or a pinched circle is actively being drawn. A
+stationary pinch stays quiet until its traced span shows movement. A single
+wake-word-style perfect-fifth chime marks recognition: completed stable box hold,
+or the first valid closed circle. The hum stops before the chime.
+
+The sample sends paced float32 PCM through the existing hub return-audio path;
+it does not start a voice or TTS stack. Browser audio playback must be permitted.
+Cues stop on cancellation, observation errors, expired progress, disconnect,
+and shutdown. The helper queues short chunks and drains its sends; it does not
+flush the participant's shared audio queue or interrupt other producers. A short
+tail already in the hub or client buffer can still finish playing.
+
+A participant stays in cooldown from recognition through VLM response delivery
+or failure cleanup. Frames received during that turn cannot trigger another
+query or chime. After the turn ends, the box still needs a visible relaxed pose
+and the circle needs a stable open pinch before another deliberate gesture.
+Set `gesture_audio: false` for silent operation.
 
 ## Provision the hand model
 
@@ -160,7 +183,7 @@ service; refer to {doc}`/guides/customizing-model-servers`.
 
 The worker YAML owns observation cadence, hold/release durations, the maximum
 observation gap, movement and geometric tolerances, alignment acknowledgement,
-the general VLM question, and the circle drawing settings. These are demonstration settings, not measured accuracy
+the general VLM question, cue enablement, finger clearance, and circle settings. These are demonstration settings, not measured accuracy
 claims. The box returns an axis-aligned rectangle inside the estimated finger-frame
 interior; the circle returns the bounding rectangle of its observed path.
 
