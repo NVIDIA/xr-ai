@@ -756,12 +756,11 @@ cleanup.
   retained for the NGC 26.10 preview pending GPU qualification; those kernel
   properties and latency results have not been reverified on the preview.
   Other GPUs, custom images, and pip mode retain vLLM's backend selection.
-  The optional
-  `attention_backend` and
-  `mm_encoder_attn_backend` YAML keys override each component independently;
-  explicit `auto` restores vLLM's selection. Cold starts still include model
-  loading and backend compilation. A healthy model HTTP endpoint is not a
-  guarantee that sample inference warmup has completed.
+  The optional `attention_backend` and `mm_encoder_attn_backend` YAML keys
+  override each component independently; explicit `auto` restores vLLM's
+  selection. Cold starts still include model loading and backend compilation.
+  A healthy model HTTP endpoint is not a guarantee that sample inference
+  warmup has completed.
 - **nemotron3-nano-llm** is a thin wrapper around `vllm serve` for
   `NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8}` (auto-selected by GPU compute
   capability). vLLM handles tool calling (`qwen3_coder` parser), reasoning

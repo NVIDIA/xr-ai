@@ -98,6 +98,25 @@ The vLLM 0.31.0 security refresh resolves the following versions. The linked
 license texts were copied without modification from SHA-256-verified upstream
 artifacts; each directory records the artifact URL and hashes.
 
+Relative to the previous security refresh, this resolution downgrades
+`huggingface-hub` from 2.2.0 to 1.33.0, `transformers` from 5.20.2 to 5.17.0,
+and `xgrammar` from 0.2.8 to 0.2.7. These downgrades follow
+[vLLM 0.31.0's requirements][vllm-031-requirements]: Transformers must be below
+5.18.0 and XGrammar must be exactly 0.2.7. The resolved
+[Transformers 5.17.0 metadata][transformers-517-metadata] requires Hugging Face
+Hub below 2.0. vLLM also replaces its `openai-harmony` dependency (previously
+resolved to 0.0.8) with `oss-harmony>=0.0.11` (resolved to 0.0.11), whose
+Apache-2.0 license and artifact provenance are linked below.
+
+Exact-version queries to the [OSV API][osv-query-api] on 2026-10-26 found no
+known advisories for these three downgraded versions or `oss-harmony` 0.0.11;
+none reopens a known advisory according to that check. This is an advisory
+database result, not a substitute for the pending source and container scans.
+
+[vllm-031-requirements]: https://github.com/vllm-project/vllm/blob/v0.31.0/requirements/common.txt
+[transformers-517-metadata]: https://pypi.org/pypi/transformers/5.17.0/json
+[osv-query-api]: https://google.github.io/osv.dev/api/#operation/OSV_QueryBatch
+
 | Component | Resolved version | License and notices |
 |---|---|---|
 | `oss-harmony` | 0.0.11 | Apache-2.0; [upstream license](third_party_licenses/oss-harmony-0.0.11/) |
@@ -115,9 +134,10 @@ proprietary software downloaded by users, rather than part of XR AI's source
 release. Its `libs-base`, `libs-core`, `libs-cu12`, and `libs-cu13` dependencies
 also resolve to 4.7.1; their upstream package metadata identifies the NVIDIA
 proprietary license. The BSD license of CUTLASS C++ does not replace the DSL
-EULA. The vLLM environments preserve protobuf 7.36.2 outside s390x; vLLM
-0.31.0 requires 7.36.1 on s390x. The lock also retains protobuf 6.33.5 for
-a separate dependency branch.
+EULA. The vLLM environments preserve protobuf 7.36.2 outside s390x.
+[vLLM 0.31.0's requirements][vllm-031-requirements] pin protobuf to 7.36.1
+only when `platform_machine == "s390x"`. The lock also retains protobuf
+6.33.5 for a separate dependency branch.
 
 ### Speaker enrollment runtime and models
 
