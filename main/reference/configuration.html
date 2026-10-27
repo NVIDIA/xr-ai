@@ -1189,8 +1189,8 @@ workflow.</p></li>
 <span class="nt">embedding</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.08</span>
 <span class="w">  </span><span class="nt">spark_uma</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-<span class="w">  </span><span class="c1"># Avoid FlashAttention kernels incompatible with GB10 SM121 on driver 580</span>
-<span class="w">  </span><span class="c1"># in the qualified vLLM 26.09 image. Other GPU profiles retain auto-selection.</span>
+<span class="w">  </span><span class="c1"># NGC 26.09 had incompatible FlashAttention kernels on GB10 SM121/driver 580.</span>
+<span class="w">  </span><span class="c1"># Retain Triton pending NGC 26.10 preview qualification on this profile.</span>
 <span class="w">  </span><span class="nt">attention_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">TRITON_ATTN</span>
 </pre></div>
 </div>
@@ -2006,7 +2006,7 @@ workflow.</p></li>
 
 <span class="c1"># Container image used when vllm_backend: docker.  Override to pin a different</span>
 <span class="c1"># tag, an internal mirror, or a custom build.</span>
-<span class="nt">vllm_image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nvidia/vllm:26.09-py3</span>
+<span class="nt">vllm_image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nvidia/vllm:26.10.pre1-py3</span>
 </pre></div>
 </div>
 </section>
@@ -2105,7 +2105,7 @@ workflow.</p></li>
 
 <span class="c1"># Container image used when vllm_backend: docker.  Override to pin a different</span>
 <span class="c1"># tag, an internal mirror, or a custom build.</span>
-<span class="nt">vllm_image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nvidia/vllm:26.09-py3</span>
+<span class="nt">vllm_image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nvidia/vllm:26.10.pre1-py3</span>
 
 <span class="c1"># DGX Spark is detected automatically to select the documented four-sequence</span>
 <span class="c1"># limit and unified-memory cold-start safeguards. Set spark_uma to override.</span>
@@ -2185,7 +2185,7 @@ workflow.</p></li>
 
 <span class="c1"># Container image used when vllm_backend: docker.  Override to pin a different</span>
 <span class="c1"># tag, an internal mirror, or a custom build.</span>
-<span class="nt">vllm_image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nvidia/vllm:26.09-py3</span>
+<span class="nt">vllm_image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nvidia/vllm:26.10.pre1-py3</span>
 
 <span class="c1"># DGX Spark is detected automatically to cap max_num_seqs at 4 and enable the</span>
 <span class="c1"># unified-memory cold-start safeguards. Set spark_uma explicitly to override.</span>
@@ -2335,7 +2335,7 @@ workflow.</p></li>
 
 <span class="c1"># Container image used when vllm_backend: docker.  Override to pin a different</span>
 <span class="c1"># tag, an internal mirror, or a custom build.</span>
-<span class="nt">vllm_image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nvidia/vllm:26.09-py3</span>
+<span class="nt">vllm_image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nvidia/vllm:26.10.pre1-py3</span>
 </pre></div>
 </div>
 </section>

@@ -36,10 +36,17 @@ NVDEC.
 | OS | Linux | Ubuntu 22.04 or 24.04 recommended; WSL2 is not officially supported (refer to [Windows (WSL2)](#windows-wsl2) below) |
 | Python | 3.11 through 3.14 | the non-GPU test suite covers this range; CloudXR runtime, OpenXR service, and Magpie TTS stop at 3.13, and each project's `requires-python` declaration is authoritative |
 | [uv](https://docs.astral.sh/uv/) | latest | dependency manager used by all samples |
-| NVIDIA driver | 580+ | required for CUDA 13 model containers and DeviceIOHub hardware codecs |
+| NVIDIA driver | 580+ | CUDA 13.x minor-version compatibility floor, including 13.4; PTX and newer CUDA features can require a newer driver (refer to the qualification note below); also required for DeviceIOHub hardware codecs |
 | Docker | 24+ | required by the checked-in model-server profiles, which use vLLM containers from NGC and Docker Hub |
 | NVIDIA Container Toolkit | latest | required, with the `nvidia` runtime registered in Docker; refer to {ref}`docker-host-setup` |
 | Node.js | 20.19.0+ with npm | required for xr-render-demo's default WebRTC profile: the orchestrator builds the web vendor bundle on first run |
+
+NVIDIA documents driver 580 as the [CUDA 13.x minor-version compatibility
+floor](https://docs.nvidia.com/deploy/cuda-compatibility/minor-version-compatibility.html),
+with limits for PTX compilation and newer CUDA features. This floor does not
+establish that the NGC 26.10 preview works on driver 580 for every model or
+GPU. Qualify the CUDA 13.4 image on the deployment driver; upgrade the driver
+if its PTX or feature requirements exceed minor-version compatibility.
 
 `uv` handles all Python dependencies per-sample — no global `pip install` or
 virtual-environment setup needed. If you do not have it:

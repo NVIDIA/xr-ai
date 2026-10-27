@@ -479,6 +479,22 @@ below. Refer to <a class="reference internal" href="migration-history.html"><spa
 before updating the checkout. Start the updated services before restarting
 workers; launchers can reuse a running service whose identity matches even when
 its application code predates the update.</p>
+<section id="vllm-0-31-security-update">
+<h3>vLLM 0.31 security update<a class="headerlink" href="#vllm-0-31-security-update" title="Link to this heading">#</a></h3>
+<p>The four vLLM service environments pin <code class="docutils literal notranslate"><span class="pre">vllm==0.31.0</span></code>. Their standalone YAMLs
+and the shared Docker default now use <code class="docutils literal notranslate"><span class="pre">nvcr.io/nvidia/vllm:26.10.pre1-py3</span></code> in
+place of <code class="docutils literal notranslate"><span class="pre">nvcr.io/nvidia/vllm:26.09-py3</span></code>. The NGC preview supports Linux
+x86_64 and aarch64 with CUDA 13.4 and NVIDIA vLLM <code class="docutils literal notranslate"><span class="pre">0.31.0+88641915</span></code>. Qualify
+this preview on the target GPU and model workload before deployment.
+Refresh pip environments with
+<code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">--config-file</span> <span class="pre">uv.toml</span> <span class="pre">sync</span> <span class="pre">--project</span> <span class="pre">&lt;service-directory&gt;</span></code>.</p>
+<p>Per-request <code class="docutils literal notranslate"><span class="pre">mm_processor_kwargs</span></code> and <code class="docutils literal notranslate"><span class="pre">media_io_kwargs</span></code> overrides are rejected
+by default. Move trusted processor settings into server configuration; do not
+enable <code class="docutils literal notranslate"><span class="pre">--trust-request-mm-kwargs</span></code> for untrusted clients. Custom image overrides
+must include the fixes for CVE-2026-114050 and CVE-2026-114055 independently of
+the host Python environment. Refer to <a class="reference internal" href="../components/ai-services.html"><span class="doc">AI inference servers</span></a> for runtime
+selection and container replacement.</p>
+</section>
 <section id="interaction-messages-move-to-xr-ai-interaction">
 <h3>Interaction messages move to xr-ai-interaction<a class="headerlink" href="#interaction-messages-move-to-xr-ai-interaction" title="Link to this heading">#</a></h3>
 <p>Code that imports <code class="docutils literal notranslate"><span class="pre">UserQuery</span></code>, <code class="docutils literal notranslate"><span class="pre">VoiceOutput</span></code>, <code class="docutils literal notranslate"><span class="pre">VoiceParticipantJoined</span></code>,
@@ -956,6 +972,7 @@ and <a class="reference internal" href="agent-sdk-conversation.html"><span class
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#changes-since-v0-3-0-beta">Changes since v0.3.0-beta</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#vllm-0-31-security-update">vLLM 0.31 security update</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#interaction-messages-move-to-xr-ai-interaction">Interaction messages move to xr-ai-interaction</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#coding-agent-setup-skill-rename">Coding-agent setup skill rename</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#dependency-refresh-and-native-tool-callback-exceptions">Dependency refresh and native tool callback exceptions</a></li>

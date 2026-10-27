@@ -1135,27 +1135,37 @@ flags. Docker-only lifecycle settings such as <code class="docutils literal notr
 <code class="docutils literal notranslate"><span class="pre">utils/xr-ai-vllm/</span></code>. Switching is one YAML edit:</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># vlm-server (Cosmos3)</span>
 <span class="nt">vllm_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docker</span>
-<span class="nt">vllm_image</span><span class="p">:</span><span class="w">   </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nvidia/vllm:26.09-py3</span>
+<span class="nt">vllm_image</span><span class="p">:</span><span class="w">   </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nvidia/vllm:26.10.pre1-py3</span>
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">vllm_image:</span></code> defaults to <code class="docutils literal notranslate"><span class="pre">nvcr.io/nvidia/vllm:26.09-py3</span></code> for all wrappers.
-This image includes NVIDIA-patched vLLM 0.29.0. The checked-in Cosmos3 and
-Nemotron model configurations select this image. Nemotron Omni uses its native Mamba and
-causal-convolution implementations, so the shipped configuration does not
-compile or install <code class="docutils literal notranslate"><span class="pre">mamba-ssm</span></code> or <code class="docutils literal notranslate"><span class="pre">causal-conv1d</span></code>. Override the image to pin
-another tag, an internal mirror, or a custom build.</p>
+<p><code class="docutils literal notranslate"><span class="pre">vllm_image:</span></code> defaults to <code class="docutils literal notranslate"><span class="pre">nvcr.io/nvidia/vllm:26.10.pre1-py3</span></code> for all wrappers.
+The Python environments also pin vLLM 0.31.0. vLLM 0.31.0 is the upstream fixed
+release for CVE-2026-114050 and CVE-2026-114055. Keep per-request multimodal
+processor overrides disabled; server-level processor configuration remains
+available.</p>
+<p>This NVIDIA NGC preview uses CUDA 13.4 and reports vLLM
+<code class="docutils literal notranslate"><span class="pre">0.31.0+88641915</span></code> on Linux x86_64 and aarch64. The checked-in Cosmos3 and
+Nemotron model configurations select this image. Qualify the preview on the
+target GPU and model workload before deploying it. Nemotron Omni uses its
+native Mamba and causal-convolution implementations, so the shipped
+configuration does not compile or install <code class="docutils literal notranslate"><span class="pre">mamba-ssm</span></code> or <code class="docutils literal notranslate"><span class="pre">causal-conv1d</span></code>.
+Override the image to pin another tag, an internal mirror, or a custom build.</p>
+<p>The preview tag is mutable. The observed multi-architecture manifest digest is
+<code class="docutils literal notranslate"><span class="pre">sha256:cb38bbefdbc3e9fe045f931dd72cbd58cd48985c7e09916bcc6c15c10f39b929</span></code>.
+For reproducible deployments, append <code class="docutils literal notranslate"><span class="pre">&#64;sha256:&lt;digest&gt;</span></code> to the image reference
+in each service configuration and qualify that exact manifest.</p>
 <div class="admonition important">
 <p class="admonition-title">Important</p>
 <p>When upgrading an existing checkout, stop the persistent model stack before
 starting it with the new image:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/simple-vlm-example/model-servers<span class="w"> </span>simple_vlm_example_model_servers<span class="w"> </span>--stop
-docker<span class="w"> </span>pull<span class="w"> </span>nvcr.io/nvidia/vllm:26.09-py3
+docker<span class="w"> </span>pull<span class="w"> </span>nvcr.io/nvidia/vllm:26.10.pre1-py3
 </pre></div>
 </div>
 <p>The next launch recreates stale managed containers when their image or command
 fingerprint differs. After the new stack starts successfully, reclaim disk from
 an old image with <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">image</span> <span class="pre">rm</span> <span class="pre">&lt;old-vllm-image&gt;</span></code>. Keep the shared model cache;
-the 26.09 stack reuses compatible weights and downloads any missing artifacts.</p>
+the updated stack reuses compatible weights and downloads any missing artifacts.</p>
 </div>
 <section id="docker-mode-prerequisites">
 <h3>docker mode — prerequisites<a class="headerlink" href="#docker-mode-prerequisites" title="Link to this heading">#</a></h3>
@@ -1206,7 +1216,7 @@ continue to use Xet when it remains enabled. These values are preserved,
 forwarded, and included in the container fingerprint, so changing one
 recreates a persistent container.</p></li>
 </ul>
-<p>The selected image reports this in-container vLLM version:</p>
+<p>The selected NGC preview reports this vLLM version in its image metadata:</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Image</p></th>
@@ -1214,8 +1224,8 @@ recreates a persistent container.</p></li>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">nvcr.io/nvidia/vllm:26.09-py3</span></code></p></td>
-<td class="text-right"><p>0.29.0+5013de39</p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">nvcr.io/nvidia/vllm:26.10.pre1-py3</span></code></p></td>
+<td class="text-right"><p>0.31.0+88641915</p></td>
 </tr>
 </tbody>
 </table>
@@ -1261,16 +1271,17 @@ backend is selectable per YAML — refer to <em>Choosing the vLLM runtime</em> a
 When serving <code class="docutils literal notranslate"><span class="pre">nvidia/Cosmos3-Nano</span></code> with the default Docker image on SM12 GPUs,
 including RTX Blackwell and GB10, the service selects Triton attention for
 both the decoder and vision encoder.
-This reduces cold image latency without depending on a previous container’s
-compilation cache. On x86 SM12 GPUs, it avoids the pinned 26.09 image’s
-FlashAttention-2 PTX fallback. The ARM image includes native Blackwell kernels,
-so that explanation does not apply to every SM12 deployment. Other GPUs,
-custom images, and pip mode retain vLLM’s backend selection. The optional
-<code class="docutils literal notranslate"><span class="pre">attention_backend</span></code> and
-<code class="docutils literal notranslate"><span class="pre">mm_encoder_attn_backend</span></code> YAML keys override each component independently;
-explicit <code class="docutils literal notranslate"><span class="pre">auto</span></code> restores vLLM’s selection. Cold starts still include model
-loading and backend compilation. A healthy model HTTP endpoint is not a
-guarantee that sample inference warmup has completed.</p></li>
+Measurements on NGC 26.09 showed lower cold image latency with Triton:
+the x86 image fell back to FlashAttention-2 PTX compilation, while the ARM
+image included native Blackwell kernels. This conservative default is
+retained for the NGC 26.10 preview pending GPU qualification; those kernel
+properties and latency results have not been reverified on the preview.
+Other GPUs, custom images, and pip mode retain vLLM’s backend selection.
+The optional <code class="docutils literal notranslate"><span class="pre">attention_backend</span></code> and <code class="docutils literal notranslate"><span class="pre">mm_encoder_attn_backend</span></code> YAML keys
+override each component independently; explicit <code class="docutils literal notranslate"><span class="pre">auto</span></code> restores vLLM’s
+selection. Cold starts still include model loading and backend compilation.
+A healthy model HTTP endpoint is not a guarantee that sample inference
+warmup has completed.</p></li>
 <li><p><strong>nemotron3-nano-llm</strong> is a thin wrapper around <code class="docutils literal notranslate"><span class="pre">vllm</span> <span class="pre">serve</span></code> for
 <code class="docutils literal notranslate"><span class="pre">NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8}</span></code> (auto-selected by GPU compute
 capability). vLLM handles tool calling (<code class="docutils literal notranslate"><span class="pre">qwen3_coder</span></code> parser), reasoning
