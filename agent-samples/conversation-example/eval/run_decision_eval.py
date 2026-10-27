@@ -43,9 +43,7 @@ from xr_ai_voice import VOICE_OUTPUT_TOPIC
 _SAMPLE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_SAMPLE / "worker"))
 
-from conversation_example_worker._alert_agent import VisualAlertAgent  # noqa: E402
-from conversation_example_worker._note_taking import NoteTakingAgent  # noqa: E402
-from conversation_example_worker._visual_agents import VisualObservationAgent  # noqa: E402
+from conversation_example_worker import NoteTakingAgent, VisualAlertAgent, VisualObservationAgent  # noqa: E402
 from conversation_example_worker.app import CONVERSATION_SCOPE  # noqa: E402
 from conversation_example_worker.config import load_config  # noqa: E402
 

@@ -549,17 +549,22 @@ async def test_only_a_screened_frame_runs_cosmos_and_the_condition_checks():
     gate = _open()
     frames = _Frames((gate, None), (gate, None), (gate, None))
     vlm = _VLM()
-    decisions = _Decisions("start", relevance=["no", "no", "yes"], fast=("yes", 1.0), backup=("yes", 1.0))
+    # Hold the direct check until Cosmos has started, so both condition checks run on the screened frame.
+    fast_gate = asyncio.Event()
+    decisions = _Decisions(
+        "start", relevance=["no", "no", "yes"], fast=("yes", 1.0), backup=("yes", 1.0), fast_gate=fast_gate
+    )
     agent, output = _agent(decisions, frames, vlm=vlm)
     await _start(agent)
+    await asyncio.wait_for(vlm.observation_started.wait(), 1)
+    await asyncio.wait_for(decisions.backup_called.wait(), 1)
+    fast_gate.set()
     await asyncio.wait_for(agent._jobs["alice"].task, 1)
     paths = decisions.paths()
     assert paths.count("relevance") == 3
-    assert paths[:2] == ["relevance", "relevance"]
-    # Condition checks start only after the third, passing screen. The direct check can win
-    # before the Cosmos observation reaches the model, so Cosmos runs at most once.
-    assert "fast-clef" in paths[3:] and set(paths[3:]) <= {"fast-clef", "cosmos-clef"}
-    assert len(vlm.observed_images) <= 1
+    assert paths[:3] == ["relevance", "relevance", "relevance"]
+    assert {"fast-clef", "cosmos-clef"} == set(paths[3:])
+    assert len(vlm.observed_images) == 1
     assert sum(message.text == "Alert" for message, _ in output.messages) == 1
 
 
