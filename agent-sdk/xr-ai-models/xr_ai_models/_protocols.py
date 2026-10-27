@@ -297,9 +297,11 @@ class DecisionService(Protocol):
         No free-form text or reasoning is generated. A per-call timeout must be
         positive and finite; the SystemOne adapter caps it at the configured
         endpoint timeout. Transport failures and invalid or incomplete answers
-        raise exceptions without returning partial decisions. A request the
-        service rejects as larger than its model accepts raises
-        :class:`DecisionInputTooLarge`.
+        raise exceptions without returning partial decisions.
+
+        Raises:
+            DecisionInputTooLargeError: The service rejected the request as more
+                input than its model accepts; a smaller request may succeed.
         """
 
         pass
@@ -570,7 +572,7 @@ class ModelServiceError(RuntimeError):
     """Base for model-service failures, including embedding identity and OCR errors."""
 
 
-class DecisionInputTooLarge(ModelServiceError):
+class DecisionInputTooLargeError(ModelServiceError):
     """The decision service rejected a request as more input than its model accepts.
 
     The service owns that limit, and the caller cannot know it in advance. The same

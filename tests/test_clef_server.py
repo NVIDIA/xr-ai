@@ -26,7 +26,7 @@ from clef_server._config import ServerConfig, identity, load_config  # noqa: E40
 from clef_server._images import _ImageLimits  # noqa: E402
 from clef_server._service import (  # noqa: E402
     ClefBackend,
-    InputTooLong,
+    InputTooLongError,
     _await_without_abandoning,
     _normalize_response,
     create_app,
@@ -49,7 +49,7 @@ class _Backend:
 
     def validate_length(self, body: dict) -> None:
         if body["state"] == "too long":
-            raise InputTooLong("request exceeds the configured token limit")
+            raise InputTooLongError("request exceeds the configured token limit")
 
     def answer(self, body: dict) -> dict:
         self.calls.append(body)
@@ -509,7 +509,7 @@ def test_aggregate_source_pixels_rejected_before_rgb_decode(tmp_path, monkeypatc
     backend = _Backend(config)
     with TestClient(create_app(config, backend)) as client:
         response = client.post("/v1/systemone", json=_request(images=[image, image]))
-    assert response.status_code == 422
+    assert response.status_code == 413
     assert "source-pixel budget" in response.json()["detail"]
     assert converted == [(400, 400)]
     assert len(backend.calls) == 1
@@ -635,11 +635,11 @@ def test_image_admission_uses_loaded_processor_geometry(tmp_path, monkeypatch):
     with TestClient(create_app(config, backend)) as client:
         # This fits the old pinned geometry, but exceeds the actual pixel budget.
         response = client.post("/v1/systemone", json=_request(images=[_image_url(size=(300, 300))]))
-        assert response.status_code == 422
+        assert response.status_code == 413
         assert "source-pixel budget" in response.json()["detail"]
         # The processor minimum is now 128 tokens per image, not 64.
         response = client.post("/v1/systemone", json=_request(images=[_image_url()] * 3))
-        assert response.status_code == 422
+        assert response.status_code == 413
         assert "too many images" in response.json()["detail"]
     assert converted == []
     assert len(backend.calls) == 1
@@ -661,7 +661,7 @@ def test_length_admission_detects_native_truncation(tmp_path, actual_length):
     backend.encode_record = encode
     try:
         if actual_length > config.max_length:
-            with pytest.raises(InputTooLong, match="maximum is 32768"):
+            with pytest.raises(InputTooLongError, match="maximum is 32768"):
                 backend.validate_length(_request(images=[_image_url()]))
         else:
             backend.validate_length(_request(images=[_image_url()]))
@@ -713,6 +713,6 @@ def test_image_count_budget_accounts_for_processor_upscaling(tmp_path):
     backend = _Backend(config)
     with TestClient(create_app(config, backend)) as client:
         response = client.post("/v1/systemone", json=_request(images=[_image_url()] * 5))
-    assert response.status_code == 422
+    assert response.status_code == 413
     assert "too many images" in response.json()["detail"]
     assert len(backend.calls) == 1

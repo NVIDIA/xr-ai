@@ -10,7 +10,7 @@ from types import MappingProxyType
 import httpx
 import pytest
 from xr_ai_models import (
-    DecisionInputTooLarge,
+    DecisionInputTooLargeError,
     DecisionQuestion,
     DecisionSpec,
     _systemone,
@@ -247,12 +247,18 @@ async def test_decision_images_use_inline_wire_data_and_preserve_order(tmp_path)
 
 
 @pytest.mark.asyncio
-async def test_decision_reports_input_too_large_as_a_typed_error() -> None:
-    client = httpx.AsyncClient(
-        transport=httpx.MockTransport(
-            lambda _request: httpx.Response(413, json={"detail": "request requires 5000 tokens; maximum is 4096"})
-        )
-    )
+@pytest.mark.parametrize(
+    ("response", "message"),
+    [
+        (httpx.Response(413, json={"detail": "request requires 5000 tokens; maximum is 4096"}), "maximum is 4096"),
+        (httpx.Response(413, text="body too large"), "body too large"),
+        (httpx.Response(413, json=["unexpected"]), r"\[\"unexpected\"\]"),
+        (httpx.Response(413), "decision request is too large"),
+    ],
+    ids=["detail", "text", "json-list", "empty"],
+)
+async def test_decision_reports_input_too_large_as_a_typed_error(response, message) -> None:
+    client = httpx.AsyncClient(transport=httpx.MockTransport(lambda _request: response))
     service = _systemone._SystemOneDecision(
         base_url="http://clef.test:8003",
         model_name="Cloudflare/Clef",
@@ -263,7 +269,7 @@ async def test_decision_reports_input_too_large_as_a_typed_error() -> None:
         client=client,
     )
     try:
-        with pytest.raises(DecisionInputTooLarge, match="maximum is 4096"):
+        with pytest.raises(DecisionInputTooLargeError, match=message):
             await service.decide(
                 "state",
                 {"q": DecisionQuestion(instructions="choose", criteria={"yes": "yes", "no": "no"})},

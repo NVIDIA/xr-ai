@@ -13,7 +13,7 @@ from typing import Any
 import httpx
 
 from ._openai_compat import _auth_headers, _http_health, _normalize_image, _warn_if_cleartext_key
-from ._protocols import DecisionAnswer, DecisionInputTooLarge, DecisionQuestion, DecisionResponse, ImageInput
+from ._protocols import DecisionAnswer, DecisionInputTooLargeError, DecisionQuestion, DecisionResponse, ImageInput
 
 
 class _SystemOneDecision:
@@ -98,7 +98,7 @@ class _SystemOneDecision:
             timeout=effective_timeout,
         )
         if response.status_code == httpx.codes.REQUEST_ENTITY_TOO_LARGE:
-            raise DecisionInputTooLarge(_error_detail(response))
+            raise DecisionInputTooLargeError(_error_detail(response))
         response.raise_for_status()
         raw = response.json()
         if not isinstance(raw, dict):

@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Literal
 import nemo_relay
 from xr_ai_models import (
     ChatMessage,
-    DecisionInputTooLarge,
+    DecisionInputTooLargeError,
     DecisionQuestion,
     DecisionResponse,
     DecisionService,
@@ -1218,7 +1218,7 @@ class AgentRouter:
             input={"state": state, "question": {"instructions": question.instructions, "criteria": criteria}},
             metadata={"participant_id": turn.participant_id},
         ) as route_scope:
-            response = await self._decide_with_fitting_history(
+            response, history_sent = await self._decide_with_fitting_history(
                 state, history, question, turn.participant_id, route_scope
             )
             answer = response.answers["destination"]
@@ -1259,6 +1259,7 @@ class AgentRouter:
                     "selected_destination_probability": selected_probability,
                     "selection_reason": selection_reason,
                     "eligible_destinations": current_eligible,
+                    "history_exchanges_sent": history_sent,
                 },
             )
         return selected
@@ -1270,21 +1271,26 @@ class AgentRouter:
         question: DecisionQuestion,
         participant_id: str,
         route_scope: object,
-    ) -> DecisionResponse:
+    ) -> tuple[DecisionResponse, int]:
         """Route with as much recent history as the decision model accepts.
 
         The decision service owns its input limit, and history tokenizes differently by
         language and content, so the router cannot size a request in advance. When the
         service rejects one as too large, keep the newest half of the history and retry.
         History is only context for routing, so a turn routes on less of it rather than
-        failing. A request that is too large without history raises: the fixed prompt and
-        destination descriptions are the application's to shorten.
+        failing. A request that is too large without history raises: the routing prompt,
+        destination descriptions, and current request alone exceed the limit.
+
+        Each over-limit turn costs up to log2(n) + 1 decision calls for n exchanges.
+        Returns the response and the number of history exchanges it was decided on.
         """
 
         while True:
             try:
-                return await self._decisions.decide({**state, "completed_history": history}, {"destination": question})
-            except DecisionInputTooLarge:
+                trial = {**state, "completed_history": history}
+                response = await self._decisions.decide(trial, {"destination": question})
+                return response, len(history)
+            except DecisionInputTooLargeError:
                 if not history:
                     raise
                 kept = history[(len(history) + 1) // 2 :]

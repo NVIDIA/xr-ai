@@ -130,8 +130,9 @@ using 16-pixel patches and a two-by-two spatial merge. This
 conservative admission limit applies to original dimensions even if the model
 would resize them. Resize large source photos on the client before submitting
 crops. The processor then checks the actual combined text, image, and question
-token count against `max_length`; invalid images receive HTTP 422, and excess
-tokens or body bytes receive HTTP 413.
+token count against `max_length`. Invalid images receive HTTP 422. Exceeding
+the image-count, source-pixel, token, or body-size limit receives HTTP 413, so a
+client can retry with less input.
 Request-controlled preprocessing options (`media_kwargs`) are rejected with
 HTTP 422: resize settings belong to the server's loaded processor.
 

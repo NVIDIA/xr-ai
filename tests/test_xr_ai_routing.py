@@ -15,7 +15,7 @@ import xr_ai_routing._router as router_module
 from _routing_test_output import destination_output as _destination_output
 from _routing_test_output import emit_control as _emit_control
 from _routing_test_output import route as _route
-from xr_ai_models import ChatResponse, DecisionAnswer, DecisionInputTooLarge, DecisionResponse
+from xr_ai_models import ChatResponse, DecisionAnswer, DecisionInputTooLargeError, DecisionResponse
 from xr_ai_routing import (
     Admission,
     AgentExchange,
@@ -816,9 +816,13 @@ async def test_route_scope_records_choice_probabilities_and_eligible_candidates(
                 "selected_destination_probability": 0.27,
                 "selection_reason": "highest_scored_eligible_after_clarify",
                 "eligible_destinations": ["conversation", "observation"],
+                "history_exchanges_sent": 0,
             },
         )
     ]
+    # Destinations reach the decision model once, as choices, not again in the state.
+    assert "destinations" not in decisions.calls[0][0]
+    assert "Questions about the current camera view" in decisions.calls[0][1]["destination"].criteria["observation"]
 
 
 @pytest.mark.asyncio
@@ -2011,7 +2015,7 @@ class _SizeLimitedDecisions(_Decisions):
         history = state["completed_history"]
         self.sent_history.append([item["user"] for item in history])
         if len(history) > self.max_history:
-            raise DecisionInputTooLarge("request requires 5000 tokens; maximum is 4096")
+            raise DecisionInputTooLargeError("request requires 5000 tokens; maximum is 4096")
         return await super().decide(state, questions, timeout=timeout)
 
 
@@ -2020,7 +2024,12 @@ def _exchanges(count):
 
 
 @pytest.mark.asyncio
-async def test_too_large_routing_request_retries_with_the_newest_half_of_history(caplog):
+async def test_too_large_routing_request_retries_with_the_newest_half_of_history(caplog, monkeypatch):
+    events = []
+    monkeypatch.setattr(
+        "xr_ai_routing._router.nemo_relay.scope.event",
+        lambda name, **kwargs: events.append((name, kwargs["data"])),
+    )
     decisions = _SizeLimitedDecisions("visual", max_history=2)
     conversation = _Destination("conversation")
     visual = _Destination("visual", results=(DestinationResult("answer", "It is blue."),))
@@ -2036,6 +2045,12 @@ async def test_too_large_routing_request_retries_with_the_newest_half_of_history
         ["question 6", "question 7"],
     ]
     assert "retrying with fewer history exchanges" in caplog.text
+    assert [(name, data) for name, data in events if name.endswith("history-trimmed")] == [
+        ("conversation.destination-route-history-trimmed", {"sent_exchanges": 8, "retry_exchanges": 4}),
+        ("conversation.destination-route-history-trimmed", {"sent_exchanges": 4, "retry_exchanges": 2}),
+    ]
+    choice = next(data for name, data in events if name == "conversation.destination-route-choice")
+    assert choice["history_exchanges_sent"] == 2
     # Only the routing request is trimmed; the destination keeps the router's full history.
     assert len(visual.answer_turns[0].history) == 8
 
@@ -2049,7 +2064,7 @@ async def test_routing_request_too_large_without_history_raises():
     )
 
     # The fixed prompt and descriptions alone exceed the limit: an application error, not a history one.
-    with pytest.raises(DecisionInputTooLarge):
+    with pytest.raises(DecisionInputTooLargeError):
         await _run(front_end, query="What color is it?", history=_exchanges(3))
 
     assert decisions.sent_history == [
