@@ -82,27 +82,26 @@ Unrelated distant hands do not need to disappear. A bystander inside the selecti
 may still obscure the target; the VLM is instructed to report obstruction.
 Box capture remains immediate, inside the framing fingers.
 
-Grip state is explicitly OPEN, PINCHED or UNKNOWN. Entry and exit use separate
-palm-scaled distance thresholds, both confirmed over `release_s` (default 0.4s).
-Strong closed observations recorded during entry confirmation are retained as
-bounded candidate points, so pinch-and-immediately-draw does not discard the
-first arc or require a stationary hold. A single open/closed outlier cannot flip
-confirmed grip. Intermediate, ambiguous or missing evidence briefly holds the
-previous state, adds no trajectory points, and breaks transition confirmation;
-unknown time cannot complete a grip transition. Sustained unknown cancels the
-attempt without interpreting loss as open. A held pinch cannot rearm after that
-cancellation: visible, sustained open evidence is required first.
+Grip state is OPEN, PINCHED or UNKNOWN. Two accepted closed observations enter
+PINCHED; duplicates and missing/outlier observations cannot supply the second
+sample. Strong closed candidate points are retained, so pinch-and-immediately-draw
+keeps its first arc without a stationary hold. Once pinched, the gap between
+`pinch_ratio` and `release_ratio` retains both grip and usable observed pointer
+motion. Uncertain grip distance does not mean the pointer disappeared.
 
-Tip distance and palm width include relative landmark z, using image-width scale
-for z and x and image-height scale for y. This follows the approximate z/x scale
-in the [MediaPipe landmark documentation](https://developers.google.com/edge/mediapipe/solutions/vision/hand_landmarker/web_js),
-and reduces false closure from projected fingertip overlap under rotation. A
-projected palm width below 20% of its approximate 3D span supplies unknown grip
-evidence, since projected geometry is nearly degenerate. This is a sample
-plausibility heuristic, not a visibility/confidence measurement. Relative z is
-model-estimated, not metric depth; dorsal/self-occluded hands may still produce
-incorrect landmarks. No per-joint confidence is available here, and handedness
-score is not used as landmark or detection confidence.
+Only sustained positive open evidence over `release_s` (default 0.4s) releases
+the grip. An open outlier suppresses that sample without releasing; intermediate
+or missing evidence breaks release confirmation. Missing/ambiguous/outlier pointer
+observations add no trajectory points. Tracking loss beyond `max_gap_s` cancels
+without treating absence as open; a held pinch cannot restart until visible,
+sustained open evidence rearms it.
+
+The ratio uses image-space thumb/index distance divided by palm width. Relative
+z is deliberately excluded: the attempted 3D-distance/edge-on gate rejected
+otherwise usable projected traces under depth-estimate jitter. No visibility or
+per-joint confidence is available, and handedness score is not such confidence.
+Projection overlap can still look pinched, and self-occluded/dorsal hands may
+produce incorrect landmarks. These limitations require physical-camera testing.
 
 Recognized circle selections and pending clearance are independent of subsequent
 grip uncertainty: the existing spatial clear-or-timeout policy continues. Brief

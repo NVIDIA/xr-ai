@@ -10,7 +10,7 @@ poll_interval_s: 0.08
 # Gentle progress hum and recognition chime through the participant audio track.
 gesture_audio: true
 hold_s: 0.6
-# Stable grip entry/exit and gesture rearm dwell; unknown frames break confirmation.
+# Stable grip release and gesture rearm dwell; missing frames break confirmation.
 release_s: 0.4
 # Break hold/release continuity if new observations are separated by this gap.
 max_gap_s: 0.5
@@ -34,8 +34,8 @@ query: "Describe the selected region and explain what is notable about it."
 # clear for a fresh-frame query (or best-effort timeout); stable unpinch rearms.
 # All values below are demonstration settings needing target-camera tuning.
 circle:
-  # Approximate 3D thumb/index distance divided by MCP palm width.
-  # Relative z uses image-width scale; near-degenerate projections are unknown.
+  # Image-space thumb/index distance divided by MCP palm width.
+  # Two accepted closed samples enter; the band retains pinched pointer tracking.
   pinch_ratio: 0.25
   release_ratio: 0.45
   # Bounds on distinct sampled points; excess points cancel rather than truncate.

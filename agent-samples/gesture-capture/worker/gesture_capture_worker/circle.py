@@ -118,6 +118,8 @@ class PinchCircleTrigger:
             self._grip.observe(None, timestamp_us)
             self.unavailable()
             return None
+        if self._grip.state is Grip.OPEN and not self._grip.entry_pending(timestamp_us):
+            self._candidate_points.clear()
         trajectory = self._points or self._candidate_points
         if trajectory and math.dist(pointer, trajectory[-1]) > self._settings.max_jump_palm * pose.scale:
             self._grip.observe(None, timestamp_us)
@@ -145,8 +147,7 @@ class PinchCircleTrigger:
             if not was_open:
                 self._ready = True
             self._points.clear()
-        if ratio is not None and (ratio <= self._settings.pinch_ratio or ratio >= self._settings.release_ratio):
-            self._last_seen = timestamp_us
+        self._last_seen = timestamp_us
         if not closed or not self._ready:
             return None
         if not self._points or pointer != self._points[-1]:

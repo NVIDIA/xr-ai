@@ -1,15 +1,12 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Positive grip evidence, depth-aware projection and bounded uncertainty."""
-
-import math
+"""Regression playback separates grip uncertainty from observed pointer motion."""
 
 import pytest
 from gesture_capture_worker.circle import PinchCircleTrigger
 from gesture_capture_worker.config import CircleSettings
 from gesture_capture_worker.grip import Grip, GripHysteresis
-from gesture_capture_worker.hand_motion import match_hand
 from test_circle_selection_wait import _path
 from test_gesture_capture import _pinch
 
@@ -18,122 +15,108 @@ def _grip():
     return GripHysteresis(pinch_ratio=0.25, release_ratio=0.45, dwell_s=0.2, max_gap_s=0.5)
 
 
-def test_entry_and_release_need_continuous_positive_evidence():
+def test_two_closed_observations_enter_and_band_retains_observed_motion():
     grip = _grip()
     assert not grip.observe(0.1, 0)
     assert grip.state is Grip.OPEN
-    assert not grip.observe(None, 100_000)
-    assert not grip.observe(0.1, 200_000)
-    assert not grip.observe(0.1, 300_000)
-    assert grip.observe(0.1, 400_000)
+    assert not grip.observe(0.35, 80_000)
+    assert grip.observe(0.2, 160_000)
     assert grip.state is Grip.PINCHED
-    # One open outlier cannot release; intermediate/unknown retains grip but
-    # supplies neither trajectory evidence nor elapsed confirmation time.
-    assert not grip.observe(0.8, 500_000)
-    assert not grip.observe(0.35, 600_000)
+    assert grip.observe(0.35, 240_000)
+    # A single open outlier suppresses that point but cannot flip the grip.
+    assert not grip.observe(0.8, 320_000)
     assert grip.state is Grip.PINCHED
-    assert grip.observe(0.1, 700_000)
-    assert not grip.observe(0.8, 800_000)
-    assert not grip.observe(None, 900_000)
-    assert not grip.observe(0.8, 1_000_000)
+    assert grip.observe(0.3, 400_000)
+    assert not grip.observe(0.8, 480_000)
+    assert not grip.observe(None, 560_000)
+    assert not grip.observe(0.8, 640_000)
     assert grip.state is Grip.PINCHED
-    assert not grip.observe(0.8, 1_100_000)
-    assert not grip.observe(0.8, 1_200_000)
+    assert not grip.observe(0.8, 840_000)
     assert grip.state is Grip.OPEN
 
 
-def test_unknown_timeout_cancels_without_interpreting_loss_as_release():
+def test_missing_pointer_timeout_cancels_and_held_pinch_cannot_rearm():
     grip = _grip()
-    for timestamp in (0, 100_000, 200_000):
-        grip.observe(0.1, timestamp)
+    grip.observe(0.1, 0)
+    assert grip.observe(0.1, 80_000)
+    assert not grip.observe(None, 240_000)
     assert grip.state is Grip.PINCHED
-    assert not grip.observe(None, 400_000)
-    assert grip.state is Grip.PINCHED
-    assert not grip.observe(None, 800_000)
+    assert not grip.observe(None, 640_000)
     assert grip.state is Grip.UNKNOWN
-    for timestamp in (900_000, 1_000_000, 1_100_000):
+    for timestamp in (720_000, 800_000, 880_000):
         assert not grip.observe(0.1, timestamp)
     assert grip.state is Grip.UNKNOWN
-    for timestamp in (1_200_000, 1_300_000, 1_400_000):
-        grip.observe(0.8, timestamp)
+    grip.observe(0.8, 960_000)
+    grip.observe(None, 1_040_000)
+    grip.observe(0.8, 1_120_000)
+    assert grip.state is Grip.UNKNOWN
+    grip.observe(0.8, 1_320_000)
     assert grip.state is Grip.OPEN
 
 
-@pytest.mark.parametrize("angle", [0, 60, 85, 180])
-@pytest.mark.parametrize("released", [False, True])
-def test_depth_distance_preserves_grip_under_hand_rotation(angle, released):
-    observation = _pinch(200, 100, released=released)
-    # Rotate a known 3D hand around y. Tip and palm distances are preserved
-    # while projected distances foreshorten; at nearly edge-on treat as unknown.
-    for point in observation.hands[0].landmarks:
-        x = (point.x - 0.5) * 400
-        point.x = (200 + x * math.cos(math.radians(angle))) / 400
-        point.z = -x * math.sin(math.radians(angle)) / 400
-    pose = match_hand(observation, None, 2)
-    if angle == 85:
-        assert pose.ratio is None  # geometry degeneracy, not visibility confidence
-    else:
-        assert pose.ratio == pytest.approx(0.6 if released else 0.1)
-
-
-def test_projected_tip_overlap_is_not_positive_pinch_when_depth_separates_tips():
-    observation = _pinch(200, 100)
-    observation.hands[0].landmarks[4].z = -0.04
-    observation.hands[0].landmarks[8].z = 0.04
-    pose = match_hand(observation, None, 2)
-    assert pose.ratio > 0.45
-    grip = _grip()
-    for timestamp in (0, 100_000, 200_000):
-        assert not grip.observe(pose.ratio, timestamp)
-    assert grip.state is Grip.OPEN
-
-
-def test_immediate_moving_pinch_preserves_first_arc_during_entry_confirmation():
-    trigger = PinchCircleTrigger(CircleSettings())
-    path = _path(310, 8)
-    results = [trigger.observe(_pinch(*p), (i + 1) * 80_000) for i, p in enumerate(path)]
-    assert all(result is None for result in results[:-1])
-    assert results[-1] is not None  # no stationary hold before the 560ms trace
-
-
-def test_uncertain_motion_never_enters_confirmed_circle_path():
-    trigger = PinchCircleTrigger(CircleSettings(), release_s=0.2)
-    for timestamp in (100_000, 200_000, 300_000):
-        trigger.observe(_pinch(200, 100), timestamp)
-    assert trigger._grip.state is Grip.PINCHED
-    before = list(trigger._points)
-    middle = _pinch(230, 100)
-    middle.hands[0].landmarks[4].x = (230 - 7) / 400
-    middle.hands[0].landmarks[8].x = (230 + 7) / 400
-    assert trigger.observe(middle, 400_000) is None
-    assert trigger._points == before and trigger._grip.state is Grip.PINCHED
-    # Sustained middle-band evidence cannot keep an attempt alive indefinitely.
-    assert trigger.observe(middle, 900_000) is None
-    assert not trigger.active
-    assert trigger._grip.state is Grip.UNKNOWN
-    for i, p in enumerate(_path(360, 14)):
-        assert trigger.observe(_pinch(*p), 1_000_000 + i * 80_000) is None
-
-
-def test_duplicate_samples_cannot_confirm_grip():
+def test_duplicate_and_missing_samples_do_not_supply_second_closed_observation():
     grip = _grip()
     for _ in range(10):
-        assert not grip.observe(0.1, 100_000)
-    assert grip.state is Grip.OPEN
-    assert not grip.observe(0.1, 200_000)
-    assert grip.observe(0.1, 300_000)
+        assert not grip.observe(0.1, 80_000)
+    grip.observe(None, 160_000)
+    assert not grip.observe(0.1, 240_000)
+    assert grip.observe(0.1, 320_000)
 
 
-def test_pending_selection_does_not_depend_on_grip_evidence():
-    from test_circle_selection_wait import _frame, _wait
+@pytest.mark.parametrize("mode", ["steady", "distance_band_jitter", "alternating_entry_band", "relative_z_jitter"])
+def test_default_cadence_playback_recovers_prior_working_strokes(mode):
+    # Same 1.12s/14-point trace was compared against actual 360e03d87 and
+    # 418f026c sources. Baseline accepted all four; 418 accepted only steady.
+    # This is perturbed synthetic playback, not a recorded physical hand.
+    trigger = PinchCircleTrigger(CircleSettings())
+    results = []
+    for i, point in enumerate(_path(310, 14)):
+        observation = _pinch(*point)
+        if mode in ("distance_band_jitter", "alternating_entry_band"):
+            ratio = ([.1, .15, .32, .18, .35, .2, .3][i % 7] if mode == "distance_band_jitter"
+                     else [.15, .35][i % 2])
+            distance = 40 * ratio
+            observation.hands[0].landmarks[4].x = (point[0] - distance / 2) / 400
+            observation.hands[0].landmarks[8].x = (point[0] + distance / 2) / 400
+        elif mode == "relative_z_jitter":
+            observation.hands[0].landmarks[4].z = [0, -.015, -.02][i % 3]
+            observation.hands[0].landmarks[8].z = [0, .015, .02][i % 3]
+        if trigger.observe(observation, (i + 1) * 80_000):
+            results.append((i + 1) * 80_000)
+    assert results == [1_120_000]
 
-    wait = _wait()
-    observation = _pinch(220, 100)
-    observation.hands[0].landmarks[5].x = 219 / 400
-    observation.hands[0].landmarks[17].x = 221 / 400
-    observation.hands[0].landmarks[5].z = -20 / 400
-    observation.hands[0].landmarks[17].z = 20 / 400
-    assert match_hand(observation, wait.hand, 2).ratio is None
-    for timestamp in range(200_000, 2_100_000, 100_000):
-        assert not wait.observe(observation, _frame(timestamp))
-    assert wait.observe(observation, _frame(2_100_000))
+
+def test_immediate_moving_pinch_preserves_entry_points():
+    trigger = PinchCircleTrigger(CircleSettings())
+    results = [trigger.observe(_pinch(*p), (i + 1) * 80_000) for i, p in enumerate(_path(310, 8))]
+    assert all(result is None for result in results[:-1])
+    assert results[-1] is not None
+
+
+def test_band_motion_is_observed_but_missing_pointer_is_never_invented():
+    trigger = PinchCircleTrigger(CircleSettings())
+    trigger.observe(_pinch(200, 100), 80_000)
+    trigger.observe(_pinch(205, 100), 160_000)
+    middle = _pinch(230, 100)
+    middle.hands[0].landmarks[4].x = 223 / 400
+    middle.hands[0].landmarks[8].x = 237 / 400
+    assert trigger.observe(middle, 240_000) is None
+    assert trigger._points[-1] == (230, 100)
+    before = list(trigger._points)
+    missing = _pinch(240, 100)
+    missing.hands.clear()
+    assert trigger.observe(missing, 320_000) is None
+    assert trigger._points == before
+    assert trigger.observe(missing, 880_000) is None
+    assert not trigger.active
+    for i, p in enumerate(_path(360, 14)):
+        assert trigger.observe(_pinch(*p), 960_000 + i * 80_000) is None
+
+
+def test_entry_positive_evidence_expires_despite_usable_band_frames():
+    grip = _grip()
+    assert not grip.observe(.1, 80_000)
+    for timestamp in range(160_000, 800_000, 80_000):
+        assert not grip.observe(.35, timestamp)
+    assert not grip.observe(.1, 800_000)
+    assert grip.observe(.1, 880_000)
