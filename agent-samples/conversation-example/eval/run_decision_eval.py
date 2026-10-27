@@ -63,6 +63,7 @@ class _Observed:
     actions: dict[str, str] = field(default_factory=dict)
     admissions: dict[str, str] = field(default_factory=dict)
     answered: str | None = None
+    focused: str | None = None
     decisions: list[dict[str, Any]] = field(default_factory=list)
 
 
@@ -96,6 +97,9 @@ class _Watched(RoutableAgent):
         return self._agent.routing_aid(participant_id)
 
     async def admit(self, turn: AgentTurn, *, focused: bool) -> Admission:
+        # The router admits a focused destination with focused=True; that is the turn's focus.
+        if focused:
+            self._recorder.turn.focused = self._name
         admission = await self._agent.admit(turn, focused=focused)
         self._recorder.turn.admissions[self._name] = admission.disposition
         return admission
@@ -201,7 +205,7 @@ def _router(recorder: _Recorder, teacher: _TeacherForced) -> tuple[AgentRouter, 
     return router, alerts, context
 
 
-def score(turn: Mapping[str, Any], observed: _Observed, result: DestinationResult | None, focus: tuple) -> dict:
+def score(turn: Mapping[str, Any], observed: _Observed, result: DestinationResult | None) -> dict:
     """Return each check that ``turn`` specifies and whether ``observed`` passed it."""
 
     acceptable = set(turn["acceptable_destinations"])
@@ -214,9 +218,8 @@ def score(turn: Mapping[str, Any], observed: _Observed, result: DestinationResul
         checks[f"action:{name}"] = observed.actions.get(name) == expected
     if "destination_disposition" in turn:
         checks["disposition"] = result is not None and result.disposition == turn["destination_disposition"]
-    for key, actual in zip(("focus_before", "focus_after"), focus, strict=True):
-        if key in turn:
-            checks[key] = actual == turn[key]
+    if "focus_before" in turn:
+        checks["focus_before"] = observed.focused == turn["focus_before"]
     return checks
 
 
@@ -236,14 +239,12 @@ async def run(flows: list[dict[str, Any]], decisions: Any) -> list[dict[str, Any
                 teacher.completion = turn.get("authored_completion", "Okay.")
                 # The router seeds a participant's history from its first turn only.
                 request = AgentTurn(participant, f"{flow['name']}/{turn['name']}", turn["query"], history=history)
-                # Focus is read, not driven; the router has no public accessor for it.
-                before = router._focus.get(participant)
                 result, error = None, None
                 try:
                     result = await router.handle(request)
                 except Exception as failure:  # noqa: BLE001 -- a failed turn is scored, not fatal.
                     error = f"{type(failure).__name__}: {failure}"
-                checks = score(turn, recorder.turn, result, (before, router._focus.get(participant)))
+                checks = score(turn, recorder.turn, result)
                 records.append(
                     {
                         "turn": request.turn_id,

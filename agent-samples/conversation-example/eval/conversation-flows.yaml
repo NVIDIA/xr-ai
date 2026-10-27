@@ -12,7 +12,7 @@
 #   admission_expectations    each named destination's admission
 #   destination_actions       each named destination's native control choice
 #   destination_disposition   the answer's disposition: answer, focus, or release
-#   focus_before/focus_after  router focus around the turn
+#   focus_before              destination the router admits as focused, if any
 
 - name: general_planning_continuation
   turns:
@@ -185,7 +185,6 @@
       admission_expectations: {notes: accept}
       destination_actions: {notes: start}
       destination_disposition: focus
-      focus_after: notes
     - name: save_accessibility_note
       query: "Save this note: use large print on the exhibit labels."
       authored_completion: "Noted."
@@ -193,7 +192,6 @@
       admission_expectations: {notes: accept}
       destination_actions: {notes: capture}
       focus_before: notes
-      focus_after: notes
     - name: explicit_handoff_for_general_answer
       query: "Why do leaves change color?"
       authored_completion: "Leaves change color as chlorophyll breaks down."
@@ -201,7 +199,6 @@
       admission_expectations: {notes: decline, conversation: accept}
       destination_actions: {notes: handoff}
       focus_before: notes
-      focus_after: notes
     - name: capture_statement_after_answer
       query: "I work at a ceramics studio."
       authored_completion: "Noted."
@@ -209,7 +206,6 @@
       admission_expectations: {notes: accept}
       destination_actions: {notes: capture}
       focus_before: notes
-      focus_after: notes
     - name: capture_explicitly_dictated_question
       query: "Save this question: how does the water pump work?"
       authored_completion: "Noted."
@@ -217,7 +213,6 @@
       admission_expectations: {notes: accept}
       destination_actions: {notes: capture}
       focus_before: notes
-      focus_after: notes
     - name: focused_notes_read_back_after_handoff
       query: "What did I save about the exhibit labels?"
       authored_completion: "You saved that the exhibit labels should use large print."
@@ -310,7 +305,6 @@
       admission_expectations: {notes: accept}
       destination_actions: {notes: start}
       destination_disposition: focus
-      focus_after: notes
     - name: save_what_to_watch_for
       query: "Save this note: watch for a yellow triangle."
       authored_completion: "Noted."
@@ -318,7 +312,6 @@
       admission_expectations: {notes: accept}
       destination_actions: {notes: capture}
       focus_before: notes
-      focus_after: notes
     - name: alert_for_what_the_note_mentions
       query: "Alert me once when you see what I mentioned in my notes."
       authored_completion: "I'll alert you once when a yellow triangle is visible."

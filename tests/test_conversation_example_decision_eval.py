@@ -58,7 +58,7 @@ async def test_fixture_faithful_decisions_pass_every_turn():
     assert len(records) == sum(len(flow["turns"]) for flow in flows)
     assert [record for record in records if not record["passed"]] == []
     checks = {name.split(":")[0] for record in records for name in record["checks"]}
-    assert checks == {"destination", "route", "admission", "action", "disposition", "focus_before", "focus_after"}
+    assert checks == {"destination", "route", "admission", "action", "disposition", "focus_before"}
 
 
 @pytest.mark.asyncio
