@@ -45,11 +45,11 @@ def test_fast_near_circle_survives_label_flicker_ghost_and_dropouts(degrees):
             assert trigger.observe(HandTrackingResult(width=400, height=200, hands=[]), timestamp) is None
             timestamp += 80_000
             # Reacquire at the actual paused position; unseen movement is not
-            # allowed to supply a circle arc. The anchor is not a sampled point.
+            # allowed to supply a circle arc; the reliable return stays usable.
             assert trigger.observe(_pinch(*_path(degrees, 14)[i - 1]), timestamp) is None
             timestamp += 80_000
         if i == 7:
-            observation.hands += _pinch(20, 20).hands
+            observation.hands += _pinch(20, 20, released=True).hands
         result = trigger.observe(observation, timestamp)
         if result is not None:
             regions.append(result)

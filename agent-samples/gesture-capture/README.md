@@ -17,6 +17,10 @@ Circle hand occlusions pause drawing for up to 2 seconds on fresh video; longer
 loss cancels the stroke while retaining grip for a fresh retry. Only stable open
 fingers release it; after recognition, open the pinch to rearm. Camera freshness
 remains 0.5 seconds, separately from the 2-second post-recognition clear wait.
+A stale, far-away positive pinch starts a fresh path; it cannot join the old
+stroke. One gesturing hand can be selected among clearly open hands, while
+new/stale ambiguous matches remain unknown. A clearly tracked nearby hand can
+continue despite a distant pinched bystander.
 
 Refer to the [gesture-capture guide](https://nvidia.github.io/xr-ai/main/reference/gesture-capture.html)
 for model provisioning, licenses, browser requirements, alignment, and behavior.

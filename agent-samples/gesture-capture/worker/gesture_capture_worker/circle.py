@@ -13,7 +13,7 @@ from xr_ai_tools.image_crop import ImageRegion
 from .config import CircleSettings
 from .diagnostics import GestureDiagnostics
 from .grip import Grip, GripHysteresis
-from .hand_motion import HandPose, match_hand
+from .hand_motion import HandPose, hand_poses
 
 
 def _circle_region(points: list[tuple[float, float]], width: int, height: int,
@@ -77,11 +77,12 @@ def _circle_region(points: list[tuple[float, float]], width: int, height: int,
 class PinchCircleTrigger:
     """Recognize a closed pinched trace once; require stable release to rearm."""
 
-    def __init__(self, settings: CircleSettings, *, release_s: float = 0.4, max_gap_s: float | None = None,
+    def __init__(self, settings: CircleSettings, *, release_s: float = 0.4, max_gap_s: float = 0.5,
                  diagnostics: GestureDiagnostics | None = None) -> None:
         self._settings = settings
         self._diagnostics = diagnostics or GestureDiagnostics()
-        hand_gap_s = settings.occlusion_grace_s if max_gap_s is None else max_gap_s
+        hand_gap_s = settings.occlusion_grace_s
+        self._anchor_gap_us = max_gap_s * 1_000_000
         self._grip = GripHysteresis(pinch_ratio=settings.pinch_ratio, release_ratio=settings.release_ratio,
                                     dwell_s=release_s, max_gap_s=hand_gap_s)
         self._max_gap_us = hand_gap_s * 1_000_000
@@ -137,6 +138,46 @@ class PinchCircleTrigger:
         points.append(pointer)
         self._interrupted = False
 
+    def _select_hand(self, observation: HandTrackingResult, timestamp_us: int) -> HandPose | None:
+        poses = hand_poses(observation)
+        possible = [pose for pose in poses if pose.ratio < self._settings.release_ratio]
+        if (self._completed_latch and len(poses) > 1 and possible and self._last_seen is not None
+                and timestamp_us - self._last_seen > self._anchor_gap_us):
+            self._diagnostics.count("association_ambiguous")
+            return None  # An open bystander cannot release a stale tracked engagement.
+        if not self._completed_latch and len(poses) > 1 and possible:
+            if len(possible) > 1 and (self.hand is None or self._last_seen is None
+                                      or timestamp_us - self._last_seen > self._anchor_gap_us):
+                self._diagnostics.count("association_ambiguous")
+                return None
+            # Exclude clearly open hands, retaining the confirmed grip's band.
+            poses = possible
+        trajectory = self._points or self._candidate_points
+        center_near = [pose for pose in poses if self.hand is None or math.dist(pose.center, self.hand.center)
+                       <= self._settings.max_jump_palm * min(pose.scale, self.hand.scale)]
+        nearby = [pose for pose in center_near if not trajectory or math.dist(pose.pointer, trajectory[-1])
+                  <= self._settings.max_jump_palm * pose.scale]
+        if len(nearby) == 1:
+            self._diagnostics.count("associated")
+            return nearby[0]
+        if (self._completed_latch and len(poses) == 1 and poses[0].ratio >= self._settings.release_ratio
+                and self._last_seen is not None and timestamp_us - self._last_seen > self._anchor_gap_us):
+            # A unique explicit open hand can rearm after moving during the turn;
+            # it still needs the normal release dwell and cannot submit a query.
+            self._diagnostics.count("association_release_reanchored")
+            return poses[0]
+        if (len(poses) == 1 and poses[0].ratio <= self._settings.pinch_ratio
+                and self._last_seen is not None and timestamp_us - self._last_seen > self._anchor_gap_us):
+            # A stale spatial anchor must not strand positive pinch input. Start
+            # a NEW stroke: never join this actor/position to the old trajectory.
+            self.reset()
+            self._diagnostics.count("association_reanchored_new_attempt")
+            return poses[0]
+        reason = ("no_hands_returned" if not observation.hands else "association_ambiguous" if len(nearby) > 1
+                  else "pointer_jump" if center_near else "association_no_usable_nearby_hand")
+        self._diagnostics.count(reason)
+        return None
+
     def observe(self, observation: HandTrackingResult, timestamp_us: int) -> ImageRegion | None:
         if timestamp_us <= self._timestamp:
             return None
@@ -145,7 +186,7 @@ class PinchCircleTrigger:
             if self.active:
                 self._diagnostics.count("circle_occlusion_cancelled")
             self.reset()
-        pose = match_hand(observation, self.hand, self._settings.max_jump_palm, self._diagnostics)
+        pose = self._select_hand(observation, timestamp_us)
         if pose is None:
             self._grip.observe(None, timestamp_us)
             self.unavailable()
@@ -162,13 +203,6 @@ class PinchCircleTrigger:
         if self._grip.state is Grip.OPEN and not self._grip.entry_pending(timestamp_us):
             self._candidate_points.clear()
             self._candidate_segments.clear()
-        trajectory = self._points or self._candidate_points
-        previous = trajectory[-1] if trajectory else None
-        if previous is not None and math.dist(pointer, previous) > self._settings.max_jump_palm * pose.scale:
-            self._diagnostics.count("pointer_jump")
-            self._grip.observe(None, timestamp_us)
-            self.unavailable()
-            return None
         self.hand = pose
         returning = self._interrupted
         was_open = self._grip.state is Grip.OPEN

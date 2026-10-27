@@ -103,7 +103,9 @@ def test_far_hand_cannot_resume_the_old_trace_and_camera_gap_still_discards_it()
     before = list(selector._circle._points)
     for timestamp in range(1_100_000, 2_000_000, 100_000):
         assert selector.observe(_pinch(10, 10), timestamp) is None
-    assert selector._circle._points == before
+        if timestamp <= 1_500_000:
+            assert selector._circle._points == before
+    assert selector._circle._points == [(10.0, 10.0)]  # fresh stroke only; no handoff of old points
     # A true source-frame gap >max_gap_s cancels even though hand grace is2s.
     assert selector.observe(_missing(), 2_600_000) is None
     assert not selector._circle.active

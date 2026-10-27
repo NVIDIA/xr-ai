@@ -96,8 +96,15 @@ or missing evidence breaks release confirmation. Missing/ambiguous/outlier point
 observations add no trajectory points. `circle.occlusion_grace_s` (default 2s)
 retains confirmed grip and the current path while the hand is missing, ambiguous
 or implausible on otherwise fresh video. The progress hum continues during this
-bounded pause. Reacquisition must match the existing spatial continuity limits;
-a distant/ambiguous hand cannot continue the path. A reliable return position is
+bounded pause. The logical grace does not keep a stale spatial anchor authoritative
+for two seconds. Circle acquisition first distinguishes one plausible gesturing
+hand from clearly OPEN hands. A fresh, uniquely nearby tracked hand can continue
+even with a distant pinched bystander; new/stale or spatially ambiguous matches
+remain unknown when multiple actors could be gesturing.
+The existing spatial limits still govern continuation. After `max_gap_s` (0.5s)
+without accepted hand geometry, a uniquely positive pinched return may establish
+a **fresh** stroke by discarding the old one. It never joins positions or people
+into the old path, and does not claim reliable person identity. A reliable return position is
 retained for the fit, bounds and point count, but cannot recognize on that first
 return. The unobserved segment to it contributes no angular travel; subsequent
 observed segments count toward circle completion.
@@ -145,7 +152,11 @@ tuning values, not measured recognition accuracy; qualify on the target camera.
 The timeouts serve separate purposes: `circle.occlusion_grace_s: 2.0` tolerates
 hand-observation loss before recognition, `max_gap_s: 0.5` still bounds actual
 video/source continuity and box acquisition, and `circle.clear_timeout_s: 2.0`
-still controls best-effort hand clearance **after** recognition. Increasing hand
+still controls best-effort hand clearance **after** recognition. `max_gap_s` also
+bounds the spatial association anchor, separately from remembered grip. After a
+recognized turn, acquisition role preference does not hide OPEN release evidence:
+a unique open return can re-anchor after moving, but must still satisfy the
+normal release dwell. The clearance matcher itself is unchanged. Increasing hand
 grace does not permit stale camera frames or extend pending capture indefinitely.
 
 ## Audio feedback and cooldown
@@ -201,6 +212,8 @@ summaries from multiple participants can interleave.
   `evidence_closed/open/band`, `grip`, `grip_to_*`,
   `entry_pointer_added` and `pointer_added` show whether grip admission or usable
   trajectory sampling is progressing. `association_ambiguous`,
+  `association_reanchored_new_attempt` identifies stale-anchor fresh retries;
+  `association_release_reanchored` identifies a completed-turn open return.
   `association_no_usable_nearby_hand`, `pointer_jump` and `pointer_outside` count
   sample continuity rejections, rather than blaming the model for all misses.
 - `circle_points`, `circle_min_points`, `circle_too_small`,
