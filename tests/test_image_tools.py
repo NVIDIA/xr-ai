@@ -566,3 +566,61 @@ async def test_streaming_image_query_reports_failure_before_output() -> None:
     chunks = [chunk.text async for chunk in tool.stream(ImageQueryRequest(image=images.put(b"image"), query="What?"))]
 
     assert chunks == ["VLM server unavailable — please retry."]
+
+
+class _BlockingVlm:
+    """Hold a VLM call open until cancelled, recording when its cleanup has run."""
+
+    def __init__(self) -> None:
+        self.started = asyncio.Event()
+        self.cleaned_up = False
+
+    async def ask_images(self, *_args, **_kwargs):
+        self.started.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            await asyncio.sleep(0)
+            self.cleaned_up = True
+
+    async def stream_images(self, *_args, **_kwargs):
+        self.started.set()
+        try:
+            await asyncio.Event().wait()
+            yield ""
+        finally:
+            await asyncio.sleep(0)
+            self.cleaned_up = True
+
+
+async def _cancel_when_started(vlm: _BlockingVlm, work) -> None:
+    # Relay runs the VLM call in its own task; run the caller as the sample's alert check does.
+    task = asyncio.create_task(work, context=nemo_relay.fork_asyncio_context())
+    await asyncio.wait_for(vlm.started.wait(), timeout=1)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+
+async def test_cancelled_image_query_returns_after_the_vlm_call_finishes() -> None:
+    vlm = _BlockingVlm()
+    images = ImageRegistry()
+    tool = ImageQueryTool(images=images, vlm=cast(VLMService, vlm))
+
+    await _cancel_when_started(vlm, tool.execute(ImageQueryRequest(image=images.put(b"image"), query="What?")))
+
+    assert vlm.cleaned_up
+
+
+async def test_cancelled_image_query_stream_returns_after_the_vlm_stream_finishes() -> None:
+    vlm = _BlockingVlm()
+    images = ImageRegistry()
+    tool = StreamingImageQueryTool(images=images, vlm=cast(VLMService, vlm))
+
+    async def consume() -> None:
+        async for _chunk in tool.stream(ImageQueryRequest(image=images.put(b"image"), query="What?")):
+            pass
+
+    await _cancel_when_started(vlm, consume())
+
+    assert vlm.cleaned_up

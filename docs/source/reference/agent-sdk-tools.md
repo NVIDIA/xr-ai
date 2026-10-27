@@ -65,6 +65,11 @@ Use `ToolSet.namespaced()` when independently named groups share a model-visible
 catalog. Aliasing changes only catalog names. Only finite tools belong in a
 `ToolSet`; callers consume an `AsyncTool` explicitly with `stream()`.
 
+Relay runs tool handlers and image-model calls in its own tasks. A cancelled
+`Tool.execute()`, image query, or image-query stream propagates the
+cancellation only after that handler and its model call have finished their
+cleanup, so cancelled model work does not outlive the caller.
+
 ## Agent-controlled recording
 
 Install the `capture` extra to expose recording controls through the same
