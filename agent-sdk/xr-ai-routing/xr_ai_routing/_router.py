@@ -18,7 +18,14 @@ from functools import partial
 from typing import TYPE_CHECKING, Literal
 
 import nemo_relay
-from xr_ai_models import ChatMessage, DecisionQuestion, DecisionService, LLMService
+from xr_ai_models import (
+    ChatMessage,
+    DecisionInputTooLarge,
+    DecisionQuestion,
+    DecisionResponse,
+    DecisionService,
+    LLMService,
+)
 
 if TYPE_CHECKING:
     from xr_ai_interaction import Interrupted, ParticipantJoined, ParticipantLeft, ResponseOutput, UserQuery
@@ -1181,18 +1188,19 @@ class AgentRouter:
             for route_aid in route_aids
         }
         criteria["clarify"] = "The request cannot safely be assigned to one available destination."
+        history = [
+            {
+                "user": item.user,
+                "assistant": item.assistant,
+                "recorded_around_utc": _history_timestamp(index),
+            }
+            for index, item in enumerate(turn.history)
+        ]
         state = {
             "participant_id": turn.participant_id,
             "current_time_utc": _format_minute(time.time_ns() // 1_000),
             "request": turn.query,
-            "completed_history": [
-                {
-                    "user": item.user,
-                    "assistant": item.assistant,
-                    "recorded_around_utc": _history_timestamp(index),
-                }
-                for index, item in enumerate(turn.history)
-            ],
+            "completed_history": history,
         }
         question = DecisionQuestion(
             instructions=(
@@ -1210,7 +1218,9 @@ class AgentRouter:
             input={"state": state, "question": {"instructions": question.instructions, "criteria": criteria}},
             metadata={"participant_id": turn.participant_id},
         ) as route_scope:
-            response = await self._decisions.decide(state, {"destination": question})
+            response = await self._decide_with_fitting_history(
+                state, history, question, turn.participant_id, route_scope
+            )
             answer = response.answers["destination"]
             current_eligible = []
             for candidate_name in candidates:
@@ -1252,6 +1262,45 @@ class AgentRouter:
                 },
             )
         return selected
+
+    async def _decide_with_fitting_history(
+        self,
+        state: Mapping[str, object],
+        history: list[dict[str, str]],
+        question: DecisionQuestion,
+        participant_id: str,
+        route_scope: object,
+    ) -> DecisionResponse:
+        """Route with as much recent history as the decision model accepts.
+
+        The decision service owns its input limit, and history tokenizes differently by
+        language and content, so the router cannot size a request in advance. When the
+        service rejects one as too large, keep the newest half of the history and retry.
+        History is only context for routing, so a turn routes on less of it rather than
+        failing. A request that is too large without history raises: the fixed prompt and
+        destination descriptions are the application's to shorten.
+        """
+
+        while True:
+            try:
+                return await self._decisions.decide({**state, "completed_history": history}, {"destination": question})
+            except DecisionInputTooLarge:
+                if not history:
+                    raise
+                kept = history[(len(history) + 1) // 2 :]
+                _logger.warning(
+                    "routing request too large for the decision model; retrying with fewer history exchanges "
+                    "participant=%r sent=%d retrying_with=%d",
+                    participant_id,
+                    len(history),
+                    len(kept),
+                )
+                nemo_relay.scope.event(
+                    "conversation.destination-route-history-trimmed",
+                    handle=route_scope,
+                    data={"sent_exchanges": len(history), "retry_exchanges": len(kept)},
+                )
+                history = kept
 
 
 def _cancel_once(task: asyncio.Task) -> None:

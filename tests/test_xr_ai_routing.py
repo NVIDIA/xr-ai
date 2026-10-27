@@ -15,7 +15,7 @@ import xr_ai_routing._router as router_module
 from _routing_test_output import destination_output as _destination_output
 from _routing_test_output import emit_control as _emit_control
 from _routing_test_output import route as _route
-from xr_ai_models import ChatResponse, DecisionAnswer, DecisionResponse
+from xr_ai_models import ChatResponse, DecisionAnswer, DecisionInputTooLarge, DecisionResponse
 from xr_ai_routing import (
     Admission,
     AgentExchange,
@@ -1997,3 +1997,65 @@ async def test_cancelled_answer_after_focused_decline_keeps_owner_and_drains_wor
         assert notes.calls[-2:] == [("admit", "Another note", True), ("answer", "Another note")]
     finally:
         await router.stop()
+
+
+class _SizeLimitedDecisions(_Decisions):
+    """Reject routing requests carrying more than ``max_history`` exchanges, as a model input limit would."""
+
+    def __init__(self, *choices, max_history: int) -> None:
+        super().__init__(*choices)
+        self.max_history = max_history
+        self.sent_history = []
+
+    async def decide(self, state, questions, *, timeout=None):
+        history = state["completed_history"]
+        self.sent_history.append([item["user"] for item in history])
+        if len(history) > self.max_history:
+            raise DecisionInputTooLarge("request requires 5000 tokens; maximum is 4096")
+        return await super().decide(state, questions, timeout=timeout)
+
+
+def _exchanges(count):
+    return tuple(AgentExchange(f"question {index}", f"answer {index}") for index in range(count))
+
+
+@pytest.mark.asyncio
+async def test_too_large_routing_request_retries_with_the_newest_half_of_history(caplog):
+    decisions = _SizeLimitedDecisions("visual", max_history=2)
+    conversation = _Destination("conversation")
+    visual = _Destination("visual", results=(DestinationResult("answer", "It is blue."),))
+    front_end = AgentRouter({"conversation": conversation, "visual": visual}, decisions, output=_emit_control)
+
+    result, output = await _run(front_end, query="What color is it?", history=_exchanges(8))
+
+    assert result == DestinationResult("answer", "It is blue.")
+    assert output == [("visual", "It is blue.")]
+    assert decisions.sent_history == [
+        [f"question {index}" for index in range(8)],
+        [f"question {index}" for index in range(4, 8)],
+        ["question 6", "question 7"],
+    ]
+    assert "retrying with fewer history exchanges" in caplog.text
+    # Only the routing request is trimmed; the destination keeps the router's full history.
+    assert len(visual.answer_turns[0].history) == 8
+
+
+@pytest.mark.asyncio
+async def test_routing_request_too_large_without_history_raises():
+    decisions = _SizeLimitedDecisions("visual", max_history=-1)
+    visual = _Destination("visual")
+    front_end = AgentRouter(
+        {"conversation": _Destination("conversation"), "visual": visual}, decisions, output=_emit_control
+    )
+
+    # The fixed prompt and descriptions alone exceed the limit: an application error, not a history one.
+    with pytest.raises(DecisionInputTooLarge):
+        await _run(front_end, query="What color is it?", history=_exchanges(3))
+
+    assert decisions.sent_history == [
+        ["question 0", "question 1", "question 2"],
+        ["question 2"],
+        [],
+    ]
+    assert visual.calls == []
+

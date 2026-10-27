@@ -46,6 +46,10 @@ def _resolve_model_directory(config: ServerConfig) -> Path:
     return Path(snapshot_download(**lookup))
 
 
+class InputTooLong(ValueError):
+    """A request needs more model input tokens than the configured ``max_length``."""
+
+
 class ClefBackend:
     """Own the downloaded code, model, processor, and serialized GPU calls."""
 
@@ -106,7 +110,7 @@ class ClefBackend:
         except ValueError as exc:
             raise ValueError(str(exc)) from exc
         if len(encoded.input_ids) > self.config.max_length:
-            raise ValueError(f"request requires {len(encoded.input_ids)} tokens; maximum is {self.config.max_length}")
+            raise InputTooLong(f"request requires {len(encoded.input_ids)} tokens; maximum is {self.config.max_length}")
 
     def answer(self, body: dict[str, Any]) -> dict[str, Any]:
         if self.systemone is None or self.model is None or self.processor is None:
@@ -143,6 +147,11 @@ def create_app(
     @app.exception_handler(ValueError)
     async def invalid_request(_: Request, exc: ValueError) -> JSONResponse:
         return JSONResponse(status_code=422, content={"detail": str(exc)})
+
+    # Too much input shares the oversized-body status, so callers can retry with less.
+    @app.exception_handler(InputTooLong)
+    async def input_too_long(_: Request, exc: InputTooLong) -> JSONResponse:
+        return JSONResponse(status_code=413, content={"detail": str(exc)})
 
     @app.get("/health")
     async def health() -> dict[str, str]:

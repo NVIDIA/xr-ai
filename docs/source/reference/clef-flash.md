@@ -60,7 +60,8 @@ fail before loading model weights.
 The YAML sets the bind address, port, device, inference dtype, maximum token
 length, and maximum request-body size. The checked-in values use `cuda:0`,
 BF16, 4096 tokens, and a 1 MiB body limit. Requests that exceed the context
-limit receive HTTP 422; increase `max_length` only when GPU memory allows it.
+limit receive HTTP 413, the same status as an oversized body, so a client can
+retry with less input; increase `max_length` only when GPU memory allows it.
 
 (clef-service-updates)=
 ## Updating a running service
@@ -129,8 +130,8 @@ using 16-pixel patches and a two-by-two spatial merge. This
 conservative admission limit applies to original dimensions even if the model
 would resize them. Resize large source photos on the client before submitting
 crops. The processor then checks the actual combined text, image, and question
-token count against `max_length`; invalid images or excess tokens receive HTTP
-422, and excess body bytes receive HTTP 413.
+token count against `max_length`; invalid images receive HTTP 422, and excess
+tokens or body bytes receive HTTP 413.
 Request-controlled preprocessing options (`media_kwargs`) are rejected with
 HTTP 422: resize settings belong to the server's loaded processor.
 

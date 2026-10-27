@@ -10,6 +10,7 @@ from types import MappingProxyType
 import httpx
 import pytest
 from xr_ai_models import (
+    DecisionInputTooLarge,
     DecisionQuestion,
     DecisionSpec,
     _systemone,
@@ -243,3 +244,29 @@ async def test_decision_images_use_inline_wire_data_and_preserve_order(tmp_path)
     assert bodies[0]["images"] == [png_url, jpeg_url, png_url]
     assert "images" not in bodies[1]
     assert len(bodies) == 2
+
+
+@pytest.mark.asyncio
+async def test_decision_reports_input_too_large_as_a_typed_error() -> None:
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(
+            lambda _request: httpx.Response(413, json={"detail": "request requires 5000 tokens; maximum is 4096"})
+        )
+    )
+    service = _systemone._SystemOneDecision(
+        base_url="http://clef.test:8003",
+        model_name="Cloudflare/Clef",
+        api_key_env=None,
+        timeout=5,
+        health_check=False,
+        health_path="/health",
+        client=client,
+    )
+    try:
+        with pytest.raises(DecisionInputTooLarge, match="maximum is 4096"):
+            await service.decide(
+                "state",
+                {"q": DecisionQuestion(instructions="choose", criteria={"yes": "yes", "no": "no"})},
+            )
+    finally:
+        await client.aclose()

@@ -26,6 +26,7 @@ from clef_server._config import ServerConfig, identity, load_config  # noqa: E40
 from clef_server._images import _ImageLimits  # noqa: E402
 from clef_server._service import (  # noqa: E402
     ClefBackend,
+    InputTooLong,
     _await_without_abandoning,
     _normalize_response,
     create_app,
@@ -48,7 +49,7 @@ class _Backend:
 
     def validate_length(self, body: dict) -> None:
         if body["state"] == "too long":
-            raise ValueError("request exceeds the configured token limit")
+            raise InputTooLong("request exceeds the configured token limit")
 
     def answer(self, body: dict) -> dict:
         self.calls.append(body)
@@ -175,7 +176,7 @@ def test_overlong_request_is_rejected_without_truncation(tmp_path: Path) -> None
     with TestClient(create_app(config, backend)) as client:
         response = client.post("/v1/systemone", json=body)
 
-    assert response.status_code == 422
+    assert response.status_code == 413
     assert "token limit" in response.json()["detail"]
     assert len(backend.calls) == 1
 
@@ -660,7 +661,7 @@ def test_length_admission_detects_native_truncation(tmp_path, actual_length):
     backend.encode_record = encode
     try:
         if actual_length > config.max_length:
-            with pytest.raises(ValueError, match="maximum is 32768"):
+            with pytest.raises(InputTooLong, match="maximum is 32768"):
                 backend.validate_length(_request(images=[_image_url()]))
         else:
             backend.validate_length(_request(images=[_image_url()]))
