@@ -11,6 +11,7 @@ a Cosmos observation judged by Clef. The first check to confirm wins.
 from __future__ import annotations
 
 import asyncio
+import re
 from collections.abc import Coroutine, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,8 +20,6 @@ from typing import Any
 import nemo_relay
 from loguru import logger
 from xr_ai_models import DecisionQuestion, DecisionService, ImageInput, VLMService
-from xr_ai_tools.image import ImageRegistry
-from xr_ai_tools.vision import ImageQueryRequest, ImageQueryTool
 
 from ._alert_compile import CompiledAlert
 from ._decisions import decide
@@ -49,6 +48,7 @@ _OBSERVED = DecisionQuestion(
     },
 )
 _OBSERVATION_PROMPT = (_PROMPTS / "alert_observation.txt").read_text(encoding="utf-8").strip()
+_THINKING = re.compile(r"<think>.*?</think>", re.DOTALL)
 
 
 @dataclass(frozen=True, slots=True)
@@ -131,26 +131,22 @@ class AlertChecks:
     async def _observe(self, participant_id: str, alert: CompiledAlert, image: ImageInput) -> str:
         """Ask Cosmos what ``image`` shows about the condition."""
 
-        # Hold the frame independently of the shared registry's bounded LRU.
-        held = ImageRegistry(capacity=1)
-        request = ImageQueryRequest(image=held.put(image), query=alert.condition)
         with nemo_relay.scope.scope(
             "conversation-example.alert-observation",
             nemo_relay.ScopeType.Agent,
             input={"condition": alert.condition, "image_role": "current still frame"},
             metadata={"participant_id": participant_id},
         ) as handle:
-            observation = await ImageQueryTool(images=held, vlm=self._vlm, system_prompt=_OBSERVATION_PROMPT).execute(
-                request
-            )
+            # Called directly, not through ImageQueryTool: a cancelled Relay tool call returns
+            # before its model call stops (NVIDIA/xr-ai#697), and the losing check must drain.
+            response = await self._vlm.ask_images([image], alert.condition, system_prompt=_OBSERVATION_PROMPT)
+            text = _THINKING.sub("", response.content or "").strip()
             nemo_relay.scope.event(
-                "conversation-example.alert-observation-result",
-                handle=handle,
-                data={"available": observation.available},
+                "conversation-example.alert-observation-result", handle=handle, data={"available": bool(text)}
             )
-        if not observation.available:
-            raise RuntimeError("Cosmos could not inspect the alert frame")
-        return observation.text
+        if not text:
+            raise RuntimeError("Cosmos returned no observation of the alert frame")
+        return text
 
 
 async def _first_trigger(

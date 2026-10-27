@@ -30,7 +30,7 @@ files before starting the sample:
 
 | File | Common changes |
 |---|---|
-| `yaml/conversation_example_worker.yaml` | Frame freshness, VAD sensitivity, idle timeout, optional route-aware acknowledgment delay, context topics (including shared notes), or prompt override |
+| `yaml/conversation_example_worker.yaml` | Frame freshness, VAD sensitivity, idle timeout, optional route-aware acknowledgment delay, conversation-context and routing-history budgets, alert check intervals, or prompt override |
 | `yaml/voice_gate.yaml` | Conversation controls, optional wake phrases, listening chime, and follow-up window |
 | `yaml/models.json` | Reused model adapters, Clef router endpoint, and conversation generation defaults |
 | `yaml/device_io_hub.yaml` | Room, ports, web client, and network behavior |

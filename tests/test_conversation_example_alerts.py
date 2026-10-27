@@ -13,7 +13,6 @@ from collections import deque
 from pathlib import Path
 from types import SimpleNamespace
 
-import nemo_relay
 import pytest
 from loguru import logger
 from test_conversation_example_agents import _Frames, _next_call
@@ -21,7 +20,6 @@ from xr_ai_conversation import ContextManager, ConversationContextUpdate
 from xr_ai_hub import FrameUnavailable
 from xr_ai_models import Capabilities, ChatResponse
 from xr_ai_routing import AgentExchange, AgentTurn
-from xr_ai_tools.vision import ImageQueryResult, ImageQueryTool
 from xr_ai_voice import VOICE_OUTPUT_TOPIC
 
 _ROOT = Path(__file__).resolve().parents[1]
@@ -135,6 +133,7 @@ class _Decisions:
         synchronize=False,
         fast_gate=None,
         ignore_fast_cancel=False,
+        fast_cancel_error=None,
     ):
         self.controls = deque(controls)
         self.relevance = deque(relevance if isinstance(relevance, list) else [relevance])
@@ -149,6 +148,7 @@ class _Decisions:
         self.ready_count = 0
         self.fast_gate = fast_gate
         self.ignore_fast_cancel = ignore_fast_cancel
+        self.fast_cancel_error = fast_cancel_error
 
     def paths(self):
         return [call[0]["decision_path"] for call in self.calls if "decision_path" in call[0]]
@@ -171,6 +171,8 @@ class _Decisions:
                 try:
                     await self.fast_gate.wait()
                 except asyncio.CancelledError:
+                    if self.fast_cancel_error is not None:
+                        raise self.fast_cancel_error from None
                     if not self.ignore_fast_cancel:
                         raise
             if self.synchronize:
@@ -223,29 +225,6 @@ def _agent(
     )
     agent.sleeps = sleeps
     return agent, output
-
-
-@pytest.fixture(autouse=True)
-def _run_relay_calls_with_scripted_vlm(monkeypatch):
-    async def stream_execute(_name, request, handler, _on_chunk, _on_complete, **kwargs):
-        return handler(request)
-
-    original_init = ImageQueryTool.__init__
-
-    def init(tool, *, images, vlm, system_prompt=""):
-        original_init(tool, images=images, vlm=vlm, system_prompt=system_prompt)
-        tool._test_images = images
-        tool._test_vlm = vlm
-        tool._test_prompt = system_prompt
-
-    async def execute(tool, request):
-        image = tool._test_images.resolve(request.image)
-        response = await tool._test_vlm.ask_images([image], request.query, system_prompt=tool._test_prompt)
-        return ImageQueryResult(text=response.content)
-
-    monkeypatch.setattr(nemo_relay.llm, "stream_execute", stream_execute)
-    monkeypatch.setattr(ImageQueryTool, "__init__", init)
-    monkeypatch.setattr(ImageQueryTool, "execute", execute)
 
 
 async def _start(agent, participant="alice", request="Alert me when the lamp is blue.", turn_id="start", history=()):
@@ -515,20 +494,23 @@ async def test_departure_during_sibling_cleanup_waits_for_that_cleanup():
 
 @pytest.mark.asyncio
 async def test_losing_check_failing_during_cleanup_is_logged_not_left_unretrieved():
-    vlm, fast_gate, decisions = _slow_sibling_cleanup()
-    vlm.cleanup_error = RuntimeError("Cosmos cleanup failed")
-    vlm.release_observation_cleanup.set()
+    # The observation check wins; the direct check, still waiting on Clef, fails while cancelling.
+    decisions = _Decisions(
+        "start",
+        fast=("no", 1.0),
+        backup=("yes", 1.0),
+        fast_gate=asyncio.Event(),
+        fast_cancel_error=RuntimeError("Clef cleanup failed"),
+    )
     unretrieved = []
     loop = asyncio.get_running_loop()
     loop.set_exception_handler(lambda _loop, context: unretrieved.append(context))
     logs = []
     sink = logger.add(logs.append, format="{message}", level="WARNING")
     try:
-        agent, output = _agent(decisions, _Frames((_open(), None)), vlm=vlm)
+        agent, output = _agent(decisions, _Frames((_open(), None)))
         await _start(agent)
         job = agent._jobs["alice"]
-        await asyncio.wait_for(vlm.observation_started.wait(), 1)
-        fast_gate.set()
         await asyncio.wait_for(job.task, 1)
         del job
         gc.collect()
@@ -537,7 +519,7 @@ async def test_losing_check_failing_during_cleanup_is_logged_not_left_unretrieve
         loop.set_exception_handler(None)
 
     assert sum(message.text == "Alert" for message, _ in output.messages) == 1
-    assert any("alert-cosmos-clef" in line and "Cosmos cleanup failed" in line for line in logs), logs
+    assert any("alert-fast-clef" in line and "Clef cleanup failed" in line for line in logs), logs
     assert not unretrieved
 
 
@@ -574,8 +556,10 @@ async def test_only_a_screened_frame_runs_cosmos_and_the_condition_checks():
     paths = decisions.paths()
     assert paths.count("relevance") == 3
     assert paths[:2] == ["relevance", "relevance"]
-    assert {"fast-clef", "cosmos-clef"} == set(paths[3:])
-    assert len(vlm.observed_images) == 1
+    # Condition checks start only after the third, passing screen. The direct check can win
+    # before the Cosmos observation reaches the model, so Cosmos runs at most once.
+    assert "fast-clef" in paths[3:] and set(paths[3:]) <= {"fast-clef", "cosmos-clef"}
+    assert len(vlm.observed_images) <= 1
     assert sum(message.text == "Alert" for message, _ in output.messages) == 1
 
 

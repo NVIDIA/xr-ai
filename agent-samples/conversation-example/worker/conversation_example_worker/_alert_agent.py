@@ -20,7 +20,6 @@ from xr_ai_routing import Admission, AgentTurn, DestinationResult, RoutableAgent
 from xr_ai_runtime import AgentRuntime, RuntimeClosedError, Topic
 from xr_ai_tools.current_frame import CurrentFrameRequest, CurrentFrameTool
 from xr_ai_tools.image import ImageRegistry
-from xr_ai_tools.vision import ImageQueryRequest, StreamingImageQueryTool
 
 from ._alert_checks import AlertChecks, Trigger
 from ._alert_compile import CompiledAlert, compile_alert
@@ -227,12 +226,11 @@ class VisualAlertAgent(RoutableAgent):
     async def _describe(self, participant_id: str, job: _Job, trigger: Trigger) -> None:
         """Follow the announcement with one description of the triggering frame."""
 
-        # Hold the selected pixels independently of the shared registry's bounded LRU.
-        images = ImageRegistry(capacity=1)
-        request = ImageQueryRequest(image=images.put(trigger.image), query=job.alert.condition)
-        stream = StreamingImageQueryTool(images=images, vlm=self._vlm, system_prompt=_DESCRIPTION).stream(request)
+        # Called directly, not through StreamingImageQueryTool, so cancelling the job stops the
+        # model stream before departure or shutdown returns (NVIDIA/xr-ai#697).
+        stream = self._vlm.stream_images([trigger.image], job.alert.condition, system_prompt=_DESCRIPTION)
         try:
-            text = "".join([chunk.text async for chunk in stream if chunk.text])
+            text = "".join([chunk async for chunk in stream if chunk])
             # An update is finite, so the description is spoken once it is complete.
             if self._jobs.get(participant_id) is job:
                 await self._outputs.update(participant_id, text)
