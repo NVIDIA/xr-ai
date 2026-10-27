@@ -250,7 +250,9 @@ async def test_alert_cancel_publishes_one_finite_attributed_response():
             await router.stop()
         # One reply: its text, then the empty terminator that completes it.
         assert {(metadata.source, metadata.participant_id) for metadata, _ in output.messages} == {("alerts", "alice")}
-        text, terminator = (message for _, message in output.messages)
+        # Cancelling first takes back any unspoken alert update, then replies.
+        withdraw, text, terminator = (message for _, message in output.messages)
+        assert withdraw.kind == "withdraw"
         assert text.kind == "reply" and text.request_id and text.timestamp_us == 789
         assert text.text == "The visual alert is cancelled."
         assert terminator.final and not terminator.text and terminator.response_id == text.response_id

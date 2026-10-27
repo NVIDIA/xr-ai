@@ -141,7 +141,7 @@ class VisualAlertAgent(RoutableAgent):
             if self._closing:
                 return _NO_ANSWER
             if action == "cancel":
-                await self._cancel(participant_id)
+                await self._retire(participant_id)
                 return await self._reply(turn, started, _CANCELLED)
             # Compile under the lock so a departure or shutdown waits for it and then cancels the new job.
             alert = await self._compile(turn)
@@ -150,7 +150,7 @@ class VisualAlertAgent(RoutableAgent):
             if alert is None:
                 # An unresolvable request leaves any running alert alone.
                 return await self._reply(turn, started, _UNCLEAR)
-            await self._cancel(participant_id)
+            await self._retire(participant_id)
             result = await self._reply(turn, started, f"I'll alert you once when {alert.condition}.")
             if not self._closing:
                 self._start_job(participant_id, alert)
@@ -287,6 +287,15 @@ class VisualAlertAgent(RoutableAgent):
             name=f"conversation-example-alert:{participant_id}",
             context=nemo_relay.fork_asyncio_context(),
         )
+
+    async def _retire(self, participant_id: str) -> None:
+        """Stop the current alert and take back any of its updates not yet spoken.
+
+        A finished job has already left ``_jobs``, but its description can still be queued.
+        """
+
+        await self._cancel(participant_id)
+        await self._outputs.withdraw(participant_id)
 
     async def _cancel(self, participant_id: str) -> None:
         job = self._jobs.pop(participant_id, None)

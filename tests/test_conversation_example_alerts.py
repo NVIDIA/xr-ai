@@ -673,3 +673,30 @@ async def test_departure_during_compilation_leaves_no_alert_running():
     await asyncio.gather(answering, leaving)
 
     assert not agent._jobs
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("request_text", "control", "reply"),
+    [
+        ("Cancel the visual alert.", "cancel", "The visual alert is cancelled."),
+        ("Alert me when the door opens.", "start", "I'll alert you once when the lamp is blue."),
+    ],
+    ids=["cancel", "replace"],
+)
+async def test_cancelling_or_replacing_an_alert_withdraws_its_unspoken_updates(request_text, control, reply):
+    decisions = _Decisions("start", control, fast=("yes", 1.0))
+    agent, output = _agent(decisions, _Frames((_open(), None), (_open(), None)))
+    await _start(agent)
+    # The job has finished and left _jobs, but its description may still be queued for speech.
+    await asyncio.wait_for(agent._jobs["alice"].task, 1)
+    assert not agent._jobs
+
+    await _start(agent, request=request_text, turn_id="second")
+
+    kinds = [(message.kind, message.text) for message, _ in output.messages]
+    after_description = kinds[kinds.index(("update", "The lamp is blue.")) + 1 :]
+    # The second request takes back the queued description before its own reply.
+    assert after_description.index(("withdraw", "")) < after_description.index(("reply", reply))
+    await agent.stop()
+

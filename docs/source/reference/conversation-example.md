@@ -92,7 +92,9 @@ Checks are paced: the next frame waits at least `alert_check_interval_secs`
 screened frame, which ran Cosmos. A failure in one condition check leaves the
 other available; if both fail, or the screen or frame capture fails, the job
 retires with a concise failure message. Only an explicit new alert request
-replaces an existing job. “Cancel the visual alert” cancels it. Ordinary
+replaces an existing job. “Cancel the visual alert” cancels it. Cancelling or
+replacing an alert also withdraws its announcement or description if voice output
+has not started speaking it. Ordinary
 questions and fragments are not alert controls. Each participant owns an
 independent job; departure and worker shutdown cancel its work and wait for that
 cleanup to finish, even if they are cancelled themselves while waiting.
@@ -110,7 +112,8 @@ image stay inside the background job.
 Foreground notes start explicitly, capture dictated text, and retain focus until
 a finish. A question handoff declines only that query so another destination can
 answer; the next turn returns to note capture. Every saved note is kept until
-the participant leaves and is read back in full, and each one is also shared
+the participant leaves and is read back in full, also after the session
+finishes, without restarting it. Each one is also shared
 with general conversation. The notes routing description is static, so the
 router's request does not grow with saved notes.
 A decline gives the router one bounded reroute; unresolved routing clarifies or

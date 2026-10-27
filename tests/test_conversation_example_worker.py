@@ -561,6 +561,24 @@ async def test_notes_capture_readback_and_finish_until_departure() -> None:
 
 
 @pytest.mark.asyncio
+async def test_notes_read_back_after_the_session_finishes_without_refocusing() -> None:
+    destination = _notes(_NoteDecisions("start", "capture", "finish", "readback"))
+    for turn_id, query, focused in (
+        ("start", "Take some notes.", False),
+        ("capture", _NOTE, True),
+        ("finish", "That's all for the notes.", True),
+    ):
+        turn = AgentTurn("alice", turn_id, query)
+        assert (await destination.admit(turn, focused=focused)).disposition == "accept"
+        await _answer(destination, turn, emit=_ignore)
+
+    readback = AgentTurn("alice", "readback", "Read back my notes.")
+    assert (await destination.admit(readback, focused=False)).disposition == "accept"
+    result = await _answer(destination, readback, emit=_ignore)
+    assert result == DestinationResult("answer", f"Your notes: {_NOTE}")
+
+
+@pytest.mark.asyncio
 async def test_note_capture_drains_context_publish_on_cancel() -> None:
     entered_publish = asyncio.Event()
     finish_publish = asyncio.Event()

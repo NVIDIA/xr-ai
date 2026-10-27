@@ -83,7 +83,8 @@ class NoteTakingAgent(RoutableAgent):
 
     async def admit(self, turn: AgentTurn, *, focused: bool) -> Admission:
         action = await self._classify(turn, focused=focused)
-        if action == "handoff" or (not focused and action not in {"start", "capture"}):
+        # Saved notes stay readable after the session ends; readback does not restart it.
+        if action == "handoff" or (not focused and action not in {"start", "capture", "readback"}):
             return Admission("decline")
         self._pending[turn.participant_id] = (turn.turn_id, action, focused)
         return Admission("accept")
