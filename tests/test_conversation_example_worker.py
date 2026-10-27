@@ -764,10 +764,10 @@ async def test_router_departure_error_does_not_skip_sample_cleanup() -> None:
 async def test_domain_visual_request_routes_to_direct_observation_agent() -> None:
     class Decisions:
         def __init__(self) -> None:
-            self.state = None
+            self.questions = None
 
-        async def decide(self, state, _questions, *, timeout=None):
-            self.state = state
+        async def decide(self, _state, questions, *, timeout=None):
+            self.questions = questions
             return DecisionResponse(
                 answers={"destination": DecisionAnswer("observation", 1.0, {"observation": 1.0})},
                 model="fake",
@@ -810,8 +810,7 @@ async def test_domain_visual_request_routes_to_direct_observation_agent() -> Non
     assert output == [("observation", "a "), ("observation", "blue square")]
     assert frames.requests[0].participant_id == "alice"
     assert "Read the label on this exhibit." in vision.requests[0].query
-    observation_aid = next(item for item in decisions.state["destinations"] if item["name"] == "observation")
-    assert "current camera frame" in observation_aid["description"]
+    assert "current camera frame" in decisions.questions["destination"].criteria["observation"]
 
 
 async def test_text_and_visual_destinations_share_router_history_and_output_sources() -> None:
