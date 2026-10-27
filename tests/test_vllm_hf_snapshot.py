@@ -103,7 +103,7 @@ class TestContainerCommand:
 
     def _command(self, tmp_path: Path, serve_args: list[str]) -> str:
         return build_run_argv(
-            image="nvcr.io/nvidia/vllm:26.09-py3",
+            image="nvcr.io/nvidia/vllm:26.10.pre1-py3",
             container_name="xr-ai-vllm-test",
             port=8100,
             model_cache=tmp_path / "models",

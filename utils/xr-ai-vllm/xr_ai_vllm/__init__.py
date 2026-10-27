@@ -57,7 +57,7 @@ from ._config import (
 
 log = logging.getLogger(__name__)
 
-DEFAULT_IMAGE = "nvcr.io/nvidia/vllm:26.09-py3"
+DEFAULT_IMAGE = "nvcr.io/nvidia/vllm:26.10.pre1-py3"
 """Default NGC vLLM image used when a service does not override ``vllm_image``.
 
 Individual services may pin a newer image when required by their model.

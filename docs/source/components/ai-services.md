@@ -622,15 +622,27 @@ flags. Docker-only lifecycle settings such as `vllm_image`, `extra_pip`, and
 ```yaml
 # vlm-server (Cosmos3)
 vllm_backend: docker
-vllm_image:   nvcr.io/nvidia/vllm:26.09-py3
+vllm_image:   nvcr.io/nvidia/vllm:26.10.pre1-py3
 ```
 
-`vllm_image:` defaults to `nvcr.io/nvidia/vllm:26.09-py3` for all wrappers.
-This image includes NVIDIA-patched vLLM 0.29.0. The checked-in Cosmos3 and
-Nemotron model configurations select this image. Nemotron Omni uses its native Mamba and
-causal-convolution implementations, so the shipped configuration does not
-compile or install `mamba-ssm` or `causal-conv1d`. Override the image to pin
-another tag, an internal mirror, or a custom build.
+`vllm_image:` defaults to `nvcr.io/nvidia/vllm:26.10.pre1-py3` for all wrappers.
+The Python environments also pin vLLM 0.31.0. vLLM 0.31.0 is the upstream fixed
+release for CVE-2026-114050 and CVE-2026-114055. Keep per-request multimodal
+processor overrides disabled; server-level processor configuration remains
+available.
+
+This NVIDIA NGC preview uses CUDA 13.4 and reports vLLM
+`0.31.0+88641915` on Linux x86_64 and aarch64. The checked-in Cosmos3 and
+Nemotron model configurations select this image. Qualify the preview on the
+target GPU and model workload before deploying it. Nemotron Omni uses its
+native Mamba and causal-convolution implementations, so the shipped
+configuration does not compile or install `mamba-ssm` or `causal-conv1d`.
+Override the image to pin another tag, an internal mirror, or a custom build.
+
+The preview tag is mutable. The observed multi-architecture manifest digest is
+`sha256:cb38bbefdbc3e9fe045f931dd72cbd58cd48985c7e09916bcc6c15c10f39b929`.
+For reproducible deployments, append `@sha256:<digest>` to the image reference
+in each service configuration and qualify that exact manifest.
 
 ::::{important}
 When upgrading an existing checkout, stop the persistent model stack before
@@ -638,13 +650,13 @@ starting it with the new image:
 
 ```bash
 uv run --project agent-samples/simple-vlm-example/model-servers simple_vlm_example_model_servers --stop
-docker pull nvcr.io/nvidia/vllm:26.09-py3
+docker pull nvcr.io/nvidia/vllm:26.10.pre1-py3
 ```
 
 The next launch recreates stale managed containers when their image or command
 fingerprint differs. After the new stack starts successfully, reclaim disk from
 an old image with `docker image rm <old-vllm-image>`. Keep the shared model cache;
-the 26.09 stack reuses compatible weights and downloads any missing artifacts.
+the updated stack reuses compatible weights and downloads any missing artifacts.
 ::::
 
 ### docker mode — prerequisites
@@ -694,11 +706,11 @@ Existing `~/.docker/config.json` entries take priority and are not overwritten.
   forwarded, and included in the container fingerprint, so changing one
   recreates a persistent container.
 
-The selected image reports this in-container vLLM version:
+The selected NGC preview reports this vLLM version in its image metadata:
 
 | Image | vLLM |
 |---|---:|
-| `nvcr.io/nvidia/vllm:26.09-py3` | 0.29.0+5013de39 |
+| `nvcr.io/nvidia/vllm:26.10.pre1-py3` | 0.31.0+88641915 |
 
 - Container name is deterministic per service: `xr-ai-vllm-vlm-server`,
   `xr-ai-vllm-nemotron3-nano-llm-server`,
@@ -738,16 +750,17 @@ cleanup.
   When serving `nvidia/Cosmos3-Nano` with the default Docker image on SM12 GPUs,
   including RTX Blackwell and GB10, the service selects Triton attention for
   both the decoder and vision encoder.
-  This reduces cold image latency without depending on a previous container's
-  compilation cache. On x86 SM12 GPUs, it avoids the pinned 26.09 image's
-  FlashAttention-2 PTX fallback. The ARM image includes native Blackwell kernels,
-  so that explanation does not apply to every SM12 deployment. Other GPUs,
-  custom images, and pip mode retain vLLM's backend selection. The optional
-  `attention_backend` and
-  `mm_encoder_attn_backend` YAML keys override each component independently;
-  explicit `auto` restores vLLM's selection. Cold starts still include model
-  loading and backend compilation. A healthy model HTTP endpoint is not a
-  guarantee that sample inference warmup has completed.
+  Measurements on NGC 26.09 showed lower cold image latency with Triton:
+  the x86 image fell back to FlashAttention-2 PTX compilation, while the ARM
+  image included native Blackwell kernels. This conservative default is
+  retained for the NGC 26.10 preview pending GPU qualification; those kernel
+  properties and latency results have not been reverified on the preview.
+  Other GPUs, custom images, and pip mode retain vLLM's backend selection.
+  The optional `attention_backend` and `mm_encoder_attn_backend` YAML keys
+  override each component independently; explicit `auto` restores vLLM's
+  selection. Cold starts still include model loading and backend compilation.
+  A healthy model HTTP endpoint is not a guarantee that sample inference
+  warmup has completed.
 - **nemotron3-nano-llm** is a thin wrapper around `vllm serve` for
   `NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8}` (auto-selected by GPU compute
   capability). vLLM handles tool calling (`qwen3_coder` parser), reasoning
