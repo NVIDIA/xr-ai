@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import asyncio
+import http.client
 import importlib.util
 import io
 import json
@@ -14,6 +15,7 @@ import socket
 import subprocess
 import sys
 import threading
+import urllib.error
 import wave
 from contextlib import suppress
 from pathlib import Path
@@ -495,6 +497,18 @@ async def test_http_contract_and_error_mapping(monkeypatch, tmp_path) -> None:
     assert health_error.value.status_code == 503
 
     backend._model = SimpleNamespace(sample_rate=24000)
+    assert routes["/health"].endpoint() == {
+        "status": "ok",
+        "service": "pocket_tts_server",
+    }
+    monkeypatch.setattr(
+        module.urllib.request,
+        "urlopen",
+        lambda *_args, **_kwargs: _health_response(
+            json.dumps(routes["/health"].endpoint()).encode()
+        ),
+    )
+    assert module._health_url_ok("http://127.0.0.1:8105/health")
     backend.synthesize = Mock(return_value=b"RIFFtest")
     request = SimpleNamespace(is_disconnected=AsyncMock(return_value=False))
     speech_request = SimpleNamespace(
@@ -747,12 +761,24 @@ async def test_scopes_hugging_face_cache_to_model_cache(tmp_path, monkeypatch) -
         )
 
 
+def _health_response(body: bytes, status: int = 200) -> io.BytesIO:
+    response = io.BytesIO(body)
+    response.status = status
+    return response
+
+
 async def test_reuses_healthy_persistent_server(tmp_path, monkeypatch) -> None:
     module = _load_main_module()
     ready_file = tmp_path / "ready"
     monitor = Mock()
     monkeypatch.setattr(module, "setup_logging", lambda *_args: None)
-    monkeypatch.setattr(module, "_health_url_ok", lambda _url: True)
+    monkeypatch.setattr(
+        module.urllib.request,
+        "urlopen",
+        lambda *_args, **_kwargs: _health_response(
+            b'{"status":"ok","service":"pocket_tts_server"}'
+        ),
+    )
     monkeypatch.setattr(module, "_monitor_reused_server", monitor)
     monkeypatch.delenv(module._READY_PROCESS_MAY_EXIT_ENV, raising=False)
     monkeypatch.setattr(
@@ -772,12 +798,33 @@ async def test_reuses_healthy_persistent_server(tmp_path, monkeypatch) -> None:
     monitor.assert_called_once_with("http://127.0.0.1:8105/health")
 
 
-async def test_rejects_unhealthy_listener(tmp_path, monkeypatch) -> None:
+@pytest.mark.parametrize(
+    ("body", "status"),
+    [
+        (b'{"status":"ok","service":"foreign_server"}', 200),
+        (b'{"status":"ok"}', 200),
+        (b"not JSON", 200),
+        (b"[]", 200),
+        (b"null", 200),
+        (b'{"service":null}', 200),
+        (b'{"service":"pocket_tts_server"}', 204),
+    ],
+)
+async def test_rejects_unidentified_listener(tmp_path, monkeypatch, body, status) -> None:
     module = _load_main_module()
     ready_file = tmp_path / "ready"
     monkeypatch.setattr(module, "setup_logging", lambda *_args: None)
-    monkeypatch.setattr(module, "_health_url_ok", lambda _url: False)
+    monkeypatch.setattr(
+        module.urllib.request,
+        "urlopen",
+        lambda *_args, **_kwargs: _health_response(body, status),
+    )
     monkeypatch.setattr(module, "_port_open", lambda _host, _port: True)
+    kill, killpg, execvpe, monitor = Mock(), Mock(), Mock(), Mock()
+    monkeypatch.setattr(module, "_monitor_reused_server", monitor)
+    monkeypatch.setattr(module.os, "kill", kill)
+    monkeypatch.setattr(module.os, "killpg", killpg)
+    monkeypatch.setattr(module.os, "execvpe", execvpe)
     monkeypatch.setattr(
         module.sys,
         "argv",
@@ -787,6 +834,44 @@ async def test_rejects_unhealthy_listener(tmp_path, monkeypatch) -> None:
     with pytest.raises(SystemExit, match="already in use"):
         module.run()
     assert not ready_file.exists()
+    kill.assert_not_called()
+    killpg.assert_not_called()
+    execvpe.assert_not_called()
+    monitor.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        OSError("connection refused"),
+        urllib.error.HTTPError("http://127.0.0.1:8105/health", 503, "not ready", {}, None),
+        http.client.IncompleteRead(b'{"service":'),
+    ],
+)
+async def test_health_probe_handles_unavailable_server(monkeypatch, error) -> None:
+    module = _load_main_module()
+    urlopen = Mock(side_effect=error)
+    monkeypatch.setattr(module.urllib.request, "urlopen", urlopen)
+
+    assert not module._health_url_ok("http://127.0.0.1:8105/health")
+    urlopen.assert_called_once_with("http://127.0.0.1:8105/health", timeout=2)
+
+
+async def test_reuse_monitor_rejects_foreign_health_responses(monkeypatch) -> None:
+    module = _load_main_module()
+    responses = [
+        b'{"status":"ok","service":"pocket_tts_server"}',
+        b'{"status":"ok","service":"foreign_server"}',
+        b'{"status":"ok"}',
+        b"not JSON",
+    ]
+    urlopen = Mock(side_effect=[_health_response(body) for body in responses])
+    monkeypatch.setattr(module.urllib.request, "urlopen", urlopen)
+    monkeypatch.setattr(module.time, "sleep", lambda _seconds: None)
+
+    with pytest.raises(SystemExit, match="3 consecutive health checks"):
+        module._monitor_reused_server("http://127.0.0.1:8105/health")
+    assert urlopen.call_count == 4
 
 
 async def test_startup_timeout_does_not_wait_for_cuda_warmup(
