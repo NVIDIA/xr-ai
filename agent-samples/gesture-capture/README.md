@@ -5,8 +5,8 @@
 
 # Gesture capture
 
-Hold a box with both hands' index fingers and thumbs, or pinch and draw a near-closed
-circle, to ask the VLM about that section of the camera view. Both gestures
+Frame a rectangle with two opposing thumb/index L shapes (no fingertip contact),
+or pinch and draw a near-closed circle, to ask the VLM about that section of the camera view. Both gestures
 query a crop of the selected streamed frame by default. Optional aligned-photo
 mode requests a separate higher-resolution photograph. This sample starts a hub
 and worker and reuses a separately running VLM service. A circle chimes when

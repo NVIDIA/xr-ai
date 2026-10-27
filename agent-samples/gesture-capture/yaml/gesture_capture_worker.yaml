@@ -18,7 +18,8 @@ release_s: 0.4
 max_gap_s: 0.5
 # Maximum normalized edge movement during a hold.
 movement_tolerance: 0.05
-# Maximum corner mismatch as a fraction of the thumb/index span.
+# Edge/ray alignment tolerance (sine of angular mismatch). Also disambiguates
+# legacy near-tip clusters; fingertip contact is not required for box framing.
 corner_tolerance: 0.35
 # Maximum absolute cosine of each thumb/index angle (near 90 degrees).
 angle_cosine: 0.45

@@ -51,18 +51,39 @@ kept outside tool requests and results.
 
 ## Select a region
 
-For the box gesture, form two opposing L shapes with the thumbs and index
-fingers and hold the framing steady. The sample checks the finger angles and
-matching corners before acquiring the hold. It then crops the estimated open
-interior, immediately while the framing hands remain in place. Each finger's
-inward clearance is estimated from its distal joint-to-tip length using
+For the box gesture, use two open thumb/index hands to frame a rectangle and
+hold steady. Fingers do **not** need to touch or pinch within or between hands.
+Two layouts are supported:
+
+- The intended framing pose is two opposing L shapes, each indicating a diagonal
+  corner through its finger-axis intersection. Compatible forward finger rays
+  define the other corners even when fingertips stop far apart. Endpoint
+  nearness is not required.
+- As a fallback, four distinct fingertips can indicate four rectangle corners,
+  each hand supplying one side's adjacent corners. The tip quadrilateral must
+  have compatible opposing edges and near-right angles, with palms outside it.
+
+Both layouts require plausible open/extended selected fingers; arbitrary open
+palms, folded tips, incompatible axes and degenerate shapes are rejected. The
+existing `angle_cosine` controls L/rectangle angle compatibility. The existing
+`corner_tolerance` controls edge/ray alignment (sine of angular mismatch) and
+also identifies legacy near-tip clusters. No new gesture-mode option is needed.
+
+Layout priority is deterministic: preserve the legacy large frame when paired
+tip clusters are near, even with noisy distinct endpoints; otherwise prefer
+valid opposing L rays, then a four-tip rectangle. If a separated symmetric pose
+satisfies both new layouts, the intended L framing wins. This is the sample's
+interpretation, not a claim that landmarks reveal the user's intended layout.
+
+Capture remains immediate while the framing hands stay in place. Each selected
+finger's inward clearance is estimated from its distal joint-to-tip length using
 `finger_clearance_ratio`. MediaPipe landmarks are centerlines, not contours;
-this is an approximation requiring camera-specific tuning, not segmentation.
-The crop is the largest centered axis-aligned rectangle inside all four inferred
-inward finger boundaries. For a rotated frame it excludes the outer bounding
-rectangle's corner regions rather than accidentally including the fingers. Relax
-both hands' pose while they are visible to rearm it. Missing hands alone do not count as an intentional
-release of a held box.
+this approximation needs camera-specific tuning. The crop is the largest
+centered axis-aligned rectangle inside the inferred inward finger boundaries
+and, for four-tip framing, inside its inset quadrilateral. It does not simply
+bound four tips while including the hands. A rotated frame excludes the outer
+bounding rectangle's corner regions. Relax both hands visibly to rearm; missing
+hands alone do not release a held box.
 
 For the circle gesture, pinch thumb and index finger and move the pinch point
 around the desired section. Either direction works. A near-closed loop needs at
