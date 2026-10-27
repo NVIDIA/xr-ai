@@ -11,6 +11,7 @@ from xr_ai_tools.hand_tracking import HandTrackingResult
 from xr_ai_tools.image_crop import ImageRegion
 
 from .config import CircleSettings
+from .grip import Grip, GripHysteresis
 from .hand_motion import HandPose, match_hand
 
 
@@ -64,34 +65,38 @@ class PinchCircleTrigger:
 
     def __init__(self, settings: CircleSettings, *, release_s: float = 0.4, max_gap_s: float = 0.5) -> None:
         self._settings = settings
-        self._release_us = release_s * 1_000_000
+        self._grip = GripHysteresis(pinch_ratio=settings.pinch_ratio, release_ratio=settings.release_ratio,
+                                    dwell_s=release_s, max_gap_s=max_gap_s)
         self._max_gap_us = max_gap_s * 1_000_000
-        self._release_start: int | None = None
         self._last_seen: int | None = None
         self._timestamp = -1
         self._short_side = 0
         self._points: list[tuple[float, float]] = []
+        self._candidate_points: list[tuple[float, float]] = []
         self.hand: HandPose | None = None
         self._ready = True
 
     @property
     def active(self) -> bool:
-        return bool(self._points)
+        return bool(self._points or self._candidate_points)
 
     @property
     def drawing(self) -> bool:
-        if len(self._points) < 2:
+        trajectory = self._points or self._candidate_points
+        if len(trajectory) < 2:
             return False
-        xs, ys = zip(*self._points, strict=True)
+        xs, ys = zip(*trajectory, strict=True)
         return max(max(xs) - min(xs), max(ys) - min(ys)) >= self._settings.min_diameter * self._short_side
 
     def unavailable(self) -> None:
-        self._release_start = None
+        self._grip.unavailable()
 
     def reset(self) -> None:
         self.unavailable()
         self._points.clear()
+        self._candidate_points.clear()
         self.hand = None
+        self._grip.reset()
         # A still-pinched hand returning after loss cannot continue an old trace.
         self._ready = False
 
@@ -103,39 +108,52 @@ class PinchCircleTrigger:
             self.reset()
         pose = match_hand(observation, self.hand, self._settings.max_jump_palm)
         if pose is None:
+            self._grip.observe(None, timestamp_us)
             self.unavailable()
             return None
         width, height = observation.width, observation.height
         self._short_side = min(width, height)
         pointer, ratio = pose.pointer, pose.ratio
         if not (0 <= pointer[0] <= width and 0 <= pointer[1] <= height):
+            self._grip.observe(None, timestamp_us)
             self.unavailable()
             return None
-        if self._points and math.dist(pointer, self._points[-1]) > self._settings.max_jump_palm * pose.scale:
+        trajectory = self._points or self._candidate_points
+        if trajectory and math.dist(pointer, trajectory[-1]) > self._settings.max_jump_palm * pose.scale:
+            self._grip.observe(None, timestamp_us)
             self.unavailable()
             return None
         self.hand = pose
-        self._last_seen = timestamp_us
-        if ratio >= self._settings.release_ratio:
-            if self._release_start is None:
-                self._release_start = timestamp_us
-            if timestamp_us - self._release_start < self._release_us:
+        was_open = self._grip.state is Grip.OPEN
+        strong_pinch = ratio is not None and ratio <= self._settings.pinch_ratio
+        if was_open and strong_pinch and self._ready:
+            if not self._candidate_points or pointer != self._candidate_points[-1]:
+                self._candidate_points.append(pointer)
+            if len(self._candidate_points) > self._settings.max_points:
+                self.reset()
                 return None
-            self._points = []
-            self.hand = None
-            self._ready = True
+        elif not was_open or (ratio is not None and ratio >= self._settings.release_ratio):
+            self._candidate_points.clear()
+        closed = self._grip.observe(ratio, timestamp_us)
+        if closed and was_open:
+            self._points = self._candidate_points
+            self._candidate_points = []
+        if self._grip.state is Grip.UNKNOWN:
+            self._points.clear()
+            self._ready = False
+        if self._grip.state is Grip.OPEN:
+            if not was_open:
+                self._ready = True
+            self._points.clear()
+        if ratio is not None and (ratio <= self._settings.pinch_ratio or ratio >= self._settings.release_ratio):
+            self._last_seen = timestamp_us
+        if not closed or not self._ready:
             return None
-        self._release_start = None
-        if not self._ready:
-            return None
-        if not self._points and ratio > self._settings.pinch_ratio:
-            return None
-        if self._points and pointer == self._points[-1]:
-            return None
-        if len(self._points) >= self._settings.max_points:
-            self.reset()
-            return None
-        self._points.append(pointer)
+        if not self._points or pointer != self._points[-1]:
+            if len(self._points) >= self._settings.max_points:
+                self.reset()
+                return None
+            self._points.append(pointer)
         region = _circle_region(self._points, width, height, self._settings)
         if region is not None:
             self._points = []

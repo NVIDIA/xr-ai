@@ -82,8 +82,30 @@ Unrelated distant hands do not need to disappear. A bystander inside the selecti
 may still obscure the target; the VLM is instructed to report obstruction.
 Box capture remains immediate, inside the framing fingers.
 
-Pinch entry and exit use separate palm-scaled distance thresholds. `release_s`
-debounces rearm; a one-frame open pinch cannot rearm a completed trace. Brief
+Grip state is explicitly OPEN, PINCHED or UNKNOWN. Entry and exit use separate
+palm-scaled distance thresholds, both confirmed over `release_s` (default 0.4s).
+Strong closed observations recorded during entry confirmation are retained as
+bounded candidate points, so pinch-and-immediately-draw does not discard the
+first arc or require a stationary hold. A single open/closed outlier cannot flip
+confirmed grip. Intermediate, ambiguous or missing evidence briefly holds the
+previous state, adds no trajectory points, and breaks transition confirmation;
+unknown time cannot complete a grip transition. Sustained unknown cancels the
+attempt without interpreting loss as open. A held pinch cannot rearm after that
+cancellation: visible, sustained open evidence is required first.
+
+Tip distance and palm width include relative landmark z, using image-width scale
+for z and x and image-height scale for y. This follows the approximate z/x scale
+in the [MediaPipe landmark documentation](https://developers.google.com/edge/mediapipe/solutions/vision/hand_landmarker/web_js),
+and reduces false closure from projected fingertip overlap under rotation. A
+projected palm width below 20% of its approximate 3D span supplies unknown grip
+evidence, since projected geometry is nearly degenerate. This is a sample
+plausibility heuristic, not a visibility/confidence measurement. Relative z is
+model-estimated, not metric depth; dorsal/self-occluded hands may still produce
+incorrect landmarks. No per-joint confidence is available here, and handedness
+score is not used as landmark or detection confidence.
+
+Recognized circle selections and pending clearance are independent of subsequent
+grip uncertainty: the existing spatial clear-or-timeout policy continues. Brief
 absent, ambiguous or implausible observations retain the candidate/path for
 `max_gap_s`, measured since the last accepted observation. They add no trajectory
 points and break release confirmation. Longer loss cancels acquisition; a
