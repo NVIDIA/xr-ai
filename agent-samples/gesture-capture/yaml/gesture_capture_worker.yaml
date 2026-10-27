@@ -6,7 +6,7 @@
 model_path: ../models/hand_landmarker.task
 models: models.json
 # Demonstration settings, requiring tuning on the target camera.
-poll_interval_s: 0.15
+poll_interval_s: 0.08
 # Gentle progress hum and recognition chime through the participant audio track.
 gesture_audio: true
 hold_s: 0.6
@@ -29,14 +29,15 @@ finger_clearance_ratio: 0.5
 aligned_photo: false
 query: "Describe the selected region and explain what is notable about it."
 
-# Pinch and draw a closed circle to query immediately; stable unpinch rearms.
+# Pinch and draw a near-closed circle; chime freezes selection. Move the hand
+# clear for a fresh-frame query (or best-effort timeout); stable unpinch rearms.
 # All values below are demonstration settings needing target-camera tuning.
 circle:
   # Thumb/index distance divided by index-to-pinky MCP palm width.
   pinch_ratio: 0.25
   release_ratio: 0.45
   # Bounds on distinct sampled points; excess points cancel rather than truncate.
-  min_points: 12
+  min_points: 8
   max_points: 256
   # Minimum diameter as a fraction of the image's shorter side.
   min_diameter: 0.1
@@ -44,9 +45,13 @@ circle:
   min_axis_ratio: 0.65
   radial_tolerance: 0.35
   # Endpoint distance divided by radius and allowed reverse travel in revolutions.
-  closure_tolerance: 0.5
+  closure_tolerance: 1.0
+  min_sweep_deg: 300
+  # Wait for mostly-clear hand overlap, stable for release_s, or capture anyway.
+  clear_overlap: 0.2
+  clear_timeout_s: 2.0
   max_backtrack: 0.15
   # Largest trajectory segment divided by radius; rejects sparsely observed arcs.
   max_segment_radius: 1.0
-  # Cancel pointer jumps larger than this many palm widths between observations.
+  # Ignore implausible samples; sustained rejected observations expire max_gap_s.
   max_jump_palm: 2.0

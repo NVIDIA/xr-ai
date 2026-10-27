@@ -145,7 +145,8 @@ async def test_turn_cooldown_lasts_until_delivery_or_failure_cleanup(failure):
         if failure:
             raise ValueError("inference failed")
         return ImageQueryResult(text="target")
-    selector = SimpleNamespace(observe=lambda *_args: ImageRegion(left=0.2, top=0.2, right=0.8, bottom=0.8))
+    selector = SimpleNamespace(circle_selected=False,
+                               observe=lambda *_args: ImageRegion(left=0.2, top=0.2, right=0.8, bottom=0.8))
     agent = GestureCaptureAgent(
         frames=SimpleNamespace(execute=frame), hands=SimpleNamespace(execute=hands),
         capture=None, crop=ImageCropTool(images=images), query=SimpleNamespace(execute=query),
@@ -215,7 +216,7 @@ async def test_each_gesture_cues_once_per_turn_and_recovers_after_failure(gestur
     else:
         path = [_pinch(x, y) for x, y in _circle_points()]
         observations = [_pinch(260, 100)] * 3 + path + [_pinch(260, 100)] * 4
-        observations += [_pinch(260, 100, released=True)] * 4 + path
+        observations += [_pinch(300, 100, released=True)] * 8 + path + [_pinch(300, 100)] * 6
     for observation in observations:
         timestamp += 100_000
         try:

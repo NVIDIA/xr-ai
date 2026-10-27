@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from xr_ai_hub import FrameUnavailable
 from xr_ai_tools.current_frame import CurrentFrameRequest, CurrentFrameTool
 from xr_ai_tools.hand_tracking import HandTrackingRequest, HandTrackingTool
 from xr_ai_tools.image_crop import ImageCropRequest, ImageCropTool
@@ -14,6 +15,7 @@ from xr_ai_tools.vision import ImageQueryRequest, ImageQueryTool
 from .config import Settings
 from .feedback import GestureFeedback
 from .gesture import RegionSelector
+from .selection_wait import CircleCaptureWait
 
 
 class GestureCaptureAgent:
@@ -34,9 +36,23 @@ class GestureCaptureAgent:
         self._last_frame = None
         self._feedback = feedback
         self._turn_active = False
+        self._pending = None
 
     async def step(self, participant_id: str) -> str | None:
-        if self._turn_active:
+        try:
+            return await self._step(participant_id)
+        except FrameUnavailable:
+            self.unavailable()
+            raise
+        except BaseException:
+            self._pending = None
+            raise
+
+    async def _step(self, participant_id: str) -> str | None:
+        if self._pending is not None and self._pending.expired:
+            self._pending = None
+            raise ValueError("Circle selection expired without fresh video; draw again")
+        if self._turn_active and self._pending is None:
             return None
         frame = await self._frames.execute(CurrentFrameRequest(participant_id=participant_id, allow_capture=False))
         identity = (frame.track_id, frame.sequence, frame.timestamp_us)
@@ -46,14 +62,24 @@ class GestureCaptureAgent:
             self._selector.reset()
         self._last_frame = identity
         hands = await self._hands.execute(HandTrackingRequest(image=frame.image))
-        region = self._selector.observe(hands, frame.timestamp_us)
-        if region is None:
+        if self._pending is not None:
+            ready = self._pending.observe(hands, frame)
+            if not ready:
+                return None
+            region = self._pending.region
+            self._pending = None
+        else:
+            region = self._selector.observe(hands, frame.timestamp_us)
+            if region is None:
+                if self._feedback:
+                    await self._feedback.update(self._selector.in_progress)
+                return None
+            self._turn_active = True
             if self._feedback:
-                await self._feedback.update(self._selector.in_progress)
-            return None
-        self._turn_active = True
-        if self._feedback:
-            await self._feedback.recognized()
+                await self._feedback.recognized()
+            if self._selector.circle_selected:
+                self._pending = CircleCaptureWait(region, self._selector.drawing_hand, frame, self._settings)
+                return None
         source = frame
         if self._settings.aligned_photo:
             source = await self._capture.execute(StillCaptureRequest(participant_id=participant_id))
@@ -64,8 +90,13 @@ class GestureCaptureAgent:
         return answer.text
 
     def unavailable(self) -> None:
+        if self._pending is not None:
+            self._pending.clear_since = None
+            if self._pending.expired:
+                self._pending = None
         self._selector.unavailable()
 
     async def finish_turn(self) -> None:
-        """Release cooldown after result delivery or failure, preserving gesture rearm."""
-        self._turn_active = False
+        """Pending clearance continues observing; completed turns unlock after delivery."""
+        if self._pending is None:
+            self._turn_active = False

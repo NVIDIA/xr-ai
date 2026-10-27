@@ -64,30 +64,47 @@ rectangle's corner regions rather than accidentally including the fingers. Relax
 both hands' pose while they are visible to rearm it. Missing hands alone do not count as an intentional
 release of a held box.
 
-For the circle gesture, pinch thumb and index finger with one hand visible,
-move the pinch point around the desired section in a closed circle. Recognition
-and the query happen as soon as the loop is valid, while still pinched. Either
-drawing direction works. Open the pinch steadily afterward to rearm. The sample
-uses the trace's bounding rectangle, rather than masking the exact circle.
-It rejects tiny loops, open arcs, elongated shapes, large radial deviations,
-sparse motion and excessive backtracking before completion. Further revolutions
-while the same pinch remains held cannot trigger another query. Keep the target
-and camera steady until the photograph finishes.
+For the circle gesture, pinch thumb and index finger and move the pinch point
+around the desired section. Either direction works. A near-closed loop needs at
+least 300 degrees of observed travel and endpoints within one fitted radius;
+240/270-degree arcs, tiny loops, elongated shapes, scribbles, sparse motion and
+excessive backtracking remain rejected. The chime freezes the trace's bounding
+rectangle (no circular mask). Keep the camera and target steady and move the
+drawing hand away from that rectangle. Stable unpinch afterward rearms detection.
 
-Pinch entry and exit have different palm-scaled distance thresholds. The
-`release_s` setting debounces rearm for both gestures. A one-frame open pinch
-cannot rearm a completed trace. Brief absent or ambiguous detections preserve the box
-candidate or circle path up to `max_gap_s`; they add no trajectory points and
-break release confirmation. Longer loss cancels acquisition. A cancelled circle
-requires an observed open pinch before another trace can begin. Duplicate frames
-cannot advance a hold, release, or drawing.
+Circle capture waits for that hand's landmark bounding rectangle to overlap at
+most `circle.clear_overlap` (default 20%) of the smaller of the hand and selected
+rectangles, continuously for `release_s`. It then crops a **newer video frame**.
+After `circle.clear_timeout_s` (default 2 seconds), it captures the latest frame
+anyway: this is a best-effort wait, not a guarantee of an unobstructed target.
+Missing or ambiguous hands do not prove clearance; they use this same deadline.
+Unrelated distant hands do not need to disappear. A bystander inside the selection
+may still obscure the target; the VLM is instructed to report obstruction.
+Box capture remains immediate, inside the framing fingers.
 
-Both geometry and trajectory continuity use source-image pixels, accounting for
-aspect ratio. Circle input requires one hand; detected handedness changes and
-implausible pointer jumps cancel the trace. IMAGE-mode handedness is a classifier
-label, not a stable hand identity, so switching between nearby hands with the
-same label cannot always be detected. Changed camera tracks or dimensions reset
-source continuity. These heuristics require target-camera qualification.
+Pinch entry and exit use separate palm-scaled distance thresholds. `release_s`
+debounces rearm; a one-frame open pinch cannot rearm a completed trace. Brief
+absent, ambiguous or implausible observations retain the candidate/path for
+`max_gap_s`, measured since the last accepted observation. They add no trajectory
+points and break release confirmation. Longer loss cancels acquisition; a
+cancelled circle requires an observed open pinch before a new trace. Duplicate
+frames cannot advance hold, release, drawing or clearance. Source changes,
+dimension changes and long video gaps cancel pending selections rather than
+querying an old frame.
+
+Spatial continuity uses image pixels and palm scale, ignoring handedness label
+flicker and tolerating a distant second detection while tracing. Ambiguous nearby
+hands retain only bounded grace. This is best-effort spatial association, not
+person identity: nearby hand switches cannot always be detected. MediaPipe
+IMAGE mode processes frames independently; changing a tracking-confidence setting
+would not supply temporal tracking. The existing detector requests up to two
+hands, including single-hand input; three or more visible hands can exceed its
+capacity. No backend confidence controls or new SDK API are introduced here.
+
+Defaults sample every 80 ms and require eight distinct points, allowing faster
+natural traces than the previous 150 ms/twelve-point policy. This increases
+potential CPU use; inference time also limits actual cadence. Thresholds are demo
+tuning values, not measured recognition accuracy; qualify on the target camera.
 
 ## Audio feedback and cooldown
 
@@ -95,7 +112,7 @@ With `gesture_audio: true`, each participant hears a quiet hum while a valid
 box hold is being acquired or a pinched circle is actively being drawn. A
 stationary pinch stays quiet until its traced span shows movement. A single
 wake-word-style perfect-fifth chime marks recognition: completed stable box hold,
-or the first valid closed circle. The hum stops before the chime.
+or the first valid near-closed circle. The hum stops before the chime.
 
 The sample sends paced float32 PCM through the existing hub return-audio path;
 it does not start a voice or TTS stack. Browser audio playback must be permitted.
@@ -105,7 +122,8 @@ flush the participant's shared audio queue or interrupt other producers. A short
 tail already in the hub or client buffer can still finish playing.
 
 A participant stays in cooldown from recognition through VLM response delivery
-or failure cleanup. Frames received during that turn cannot trigger another
+or failure cleanup, including the circle clearance wait. Hand observations continue
+during that wait, but frames received during the turn cannot trigger another
 query or chime. After the turn ends, the box still needs a visible relaxed pose
 and the circle needs a stable open pinch before another deliberate gesture.
 Set `gesture_audio: false` for silent operation.

@@ -11,6 +11,7 @@ from xr_ai_tools.hand_tracking import HandTrackingResult
 from xr_ai_tools.image_crop import ImageRegion
 
 from .config import CircleSettings
+from .hand_motion import HandPose, match_hand
 
 
 def _circle_region(points: list[tuple[float, float]], width: int, height: int,
@@ -24,20 +25,33 @@ def _circle_region(points: list[tuple[float, float]], width: int, height: int,
         return None
     if min(diameter_x, diameter_y) / max(diameter_x, diameter_y) < settings.min_axis_ratio:
         return None
-    radius = (diameter_x + diameter_y) / 4
-    center = ((left + right) / 2, (top + bottom) / 2)
-    if math.dist(points[0], points[-1]) > settings.closure_tolerance * radius:
+    # Least-squares circle center avoids bias toward the missing arc of a
+    # near-closed loop. Solve the centered two-variable normal equations.
+    mean_x, mean_y = sum(xs) / len(xs), sum(ys) / len(ys)
+    centered = [(x - mean_x, y - mean_y) for x, y in points]
+    xx = sum(x * x for x, y in centered)
+    yy = sum(y * y for x, y in centered)
+    xy = sum(x * y for x, y in centered)
+    bx = sum(x * (x * x + y * y) / 2 for x, y in centered)
+    by = sum(y * (x * x + y * y) / 2 for x, y in centered)
+    determinant = xx * yy - xy * xy
+    if determinant <= 0:
         return None
+    center = (mean_x + (bx * yy - by * xy) / determinant,
+              mean_y + (by * xx - bx * xy) / determinant)
     vectors = [(x - center[0], y - center[1]) for x, y in points]
+    radius = sum(math.hypot(*v) for v in vectors) / len(vectors)
+    if math.dist(points[0], points[-1]) > settings.closure_tolerance * radius * (1 + 1e-9):
+        return None
     if any(abs(math.hypot(*v) / radius - 1) > settings.radial_tolerance for v in vectors):
         return None
     turns = []
-    for a, b in zip(vectors, [*vectors[1:], vectors[0]], strict=True):
-        if math.dist(a, b) > settings.max_segment_radius * radius:
+    for a, b in zip(vectors[:-1], vectors[1:], strict=True):
+        if math.dist(a, b) > settings.max_segment_radius * radius * (1 + 1e-9):
             return None
         turns.append(math.atan2(a[0] * b[1] - a[1] * b[0], a[0] * b[0] + a[1] * b[1]))
     winding = sum(turns)
-    if not math.isclose(abs(winding), math.tau):
+    if abs(winding) + 1e-9 < math.radians(settings.min_sweep_deg) or abs(winding) > math.tau * 1.1:
         return None
     backtrack = (sum(abs(turn) for turn in turns) - abs(winding)) / 2
     if backtrack > settings.max_backtrack * math.tau:
@@ -57,7 +71,7 @@ class PinchCircleTrigger:
         self._timestamp = -1
         self._short_side = 0
         self._points: list[tuple[float, float]] = []
-        self._handedness: str | None = None
+        self.hand: HandPose | None = None
         self._ready = True
 
     @property
@@ -77,7 +91,7 @@ class PinchCircleTrigger:
     def reset(self) -> None:
         self.unavailable()
         self._points.clear()
-        self._handedness = None
+        self.hand = None
         # A still-pinched hand returning after loss cannot continue an old trace.
         self._ready = False
 
@@ -87,26 +101,20 @@ class PinchCircleTrigger:
         self._timestamp = timestamp_us
         if self._last_seen is not None and timestamp_us - self._last_seen > self._max_gap_us:
             self.reset()
-        if len(observation.hands) != 1:
+        pose = match_hand(observation, self.hand, self._settings.max_jump_palm)
+        if pose is None:
             self.unavailable()
             return None
-        hand = observation.hands[0]
         width, height = observation.width, observation.height
         self._short_side = min(width, height)
-        points = [(p.x * width, p.y * height) for p in hand.landmarks]
-        palm = math.dist(points[5], points[17])
-        if palm == 0:
+        pointer, ratio = pose.pointer, pose.ratio
+        if not (0 <= pointer[0] <= width and 0 <= pointer[1] <= height):
             self.unavailable()
             return None
-        ratio = math.dist(points[4], points[8]) / palm
-        pointer = ((points[4][0] + points[8][0]) / 2, (points[4][1] + points[8][1]) / 2)
-        if not (0 <= pointer[0] <= width and 0 <= pointer[1] <= height):
-            self.reset()
+        if self._points and math.dist(pointer, self._points[-1]) > self._settings.max_jump_palm * pose.scale:
+            self.unavailable()
             return None
-        if self._points and (self._handedness != hand.handedness
-                             or math.dist(pointer, self._points[-1]) > self._settings.max_jump_palm * palm):
-            self.reset()
-            return None
+        self.hand = pose
         self._last_seen = timestamp_us
         if ratio >= self._settings.release_ratio:
             if self._release_start is None:
@@ -114,7 +122,7 @@ class PinchCircleTrigger:
             if timestamp_us - self._release_start < self._release_us:
                 return None
             self._points = []
-            self._handedness = None
+            self.hand = None
             self._ready = True
             return None
         self._release_start = None
@@ -127,7 +135,6 @@ class PinchCircleTrigger:
         if len(self._points) >= self._settings.max_points:
             self.reset()
             return None
-        self._handedness = hand.handedness
         self._points.append(pointer)
         region = _circle_region(self._points, width, height, self._settings)
         if region is not None:

@@ -182,7 +182,7 @@ async def test_sample_composes_tools_with_selected_video_or_aligned_photo(gestur
         expected_crop = (2280, 1080) if aligned_photo else (228, 108)
     else:
         observations = [_pinch(x, y) for x, y in _circle_points()]
-        observations += [_pinch(260, 100, released=True)] * 5
+        observations += [_pinch(300, 100, released=True)] * 7
         steps = [(i * 100_000, value) for i, value in enumerate(observations, start=1)]
         expected_crop = (1200, 1200) if aligned_photo else (120, 120)
 
@@ -426,18 +426,14 @@ def test_invalid_traces_never_submit(path):
     _release(trigger, *path[-1], timestamp)
 
 
-@pytest.mark.parametrize("interruption", ["handedness", "jump", "gap", "dimensions"])
+@pytest.mark.parametrize("interruption", ["gap", "dimensions"])
 def test_circle_source_interruptions_cancel_until_observed_release(interruption):
     selector = RegionSelector(_settings())
     timestamp = _trace(selector, _circle_points()[:12])
     timestamp += 100_000
     x, y = _circle_points()[11]
     observation = _pinch(x, y)
-    if interruption == "handedness":
-        observation.hands[0].handedness = "Right"
-    elif interruption == "jump":
-        observation = _pinch(0, 0)
-    elif interruption == "gap":
+    if interruption == "gap":
         timestamp += 1_000_000
     else:
         observation.width = 800

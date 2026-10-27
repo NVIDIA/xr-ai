@@ -5,11 +5,14 @@
 
 # Gesture capture
 
-Hold a box with both hands' index fingers and thumbs, or pinch and draw a closed
+Hold a box with both hands' index fingers and thumbs, or pinch and draw a near-closed
 circle, to ask the VLM about that section of the camera view. Both gestures
 query a crop of the selected streamed frame by default. Optional aligned-photo
 mode requests a separate higher-resolution photograph. This sample starts a hub
-and worker and reuses a separately running VLM service.
+and worker and reuses a separately running VLM service. A circle chimes when
+recognized; move the drawing hand clear and keep the camera steady. Capture uses
+a newer frame after stable clearance or a 2-second best-effort timeout. Box capture
+remains immediate. Both gestures stay in cooldown through response delivery.
 
 Refer to the [gesture-capture guide](https://nvidia.github.io/xr-ai/main/reference/gesture-capture.html)
 for model provisioning, licenses, browser requirements, alignment, and behavior.

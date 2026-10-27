@@ -175,8 +175,13 @@ class RegionSelector:
             max_gap_s=settings.max_gap_s, movement_tolerance=settings.movement_tolerance,
         )
         self._circle = PinchCircleTrigger(settings.circle, release_s=settings.release_s, max_gap_s=settings.max_gap_s)
+        self.circle_selected = False
         self._timestamp = -1
         self._dimensions: tuple[int, int] | None = None
+
+    @property
+    def drawing_hand(self):
+        return self._circle.hand
 
     @property
     def in_progress(self) -> bool:
@@ -193,6 +198,7 @@ class RegionSelector:
         self._dimensions = dimensions
         circle_active = self._circle.active
         region = self._circle.observe(observation, timestamp_us)
+        self.circle_selected = region is not None
         box = camera_box(observation, corner_tolerance=self._settings.corner_tolerance,
                          angle_cosine=self._settings.angle_cosine,
                          finger_clearance_ratio=self._settings.finger_clearance_ratio)
