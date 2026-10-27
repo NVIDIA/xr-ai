@@ -20,7 +20,7 @@ from fastapi.responses import JSONResponse
 from loguru import logger
 
 from ._config import ServerConfig, identity
-from ._images import _ImageLimits, decode_images, validate_images
+from ._images import InputTooLongError, _ImageLimits, decode_images, validate_images
 
 
 def _resolve_model_directory(config: ServerConfig) -> Path:
@@ -106,7 +106,9 @@ class ClefBackend:
         except ValueError as exc:
             raise ValueError(str(exc)) from exc
         if len(encoded.input_ids) > self.config.max_length:
-            raise ValueError(f"request requires {len(encoded.input_ids)} tokens; maximum is {self.config.max_length}")
+            raise InputTooLongError(
+                f"request requires {len(encoded.input_ids)} tokens; maximum is {self.config.max_length}"
+            )
 
     def answer(self, body: dict[str, Any]) -> dict[str, Any]:
         if self.systemone is None or self.model is None or self.processor is None:
@@ -143,6 +145,11 @@ def create_app(
     @app.exception_handler(ValueError)
     async def invalid_request(_: Request, exc: ValueError) -> JSONResponse:
         return JSONResponse(status_code=422, content={"detail": str(exc)})
+
+    # Too much input shares the oversized-body status, so callers can retry with less.
+    @app.exception_handler(InputTooLongError)
+    async def input_too_long(_: Request, exc: InputTooLongError) -> JSONResponse:
+        return JSONResponse(status_code=413, content={"detail": str(exc)})
 
     @app.get("/health")
     async def health() -> dict[str, str]:

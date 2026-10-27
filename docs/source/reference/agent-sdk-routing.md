@@ -63,9 +63,19 @@ the budget counts the serialized exchange and time label in UTF-8 bytes. An
 oversized exchange is dropped whole, even when that leaves history empty; later
 caller-supplied history does not reseed that participant. The budget covers
 serialized completed-history entries, not the current request, destination
-descriptions, or the backend's total prompt/token limit. Configure it to suit the
-selected endpoint. Decision-service errors propagate to the caller; the router
-does not replace a failed routing decision with an unapproved default action.
+descriptions, or the backend's total prompt/token limit. The decision service owns
+that limit, so the router does not size requests against it. When the service
+rejects a routing request with `DecisionInputTooLargeError`, the router retries with
+the newest half of the history, down to none, and logs a warning and a
+`conversation.destination-route-history-trimmed` Relay event for each retry.
+Only the routing request is trimmed; destinations still receive the router's
+retained history. A participant whose history stays over the limit pays these
+retries on each routed turn, up to log2(n) + 1 decision calls for n exchanges;
+lower `context_budget_bytes` if the warning recurs. If the request is still too
+large with no history, the routing prompt, destination descriptions, and current
+request alone exceed the limit, and the error propagates. Other
+decision-service errors also propagate to the caller; the router does not
+replace a failed routing decision with an unapproved default action.
 
 The router keeps each retained exchange's timestamp and private identity
 aligned as history is trimmed. When an admission release emits text, it records

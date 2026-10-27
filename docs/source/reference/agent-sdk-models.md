@@ -50,8 +50,11 @@ async with make_decision(config, "triage") as decisions:
 ```
 
 The profile entry uses `category: decision`, `kind: systemone`, a model name,
-and an endpoint. The standalone {doc}`Clef-Flash guide </reference/clef-flash>`
-documents the local service and its pinned model release.
+and an endpoint. A request the service rejects as more input than its model
+accepts (HTTP 413) raises `DecisionInputTooLargeError`. The limit belongs to the
+service, so a caller handles this by retrying with less input. The standalone
+{doc}`Clef-Flash guide </reference/clef-flash>` documents the local service and
+its pinned model release.
 
 (profile-contract)=
 Model entry names are application-defined. Applications can configure multiple

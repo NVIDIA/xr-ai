@@ -18,7 +18,14 @@ from functools import partial
 from typing import TYPE_CHECKING, Literal
 
 import nemo_relay
-from xr_ai_models import ChatMessage, DecisionQuestion, DecisionService, LLMService
+from xr_ai_models import (
+    ChatMessage,
+    DecisionInputTooLargeError,
+    DecisionQuestion,
+    DecisionResponse,
+    DecisionService,
+    LLMService,
+)
 
 if TYPE_CHECKING:
     from xr_ai_interaction import Interrupted, ParticipantJoined, ParticipantLeft, ResponseOutput, UserQuery
@@ -1172,6 +1179,7 @@ class AgentRouter:
                     f"routing aid name {route_aid.name!r} does not match destination {candidate_name!r}"
                 )
             route_aids.append(route_aid)
+        # Each destination appears once, as its choice; the decision model reads it there.
         criteria = {
             route_aid.name: (
                 f"{route_aid.name} has routing description={route_aid.description!r}; "
@@ -1180,28 +1188,19 @@ class AgentRouter:
             for route_aid in route_aids
         }
         criteria["clarify"] = "The request cannot safely be assigned to one available destination."
+        history = [
+            {
+                "user": item.user,
+                "assistant": item.assistant,
+                "recorded_around_utc": _history_timestamp(index),
+            }
+            for index, item in enumerate(turn.history)
+        ]
         state = {
             "participant_id": turn.participant_id,
             "current_time_utc": _format_minute(time.time_ns() // 1_000),
             "request": turn.query,
-            "completed_history": [
-                {
-                    "user": item.user,
-                    "assistant": item.assistant,
-                    "recorded_around_utc": _history_timestamp(index),
-                }
-                for index, item in enumerate(turn.history)
-            ],
-            "destinations": [
-                {
-                    "name": route_aid.name,
-                    "description": route_aid.description,
-                    "eligible": route_aid.eligible,
-                    "eligibility": route_aid.eligibility,
-                    "priority": route_aid.priority,
-                }
-                for route_aid in route_aids
-            ],
+            "completed_history": history,
         }
         question = DecisionQuestion(
             instructions=(
@@ -1219,7 +1218,9 @@ class AgentRouter:
             input={"state": state, "question": {"instructions": question.instructions, "criteria": criteria}},
             metadata={"participant_id": turn.participant_id},
         ) as route_scope:
-            response = await self._decisions.decide(state, {"destination": question})
+            response, history_sent = await self._decide_with_fitting_history(
+                state, history, question, turn.participant_id, route_scope
+            )
             answer = response.answers["destination"]
             current_eligible = []
             for candidate_name in candidates:
@@ -1258,9 +1259,54 @@ class AgentRouter:
                     "selected_destination_probability": selected_probability,
                     "selection_reason": selection_reason,
                     "eligible_destinations": current_eligible,
+                    "history_exchanges_sent": history_sent,
                 },
             )
         return selected
+
+    async def _decide_with_fitting_history(
+        self,
+        state: Mapping[str, object],
+        history: list[dict[str, str]],
+        question: DecisionQuestion,
+        participant_id: str,
+        route_scope: object,
+    ) -> tuple[DecisionResponse, int]:
+        """Route with as much recent history as the decision model accepts.
+
+        The decision service owns its input limit, and history tokenizes differently by
+        language and content, so the router cannot size a request in advance. When the
+        service rejects one as too large, keep the newest half of the history and retry.
+        History is only context for routing, so a turn routes on less of it rather than
+        failing. A request that is too large without history raises: the routing prompt,
+        destination descriptions, and current request alone exceed the limit.
+
+        Each over-limit turn costs up to log2(n) + 1 decision calls for n exchanges.
+        Returns the response and the number of history exchanges it was decided on.
+        """
+
+        while True:
+            try:
+                trial = {**state, "completed_history": history}
+                response = await self._decisions.decide(trial, {"destination": question})
+                return response, len(history)
+            except DecisionInputTooLargeError:
+                if not history:
+                    raise
+                kept = history[(len(history) + 1) // 2 :]
+                _logger.warning(
+                    "routing request too large for the decision model; retrying with fewer history exchanges "
+                    "participant=%r sent=%d retrying_with=%d",
+                    participant_id,
+                    len(history),
+                    len(kept),
+                )
+                nemo_relay.scope.event(
+                    "conversation.destination-route-history-trimmed",
+                    handle=route_scope,
+                    data={"sent_exchanges": len(history), "retry_exchanges": len(kept)},
+                )
+                history = kept
 
 
 def _cancel_once(task: asyncio.Task) -> None:
