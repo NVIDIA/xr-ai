@@ -17,6 +17,23 @@ before updating the checkout. Start the updated services before restarting
 workers; launchers can reuse a running service whose identity matches even when
 its application code predates the update.
 
+### vLLM 0.31 security update
+
+The four vLLM service environments pin `vllm==0.31.0`. Their standalone YAMLs
+and the shared Docker default now use `nvcr.io/nvidia/vllm:26.10.pre1-py3` in
+place of `nvcr.io/nvidia/vllm:26.09-py3`. The NGC preview supports Linux
+x86_64 and aarch64 with CUDA 13.4 and NVIDIA vLLM `0.31.0+88641915`. Qualify
+this preview on the target GPU and model workload before deployment.
+Refresh pip environments with
+`uv --config-file uv.toml sync --project <service-directory>`.
+
+Per-request `mm_processor_kwargs` and `media_io_kwargs` overrides are rejected
+by default. Move trusted processor settings into server configuration; do not
+enable `--trust-request-mm-kwargs` for untrusted clients. Custom image overrides
+must include the fixes for CVE-2026-114050 and CVE-2026-114055 independently of
+the host Python environment. Refer to {doc}`/components/ai-services` for runtime
+selection and container replacement.
+
 ### Interaction messages move to xr-ai-interaction
 
 Code that imports `UserQuery`, `VoiceOutput`, `VoiceParticipantJoined`,
