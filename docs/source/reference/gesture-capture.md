@@ -92,9 +92,12 @@ motion. Uncertain grip distance does not mean the pointer disappeared.
 Only sustained positive open evidence over `release_s` (default 0.4s) releases
 the grip. An open outlier suppresses that sample without releasing; intermediate
 or missing evidence breaks release confirmation. Missing/ambiguous/outlier pointer
-observations add no trajectory points. Tracking loss beyond `max_gap_s` cancels
-without treating absence as open; a held pinch cannot restart until visible,
-sustained open evidence rearms it.
+observations add no trajectory points. Tracking loss beyond `max_gap_s` discards
+an **unrecognized** attempt and all its points. Recovered valid pinch input may
+start a fresh attempt through normal entry confirmation, without first opening.
+Once a circle has been **recognized**, its release latch survives tracking loss:
+a held pinch cannot trigger another turn until visible, sustained open evidence
+rearms it. Pending capture/query/response cooldown remains in force.
 
 The ratio uses image-space thumb/index distance divided by palm width. Relative
 z is deliberately excluded: the attempted 3D-distance/edge-on gate rejected
@@ -107,8 +110,8 @@ Recognized circle selections and pending clearance are independent of subsequent
 grip uncertainty: the existing spatial clear-or-timeout policy continues. Brief
 absent, ambiguous or implausible observations retain the candidate/path for
 `max_gap_s`, measured since the last accepted observation. They add no trajectory
-points and break release confirmation. Longer loss cancels acquisition; a
-cancelled circle requires an observed open pinch before a new trace. Duplicate
+points and break release confirmation. Longer loss discards failed acquisition;
+recovery starts a fresh path, while recognized turns still require open to rearm. Duplicate
 frames cannot advance hold, release, drawing or clearance. Source changes,
 dimension changes and long video gaps cancel pending selections rather than
 querying an old frame.
@@ -173,7 +176,11 @@ summaries from multiple participants can interleave.
   lock wait, not a pure model benchmark. `frame_interval_ms` is the interval
   between observed source-frame timestamps; `duplicate_frame` and
   `frame_unavailable` distinguish sensing gaps from absent hand detections.
-- `pinch_ratio`, `evidence_closed/open/band`, `grip`, `grip_to_*`,
+- `pinch_ratio`, `tip_distance_px` and `palm_width_px` separate the normalized
+  distance from its numerator/denominator; palm foreshortening can inflate the
+  ratio. These ranges are independent; `pinch_peak` also retains the paired
+  ratio/tip-distance/palm-width values from the window's maximum-ratio observation.
+  `evidence_closed/open/band`, `grip`, `grip_to_*`,
   `entry_pointer_added` and `pointer_added` show whether grip admission or usable
   trajectory sampling is progressing. `association_ambiguous`,
   `association_no_usable_nearby_hand`, `pointer_jump` and `pointer_outside` count
@@ -181,10 +188,14 @@ summaries from multiple participants can interleave.
 - `circle_points`, `circle_min_points`, `circle_too_small`,
   `circle_elongated`, `circle_degenerate_fit`, `circle_endpoint_gap`,
   `circle_radial_error`, `circle_sparse_segment`, `circle_sweep` and
-  `circle_backtrack` locate the first failed geometry check. Many are expected
+  `circle_backtrack` locate the first failed geometry check. Numeric
+  `trace_width_px`, `trace_height_px` and `endpoint_gap_radius` expose span/closure
+  geometry without logging coordinates. Many checks are expected
   while a partial circle is still being drawn; their counts alone do not prove
   poor recognition. `tracking_gap`, `circle_reset` and
   `selector_dimensions_or_frame_gap` show continuity resets.
+  `fresh_attempt_after_loss` counts discarded acquisitions eligible for fresh
+  entry; `rearm_wait_after_completion` identifies the recognized-turn release latch.
 - `circle_recognized` / `box_recognized` and `pending_cleared` /
   `pending_timeout` separate recognition from the circle's later capture point.
   `pending_association_unknown`, `pending_source_or_frame_gap` and

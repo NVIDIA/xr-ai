@@ -25,9 +25,9 @@ class GripHysteresis:
         self._last_observation: int | None = None
         self._timestamp = -1
 
-    def reset(self) -> None:
-        """After tracking loss, sustained visible open evidence must rearm."""
-        self.state = Grip.UNKNOWN
+    def reset(self, *, require_open: bool = True) -> None:
+        """A completed interaction requires open; failed acquisition may start fresh."""
+        self.state = Grip.UNKNOWN if require_open else Grip.OPEN
         self._last_observation = None
         self.unavailable()
 

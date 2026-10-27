@@ -90,7 +90,8 @@ def test_real_selector_reasons_distinguish_missing_association_grip_and_geometry
     assert counts['no_hands_returned'] == 1
     assert counts['association_ambiguous'] == 1
     assert counts['associated'] >= 2 and counts['association_no_usable_nearby_hand'] == 1
-    assert counts['grip_to_pinched'] == counts['grip_to_unknown'] == 1
+    assert counts['grip_to_pinched'] == counts['grip_to_open'] == 1
+    assert counts['fresh_attempt_after_loss'] == 1
     assert counts['circle_min_points'] >= 1 and counts['selector_dimensions_or_frame_gap'] == 1
 
 
@@ -159,3 +160,58 @@ def test_partial_circle_reports_geometry_stage_without_changing_decision(monkeyp
     counts = _payload(caplog)['counts']
     assert counts['circle_endpoint_gap'] > 0
     assert 'circle_recognized' not in counts
+
+
+def test_decomposed_numeric_ranges_explain_ratio_and_trace_without_coordinates(monkeypatch, caplog):
+    clock = _clock(monkeypatch)
+    caplog.set_level(logging.INFO, logger='gesture_capture_worker.diagnostics')
+    diagnostics = GestureDiagnostics(True)
+    trigger = PinchCircleTrigger(CircleSettings(), diagnostics=diagnostics)
+    for i, point in enumerate(_path(240, 14)):
+        assert trigger.observe(_pinch(*point), (i + 1) * 80_000) is None
+    clock[0] = 1
+    diagnostics.emit()
+    payload = _payload(caplog)
+    assert payload['ranges']['tip_distance_px'] == [4, 4]
+    assert payload['ranges']['palm_width_px'] == [40, 40]
+    assert payload['ranges']['trace_width_px'][1] > 100
+    assert payload['ranges']['trace_height_px'][1] > 100
+    assert payload['ranges']['endpoint_gap_radius'][1] > 1
+    assert all('pointer_x' not in key and 'pointer_y' not in key for key in payload['ranges'])
+
+
+def test_rearm_diagnostics_distinguish_loss_from_completed_turn(monkeypatch, caplog):
+    clock = _clock(monkeypatch)
+    caplog.set_level(logging.INFO, logger='gesture_capture_worker.diagnostics')
+    diagnostics = GestureDiagnostics(True)
+    lost = PinchCircleTrigger(CircleSettings(), diagnostics=diagnostics)
+    lost.observe(_pinch(200, 100), 80_000)
+    lost.observe(_pinch(200, 100), 160_000)
+    assert lost.observe(_pinch(200, 100), 800_000) is None
+    completed = PinchCircleTrigger(CircleSettings(), diagnostics=diagnostics)
+    for i, point in enumerate(_path(310, 14)):
+        completed.observe(_pinch(*point), (i + 1) * 80_000)
+    # Even a later continuity reset belongs to completed-turn rearm until open.
+    completed.reset()
+    assert completed.observe(_pinch(200, 100), 1_500_000) is None
+    clock[0] = 1
+    diagnostics.emit()
+    counts = _payload(caplog)['counts']
+    assert counts['fresh_attempt_after_loss'] >= 1
+    assert counts['rearm_wait_after_completion'] >= 1
+
+
+def test_peak_ratio_retains_its_own_numerator_and_denominator(monkeypatch, caplog):
+    clock = _clock(monkeypatch)
+    caplog.set_level(logging.INFO, logger='gesture_capture_worker.diagnostics')
+    diagnostics = GestureDiagnostics(True)
+    diagnostics.count('associated')
+    diagnostics.pinch(1.0, 10, 10)
+    diagnostics.pinch(.5, 20, 40)
+    clock[0] = 1
+    diagnostics.emit()
+    assert _payload(caplog)['pinch_peak'] == {'ratio': 1.0, 'tip_distance_px': 10, 'palm_width_px': 10}
+    diagnostics.count('no_hands_returned')
+    clock[0] = 2
+    diagnostics.emit()
+    assert 'pinch_peak' not in _payload(caplog)

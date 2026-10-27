@@ -109,8 +109,9 @@ def test_band_motion_is_observed_but_missing_pointer_is_never_invented():
     assert trigger._points == before
     assert trigger.observe(missing, 880_000) is None
     assert not trigger.active
-    for i, p in enumerate(_path(360, 14)):
-        assert trigger.observe(_pinch(*p), 960_000 + i * 80_000) is None
+    results = [trigger.observe(_pinch(*p), 960_000 + i * 80_000)
+               for i, p in enumerate(_path(360, 14))]
+    assert sum(result is not None for result in results) == 1
 
 
 def test_entry_positive_evidence_expires_despite_usable_band_frames():
@@ -120,3 +121,41 @@ def test_entry_positive_evidence_expires_despite_usable_band_frames():
         assert not grip.observe(.35, timestamp)
     assert not grip.observe(.1, 800_000)
     assert grip.observe(.1, 880_000)
+
+
+def test_failed_trace_recovers_from_six_closed_samples_without_reusing_old_stroke():
+    trigger = PinchCircleTrigger(CircleSettings())
+    path = _path(310, 14)
+    for i, point in enumerate(path[:7]):
+        assert trigger.observe(_pinch(*point), (i + 1) * 80_000) is None
+    missing = _pinch(200, 100)
+    missing.hands.clear()
+    assert trigger.observe(missing, 1_200_000) is None
+    assert not trigger.active
+    # The old implementation blocked these indefinitely after FAILED loss.
+    for i, ratio in enumerate((.038, .16, .22, .301, .18, .27, .11, .2)):
+        observation = _pinch(*path[0])
+        observation.hands[0].landmarks[4].x = (path[0][0] - ratio * 20) / 400
+        observation.hands[0].landmarks[8].x = (path[0][0] + ratio * 20) / 400
+        assert trigger.observe(observation, 1_280_000 + i * 80_000) is None
+    assert trigger._grip.state is Grip.PINCHED
+    assert trigger._points == [path[0]]
+    # Only the new complete trajectory can recognize; none of the old arc survives.
+    results = [trigger.observe(_pinch(*point), 1_920_000 + i * 80_000)
+               for i, point in enumerate(path)]
+    assert sum(region is not None for region in results) == 1
+
+
+def test_completed_circle_stays_latched_across_loss_and_held_pinch():
+    trigger = PinchCircleTrigger(CircleSettings())
+    path = _path(310, 14)
+    results = [trigger.observe(_pinch(*point), (i + 1) * 80_000) for i, point in enumerate(path)]
+    assert sum(region is not None for region in results) == 1
+    trigger.reset()
+    for i, point in enumerate(path):
+        assert trigger.observe(_pinch(*point), 1_800_000 + i * 80_000) is None
+    assert not trigger._ready
+    for i in range(6):
+        assert trigger.observe(_pinch(*path[0], released=True), 3_000_000 + i * 100_000) is None
+    results = [trigger.observe(_pinch(*point), 3_600_000 + i * 80_000) for i, point in enumerate(path)]
+    assert sum(region is not None for region in results) == 1

@@ -427,18 +427,22 @@ def test_invalid_traces_never_submit(path):
 
 
 @pytest.mark.parametrize("interruption", ["gap", "dimensions"])
-def test_circle_source_interruptions_cancel_until_observed_release(interruption):
+def test_circle_source_interruptions_discard_failed_path_and_allow_fresh_attempt(interruption):
     selector = RegionSelector(_settings())
     timestamp = _trace(selector, _circle_points()[:12])
     timestamp += 100_000
     x, y = _circle_points()[11]
     observation = _pinch(x, y)
+    observation.hands.clear()
     if interruption == "gap":
         timestamp += 1_000_000
     else:
         observation.width = 800
     assert selector.observe(observation, timestamp) is None
-    timestamp = _trace(selector, _circle_points(), timestamp)
+    assert not selector._circle.active
+    results = []
+    timestamp = _trace(selector, _circle_points(), timestamp, completed=results)
+    assert len(results) == 1
     timestamp = _release(selector, 260, 100, timestamp)
     results = []
     _trace(selector, _circle_points(), timestamp, completed=results)
