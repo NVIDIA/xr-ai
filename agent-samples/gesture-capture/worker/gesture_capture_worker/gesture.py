@@ -12,6 +12,7 @@ from xr_ai_tools.image_crop import ImageRegion
 
 from .circle import PinchCircleTrigger
 from .config import Settings
+from .diagnostics import GestureDiagnostics
 
 
 def _corner(hand: TrackedHand, width: int, height: int, angle_cosine: float):
@@ -168,13 +169,15 @@ class CameraBoxTrigger:
 class RegionSelector:
     """Compose box and pinch-circle selection into one sample action boundary."""
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: Settings, *, diagnostics: GestureDiagnostics | None = None) -> None:
         self._settings = settings
+        self._diagnostics = diagnostics or GestureDiagnostics()
         self._box = CameraBoxTrigger(
             hold_s=settings.hold_s, release_s=settings.release_s,
             max_gap_s=settings.max_gap_s, movement_tolerance=settings.movement_tolerance,
         )
-        self._circle = PinchCircleTrigger(settings.circle, release_s=settings.release_s, max_gap_s=settings.max_gap_s)
+        self._circle = PinchCircleTrigger(settings.circle, release_s=settings.release_s,
+                                          max_gap_s=settings.max_gap_s, diagnostics=diagnostics)
         self.circle_selected = False
         self._timestamp = -1
         self._dimensions: tuple[int, int] | None = None
@@ -193,6 +196,7 @@ class RegionSelector:
         dimensions = (observation.width, observation.height)
         if ((self._timestamp >= 0 and timestamp_us - self._timestamp > self._settings.max_gap_s * 1_000_000)
                 or (self._dimensions is not None and dimensions != self._dimensions)):
+            self._diagnostics.count("selector_dimensions_or_frame_gap")
             self.reset()
         self._timestamp = timestamp_us
         self._dimensions = dimensions
@@ -202,13 +206,18 @@ class RegionSelector:
         box = camera_box(observation, corner_tolerance=self._settings.corner_tolerance,
                          angle_cosine=self._settings.angle_cosine,
                          finger_clearance_ratio=self._settings.finger_clearance_ratio)
+        if box is not None:
+            self._diagnostics.count("box_candidate")
         if circle_active or self._circle.active:
             self._box.unavailable()
             return region
         if len(observation.hands) != 2:
             self._box.missing(timestamp_us)
             return region
-        return region or self._box.observe(box, timestamp_us)
+        selected = region or self._box.observe(box, timestamp_us)
+        if selected is not None:
+            self._diagnostics.count("box_recognized")
+        return selected
 
     def unavailable(self) -> None:
         # The next timestamp expires stale evidence. Unknown sensing must not

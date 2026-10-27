@@ -149,6 +149,51 @@ query or chime. After the turn ends, the box still needs a visible relaxed pose
 and the circle needs a stable open pinch before another deliberate gesture.
 Set `gesture_audio: false` for silent operation.
 
+## Diagnose a flaky gesture
+
+Set `gesture_diagnostics: true` in `yaml/gesture_capture_worker.yaml` for a
+reproduction on your next normal sample launch. It defaults to false. This adds
+at most one INFO JSON summary per second per participant through the existing
+worker logger, visible in the launch terminal and
+`/tmp/log_gesture-capture_<run timestamp>/worker.log`. `XR_AI_LOG_ROOT` overrides
+the default `/tmp` root. Filter the text for `"event": "gesture_diagnostics"`.
+Allow several seconds of drawing and share those summary lines when diagnosing
+an issue; enabling the option does not change gesture thresholds or behavior.
+
+The summaries contain counts and numeric min/max ranges, not raw camera/audio,
+landmark coordinates, image references, participant/track identifiers or absolute
+frame timestamps. They use no extra recording files or telemetry sink. Anonymous
+summaries from multiple participants can interleave.
+
+- `hands_0`, `hands_1`, `hands_2` and `hands_3` (three or more) count actual
+  HandLandmarker results. `no_hands_returned` means the overall MediaPipe task
+  returned no hands; it cannot distinguish its internal palm-detection failure
+  from landmark/presence rejection.
+- `backend_ms` is wall time of the hand tool call, including decoding and any
+  lock wait, not a pure model benchmark. `frame_interval_ms` is the interval
+  between observed source-frame timestamps; `duplicate_frame` and
+  `frame_unavailable` distinguish sensing gaps from absent hand detections.
+- `pinch_ratio`, `evidence_closed/open/band`, `grip`, `grip_to_*`,
+  `entry_pointer_added` and `pointer_added` show whether grip admission or usable
+  trajectory sampling is progressing. `association_ambiguous`,
+  `association_no_usable_nearby_hand`, `pointer_jump` and `pointer_outside` count
+  sample continuity rejections, rather than blaming the model for all misses.
+- `circle_points`, `circle_min_points`, `circle_too_small`,
+  `circle_elongated`, `circle_degenerate_fit`, `circle_endpoint_gap`,
+  `circle_radial_error`, `circle_sparse_segment`, `circle_sweep` and
+  `circle_backtrack` locate the first failed geometry check. Many are expected
+  while a partial circle is still being drawn; their counts alone do not prove
+  poor recognition. `tracking_gap`, `circle_reset` and
+  `selector_dimensions_or_frame_gap` show continuity resets.
+- `circle_recognized` / `box_recognized` and `pending_cleared` /
+  `pending_timeout` separate recognition from the circle's later capture point.
+  `pending_association_unknown`, `pending_source_or_frame_gap` and
+  `pending_no_fresh_video` explain why waiting continued or was cancelled.
+
+These observations help isolate detector/landmark availability, cadence and
+sample decisions. They do not establish back-of-hand accuracy or fix an
+unobserved physical-camera failure. No detector replacement is enabled here.
+
 ## Provision the hand model
 
 The optional `hand-tracking` extra uses the reviewed MediaPipe 0.10.31 release.

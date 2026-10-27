@@ -25,6 +25,7 @@ from xr_ai_tools.vision import ImageQueryTool
 
 from .agent import GestureCaptureAgent
 from .config import Settings, load_settings
+from .diagnostics import GestureDiagnostics
 from .feedback import GestureFeedback
 from .gesture import RegionSelector
 
@@ -56,11 +57,12 @@ async def _run(settings: Settings, ready_file: Path | None) -> None:
         stopped = asyncio.Event()
 
         async def poll(participant_id: str) -> None:
+            diagnostics = GestureDiagnostics(settings.gesture_diagnostics)
             feedback = GestureFeedback(endpoint, participant_id, enabled=settings.gesture_audio,
                                        max_gap_s=settings.max_gap_s)
             agent = GestureCaptureAgent(
                 frames=frames, hands=hands, capture=capture, crop=crop, query=query,
-                selector=RegionSelector(settings), feedback=feedback,
+                selector=RegionSelector(settings, diagnostics=diagnostics), feedback=feedback, diagnostics=diagnostics,
                 settings=settings,
             )
             try:

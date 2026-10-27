@@ -11,21 +11,26 @@ from xr_ai_tools.hand_tracking import HandTrackingResult
 from xr_ai_tools.image_crop import ImageRegion
 
 from .config import CircleSettings
+from .diagnostics import GestureDiagnostics
 from .grip import Grip, GripHysteresis
 from .hand_motion import HandPose, match_hand
 
 
 def _circle_region(points: list[tuple[float, float]], width: int, height: int,
-                   settings: CircleSettings) -> ImageRegion | None:
-    if len(points) < settings.min_points:
+                   settings: CircleSettings, diagnostics: GestureDiagnostics | None = None) -> ImageRegion | None:
+    def reject(reason):
+        if diagnostics:
+            diagnostics.count(reason)
         return None
+    if len(points) < settings.min_points:
+        return reject("circle_min_points")
     xs, ys = zip(*points, strict=True)
     left, right, top, bottom = min(xs), max(xs), min(ys), max(ys)
     diameter_x, diameter_y = right - left, bottom - top
     if min(diameter_x, diameter_y) < settings.min_diameter * min(width, height):
-        return None
+        return reject("circle_too_small")
     if min(diameter_x, diameter_y) / max(diameter_x, diameter_y) < settings.min_axis_ratio:
-        return None
+        return reject("circle_elongated")
     # Least-squares circle center avoids bias toward the missing arc of a
     # near-closed loop. Solve the centered two-variable normal equations.
     mean_x, mean_y = sum(xs) / len(xs), sum(ys) / len(ys)
@@ -37,34 +42,36 @@ def _circle_region(points: list[tuple[float, float]], width: int, height: int,
     by = sum(y * (x * x + y * y) / 2 for x, y in centered)
     determinant = xx * yy - xy * xy
     if determinant <= 0:
-        return None
+        return reject("circle_degenerate_fit")
     center = (mean_x + (bx * yy - by * xy) / determinant,
               mean_y + (by * xx - bx * xy) / determinant)
     vectors = [(x - center[0], y - center[1]) for x, y in points]
     radius = sum(math.hypot(*v) for v in vectors) / len(vectors)
     if math.dist(points[0], points[-1]) > settings.closure_tolerance * radius * (1 + 1e-9):
-        return None
+        return reject("circle_endpoint_gap")
     if any(abs(math.hypot(*v) / radius - 1) > settings.radial_tolerance for v in vectors):
-        return None
+        return reject("circle_radial_error")
     turns = []
     for a, b in zip(vectors[:-1], vectors[1:], strict=True):
         if math.dist(a, b) > settings.max_segment_radius * radius * (1 + 1e-9):
-            return None
+            return reject("circle_sparse_segment")
         turns.append(math.atan2(a[0] * b[1] - a[1] * b[0], a[0] * b[0] + a[1] * b[1]))
     winding = sum(turns)
     if abs(winding) + 1e-9 < math.radians(settings.min_sweep_deg) or abs(winding) > math.tau * 1.1:
-        return None
+        return reject("circle_sweep")
     backtrack = (sum(abs(turn) for turn in turns) - abs(winding)) / 2
     if backtrack > settings.max_backtrack * math.tau:
-        return None
+        return reject("circle_backtrack")
     return ImageRegion(left=left / width, right=right / width, top=top / height, bottom=bottom / height)
 
 
 class PinchCircleTrigger:
     """Recognize a closed pinched trace once; require stable release to rearm."""
 
-    def __init__(self, settings: CircleSettings, *, release_s: float = 0.4, max_gap_s: float = 0.5) -> None:
+    def __init__(self, settings: CircleSettings, *, release_s: float = 0.4, max_gap_s: float = 0.5,
+                 diagnostics: GestureDiagnostics | None = None) -> None:
         self._settings = settings
+        self._diagnostics = diagnostics or GestureDiagnostics()
         self._grip = GripHysteresis(pinch_ratio=settings.pinch_ratio, release_ratio=settings.release_ratio,
                                     dwell_s=release_s, max_gap_s=max_gap_s)
         self._max_gap_us = max_gap_s * 1_000_000
@@ -92,11 +99,13 @@ class PinchCircleTrigger:
         self._grip.unavailable()
 
     def reset(self) -> None:
+        self._diagnostics.count("circle_reset")
         self.unavailable()
         self._points.clear()
         self._candidate_points.clear()
         self.hand = None
         self._grip.reset()
+        self._diagnostics.grip(self._grip.state.value)
         # A still-pinched hand returning after loss cannot continue an old trace.
         self._ready = False
 
@@ -105,8 +114,9 @@ class PinchCircleTrigger:
             return None
         self._timestamp = timestamp_us
         if self._last_seen is not None and timestamp_us - self._last_seen > self._max_gap_us:
+            self._diagnostics.count("tracking_gap")
             self.reset()
-        pose = match_hand(observation, self.hand, self._settings.max_jump_palm)
+        pose = match_hand(observation, self.hand, self._settings.max_jump_palm, self._diagnostics)
         if pose is None:
             self._grip.observe(None, timestamp_us)
             self.unavailable()
@@ -114,7 +124,9 @@ class PinchCircleTrigger:
         width, height = observation.width, observation.height
         self._short_side = min(width, height)
         pointer, ratio = pose.pointer, pose.ratio
+        self._diagnostics.number("pinch_ratio", ratio)
         if not (0 <= pointer[0] <= width and 0 <= pointer[1] <= height):
+            self._diagnostics.count("pointer_outside")
             self._grip.observe(None, timestamp_us)
             self.unavailable()
             return None
@@ -122,6 +134,7 @@ class PinchCircleTrigger:
             self._candidate_points.clear()
         trajectory = self._points or self._candidate_points
         if trajectory and math.dist(pointer, trajectory[-1]) > self._settings.max_jump_palm * pose.scale:
+            self._diagnostics.count("pointer_jump")
             self._grip.observe(None, timestamp_us)
             self.unavailable()
             return None
@@ -131,12 +144,16 @@ class PinchCircleTrigger:
         if was_open and strong_pinch and self._ready:
             if not self._candidate_points or pointer != self._candidate_points[-1]:
                 self._candidate_points.append(pointer)
+                self._diagnostics.count("entry_pointer_added")
             if len(self._candidate_points) > self._settings.max_points:
                 self.reset()
                 return None
         elif not was_open or (ratio is not None and ratio >= self._settings.release_ratio):
             self._candidate_points.clear()
         closed = self._grip.observe(ratio, timestamp_us)
+        self._diagnostics.grip(self._grip.state.value)
+        self._diagnostics.count("evidence_closed" if strong_pinch else "evidence_open"
+                                if ratio >= self._settings.release_ratio else "evidence_band")
         if closed and was_open:
             self._points = self._candidate_points
             self._candidate_points = []
@@ -149,14 +166,18 @@ class PinchCircleTrigger:
             self._points.clear()
         self._last_seen = timestamp_us
         if not closed or not self._ready:
+            self._diagnostics.count("grip_or_rearm_wait")
             return None
         if not self._points or pointer != self._points[-1]:
             if len(self._points) >= self._settings.max_points:
                 self.reset()
                 return None
             self._points.append(pointer)
-        region = _circle_region(self._points, width, height, self._settings)
+            self._diagnostics.count("pointer_added")
+        self._diagnostics.number("circle_points", len(self._points))
+        region = _circle_region(self._points, width, height, self._settings, self._diagnostics)
         if region is not None:
+            self._diagnostics.count("circle_recognized")
             self._points = []
             self._ready = False
         return region

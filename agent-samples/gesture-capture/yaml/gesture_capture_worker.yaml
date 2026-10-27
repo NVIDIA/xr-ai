@@ -9,6 +9,8 @@ models: models.json
 poll_interval_s: 0.08
 # Gentle progress hum and recognition chime through the participant audio track.
 gesture_audio: true
+# Opt-in one-second numeric/reason summaries in existing worker logs; no images.
+gesture_diagnostics: false
 hold_s: 0.6
 # Stable grip release and gesture rearm dwell; missing frames break confirmation.
 release_s: 0.4

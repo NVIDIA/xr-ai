@@ -8,6 +8,8 @@ from dataclasses import dataclass
 
 from xr_ai_tools.hand_tracking import HandTrackingResult
 
+from .diagnostics import GestureDiagnostics
+
 
 @dataclass(frozen=True)
 class HandPose:
@@ -18,7 +20,8 @@ class HandPose:
     bounds: tuple[float, float, float, float]
 
 
-def match_hand(observation: HandTrackingResult, previous: HandPose | None, max_jump: float) -> HandPose | None:
+def match_hand(observation: HandTrackingResult, previous: HandPose | None, max_jump: float,
+               diagnostics: GestureDiagnostics | None = None) -> HandPose | None:
     candidates = []
     for hand in observation.hands:
         points = [(p.x * observation.width, p.y * observation.height) for p in hand.landmarks]
@@ -33,4 +36,7 @@ def match_hand(observation: HandTrackingResult, previous: HandPose | None, max_j
                                   tuple((points[4][i] + points[8][i]) / 2 for i in (0, 1)),
                                   math.dist(points[4], points[8]) / scale,
                                   (min(xs), min(ys), max(xs), max(ys))))
+    if diagnostics:
+        diagnostics.count("associated" if len(candidates) == 1 else "no_hands_returned" if not observation.hands
+                          else "association_ambiguous" if len(candidates) > 1 else "association_no_usable_nearby_hand")
     return candidates[0] if len(candidates) == 1 else None

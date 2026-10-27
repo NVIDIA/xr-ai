@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import time
+
 from xr_ai_hub import FrameUnavailable
 from xr_ai_tools.current_frame import CurrentFrameRequest, CurrentFrameTool
 from xr_ai_tools.hand_tracking import HandTrackingRequest, HandTrackingTool
@@ -13,6 +15,7 @@ from xr_ai_tools.still_capture import StillCaptureRequest, StillCaptureTool
 from xr_ai_tools.vision import ImageQueryRequest, ImageQueryTool
 
 from .config import Settings
+from .diagnostics import GestureDiagnostics
 from .feedback import GestureFeedback
 from .gesture import RegionSelector
 from .selection_wait import CircleCaptureWait
@@ -25,7 +28,9 @@ class GestureCaptureAgent:
         self, *, frames: CurrentFrameTool, hands: HandTrackingTool,
         capture: StillCaptureTool, crop: ImageCropTool, query: ImageQueryTool,
         selector: RegionSelector, settings: Settings, feedback: GestureFeedback | None = None,
+        diagnostics: GestureDiagnostics | None = None,
     ) -> None:
+        self._diagnostics = diagnostics or GestureDiagnostics()
         self._frames = frames
         self._hands = hands
         self._capture = capture
@@ -42,14 +47,19 @@ class GestureCaptureAgent:
         try:
             return await self._step(participant_id)
         except FrameUnavailable:
+            self._diagnostics.count("frame_unavailable")
             self.unavailable()
             raise
         except BaseException:
+            self._diagnostics.count("step_failed_or_cancelled")
             self._pending = None
             raise
+        finally:
+            self._diagnostics.emit()
 
     async def _step(self, participant_id: str) -> str | None:
         if self._pending is not None and self._pending.expired:
+            self._diagnostics.count("pending_no_fresh_video")
             self._pending = None
             raise ValueError("Circle selection expired without fresh video; draw again")
         if self._turn_active and self._pending is None:
@@ -57,11 +67,16 @@ class GestureCaptureAgent:
         frame = await self._frames.execute(CurrentFrameRequest(participant_id=participant_id, allow_capture=False))
         identity = (frame.track_id, frame.sequence, frame.timestamp_us)
         if identity == self._last_frame:
+            self._diagnostics.count("duplicate_frame")
             return None
         if self._last_frame is not None and self._last_frame[0] != frame.track_id:
+            self._diagnostics.count("source_changed")
             self._selector.reset()
         self._last_frame = identity
+        started = time.monotonic()
         hands = await self._hands.execute(HandTrackingRequest(image=frame.image))
+        if self._diagnostics.enabled:
+            self._diagnostics.frame(frame.timestamp_us, len(hands.hands), (time.monotonic() - started) * 1000)
         if self._pending is not None:
             ready = self._pending.observe(hands, frame)
             if not ready:
@@ -78,7 +93,8 @@ class GestureCaptureAgent:
             if self._feedback:
                 await self._feedback.recognized()
             if self._selector.circle_selected:
-                self._pending = CircleCaptureWait(region, self._selector.drawing_hand, frame, self._settings)
+                self._pending = CircleCaptureWait(
+                    region, self._selector.drawing_hand, frame, self._settings, self._diagnostics)
                 return None
         source = frame
         if self._settings.aligned_photo:

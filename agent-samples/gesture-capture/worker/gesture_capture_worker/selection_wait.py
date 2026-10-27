@@ -10,11 +10,14 @@ from xr_ai_tools.hand_tracking import HandTrackingResult
 from xr_ai_tools.image_crop import ImageRegion
 
 from .config import Settings
+from .diagnostics import GestureDiagnostics
 from .hand_motion import HandPose, match_hand
 
 
 class CircleCaptureWait:
-    def __init__(self, region: ImageRegion, hand: HandPose | None, frame: ImageFrame, settings: Settings) -> None:
+    def __init__(self, region: ImageRegion, hand: HandPose | None, frame: ImageFrame, settings: Settings,
+                 diagnostics: GestureDiagnostics | None = None) -> None:
+        self._diagnostics = diagnostics or GestureDiagnostics()
         self.region = region
         self.hand = hand
         self.track = frame.track_id
@@ -34,13 +37,16 @@ class CircleCaptureWait:
         timestamp = frame.timestamp_us
         if (frame.track_id != self.track or (frame.width, frame.height) != self.dimensions
                 or timestamp - self.timestamp > self.settings.max_gap_s * 1_000_000):
+            self._diagnostics.count("pending_source_or_frame_gap")
             raise ValueError("Circle selection expired after video source interruption; draw again")
         if timestamp <= self.timestamp:
             return False
         self.timestamp = timestamp
         self.last_observed = time.monotonic()
-        pose = match_hand(observation, self.hand, self.settings.circle.max_jump_palm)
+        pose = match_hand(observation, self.hand, self.settings.circle.max_jump_palm, self._diagnostics)
+        self._diagnostics.count("pending_observation")
         if pose is None:
+            self._diagnostics.count("pending_association_unknown")
             self.clear_since = None
         else:
             self.hand = pose
@@ -58,5 +64,9 @@ class CircleCaptureWait:
                     self.clear_since = timestamp
             else:
                 self.clear_since = None
-        return (timestamp >= self.deadline or (self.clear_since is not None
-                and timestamp - self.clear_since >= self.settings.release_s * 1_000_000))
+        timed_out = timestamp >= self.deadline
+        cleared = (self.clear_since is not None
+                   and timestamp - self.clear_since >= self.settings.release_s * 1_000_000)
+        if timed_out or cleared:
+            self._diagnostics.count("pending_timeout" if timed_out else "pending_cleared")
+        return timed_out or cleared

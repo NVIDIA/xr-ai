@@ -44,7 +44,9 @@ hold_s: 0.6
 ```
 
 That YAML also selects model paths, gesture timing, tolerances, and the general VLM
-question. `yaml/models.json` selects the VLM endpoint and adapter.
+question. For a flaky-gesture reproduction, opt into `gesture_diagnostics: true`
+in that YAML; bounded numeric summaries appear in the terminal and existing
+worker log (see the guide for interpretation). `yaml/models.json` selects the VLM endpoint and adapter.
 `yaml/device_io_hub.yaml` configures the hub and web client. Refer to the
 [sample configuration guide](https://nvidia.github.io/xr-ai/latest/reference/gesture-capture.html#settings-and-output)
 and generated [configuration reference](https://nvidia.github.io/xr-ai/latest/reference/configuration.html).
