@@ -16,7 +16,7 @@ from types import SimpleNamespace
 import pytest
 from gesture_capture_worker.agent import GestureCaptureAgent
 from gesture_capture_worker.circle import PinchCircleTrigger
-from gesture_capture_worker.config import CircleSettings, Settings
+from gesture_capture_worker.config import CircleSettings, Settings, load_settings
 from gesture_capture_worker.gesture import CameraBoxTrigger, RegionSelector, camera_box
 from PIL import Image
 from pydantic import ValidationError
@@ -135,17 +135,20 @@ async def test_explicit_still_ignores_fresh_video():
 
 
 @pytest.mark.parametrize("gesture", ["box", "circle"])
-async def test_sample_composes_tools_and_captures_once_until_release(gesture):
+@pytest.mark.parametrize("aligned_photo,photo_size", [
+    (False, (4000, 3000)), (True, (4000, 2000)), (True, (4000, 3000)),
+])
+async def test_sample_composes_tools_with_selected_video_or_aligned_photo(gesture, aligned_photo, photo_size):
     from test_image_capture import _Endpoint
     images = ImageRegistry()
     endpoint = _Endpoint()
-    # Return a large photo with the same framing as the low-resolution observations.
+    # A deliberately incompatible photo must not affect default video-mode queries.
     async def photo(request):
         from xr_ai_hub import ImageCaptureData
         endpoint.requests.append(request)
         await endpoint.image_callback(ImageCaptureData(
             participant_id="alice",request_id=request.request_id,pts_us=1,
-            mime_type="image/png",data=_png((4000,2000)),
+            mime_type="image/png",data=_png(photo_size),
         ))
     endpoint._request_image_capture = photo
     timestamp = 100_000
@@ -166,28 +169,35 @@ async def test_sample_composes_tools_and_captures_once_until_release(gesture):
         hands=Tool("hands","Hands",HandTrackingRequest,HandTrackingResult,hands),
         capture=StillCaptureTool(endpoint=endpoint,images=images),crop=ImageCropTool(images=images),
         query=Tool("query","Query",ImageQueryRequest,ImageQueryResult,query),
-        selector=RegionSelector(_settings(hold_s=0.2)),
-        settings=_settings(hold_s=0.2),
+        selector=RegionSelector(_settings(hold_s=0.2, aligned_photo=aligned_photo)),
+        settings=_settings(hold_s=0.2, aligned_photo=aligned_photo),
     )
     if gesture == "box":
-        assert await agent.step("alice") is None
-        timestamp = 300_000
-        assert await agent.step("alice") == "A blue region"
-        timestamp = 500_000
-        assert await agent.step("alice") is None
-        assert observed == [(2400, 1200)]
+        steps = [(100_000, _box()), (300_000, _box()), (500_000, _box())]
+        expected_crop = (2400, 1200) if aligned_photo else (240, 120)
     else:
-        answers = []
         observations = [_pinch(x, y) for x, y in _circle_points()]
         observations += [_pinch(260, 100, released=True)] * 5
-        for observation in observations:
-            timestamp += 100_000
+        steps = [(i * 100_000, value) for i, value in enumerate(observations, start=1)]
+        expected_crop = (1200, 1200) if aligned_photo else (120, 120)
+
+    async def run_steps():
+        nonlocal timestamp, observation
+        answers = []
+        for timestamp, observation in steps:
             answer = await agent.step("alice")
             if answer is not None:
                 answers.append(answer)
-        assert answers == ["A blue region"]
-        assert observed == [(1200, 1200)]
-    assert len(endpoint.requests) == 1
+        return answers
+
+    if aligned_photo and photo_size == (4000, 3000):
+        with pytest.raises(ValueError, match="Photo and video aspect ratios differ"):
+            await run_steps()
+        assert observed == []
+    else:
+        assert await run_steps() == ["A blue region"]
+        assert observed == [expected_crop]
+    assert len(endpoint.requests) == int(aligned_photo)
 
 
 
@@ -280,7 +290,6 @@ async def test_exif_oriented_still_uses_upright_coordinates():
 
 async def test_worker_roster_is_idempotent_and_departure_drains_polling(monkeypatch, tmp_path):
     from gesture_capture_worker import __main__ as worker
-    from gesture_capture_worker.config import Settings
     from test_image_capture import _Endpoint
     from xr_ai_hub import ParticipantEvent
 
@@ -323,8 +332,9 @@ async def test_worker_roster_is_idempotent_and_departure_drains_polling(monkeypa
     monkeypatch.setattr(worker, "GestureCaptureAgent", Agent)
     monkeypatch.setattr(worker, "load_models_config", lambda path: None)
     monkeypatch.setattr(worker, "make_vlm", lambda *args: Vlm())
-    settings = Settings(model_path=tmp_path / "model.task", models=tmp_path / "models.json",
-                        query="Describe the selected region")
+    path = Path(__file__).resolve().parents[1] / "agent-samples/gesture-capture/yaml/gesture_capture_worker.yaml"
+    settings = load_settings(path)
+    assert settings.aligned_photo is False
     app = asyncio.create_task(worker._run(settings, None))
     try:
         await asyncio.wait_for(running.wait(), 2)

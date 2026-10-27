@@ -52,6 +52,4 @@ def load_settings(path: Path) -> Settings:
     settings = Settings.model_validate(yaml.safe_load(path.read_text()))
     settings.model_path = (path.parent / settings.model_path).resolve()
     settings.models = (path.parent / settings.models).resolve()
-    if not settings.aligned_photo:
-        raise ValueError("Verify matching photo/video camera framing and set aligned_photo: true")
     return settings

@@ -7,8 +7,9 @@
 
 The `gesture-capture` sample reads hand landmarks from mono video. A held
 camera-box gesture or a pinched circle selects a section of the camera view.
-Both request a separate still photograph, crop the selected region, and ask
-the configured VLM to describe it. The sample launches a hub and worker; the
+Both crop the selected streamed video frame by default and ask the configured
+VLM to describe it. Optional aligned-photo mode uses a separate still photograph
+that can have a higher resolution. The sample launches a hub and worker; the
 VLM service runs separately. Start commands and common settings are in the
 [sample README](https://github.com/NVIDIA/xr-ai/tree/main/agent-samples/gesture-capture).
 
@@ -16,17 +17,22 @@ VLM service runs separately. Start commands and common settings are in the
 
 ```text
 Live image → hand landmarks → sample region selector
-           → device still capture → image crop → VLM query → gesture.response
+           → selected video frame or aligned still → image crop → VLM query → gesture.response
 ```
 
 `GestureCaptureAgent.step()` shows the composition. `CurrentFrameTool` selects
 live images with photo fallback disabled. `HandTrackingTool` returns 21 landmarks
 per hand and knows nothing about gestures or capture. The sample-owned
 `RegionSelector` composes the two gestures into an `ImageRegion`; the agent
-uses the same capture, crop, and VLM query sequence for either selection.
+uses the same image-selection, crop, and VLM query sequence for either gesture.
 
-`StillCaptureTool` always requests a new device photograph, even with fresh
-video available. It returns the actual dimensions and an opaque image reference.
+`aligned_photo: false` selects the same frame used for the final gesture
+observation. The crop uses that frame's actual streamed resolution and coordinate
+system; this mode sends no photo request. It works with ordinary video streaming
+and needs no photo calibration acknowledgement.
+
+With `aligned_photo: true`, `StillCaptureTool` requests a new device photograph,
+even with fresh video available. It returns the actual dimensions and an opaque image reference.
 `ImageCropTool` crops that reference independently of hand tracking.
 `ImageQueryTool` resolves the crop through the typed VLM service. Changing the
 question does not require changing sensing or acquisition. Both gestures use
@@ -103,25 +109,32 @@ recognition here is a demonstration requiring target-camera tuning.
 ## Configure the image path
 
 Select **Live** camera mode in the web client. The existing capture callback
-now handles live-mode photograph requests through the browser's native
+handles optional aligned-photo requests through the browser's native
 `ImageCapture.takePhoto()` API. It requests the maximum photo dimensions
 reported by the camera without changing video constraints. A camera may return
 less than 4K or pause video during exposure. Unsupported browsers reject the
-request; the explicit still tool does not substitute a video snapshot.
+request in aligned-photo mode; it does not silently change to a video snapshot.
+Default video-frame mode does not require this browser photo API.
 
 Custom device applications implement `onImageCaptureRequested` with their own
 photo API. This permits image-only sensor resolutions while low-resolution
 video continues to supply hand observations. The existing request, response,
 and cancellation protocol carries the encoded image independently of video.
 An aborted request suppresses delivery; a device exposure already started by
-its native camera API may still finish. Native iOS and Android high-resolution photo adapters for live mode
-are separate platform work; this sample's built-in implementation is web-only.
+its native camera API may still finish. Native iOS and Android high-resolution
+photo adapters for live mode are separate platform work; this sample's built-in
+photo implementation is web-only.
 
-Set `aligned_photo: true` only after verifying that video and stills come
-from the same camera, with the same optical framing and orientation. Coordinates
+Leave `aligned_photo: false` for video-frame queries at startup. To opt into
+higher-resolution stills, set `aligned_photo: true` only after verifying that
+video and stills come from the same camera, with the same optical framing and
+orientation. Coordinates
 refer to source pixels, independent of a mirrored preview. EXIF orientation is
-normalized when processing stills. The sample rejects different photo and video
-aspect ratios. Equal aspect ratios cannot detect digital zoom, stabilization,
+normalized when processing stills. The flag is a manual assertion; the sample does
+not calibrate, register, or transform coordinates between the two images. In
+aligned-photo mode, the sample rejects different photo and video aspect ratios
+before cropping or querying. Equal aspect ratios cannot detect digital zoom,
+stabilization,
 lens switching, changed field of view, or scene motion between gesture and
 exposure; these need device-specific calibration or alignment. Keep the camera
 and framed target steady until capture finishes.

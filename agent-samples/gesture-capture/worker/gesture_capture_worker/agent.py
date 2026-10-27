@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Compose independent tools into gesture → photograph → crop → VLM."""
+"""Compose independent tools into gesture → selected image → crop → VLM."""
 
 from __future__ import annotations
 
@@ -44,10 +44,12 @@ class GestureCaptureAgent:
         region = self._selector.observe(hands, frame.timestamp_us)
         if region is None:
             return None
-        photo = await self._capture.execute(StillCaptureRequest(participant_id=participant_id))
-        if photo.width * frame.height != photo.height * frame.width:
-            raise ValueError("Photo and video aspect ratios differ; crop alignment is unavailable")
-        cropped = await self._crop.execute(ImageCropRequest(image=photo.image, region=region))
+        source = frame
+        if self._settings.aligned_photo:
+            source = await self._capture.execute(StillCaptureRequest(participant_id=participant_id))
+            if source.width * frame.height != source.height * frame.width:
+                raise ValueError("Photo and video aspect ratios differ; crop alignment is unavailable")
+        cropped = await self._crop.execute(ImageCropRequest(image=source.image, region=region))
         answer = await self._query.execute(ImageQueryRequest(image=cropped.image, query=self._settings.query))
         return answer.text
 

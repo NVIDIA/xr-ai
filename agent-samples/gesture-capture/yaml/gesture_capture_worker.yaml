@@ -17,8 +17,10 @@ movement_tolerance: 0.05
 corner_tolerance: 0.35
 # Maximum absolute cosine of each thumb/index angle (near 90 degrees).
 angle_cosine: 0.45
-# Required acknowledgement: same optical camera, orientation and field of view
-# for video and photo. Aspect ratio validation alone cannot establish this.
+# Default: crop the selected streamed video frame at its actual resolution.
+# Set true to request a separate higher-resolution photo only after verifying
+# the same optical camera, orientation and field of view for video and photo.
+# Aspect ratio validation alone cannot establish alignment.
 aligned_photo: false
 query: "Describe the selected region and explain what is notable about it."
 

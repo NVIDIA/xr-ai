@@ -7,7 +7,8 @@
 
 Hold a box with both hands' index fingers and thumbs, or pinch and draw a circle
 then release, to ask the VLM about that section of the camera view. Both gestures
-request a separate still photograph and query its selected crop. This sample starts a hub
+query a crop of the selected streamed frame by default. Optional aligned-photo
+mode requests a separate higher-resolution photograph. This sample starts a hub
 and worker and reuses a separately running VLM service.
 
 Refer to the [gesture-capture guide](https://nvidia.github.io/xr-ai/main/reference/gesture-capture.html)
@@ -17,12 +18,11 @@ for model provisioning, licenses, browser requirements, alignment, and behavior.
 
 Working directory: `agent-samples/gesture-capture/`.
 
-Provision `models/hand_landmarker.task` using the guide. Set camera alignment
-only after verifying photo/video framing:
+Provision `models/hand_landmarker.task` using the guide. Default video-frame
+mode needs no photo alignment configuration. For example, adjust the hold time:
 
 ```yaml
 # yaml/gesture_capture_worker.yaml
-aligned_photo: true
 hold_s: 0.6
 ```
 
@@ -61,5 +61,8 @@ uv run main.py
 ```
 
 Open the hub's authenticated web URL, select **Live** camera mode, and form
-the gesture. A browser and camera supporting native still photography are
-required. The client displays the text reply on `gesture.response`.
+the gesture. The client displays the text reply on `gesture.response`.
+
+To enable higher-resolution stills, verify matching photo and video framing,
+then set `aligned_photo: true` in `yaml/gesture_capture_worker.yaml`. That mode
+requires a browser and camera supporting native still photography.
