@@ -1,0 +1,23 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Paths resolve relative to this YAML file. Provision the model explicitly;
+# see docs/source/reference/gesture-capture.md for download and license details.
+model_path: ../models/hand_landmarker.task
+models: models.json
+# Demonstration settings, requiring tuning on the target camera.
+poll_interval_s: 0.15
+hold_s: 0.6
+release_s: 0.4
+# Break hold/release continuity if new observations are separated by this gap.
+max_gap_s: 0.5
+# Maximum normalized edge movement during a hold.
+movement_tolerance: 0.05
+# Maximum corner mismatch as a fraction of the thumb/index span.
+corner_tolerance: 0.35
+# Maximum absolute cosine of each thumb/index angle (near 90 degrees).
+angle_cosine: 0.45
+# Required acknowledgement: same optical camera, orientation and field of view
+# for video and photo. Aspect ratio validation alone cannot establish this.
+aligned_photo: false
+query: "Read all text in this image. Return only the text, preserving line breaks."

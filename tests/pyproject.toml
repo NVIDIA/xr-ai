@@ -12,6 +12,7 @@ description = "Multi-client / multi-agent integration tests for xr-ai."
 requires-python = ">=3.11,<3.15"
 dependencies = [
     # Pulled in via editable installs of the workspace packages.
+    "gesture-capture-worker",
     "xr-ai-agent-runtime",
     "xr-ai-interaction",
     "xr-ai-conversation",
@@ -50,6 +51,7 @@ dependencies = [
 ]
 
 [tool.uv.sources]
+gesture-capture-worker = { path = "../agent-samples/gesture-capture/worker", editable = true }
 xr-ai-gpu = { path = "../utils/xr-ai-gpu", editable = true }
 xr-ai-model-server-stack = { path = "../utils/xr-ai-model-server-stack", editable = true }
 xr-ai-agent-runtime      = { path = "../agent-sdk/xr-ai-runtime",       editable = true }

@@ -11,13 +11,11 @@ import io
 from PIL import Image
 from pydantic import Field
 from xr_ai_hub import (
+    ClientImageCaptureSource,
     FrameUnavailable,
+    ImageCaptureUnavailable,
     LiveFrameSource,
     ProcessorEndpoint,
-)
-from xr_ai_hub._image_capture import (
-    _ClientImageCaptureSource,
-    _ImageCaptureUnavailable,
 )
 
 from ._pixels import encode_image_bytes, frame_to_pil
@@ -54,6 +52,9 @@ class CurrentFrameRequest(StrictRequest):
     )
     """Participant whose latest camera frame should be returned."""
 
+    allow_capture: bool = True
+    """Whether a device photo may be requested when live video is unavailable."""
+
 
 class CurrentFrameTool(Tool[CurrentFrameRequest, ImageFrame]):
     """Return a participant's current image without running visual inference.
@@ -83,7 +84,7 @@ class CurrentFrameTool(Tool[CurrentFrameRequest, ImageFrame]):
             max_age_s=frame_max_age_s,
             timeout_s=frame_timeout_s,
         )
-        self._captures = _ClientImageCaptureSource(
+        self._captures = ClientImageCaptureSource(
             endpoint,
             timeout_s=frame_timeout_s,
         )
@@ -128,12 +129,14 @@ class CurrentFrameTool(Tool[CurrentFrameRequest, ImageFrame]):
         if live_frame is not None:
             return live_frame
 
+        if not request.allow_capture:
+            raise FrameUnavailable("No fresh live video frame is available.")
+
         try:
             captured = await self._captures.capture(request.participant_id)
-        except _ImageCaptureUnavailable as exc:
-            # Live mode intentionally has no still-capture handler. A frame may
-            # have arrived while its rejection was in flight, so prefer that
-            # already-fresh frame without extending the request deadline.
+        except ImageCaptureUnavailable as exc:
+            # A client may reject photos while video is becoming available.
+            # Prefer an already-fresh frame without extending the deadline.
             live_frame = await self._fresh_live_frame(request.participant_id)
             if live_frame is not None:
                 return live_frame
