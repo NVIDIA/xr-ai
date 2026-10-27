@@ -5,46 +5,71 @@
 
 # Gesture capture
 
-The `gesture-capture` sample reads hand landmarks from mono video and uses a
-camera-box gesture to request a separate still photograph. It crops the photo
-and reads text through the configured VLM service. The sample launches a hub
-and worker; the VLM service runs separately. Start commands and common settings
-are in the [sample README](https://github.com/NVIDIA/xr-ai/tree/main/agent-samples/gesture-capture).
+The `gesture-capture` sample reads hand landmarks from mono video. A held
+camera-box gesture or a pinched circle selects a section of the camera view.
+Both request a separate still photograph, crop the selected region, and ask
+the configured VLM to describe it. The sample launches a hub and worker; the
+VLM service runs separately. Start commands and common settings are in the
+[sample README](https://github.com/NVIDIA/xr-ai/tree/main/agent-samples/gesture-capture).
 
 ## Compose the capabilities
 
-```mermaid
-flowchart LR
-    V[Live video image] --> H[Hand landmarks]
-    H --> G[Sample gesture and hold policy]
-    G --> S[Device still capture]
-    S --> C[Image crop]
-    C --> Q[Image query tool]
-    Q --> R[gesture.ocr reply]
+```text
+Live image → hand landmarks → sample region selector
+           → device still capture → image crop → VLM query → gesture.response
 ```
 
 `GestureCaptureAgent.step()` shows the composition. `CurrentFrameTool` selects
-live images with photo fallback disabled. `HandTrackingTool` interprets a
-selected image and returns 21 landmarks per hand; it knows nothing about
-capture or gestures. The sample recognizes two opposing thumb/index L shapes,
-checks that their endpoints approximate the other rectangle corners, and uses
-a stable hold followed by an observed release to trigger once.
+live images with photo fallback disabled. `HandTrackingTool` returns 21 landmarks
+per hand and knows nothing about gestures or capture. The sample-owned
+`RegionSelector` composes the two gestures into an `ImageRegion`; the agent
+uses the same capture, crop, and VLM query sequence for either selection.
 
 `StillCaptureTool` always requests a new device photograph, even with fresh
-video available. It returns the actual image dimensions and an opaque image
-reference. `ImageCropTool` operates on that reference independently of hand
-tracking. `ImageQueryTool` resolves the cropped reference through the typed
-VLM service. Other applications can replace any of the gesture, acquisition,
-crop, or inference steps independently. Tool execution uses the existing Relay
-boundary; raw pixels do not enter tool requests or results.
+video available. It returns the actual dimensions and an opaque image reference.
+`ImageCropTool` crops that reference independently of hand tracking.
+`ImageQueryTool` resolves the crop through the typed VLM service. Changing the
+question does not require changing sensing or acquisition. Both gestures use
+VLM inference only; no dedicated OCR model or OCR result parser is involved.
+A question can still ask the VLM to read or explain text in the selected image.
 
 The worker owns one polling task per participant and one shared local hand
-detector. IMAGE mode keeps observations independent across participants.
-Native calls are serialized off the event loop, and detector teardown waits
-for native inference to finish even after a polling coroutine is cancelled.
-Disconnect cancels the participant task and releases its image handles.
-A missing frame or inference failure breaks hold continuity without rearming
-a held gesture. Duplicate observations cannot advance the hold timer.
+detector. IMAGE mode keeps observations independent across participants. Native
+calls are serialized off the event loop; teardown waits for actual native
+inference after polling cancellation. Disconnect cancels the participant task
+and releases its image handles. Tool execution uses Relay, with raw pixels
+kept outside tool requests and results.
+
+## Select a region
+
+For the box gesture, form two opposing L shapes with the thumbs and index
+fingers and hold the framing steady. The sample checks the finger angles and
+matching corners before acquiring the hold. Relax both hands' pose while they
+are visible to rearm it. Missing hands alone do not count as an intentional
+release of a held box.
+
+For the circle gesture, pinch thumb and index finger with one hand visible,
+move the pinch point around the desired section in a closed circle, and hold
+the pinch open briefly to submit. Either drawing direction works. The sample
+uses the trace's bounding rectangle, rather than masking the exact circle.
+It rejects tiny loops, open arcs, elongated shapes, large radial deviations,
+sparse motion, multiple revolutions, and excessive backtracking. Keep the target
+and camera steady until the photograph finishes.
+
+Pinch entry and exit have different palm-scaled distance thresholds. The
+`release_s` setting debounces release for both gestures. A one-frame open pinch
+cannot submit a trace. Brief absent or ambiguous detections preserve the box
+candidate or circle path up to `max_gap_s`; they add no trajectory points and
+break release confirmation. Longer loss cancels acquisition. A cancelled circle
+requires an observed open pinch before another trace can begin. Duplicate frames
+cannot advance a hold, release, or drawing.
+
+Both geometry and trajectory continuity use source-image pixels, accounting for
+aspect ratio. Circle input requires one hand; detected handedness changes and
+implausible pointer jumps cancel the trace. IMAGE-mode handedness is a classifier
+label, not a stable hand identity, so switching between nearby hands with the
+same label cannot always be detected. Changed camera tracks or dimensions reset
+source continuity. These heuristics require target-camera qualification.
 
 ## Provision the hand model
 
@@ -112,12 +137,12 @@ service; refer to {doc}`/guides/customizing-model-servers`.
 
 The worker YAML owns observation cadence, hold/release durations, the maximum
 observation gap, movement and geometric tolerances, alignment acknowledgement,
-and the OCR question. These are demonstration settings, not measured accuracy
-claims. The current gesture returns an axis-aligned rectangle enclosing the
-hands' framing corners, including for a rotated gesture.
+the general VLM question, and the circle drawing settings. These are demonstration settings, not measured accuracy
+claims. Each gesture returns an axis-aligned bounding rectangle: the framing corners
+for the box, or the observed path for the circle.
 
-Results are UTF-8 data messages on `gesture.ocr`, visible in the web client's
-message log. A capture failure is logged and does not automatically retry
-while the gesture remains held. Release both hands from the box pose before
-trying again. Inference can be replaced by another image question or a separate
-OCR consumer without modifying hand tracking or acquisition.
+Results are UTF-8 messages on `gesture.response`, visible in the web client's
+message log. A capture failure is logged and does not automatically repeat a
+held box or resubmit a released circle. Perform a new deliberate gesture before
+trying again. The `query` setting supplies the same VLM question for either
+selection; its default asks for a description and what is notable in the region.

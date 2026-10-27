@@ -25,7 +25,7 @@ from xr_ai_tools.vision import ImageQueryTool
 
 from .agent import GestureCaptureAgent
 from .config import Settings, load_settings
-from .gesture import CameraBoxTrigger
+from .gesture import RegionSelector
 
 _LOG = logging.getLogger(__name__)
 _HUB_PUB = "ipc:///tmp/xr_hub_pub"
@@ -56,8 +56,7 @@ async def _run(settings: Settings, ready_file: Path | None) -> None:
         async def poll(participant_id: str) -> None:
             agent = GestureCaptureAgent(
                 frames=frames, hands=hands, capture=capture, crop=crop, query=query,
-                trigger=CameraBoxTrigger(hold_s=settings.hold_s, release_s=settings.release_s,
-                                         max_gap_s=settings.max_gap_s, movement_tolerance=settings.movement_tolerance),
+                selector=RegionSelector(settings),
                 settings=settings,
             )
             try:
@@ -66,7 +65,7 @@ async def _run(settings: Settings, ready_file: Path | None) -> None:
                         text = await agent.step(participant_id)
                         if text is not None:
                             await endpoint.send_return_data(DataMessage(
-                                participant_id=participant_id, topic="gesture.ocr",
+                                participant_id=participant_id, topic="gesture.response",
                                 pts_us=time.time_ns() // 1_000, data=text.encode(),
                             ))
                     except FrameUnavailable:
@@ -122,7 +121,7 @@ async def _run(settings: Settings, ready_file: Path | None) -> None:
 
 
 def run() -> None:
-    parser = argparse.ArgumentParser(description="Camera-box gesture → still photo → cropped OCR.")
+    parser = argparse.ArgumentParser(description="Box or pinch-circle gesture → still photo → region VLM query.")
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--ready-file", type=Path)
     args = parser.parse_args()

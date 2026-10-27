@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Compose independent tools into gesture → photograph → crop → OCR."""
+"""Compose independent tools into gesture → photograph → crop → VLM."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from xr_ai_tools.still_capture import StillCaptureRequest, StillCaptureTool
 from xr_ai_tools.vision import ImageQueryRequest, ImageQueryTool
 
 from .config import Settings
-from .gesture import CameraBoxTrigger, camera_box
+from .gesture import RegionSelector
 
 
 class GestureCaptureAgent:
@@ -21,14 +21,14 @@ class GestureCaptureAgent:
     def __init__(
         self, *, frames: CurrentFrameTool, hands: HandTrackingTool,
         capture: StillCaptureTool, crop: ImageCropTool, query: ImageQueryTool,
-        trigger: CameraBoxTrigger, settings: Settings,
+        selector: RegionSelector, settings: Settings,
     ) -> None:
         self._frames = frames
         self._hands = hands
         self._capture = capture
         self._crop = crop
         self._query = query
-        self._trigger = trigger
+        self._selector = selector
         self._settings = settings
         self._last_frame = None
 
@@ -38,12 +38,10 @@ class GestureCaptureAgent:
         if identity == self._last_frame:
             return None
         if self._last_frame is not None and self._last_frame[0] != frame.track_id:
-            self._trigger.unavailable()
+            self._selector.reset()
         self._last_frame = identity
         hands = await self._hands.execute(HandTrackingRequest(image=frame.image))
-        region = camera_box(hands, corner_tolerance=self._settings.corner_tolerance,
-                            angle_cosine=self._settings.angle_cosine)
-        region = self._trigger.observe(region, frame.timestamp_us)
+        region = self._selector.observe(hands, frame.timestamp_us)
         if region is None:
             return None
         photo = await self._capture.execute(StillCaptureRequest(participant_id=participant_id))
@@ -54,4 +52,4 @@ class GestureCaptureAgent:
         return answer.text
 
     def unavailable(self) -> None:
-        self._trigger.unavailable()
+        self._selector.unavailable()

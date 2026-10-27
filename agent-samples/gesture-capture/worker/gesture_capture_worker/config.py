@@ -6,7 +6,30 @@
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+
+class CircleSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+    pinch_ratio: float = Field(default=0.25, gt=0)
+    release_ratio: float = Field(default=0.45, gt=0)
+    min_points: int = Field(default=12, ge=4)
+    max_points: int = Field(default=256, ge=4)
+    min_diameter: float = Field(default=0.1, gt=0, le=1)
+    min_axis_ratio: float = Field(default=0.65, gt=0, le=1)
+    radial_tolerance: float = Field(default=0.35, gt=0, lt=1)
+    closure_tolerance: float = Field(default=0.5, gt=0, lt=1)
+    max_backtrack: float = Field(default=0.15, ge=0, lt=1)
+    max_segment_radius: float = Field(default=1.0, gt=0, lt=2)
+    max_jump_palm: float = Field(default=2.0, gt=0)
+
+    @model_validator(mode="after")
+    def _validate_limits(self):
+        if self.release_ratio <= self.pinch_ratio:
+            raise ValueError("circle release_ratio must exceed pinch_ratio")
+        if self.max_points < self.min_points:
+            raise ValueError("circle max_points must be at least min_points")
+        return self
 
 
 class Settings(BaseModel):
@@ -20,6 +43,7 @@ class Settings(BaseModel):
     release_s: float = Field(default=0.4, gt=0, allow_inf_nan=False)
     corner_tolerance: float = Field(default=0.35, gt=0, lt=1)
     angle_cosine: float = Field(default=0.45, gt=0, lt=1)
+    circle: CircleSettings = Field(default_factory=CircleSettings)
     aligned_photo: bool = False
     query: str = Field(min_length=1)
 

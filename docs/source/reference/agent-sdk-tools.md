@@ -208,4 +208,4 @@ Install `hand-tracking` for image-based hand landmarks, `frames` for live-frame
 selection and explicit still acquisition, and `image-editing` for rectangular
 cropping. These tools compose through `ImageRegistry` references and do not
 perform inference on each other's behalf. The {doc}`gesture-capture` sample
-combines them with the existing image-query tool for gesture-triggered OCR.
+combines them with the existing image-query tool for gesture-selected VLM questions.

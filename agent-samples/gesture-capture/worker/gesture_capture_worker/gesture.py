@@ -10,6 +10,9 @@ import math
 from xr_ai_tools.hand_tracking import HandTrackingResult, TrackedHand
 from xr_ai_tools.image_crop import ImageRegion
 
+from .circle import PinchCircleTrigger
+from .config import Settings
+
 
 def _corner(hand: TrackedHand, width: int, height: int, angle_cosine: float):
     points = [(p.x * width, p.y * height) for p in hand.landmarks]
@@ -71,6 +74,7 @@ class CameraBoxTrigger:
         self._release_start: int | None = None
         self._latched = False
         self._last_timestamp = -1
+        self._last_positive = -1
 
     def observe(self, region: ImageRegion | None, timestamp_us: int) -> ImageRegion | None:
         if timestamp_us <= self._last_timestamp:
@@ -79,12 +83,15 @@ class CameraBoxTrigger:
             self.unavailable()
         self._last_timestamp = timestamp_us
         if region is None:
-            self._candidate = None
+            if timestamp_us - self._last_positive > self._max_gap_us:
+                self._candidate = None
             if self._release_start is None:
                 self._release_start = timestamp_us
             if timestamp_us - self._release_start >= self._release_us:
                 self._latched = False
+                self._candidate = None
             return None
+        self._last_positive = timestamp_us
         self._release_start = None
         if self._latched:
             return None
@@ -101,7 +108,58 @@ class CameraBoxTrigger:
         self._candidate = (timestamp_us, region)
         return None
 
+    def missing(self, timestamp_us: int) -> None:
+        """Keep a brief unknown observation without treating it as release."""
+        self._release_start = None
+        if timestamp_us - self._last_positive > self._max_gap_us:
+            self._candidate = None
+
     def unavailable(self) -> None:
-        """Unknown observations break continuity without authorizing another capture."""
+        """Reset source continuity without authorizing another capture."""
         self._candidate = None
         self._release_start = None
+
+
+class RegionSelector:
+    """Compose box and pinch-circle selection into one sample action boundary."""
+
+    def __init__(self, settings: Settings) -> None:
+        self._settings = settings
+        self._box = CameraBoxTrigger(
+            hold_s=settings.hold_s, release_s=settings.release_s,
+            max_gap_s=settings.max_gap_s, movement_tolerance=settings.movement_tolerance,
+        )
+        self._circle = PinchCircleTrigger(settings.circle, release_s=settings.release_s, max_gap_s=settings.max_gap_s)
+        self._timestamp = -1
+        self._dimensions: tuple[int, int] | None = None
+
+    def observe(self, observation: HandTrackingResult, timestamp_us: int) -> ImageRegion | None:
+        if timestamp_us <= self._timestamp:
+            return None
+        dimensions = (observation.width, observation.height)
+        if ((self._timestamp >= 0 and timestamp_us - self._timestamp > self._settings.max_gap_s * 1_000_000)
+                or (self._dimensions is not None and dimensions != self._dimensions)):
+            self.reset()
+        self._timestamp = timestamp_us
+        self._dimensions = dimensions
+        circle_active = self._circle.active
+        region = self._circle.observe(observation, timestamp_us)
+        box = camera_box(observation, corner_tolerance=self._settings.corner_tolerance,
+                         angle_cosine=self._settings.angle_cosine)
+        if circle_active or self._circle.active:
+            self._box.unavailable()
+            return region
+        if len(observation.hands) != 2:
+            self._box.missing(timestamp_us)
+            return region
+        return region or self._box.observe(box, timestamp_us)
+
+    def unavailable(self) -> None:
+        # The next timestamp expires stale evidence. Unknown sensing must not
+        # immediately erase a candidate or complete a deliberate release.
+        self._box.missing(self._timestamp)
+        self._circle.unavailable()
+
+    def reset(self) -> None:
+        self._box.unavailable()
+        self._circle.reset()

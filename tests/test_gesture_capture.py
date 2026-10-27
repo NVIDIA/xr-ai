@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+import math
 import time
 from pathlib import Path
 from threading import Event
@@ -14,7 +15,9 @@ from types import SimpleNamespace
 
 import pytest
 from gesture_capture_worker.agent import GestureCaptureAgent
-from gesture_capture_worker.gesture import CameraBoxTrigger, camera_box
+from gesture_capture_worker.circle import PinchCircleTrigger
+from gesture_capture_worker.config import CircleSettings, Settings
+from gesture_capture_worker.gesture import CameraBoxTrigger, RegionSelector, camera_box
 from PIL import Image
 from pydantic import ValidationError
 from xr_ai_hub import FrameSignal, FrameUnavailable, ImageCaptureUnavailable, PixelFormat
@@ -131,7 +134,8 @@ async def test_explicit_still_ignores_fresh_video():
         await tool.execute(StillCaptureRequest(participant_id="alice"))
 
 
-async def test_sample_composes_tools_and_captures_once_until_release():
+@pytest.mark.parametrize("gesture", ["box", "circle"])
+async def test_sample_composes_tools_and_captures_once_until_release(gesture):
     from test_image_capture import _Endpoint
     images = ImageRegistry()
     endpoint = _Endpoint()
@@ -148,28 +152,43 @@ async def test_sample_composes_tools_and_captures_once_until_release():
     async def frame(request):
         return ImageFrame(image=images.put(_png(),owner="alice"),width=400,height=200,
                           sequence=timestamp,timestamp_us=timestamp,participant_id="alice")
+    observation = _box()
     async def hands(request):
-        return _box()
+        return observation
     observed = []
     async def query(request):
         with Image.open(io.BytesIO(images.resolve(request.image))) as image:
             observed.append(image.size)
-        return ImageQueryResult(text="TEST OCR")
+        assert request.query == "Describe the selected region"
+        return ImageQueryResult(text="A blue region")
     agent = GestureCaptureAgent(
         frames=Tool("frame","Frame",CurrentFrameRequest,ImageFrame,frame),
         hands=Tool("hands","Hands",HandTrackingRequest,HandTrackingResult,hands),
         capture=StillCaptureTool(endpoint=endpoint,images=images),crop=ImageCropTool(images=images),
         query=Tool("query","Query",ImageQueryRequest,ImageQueryResult,query),
-        trigger=CameraBoxTrigger(hold_s=0.2,release_s=0.2),
-        settings=SimpleNamespace(corner_tolerance=0.2,angle_cosine=0.4,query="Read text"),
+        selector=RegionSelector(_settings(hold_s=0.2)),
+        settings=_settings(hold_s=0.2),
     )
-    assert await agent.step("alice") is None
-    timestamp = 300_000
-    assert await agent.step("alice") == "TEST OCR"
-    timestamp = 500_000
-    assert await agent.step("alice") is None
+    if gesture == "box":
+        assert await agent.step("alice") is None
+        timestamp = 300_000
+        assert await agent.step("alice") == "A blue region"
+        timestamp = 500_000
+        assert await agent.step("alice") is None
+        assert observed == [(2400, 1200)]
+    else:
+        answers = []
+        observations = [_pinch(x, y) for x, y in _circle_points()]
+        observations += [_pinch(260, 100, released=True)] * 5
+        for observation in observations:
+            timestamp += 100_000
+            answer = await agent.step("alice")
+            if answer is not None:
+                answers.append(answer)
+        assert answers == ["A blue region"]
+        assert observed == [(1200, 1200)]
     assert len(endpoint.requests) == 1
-    assert observed == [(2400,1200)]
+
 
 
 async def test_hand_backend_maps_landmarks_and_close_drains_cancelled_inference(monkeypatch):
@@ -304,7 +323,8 @@ async def test_worker_roster_is_idempotent_and_departure_drains_polling(monkeypa
     monkeypatch.setattr(worker, "GestureCaptureAgent", Agent)
     monkeypatch.setattr(worker, "load_models_config", lambda path: None)
     monkeypatch.setattr(worker, "make_vlm", lambda *args: Vlm())
-    settings = Settings(model_path=tmp_path / "model.task", models=tmp_path / "models.json", query="Read")
+    settings = Settings(model_path=tmp_path / "model.task", models=tmp_path / "models.json",
+                        query="Describe the selected region")
     app = asyncio.create_task(worker._run(settings, None))
     try:
         await asyncio.wait_for(running.wait(), 2)
@@ -319,3 +339,199 @@ async def test_worker_roster_is_idempotent_and_departure_drains_polling(monkeypa
         with pytest.raises(asyncio.CancelledError):
             await app
     assert set(closed) == {"hands", "vlm", "endpoint stopped", "endpoint closed"}
+
+
+def _settings(**kwargs):
+    return Settings(model_path=Path("model.task"), models=Path("models.json"),
+                    query="Describe the selected region", **kwargs)
+
+
+def _pinch(x, y, *, released=False, handedness="Left", width=400, height=200):
+    points = [HandLandmark(x=x / width, y=y / height, z=0) for _ in range(21)]
+    # A fixed 40px palm and 4px pinch stay invariant under image aspect ratio.
+    points[5] = HandLandmark(x=(x - 20) / width, y=y / height, z=0)
+    points[17] = HandLandmark(x=(x + 20) / width, y=y / height, z=0)
+    distance = 24 if released else 4
+    points[4] = HandLandmark(x=(x - distance / 2) / width, y=y / height, z=0)
+    points[8] = HandLandmark(x=(x + distance / 2) / width, y=y / height, z=0)
+    return HandTrackingResult(width=width, height=height, hands=[TrackedHand(
+        landmarks=points, handedness=handedness, handedness_score=0.9,
+    )])
+
+
+def _circle_points(*, reverse=False, turns=1):
+    direction = -1 if reverse else 1
+    return [(200 + 60 * math.cos(direction * i * math.tau / 24),
+             100 + 60 * math.sin(direction * i * math.tau / 24)) for i in range(24 * turns + 1)]
+
+
+def _trace(trigger, path, timestamp=0):
+    for x, y in path:
+        timestamp += 100_000
+        assert trigger.observe(_pinch(x, y), timestamp) is None
+    return timestamp
+
+
+def _release(trigger, x, y, timestamp):
+    results = []
+    for _ in range(5):
+        timestamp += 100_000
+        region = trigger.observe(_pinch(x, y, released=True), timestamp)
+        if region is not None:
+            results.append(region)
+    return timestamp, results
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_circle_submits_on_stable_release_and_repeats_after_new_pinch(reverse):
+    trigger = PinchCircleTrigger(CircleSettings())
+    timestamp = 0
+    for _ in range(2):
+        timestamp = _trace(trigger, _circle_points(reverse=reverse), timestamp)
+        timestamp, results = _release(trigger, 260, 100, timestamp)
+        assert results == [ImageRegion(left=0.35, top=0.2, right=0.65, bottom=0.8)]
+
+
+@pytest.mark.parametrize("path", [
+    [(200, 100)] * 30,
+    _circle_points()[:18],
+    _circle_points(turns=2),
+    [(180 + i * 3, 100) for i in range(25)],
+    [(200 + 60 * math.cos(i * math.tau / 24), 100 + 15 * math.sin(i * math.tau / 24)) for i in range(25)],
+    [point for _ in range(4) for point in [(140, 40), (260, 40), (260, 160), (140, 160)]],
+    [*_circle_points(), *_circle_points(reverse=True)],
+])
+def test_invalid_traces_never_submit(path):
+    trigger = PinchCircleTrigger(CircleSettings())
+    timestamp = _trace(trigger, path)
+    _, results = _release(trigger, *path[-1], timestamp)
+    assert results == []
+
+
+@pytest.mark.parametrize("interruption", ["handedness", "jump", "gap", "dimensions"])
+def test_circle_source_interruptions_cancel_until_observed_release(interruption):
+    selector = RegionSelector(_settings())
+    timestamp = _trace(selector, _circle_points()[:12])
+    timestamp += 100_000
+    x, y = _circle_points()[11]
+    observation = _pinch(x, y)
+    if interruption == "handedness":
+        observation.hands[0].handedness = "Right"
+    elif interruption == "jump":
+        observation = _pinch(0, 0)
+    elif interruption == "gap":
+        timestamp += 1_000_000
+    else:
+        observation.width = 800
+    assert selector.observe(observation, timestamp) is None
+    timestamp = _trace(selector, _circle_points(), timestamp)
+    timestamp, results = _release(selector, 260, 100, timestamp)
+    assert results == []
+    timestamp = _trace(selector, _circle_points(), timestamp)
+    _, results = _release(selector, 260, 100, timestamp)
+    assert len(results) == 1
+
+
+@pytest.mark.parametrize("hand_count", [0, 2])
+def test_circle_brief_misses_keep_path_but_sustained_loss_cancels(hand_count):
+    selector = RegionSelector(_settings())
+    path = _circle_points()
+    timestamp = _trace(selector, path[:12])
+    missing = _pinch(*path[11])
+    missing.hands = [] if hand_count == 0 else missing.hands * 2
+    assert selector.observe(missing, timestamp + 100_000) is None
+    timestamp = _trace(selector, path[12:], timestamp + 100_000)
+    timestamp, results = _release(selector, 260, 100, timestamp)
+    assert len(results) == 1
+    timestamp = _trace(selector, path[:12], timestamp)
+    for _ in range(6):
+        timestamp += 100_000
+        assert selector.observe(missing, timestamp) is None
+    timestamp = _trace(selector, path[12:], timestamp)
+    _, results = _release(selector, 260, 100, timestamp)
+    assert results == []
+
+
+def test_circle_release_hysteresis_ignores_single_frame_open_and_threshold_noise():
+    trigger = PinchCircleTrigger(CircleSettings())
+    timestamp = _trace(trigger, _circle_points())
+    assert trigger.observe(_pinch(260, 100, released=True), timestamp + 100_000) is None
+    assert trigger.observe(_pinch(260, 100), timestamp + 200_000) is None
+    intermediate = _pinch(260, 100)
+    intermediate.hands[0].landmarks[4].x -= 0.01
+    intermediate.hands[0].landmarks[8].x += 0.01  # 0.3 palm widths: between enter and exit.
+    assert trigger.observe(intermediate, timestamp + 300_000) is None
+    timestamp, results = _release(trigger, 260, 100, timestamp + 300_000)
+    assert len(results) == 1
+    _, results = _release(trigger, 260, 100, timestamp)
+    assert results == []
+
+
+def test_circle_sample_limit_cancels_without_truncating_start():
+    trigger = PinchCircleTrigger(CircleSettings(max_points=16))
+    timestamp = _trace(trigger, _circle_points())
+    _, results = _release(trigger, 260, 100, timestamp)
+    assert results == []
+
+
+def test_circle_duplicate_frames_do_not_complete_a_trace():
+    selector = RegionSelector(_settings())
+    for x, y in _circle_points():
+        assert selector.observe(_pinch(x, y), 100_000) is None
+    _, results = _release(selector, x, y, 100_000)
+    assert results == []
+
+
+def test_box_candidate_and_latch_survive_brief_missing_or_noisy_geometry():
+    selector = RegionSelector(_settings(hold_s=0.6))
+    empty = HandTrackingResult(width=400, height=200, hands=[])
+    assert selector.observe(_box(), 100_000) is None
+    assert selector.observe(_box(), 300_000) is None
+    assert selector.observe(empty, 400_000) is None
+    noisy = _box()
+    noisy.hands[0].landmarks[4].x = 0.5
+    assert selector.observe(noisy, 500_000) is None
+    assert selector.observe(_box(), 700_000) is not None
+    assert selector.observe(empty, 800_000) is None
+    assert selector.observe(_box(), 900_000) is None
+    assert selector.observe(_box(), 1_100_000) is None
+    # Missing sensing, even sustained, cannot count as an intentional release.
+    for timestamp in range(1_200_000, 2_000_000, 100_000):
+        assert selector.observe(empty, timestamp) is None
+    assert selector.observe(_box(), 2_000_000) is None
+
+
+def test_box_reacquisition_requires_consistent_region_and_bounded_loss():
+    trigger = CameraBoxTrigger(hold_s=0.6, release_s=0.4)
+    region = ImageRegion(left=0.2, top=0.2, right=0.8, bottom=0.8)
+    moved = ImageRegion(left=0.3, top=0.3, right=0.9, bottom=0.9)
+    assert trigger.observe(region, 100_000) is None
+    trigger.missing(300_000)
+    assert trigger.observe(moved, 500_000) is None
+    assert trigger.observe(moved, 800_000) is None
+    trigger.missing(1_400_000)
+    assert trigger.observe(moved, 1_500_000) is None
+
+
+def test_unknown_frame_interrupts_circle_release_confirmation():
+    selector = RegionSelector(_settings())
+    timestamp = _trace(selector, _circle_points())
+    assert selector.observe(_pinch(260, 100, released=True), timestamp + 100_000) is None
+    missing = HandTrackingResult(width=400, height=200, hands=[])
+    assert selector.observe(missing, timestamp + 200_000) is None
+    assert selector.observe(_pinch(260, 100, released=True), timestamp + 300_000) is None
+    assert selector.observe(_pinch(260, 100, released=True), timestamp + 500_000) is None
+    assert selector.observe(_pinch(260, 100, released=True), timestamp + 700_000) is not None
+    assert selector.observe(_pinch(260, 100, released=True), timestamp + 800_000) is None
+
+
+def test_active_circle_does_not_acquire_box_from_brief_hand_transition():
+    selector = RegionSelector(_settings(hold_s=0.2))
+    path = _circle_points()
+    timestamp = _trace(selector, path[:12])
+    for _ in range(3):
+        timestamp += 100_000
+        assert selector.observe(_box(), timestamp) is None
+    timestamp = _trace(selector, path[12:], timestamp)
+    _, results = _release(selector, 260, 100, timestamp)
+    assert len(results) == 1

@@ -20,4 +20,26 @@ angle_cosine: 0.45
 # Required acknowledgement: same optical camera, orientation and field of view
 # for video and photo. Aspect ratio validation alone cannot establish this.
 aligned_photo: false
-query: "Read all text in this image. Return only the text, preserving line breaks."
+query: "Describe the selected region and explain what is notable about it."
+
+# Pinch with one hand, trace a circle, and release to submit its bounding rectangle.
+# All values below are demonstration settings needing target-camera tuning.
+circle:
+  # Thumb/index distance divided by index-to-pinky MCP palm width.
+  pinch_ratio: 0.25
+  release_ratio: 0.45
+  # Bounds on distinct sampled points; excess points cancel rather than truncate.
+  min_points: 12
+  max_points: 256
+  # Minimum diameter as a fraction of the image's shorter side.
+  min_diameter: 0.1
+  # Reject elongated loops and radial deviations from the fitted circle.
+  min_axis_ratio: 0.65
+  radial_tolerance: 0.35
+  # Endpoint distance divided by radius and allowed reverse travel in revolutions.
+  closure_tolerance: 0.5
+  max_backtrack: 0.15
+  # Largest trajectory segment divided by radius; rejects sparsely observed arcs.
+  max_segment_radius: 1.0
+  # Cancel pointer jumps larger than this many palm widths between observations.
+  max_jump_palm: 2.0
