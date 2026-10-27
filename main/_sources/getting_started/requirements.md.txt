@@ -23,6 +23,7 @@ NVDEC.
 |---|---|
 | Local model stacks | Depends on the sample and its selected models |
 | simple-vlm-example (requires model services) | Uses the model-services allocation |
+| conversation-example (requires model services) | Uses the model-services allocation |
 | lab-instrument-monitoring (requires model services) | Uses the model-services allocation |
 | tea-making-sample (requires model services) | Uses the model-services allocation |
 | xr-render-demo (requires model services) | Model allocation plus ~2 GB for CloudXR and the hub |
