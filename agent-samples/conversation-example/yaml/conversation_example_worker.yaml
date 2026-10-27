@@ -1,0 +1,53 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Conversation-example worker configuration.
+# Auto-discovered by the launcher and passed as --config to the worker process.
+
+# Path to the voice-gate config (resolved relative to this file's
+# directory). Owns the magic-phrase / follow-up / listening-chime knobs.
+voice_gate_yaml: voice_gate.yaml
+
+# The worker uses its packaged prompts/system.txt by default. Set
+# system_prompt or system_prompt_file here only to override it.
+
+# Frame freshness — tune if the agent sees stale frames.
+frame_max_age_s: 5.0   # frame older than this is considered stale
+frame_timeout_s: 5.0   # give up waiting for a fresh frame after this many seconds
+
+# Voice Activity Detection — Silero VAD (ONNX backend).
+# Tune if STT triggers too early or misses speech.
+silero_threshold:  0.5    # Silero speech-probability gate (0..1); lower = more sensitive
+silence_duration:  0.4    # seconds of silence that ends an utterance
+min_speech:        0.1    # minimum seconds of speech before STT is called
+
+# ── Idle timeout ──────────────────────────────────────────────────────────
+# Auto-cancel the voice pipeline after this many seconds with no user/bot
+# speech. DISABLED by default (0 = off) — a quiet session stays connected
+# indefinitely, which is what XR sessions usually want. Set a positive value
+# (e.g. 300 for 5 min) to opt in; the worker then tears the pipeline down
+# after that long idle. Applied by VoiceAgent.
+idle_timeout_secs: 0
+
+# General-conversation context budget, split evenly between completed dialogue
+# and saved notes. Each keeps recent entries verbatim and summarizes older ones.
+context_budget_bytes: 12000
+# Completed history the router sends with each routing decision. Clef accepts
+# at most 4,096 tokens per request, including the routing prompt and destinations.
+routing_history_budget_bytes: 8000
+# Input limit for one asynchronous context compaction request.
+compaction_input_budget_bytes: 12000
+
+# Optional route-aware intention acknowledgment. When omitted, prediction and
+# acknowledgment are disabled. Set a positive delay in seconds to enable it.
+# The selected destination starts immediately; a confident slow prediction can
+# speak an acknowledgment early, otherwise the delay is the fallback threshold.
+# acknowledgment_delay_secs: 2.0
+
+# Background visual alerts pace their frame checks. Every frame is first screened
+# by a cheap Clef image call; only a frame that may show the alert's subject also
+# runs Cosmos and the condition check. A screened frame waits at least
+# alert_confirm_interval_secs before the next check, otherwise
+# alert_check_interval_secs (0 <= check <= confirm).
+# alert_check_interval_secs: 1.0
+# alert_confirm_interval_secs: 3.0

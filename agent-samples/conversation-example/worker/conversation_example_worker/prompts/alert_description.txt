@@ -1,0 +1,1 @@
+Describe the visible evidence related to the requested alert condition in this triggering image. Give one short, natural spoken sentence. Describe only what the image supports; do not infer motion, prior events, or hidden details. Do not repeat the alert announcement, the request, or unrelated scene details.
