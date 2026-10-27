@@ -30,6 +30,7 @@ from .gesture import RegionSelector
 _LOG = logging.getLogger(__name__)
 _HUB_PUB = "ipc:///tmp/xr_hub_pub"
 _HUB_PUSH = "ipc:///tmp/xr_hub_in"
+_REGION_SYSTEM_PROMPT = (Path(__file__).parent / "prompts/system.txt").read_text()
 
 
 async def _run(settings: Settings, ready_file: Path | None) -> None:
@@ -48,7 +49,7 @@ async def _run(settings: Settings, ready_file: Path | None) -> None:
         vlm = make_vlm(models, "vlm")
         resources.push_async_callback(vlm.close)
         crop = ImageCropTool(images=images)
-        query = ImageQueryTool(images=images, vlm=vlm)
+        query = ImageQueryTool(images=images, vlm=vlm, system_prompt=_REGION_SYSTEM_PROMPT)
         tasks: dict[str, asyncio.Task] = {}
         owned: set[asyncio.Task] = set()
         stopped = asyncio.Event()

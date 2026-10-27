@@ -34,9 +34,50 @@ def _corner(hand: TrackedHand, width: int, height: int, angle_cosine: float):
     return corner, thumb, index
 
 
+def _interior_region(corners, hands, width: int, height: int, clearance_ratio: float) -> ImageRegion | None:
+    center = tuple((a + b) / 2 for a, b in zip(corners[0][0], corners[1][0], strict=True))
+    constraints = []
+    for (corner, thumb, index), hand in zip(corners, hands, strict=True):
+        for tip, joint in ((thumb, 3), (index, 7)):
+            dx, dy = tip[0] - corner[0], tip[1] - corner[1]
+            length = math.hypot(dx, dy)
+            nx, ny = -dy / length, dx / length
+            distance = nx * (center[0] - corner[0]) + ny * (center[1] - corner[1])
+            if distance < 0:
+                nx, ny, distance = -nx, -ny, -distance
+            point = hand.landmarks[joint]
+            clearance = math.dist(tip, (point.x * width, point.y * height)) * clearance_ratio
+            available = distance - clearance
+            if available <= 0:
+                return None
+            constraints.append((abs(nx), abs(ny), available))
+
+    # A centered axis-aligned rectangle fits every inward finger half-plane
+    # iff |nx|*half_width + |ny|*half_height <= available. Its largest area
+    # occurs at two active constraints or a stationary point on one constraint.
+    candidates = [(c / (2 * a), c / (2 * b)) for a, b, c in constraints if a and b]
+    for i, (a, b, c) in enumerate(constraints):
+        for d, e, f in constraints[i + 1:]:
+            determinant = a * e - b * d
+            if determinant:
+                candidates.append(((c * e - b * f) / determinant, (a * f - c * d) / determinant))
+    valid = [(x, y) for x, y in candidates if x > 0 and y > 0 and all(
+        a * x + b * y <= c or math.isclose(a * x + b * y, c) for a, b, c in constraints
+    )]
+    if not valid:
+        return None
+    half_width, half_height = max(valid, key=lambda point: point[0] * point[1])
+    # Round inward because the crop tool normally rounds out to pixel edges.
+    left, right = math.ceil(center[0] - half_width), math.floor(center[0] + half_width)
+    top, bottom = math.ceil(center[1] - half_height), math.floor(center[1] + half_height)
+    if not (0 <= left < right <= width and 0 <= top < bottom <= height):
+        return None
+    return ImageRegion(left=left / width, top=top / height, right=right / width, bottom=bottom / height)
+
+
 def camera_box(observation: HandTrackingResult, *, corner_tolerance: float,
-               angle_cosine: float) -> ImageRegion | None:
-    """Find opposing thumb/index L shapes; return their image-space bounding box."""
+               angle_cosine: float, finger_clearance_ratio: float = 0.5) -> ImageRegion | None:
+    """Find opposing L shapes and crop the estimated open interior between fingers."""
     if len(observation.hands) != 2:
         return None
     corners = [_corner(h, observation.width, observation.height, angle_cosine) for h in observation.hands]
@@ -58,7 +99,7 @@ def camera_box(observation: HandTrackingResult, *, corner_tolerance: float,
     ys = [p[1] / observation.height for p in points]
     if min(xs) < 0 or max(xs) > 1 or min(ys) < 0 or max(ys) > 1:
         return None
-    return ImageRegion(left=min(xs), top=min(ys), right=max(xs), bottom=max(ys))
+    return _interior_region(corners, observation.hands, observation.width, observation.height, finger_clearance_ratio)
 
 
 class CameraBoxTrigger:
@@ -145,7 +186,8 @@ class RegionSelector:
         circle_active = self._circle.active
         region = self._circle.observe(observation, timestamp_us)
         box = camera_box(observation, corner_tolerance=self._settings.corner_tolerance,
-                         angle_cosine=self._settings.angle_cosine)
+                         angle_cosine=self._settings.angle_cosine,
+                         finger_clearance_ratio=self._settings.finger_clearance_ratio)
         if circle_active or self._circle.active:
             self._box.unavailable()
             return region

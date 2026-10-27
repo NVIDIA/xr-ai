@@ -18,7 +18,7 @@ from gesture_capture_worker.agent import GestureCaptureAgent
 from gesture_capture_worker.circle import PinchCircleTrigger
 from gesture_capture_worker.config import CircleSettings, Settings, load_settings
 from gesture_capture_worker.gesture import CameraBoxTrigger, RegionSelector, camera_box
-from PIL import Image
+from PIL import Image, ImageDraw
 from pydantic import ValidationError
 from xr_ai_hub import FrameSignal, FrameUnavailable, ImageCaptureUnavailable, PixelFormat
 from xr_ai_tools import Tool
@@ -48,6 +48,11 @@ def _hand(corner, thumb, index):
     points[5] = HandLandmark(x=corner[0], y=corner[1], z=0)
     points[4] = HandLandmark(x=thumb[0], y=thumb[1], z=0)
     points[8] = HandLandmark(x=index[0], y=index[1], z=0)
+    for joint, tip in ((3, thumb), (7, index)):
+        dx, dy = (tip[0] - corner[0]) * 400, (tip[1] - corner[1]) * 200
+        length = math.hypot(dx, dy)
+        points[joint] = HandLandmark(x=tip[0] - 12 * dx / length / 400,
+                                    y=tip[1] - 12 * dy / length / 200, z=0)
     return TrackedHand(landmarks=points, handedness="Left", handedness_score=0.9)
 
 
@@ -61,7 +66,7 @@ def _box():
 def test_geometry_needs_two_opposing_l_shapes():
     observation = _box()
     region = camera_box(observation, corner_tolerance=0.2, angle_cosine=0.4)
-    assert region == ImageRegion(left=0.2, top=0.2, right=0.8, bottom=0.8)
+    assert region == ImageRegion(left=0.215, top=0.23, right=0.785, bottom=0.77)
     observation.hands.reverse()
     assert camera_box(observation, corner_tolerance=0.2, angle_cosine=0.4) == region
     observation.hands.pop()
@@ -174,7 +179,7 @@ async def test_sample_composes_tools_with_selected_video_or_aligned_photo(gestur
     )
     if gesture == "box":
         steps = [(100_000, _box()), (300_000, _box()), (500_000, _box())]
-        expected_crop = (2400, 1200) if aligned_photo else (240, 120)
+        expected_crop = (2280, 1080) if aligned_photo else (228, 108)
     else:
         observations = [_pinch(x, y) for x, y in _circle_points()]
         observations += [_pinch(260, 100, released=True)] * 5
@@ -545,3 +550,55 @@ def test_active_circle_does_not_acquire_box_from_brief_hand_transition():
     timestamp = _trace(selector, path[12:], timestamp)
     _, results = _release(selector, 260, 100, timestamp)
     assert len(results) == 1
+
+
+@pytest.mark.parametrize("angle", [0, 20])
+async def test_box_vlm_input_is_open_interior_with_target_retained(angle):
+    from gesture_capture_worker import __main__ as worker
+    from test_image_tools import _Vlm
+    from xr_ai_tools.vision import ImageQueryTool
+
+    observation = _box()
+    radians = math.radians(angle)
+    for hand in observation.hands:
+        for point in hand.landmarks:
+            x, y = point.x * 400 - 200, point.y * 200 - 100
+            point.x = (200 + math.cos(radians) * x - math.sin(radians) * y) / 400
+            point.y = (100 + math.sin(radians) * x + math.cos(radians) * y) / 200
+    image = Image.new("RGB", (400, 200), "white")
+    draw = ImageDraw.Draw(image)
+    finger_color, target_color = (210, 160, 130), (0, 100, 220)
+    for hand in observation.hands:
+        base = hand.landmarks[2]
+        for tip_index in (4, 8):
+            tip = hand.landmarks[tip_index]
+            draw.line([(base.x * 400, base.y * 200), (tip.x * 400, tip.y * 200)],
+                      fill=finger_color, width=10)
+    draw.rectangle((190, 90, 209, 109), fill=target_color)
+    output = io.BytesIO()
+    image.save(output, "PNG")
+    images = ImageRegistry()
+    timestamp = 100_000
+    async def frame(request):
+        return ImageFrame(image=images.put(output.getvalue()), width=400, height=200,
+                          sequence=timestamp, timestamp_us=timestamp, participant_id="alice")
+    async def hands(request):
+        return observation
+    vlm = _Vlm("A blue square")
+    agent = GestureCaptureAgent(
+        frames=Tool("frame", "Frame", CurrentFrameRequest, ImageFrame, frame),
+        hands=Tool("hands", "Hands", HandTrackingRequest, HandTrackingResult, hands),
+        capture=None, crop=ImageCropTool(images=images),
+        query=ImageQueryTool(images=images, vlm=vlm, system_prompt=worker._REGION_SYSTEM_PROMPT),
+        selector=RegionSelector(_settings(hold_s=0.2)), settings=_settings(),
+    )
+    assert await agent.step("alice") is None
+    timestamp = 300_000
+    assert await agent.step("alice") == "A blue square"
+    sent_images, question, system_prompt, _headers = vlm.calls[0]
+    with Image.open(io.BytesIO(sent_images[0])) as cropped:
+        pixels = list(cropped.get_flattened_data())
+        assert pixels.count(target_color) == 400
+        assert finger_color not in pixels
+    assert question == "Describe the selected region"
+    assert system_prompt == worker._REGION_SYSTEM_PROMPT

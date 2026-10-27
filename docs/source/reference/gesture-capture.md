@@ -38,6 +38,9 @@ even with fresh video available. It returns the actual dimensions and an opaque 
 question does not require changing sensing or acquisition. Both gestures use
 VLM inference only; no dedicated OCR model or OCR result parser is involved.
 A question can still ask the VLM to read or explain text in the selected image.
+The packaged system prompt treats framing hands as selectors, asks about visible
+target content, and requires an obstruction response rather than inventing hidden
+objects when the selected view is blocked.
 
 The worker owns one polling task per participant and one shared local hand
 detector. IMAGE mode keeps observations independent across participants. Native
@@ -50,7 +53,14 @@ kept outside tool requests and results.
 
 For the box gesture, form two opposing L shapes with the thumbs and index
 fingers and hold the framing steady. The sample checks the finger angles and
-matching corners before acquiring the hold. Relax both hands' pose while they
+matching corners before acquiring the hold. It then crops the estimated open
+interior, immediately while the framing hands remain in place. Each finger's
+inward clearance is estimated from its distal joint-to-tip length using
+`finger_clearance_ratio`. MediaPipe landmarks are centerlines, not contours;
+this is an approximation requiring camera-specific tuning, not segmentation.
+The crop is the largest centered axis-aligned rectangle inside all four inferred
+inward finger boundaries. For a rotated frame it excludes the outer bounding
+rectangle's corner regions rather than accidentally including the fingers. Relax both hands' pose while they
 are visible to rearm it. Missing hands alone do not count as an intentional
 release of a held box.
 
@@ -151,8 +161,8 @@ service; refer to {doc}`/guides/customizing-model-servers`.
 The worker YAML owns observation cadence, hold/release durations, the maximum
 observation gap, movement and geometric tolerances, alignment acknowledgement,
 the general VLM question, and the circle drawing settings. These are demonstration settings, not measured accuracy
-claims. Each gesture returns an axis-aligned bounding rectangle: the framing corners
-for the box, or the observed path for the circle.
+claims. The box returns an axis-aligned rectangle inside the estimated finger-frame
+interior; the circle returns the bounding rectangle of its observed path.
 
 Results are UTF-8 messages on `gesture.response`, visible in the web client's
 message log. A capture failure is logged and does not automatically repeat a

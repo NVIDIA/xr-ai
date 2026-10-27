@@ -43,6 +43,7 @@ class Settings(BaseModel):
     release_s: float = Field(default=0.4, gt=0, allow_inf_nan=False)
     corner_tolerance: float = Field(default=0.35, gt=0, lt=1)
     angle_cosine: float = Field(default=0.45, gt=0, lt=1)
+    finger_clearance_ratio: float = Field(default=0.5, gt=0, allow_inf_nan=False)
     circle: CircleSettings = Field(default_factory=CircleSettings)
     aligned_photo: bool = False
     query: str = Field(min_length=1)
