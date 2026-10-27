@@ -18,8 +18,22 @@ for model provisioning, licenses, browser requirements, alignment, and behavior.
 
 Working directory: `agent-samples/gesture-capture/`.
 
-Provision `models/hand_landmarker.task` using the guide. Default video-frame
-mode needs no photo alignment configuration. For example, adjust the hold time:
+Before starting the sample, provision the required hand model. Run these commands
+from `agent-samples/gesture-capture/`:
+
+```bash
+mkdir -p models
+curl --fail --location \
+  https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task \
+  --output models/hand_landmarker.task
+printf '%s  %s\n' \
+  fbc2a30080c3c557093b5ddfc334698132eb341044ccee322ccf8bcf3607cde1 \
+  models/hand_landmarker.task | sha256sum --check
+```
+
+The model stays local and is ignored by Git. Refer to the guide for its licensing
+and backend requirements. Default video-frame mode needs no photo alignment
+configuration. For example, adjust the hold time:
 
 ```yaml
 # yaml/gesture_capture_worker.yaml
