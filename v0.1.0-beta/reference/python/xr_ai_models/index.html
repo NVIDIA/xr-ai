@@ -489,13 +489,16 @@ OCR uses the Nemotron v2 protocol and Riva speech uses optional gRPC.</p>
 <h2>Exceptions<a class="headerlink" href="#exceptions" title="Link to this heading">#</a></h2>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table autosummary">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_models.ModelServiceError" title="xr_ai_models.ModelServiceError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ModelServiceError</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_models.DecisionInputTooLargeError" title="xr_ai_models.DecisionInputTooLargeError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DecisionInputTooLargeError</span></code></a></p></td>
+<td><p>The decision service rejected a request as more input than its model accepts.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_models.ModelServiceError" title="xr_ai_models.ModelServiceError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ModelServiceError</span></code></a></p></td>
 <td><p>Base for model-service failures, including embedding identity and OCR errors.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_models.OCRRequestError" title="xr_ai_models.OCRRequestError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OCRRequestError</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_models.OCRRequestError" title="xr_ai_models.OCRRequestError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OCRRequestError</span></code></a></p></td>
 <td><p>OCR input could not be read or the HTTP request failed.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_models.OCRResponseError" title="xr_ai_models.OCRResponseError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OCRResponseError</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_models.OCRResponseError" title="xr_ai_models.OCRResponseError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OCRResponseError</span></code></a></p></td>
 <td><p>The OCR endpoint returned malformed JSON or invalid detection data.</p></td>
 </tr>
 </tbody>
@@ -790,6 +793,14 @@ OCR uses the Nemotron v2 protocol and Riva speech uses optional gRPC.</p>
 
 </dd></dl>
 
+<dl class="py exception">
+<dt class="sig sig-object py" id="xr_ai_models.DecisionInputTooLargeError">
+<em class="property"><span class="pre">exception</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_models.</span></span><span class="sig-name descname"><span class="pre">DecisionInputTooLargeError</span></span><a class="headerlink" href="#xr_ai_models.DecisionInputTooLargeError" title="Link to this definition">#</a></dt>
+<dd><p>The decision service rejected a request as more input than its model accepts.</p>
+<p>The service owns that limit, and the caller cannot know it in advance. The same
+request will not succeed; a caller can retry with less input.</p>
+</dd></dl>
+
 <dl class="py class">
 <dt class="sig sig-object py" id="xr_ai_models.DecisionQuestion">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_models.</span></span><span class="sig-name descname"><span class="pre">DecisionQuestion</span></span><a class="headerlink" href="#xr_ai_models.DecisionQuestion" title="Link to this definition">#</a></dt>
@@ -870,6 +881,13 @@ No free-form text or reasoning is generated. A per-call timeout must be
 positive and finite; the SystemOne adapter caps it at the configured
 endpoint timeout. Transport failures and invalid or incomplete answers
 raise exceptions without returning partial decisions.</p>
+<dl class="simple">
+<dt>Raises:</dt><dd><dl class="simple">
+<dt>DecisionInputTooLargeError: The service rejected the request as more</dt><dd><p>input than its model accepts; a smaller request may succeed.</p>
+</dd>
+</dl>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py method">
@@ -2754,6 +2772,7 @@ before returning, so a caller can safely release recognition resources.</p>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.DecisionAnswer.probabilities"><code class="docutils literal notranslate"><span class="pre">probabilities</span></code></a></li>
 </ul>
 </li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.DecisionInputTooLargeError"><code class="docutils literal notranslate"><span class="pre">DecisionInputTooLargeError</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.DecisionQuestion"><code class="docutils literal notranslate"><span class="pre">DecisionQuestion</span></code></a><ul class="nav section-nav flex-column">
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.DecisionQuestion.instructions"><code class="docutils literal notranslate"><span class="pre">instructions</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.DecisionQuestion.criteria"><code class="docutils literal notranslate"><span class="pre">criteria</span></code></a></li>

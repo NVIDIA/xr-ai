@@ -43,6 +43,7 @@ Exceptions
 
 .. autoapisummary::
 
+   xr_ai_models.DecisionInputTooLargeError
    xr_ai_models.ModelServiceError
    xr_ai_models.OCRRequestError
    xr_ai_models.OCRResponseError
@@ -266,6 +267,16 @@ Package Contents
 
 
 
+.. py:exception:: DecisionInputTooLargeError
+
+
+
+   The decision service rejected a request as more input than its model accepts.
+
+   The service owns that limit, and the caller cannot know it in advance. The same
+   request will not succeed; a caller can retry with less input.
+
+
 .. py:class:: DecisionQuestion
 
    One choice question for a structured decision model.
@@ -347,6 +358,10 @@ Package Contents
       positive and finite; the SystemOne adapter caps it at the configured
       endpoint timeout. Transport failures and invalid or incomplete answers
       raise exceptions without returning partial decisions.
+
+      Raises:
+          DecisionInputTooLargeError: The service rejected the request as more
+              input than its model accepts; a smaller request may succeed.
 
 
 

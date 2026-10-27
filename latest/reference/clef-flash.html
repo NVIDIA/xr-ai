@@ -517,7 +517,8 @@ fail before loading model weights.</p>
 <p>The YAML sets the bind address, port, device, inference dtype, maximum token
 length, and maximum request-body size. The checked-in values use <code class="docutils literal notranslate"><span class="pre">cuda:0</span></code>,
 BF16, 4096 tokens, and a 1 MiB body limit. Requests that exceed the context
-limit receive HTTP 422; increase <code class="docutils literal notranslate"><span class="pre">max_length</span></code> only when GPU memory allows it.</p>
+limit receive HTTP 413, the same status as an oversized body, so a client can
+retry with less input; increase <code class="docutils literal notranslate"><span class="pre">max_length</span></code> only when GPU memory allows it.</p>
 </section>
 <section id="updating-a-running-service">
 <span id="clef-service-updates"></span><h2>Updating a running service<a class="headerlink" href="#updating-a-running-service" title="Link to this heading">#</a></h2>
@@ -579,8 +580,9 @@ using 16-pixel patches and a two-by-two spatial merge. This
 conservative admission limit applies to original dimensions even if the model
 would resize them. Resize large source photos on the client before submitting
 crops. The processor then checks the actual combined text, image, and question
-token count against <code class="docutils literal notranslate"><span class="pre">max_length</span></code>; invalid images or excess tokens receive HTTP
-422, and excess body bytes receive HTTP 413.
+token count against <code class="docutils literal notranslate"><span class="pre">max_length</span></code>. Invalid images receive HTTP 422. Exceeding
+the image-count, source-pixel, token, or body-size limit receives HTTP 413, so a
+client can retry with less input.
 Request-controlled preprocessing options (<code class="docutils literal notranslate"><span class="pre">media_kwargs</span></code>) are rejected with
 HTTP 422: resize settings belong to the server’s loaded processor.</p>
 <p>Inputs use Pillow’s RGB conversion without EXIF rotation, alpha compositing,
