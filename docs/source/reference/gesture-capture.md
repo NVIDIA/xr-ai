@@ -26,10 +26,10 @@ per hand and knows nothing about gestures or capture. The sample-owned
 `RegionSelector` composes the two gestures into an `ImageRegion`; the agent
 uses the same image-selection, crop, and VLM query sequence for either gesture.
 
-`aligned_photo: false` selects the same frame used for the final gesture
-observation. The crop uses that frame's actual streamed resolution and coordinate
-system; this mode sends no photo request. It works with ordinary video streaming
-and needs no photo calibration acknowledgement.
+`aligned_photo: false` selects the box recognition frame or the circle's later
+clearance/timeout frame. The crop uses that frame's actual streamed resolution
+and coordinate system; this mode sends no photo request. It works with ordinary
+video streaming and needs no photo calibration acknowledgement.
 
 With `aligned_photo: true`, `StillCaptureTool` requests a new device photograph,
 even with fresh video available. It returns the actual dimensions and an opaque image reference.
@@ -139,9 +139,8 @@ a held pinch cannot trigger another turn until visible, sustained open evidence
 rearms it. Pending capture/query/response cooldown remains in force.
 
 The ratio uses image-space thumb/index distance divided by palm width. Relative
-z is deliberately excluded: the attempted 3D-distance/edge-on gate rejected
-otherwise usable projected traces under depth-estimate jitter. No visibility or
-per-joint confidence is available, and handedness score is not such confidence.
+z is not used to establish grip or visibility. No visibility or per-joint
+confidence is available, and handedness score is not such confidence.
 Projection overlap can still look pinched, and self-occluded/dorsal hands may
 produce incorrect landmarks. These limitations require physical-camera testing.
 
@@ -165,10 +164,9 @@ would not supply temporal tracking. The existing detector requests up to two
 hands, including single-hand input; three or more visible hands can exceed its
 capacity. No backend confidence controls or new SDK API are introduced here.
 
-Defaults sample every 80 ms and require eight distinct points, allowing faster
-natural traces than the previous 150 ms/twelve-point policy. This increases
-potential CPU use; inference time also limits actual cadence. Thresholds are demo
-tuning values, not measured recognition accuracy; qualify on the target camera.
+Defaults poll every 80 ms and require eight distinct points. Faster polling
+increases potential CPU use; inference time also limits actual cadence.
+Thresholds are demo tuning values, not measured recognition accuracy; qualify on the target camera.
 
 The timeouts serve separate purposes: `circle.occlusion_grace_s: 2.0` tolerates
 hand-observation loss before recognition, `max_gap_s: 0.5` still bounds actual

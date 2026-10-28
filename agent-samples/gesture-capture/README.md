@@ -5,22 +5,11 @@
 
 # Gesture capture
 
-Frame a rectangle with two opposing thumb/index L shapes (no fingertip contact),
-or pinch and draw a near-closed circle, to ask the VLM about that section of the camera view. Both gestures
-query a crop of the selected streamed frame by default. Optional aligned-photo
-mode requests a separate higher-resolution photograph. This sample starts a hub
-and worker and reuses a separately running VLM service. A circle chimes when
-recognized; move the drawing hand clear and keep the camera steady. Capture uses
-a newer frame after stable clearance or a 2-second best-effort timeout. Box capture
-remains immediate. Both gestures stay in cooldown through response delivery.
-Circle hand occlusions pause drawing for up to 2 seconds on fresh video; longer
-loss cancels the stroke while retaining grip for a fresh retry. Only stable open
-fingers release it; after recognition, open the pinch to rearm. Camera freshness
-remains 0.5 seconds, separately from the 2-second post-recognition clear wait.
-A stale, far-away positive pinch starts a fresh path; it cannot join the old
-stroke. One gesturing hand can be selected among clearly open hands, while
-new/stale ambiguous matches remain unknown. A clearly tracked nearby hand can
-continue despite a distant pinched bystander.
+Frame a rectangle with two opposing thumb/index L shapes (tips need not touch),
+or pinch and draw a near-closed circle, to ask a VLM about the selected camera region. The sample
+starts a hub and worker and reuses a separately running VLM service. It crops
+streamed video by default; optional aligned-photo mode requests a separate
+higher-resolution photograph.
 
 Refer to the [gesture-capture guide](https://nvidia.github.io/xr-ai/main/reference/gesture-capture.html)
 for model provisioning, licenses, browser requirements, alignment, and behavior.

@@ -22,7 +22,12 @@ from .selection_wait import CircleCaptureWait
 
 
 class GestureCaptureAgent:
-    """One participant's workflow; the application owns polling and task lifetime."""
+    """Compose tools for one participant; the application owns polling and tasks.
+
+    ``step`` returns no text while acquiring a gesture or awaiting circle clearance.
+    After a result (or failure), the caller invokes ``finish_turn`` only after
+    response delivery/cleanup, keeping that participant in cooldown until then.
+    """
 
     def __init__(
         self, *, frames: CurrentFrameTool, hands: HandTrackingTool,

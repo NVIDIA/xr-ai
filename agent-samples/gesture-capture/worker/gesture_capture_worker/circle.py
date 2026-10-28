@@ -140,14 +140,14 @@ class PinchCircleTrigger:
 
     def _select_hand(self, observation: HandTrackingResult, timestamp_us: int) -> HandPose | None:
         poses = hand_poses(observation)
+        anchor_stale = self._last_seen is not None and timestamp_us - self._last_seen > self._anchor_gap_us
+        anchor_unavailable = self.hand is None or self._last_seen is None or anchor_stale
         possible = [pose for pose in poses if pose.ratio < self._settings.release_ratio]
-        if (self._completed_latch and len(poses) > 1 and possible and self._last_seen is not None
-                and timestamp_us - self._last_seen > self._anchor_gap_us):
+        if (self._completed_latch and len(poses) > 1 and possible and anchor_stale):
             self._diagnostics.count("association_ambiguous")
             return None  # An open bystander cannot release a stale tracked engagement.
         if not self._completed_latch and len(poses) > 1 and possible:
-            if len(possible) > 1 and (self.hand is None or self._last_seen is None
-                                      or timestamp_us - self._last_seen > self._anchor_gap_us):
+            if len(possible) > 1 and anchor_unavailable:
                 self._diagnostics.count("association_ambiguous")
                 return None
             # Exclude clearly open hands, retaining the confirmed grip's band.
@@ -161,13 +161,13 @@ class PinchCircleTrigger:
             self._diagnostics.count("associated")
             return nearby[0]
         if (self._completed_latch and len(poses) == 1 and poses[0].ratio >= self._settings.release_ratio
-                and self._last_seen is not None and timestamp_us - self._last_seen > self._anchor_gap_us):
+                and anchor_stale):
             # A unique explicit open hand can rearm after moving during the turn;
             # it still needs the normal release dwell and cannot submit a query.
             self._diagnostics.count("association_release_reanchored")
             return poses[0]
         if (len(poses) == 1 and poses[0].ratio <= self._settings.pinch_ratio
-                and self._last_seen is not None and timestamp_us - self._last_seen > self._anchor_gap_us):
+                and anchor_stale):
             # A stale spatial anchor must not strand positive pinch input. Start
             # a NEW stroke: never join this actor/position to the old trajectory.
             self.reset()
