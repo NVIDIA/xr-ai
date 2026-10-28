@@ -6,6 +6,7 @@
 import asyncio
 import contextlib
 import math
+import sys
 import uuid
 from pathlib import Path
 from types import SimpleNamespace
@@ -13,6 +14,7 @@ from types import SimpleNamespace
 import pytest
 from openxr_service.pose import from_native_pose
 from openxr_service.service import OpenXRService
+from openxr_service.session import HardwarePoseSource
 from xr_ai_tools.rpc import RPCClient, RPCError, RPCServer
 from xr_ai_tools.tracking import HeadPose, OpenXRHealth, TrackingTools
 from xr_ai_tools.types import EmptyRequest, SpatialFrame, Vector3
@@ -136,6 +138,38 @@ def _native_pose(quaternion: tuple[float, float, float, float]) -> SimpleNamespa
             orientation=SimpleNamespace(x=quaternion[0], y=quaternion[1], z=quaternion[2], w=quaternion[3]),
         ),
     )
+
+
+def _hardware_source(monkeypatch: pytest.MonkeyPatch, head) -> HardwarePoseSource:
+    tracker = SimpleNamespace(get_head=lambda session: head)
+    deviceio = SimpleNamespace(HeadTracker=lambda: tracker)
+    monkeypatch.setitem(sys.modules, "isaacteleop", SimpleNamespace(deviceio=deviceio))
+    monkeypatch.setitem(sys.modules, "isaacteleop.deviceio", deviceio)
+    source = HardwarePoseSource()
+    source._device_session = SimpleNamespace(update=lambda: None)
+    return source
+
+
+@pytest.mark.parametrize("wrapped", [False, True], ids=["bare-pose", "data-wrapped-pose"])
+def test_hardware_pose_source_reads_tracker_result(monkeypatch: pytest.MonkeyPatch, wrapped: bool) -> None:
+    head = _native_pose((0.0, 0.0, 0.0, 1.0))
+    source = _hardware_source(monkeypatch, SimpleNamespace(data=head) if wrapped else head)
+
+    result = source.get_pose()
+
+    assert result["is_valid"] is True
+    assert result["position"] == {"x": 1.0, "y": 1.7, "z": -2.0}
+    assert result["forward"] == {"x": 0.0, "y": 0.0, "z": -1.0}
+
+
+@pytest.mark.parametrize("head", [None, SimpleNamespace(data=None)], ids=["bare-none", "data-wrapped-none"])
+def test_hardware_pose_source_reports_inactive_tracker(monkeypatch: pytest.MonkeyPatch, head) -> None:
+    source = _hardware_source(monkeypatch, head)
+
+    result = source.get_pose()
+
+    assert result["is_valid"] is False
+    assert "head tracker inactive" in result["error"]
 
 
 @pytest.mark.parametrize(
