@@ -162,7 +162,7 @@ def test_shipped_tea_guide_is_selectable_by_example_path():
             assert step.evidence.consecutive == 2
             assert step.evidence.condition and step.evidence.pattern is None
             assert step.voice.tools == ("current_view",)
-            assert step.complete_on_skip  # Do not silently bypass a brewing prerequisite.
+            assert step.complete_on_skip == (step.id != "heat_water")
         else:
             assert step.trigger.arguments == {"duration_s": 300}
             assert step.finish_on_complete
@@ -272,8 +272,14 @@ async def test_shipped_tea_guide_skip_never_claims_verified_completion(engine, s
     session.step_id = step_id
     backend._enter_step(session)
     response = await control(backend, "advance", skip=True)
-    assert "skipped steps" in response and session.workflow.complete_message not in response
-    assert not session.active and session.timer is None
+    assert session.workflow.complete_message not in response
+    assert session.timer is None
+    if step_id == "heat_water":
+        assert "Temperature verification skipped" in response
+        assert session.active and session.step_id == "start_steeping"
+        assert not session.state["water_at_target"]
+    else:
+        assert "skipped steps" in response and not session.active
 
 
 def test_finish_on_complete_is_opt_in_and_terminal(document):
@@ -1387,6 +1393,61 @@ async def test_skip_state_supplies_typed_inputs_to_later_step(engine, document):
     assert backend._sessions["alice"].timer.duration_s == 23
 
 
+async def test_tea_skip_heating_preserves_immersion_check_and_full_timer(engine, monkeypatch):
+    from procedure_capture_guide_worker.guide import guiding
+
+    now = 1000.0
+    monkeypatch.setattr(guiding, "time", SimpleNamespace(monotonic=lambda: now))
+    backend = engine._backend
+    backend._guide = load_guide(_SAMPLE / "example-guides/tea-making/guide.yaml")
+    await engine.participant_left(None, context())
+    await engine.participant_joined(None, context())
+    await control(backend, "restart")
+    session = backend._sessions["alice"]
+    sequence = 0
+
+    async def confirm_step():
+        nonlocal sequence
+        for _ in range(2):
+            sequence += 1
+            backend._trigger = AsyncMock(return_value=observation("YES", sequence))
+            session.next_tick = 0
+            await backend._tick(session)
+        assert backend._is_complete(session)
+
+    await confirm_step()
+    await control(backend, "advance", skip=False)
+    assert session.step_id == "heat_water"
+    assert "not complete" in await control(backend, "advance", skip=False)
+    reply = await control(backend, "advance", skip=True)
+    assert "Temperature verification skipped" in reply
+    assert "Carefully put the chamomile" in reply
+    assert session.active and session.step_id == "start_steeping"
+    assert session.skipped and not session.state["water_at_target"]
+    assert session.timer is None and not session.state["tea_immersed"]
+    assert "not complete" in await control(backend, "advance", skip=False)
+    await confirm_step()
+    now += 40
+    await control(backend, "advance", skip=False)
+    assert session.step_id == "steep_timer" and session.timer.started == now
+    assert not session.state["water_at_target"]
+    backend._trigger = _Guide._trigger.__get__(backend)
+    timer = backend._timer_tool("alice")
+    assert (await timer.execute(EmptyRequest())).remaining_s == 300
+    now += 299
+    session.next_tick = 0
+    await backend._tick(session)
+    assert not backend._is_complete(session)
+    now += 1
+    backend._announce = AsyncMock()
+    session.next_tick = 0
+    await backend._tick(session)
+    assert not session.active
+    backend._announce.assert_awaited_once_with(
+        "alice", "Guide ended with skipped steps. Say start guide to begin again.",
+    )
+
+
 @pytest.mark.parametrize("missing", ["session", "timer", "duration"])
 async def test_timer_unavailability_is_a_tool_result(engine, document, missing):
     backend = engine._backend
@@ -1406,11 +1467,13 @@ async def test_timer_unavailability_is_a_tool_result(engine, document, missing):
     assert result.expired is None and result.remaining_s is None and result.elapsed_s is None
 
 
-def test_tea_temperature_condition_distinguishes_current_and_target():
+def test_tea_temperature_condition_accepts_display_reading_without_label():
     step = load_guide(_SAMPLE / "example-guides/tea-making/guide.yaml").workflow.steps["heat_water"]
     assert step.evidence.pattern is None
-    for requirement in ("100", "212", "CURRENT", "ACTUAL"):
+    for requirement in ("100 C", "212 F", "absent label", "no probe", "unit"):
         assert requirement in step.evidence.condition
+    assert not step.complete_on_skip
+    assert step.next_step == "start_steeping"
 
 
 @pytest.mark.parametrize("failed_probe,fail_fast", [
@@ -2041,3 +2104,33 @@ def test_invalid_decision_timeout_rejected(tmp_path, value):
     path.write_text(yaml.safe_dump({"decision_timeout_s": value}))
     with pytest.raises(ValueError):
         load_guide_config(path, guide_path="example.yaml")
+
+
+@pytest.mark.parametrize("failure", [False, True])
+async def test_visual_evidence_is_logged_even_when_decision_fails(failure):
+    from loguru import logger
+    from procedure_capture_guide_worker.guide.verification import condition_met
+
+    messages = []
+    sink = logger.add(lambda message: messages.append(message.record["message"]), level="DEBUG")
+    decisions = SimpleNamespace(decide=AsyncMock(return_value=clef_response()))
+    if failure:
+        decisions.decide.side_effect = RuntimeError("CLEF unavailable")
+    request = dict(condition="A display reads 100 C.", observation="The display reads 100 C.",
+                   frame={"participant_id": "alice", "sequence": 42}, step_id="heat_water",
+                   revision=3, timeout_s=15)
+    try:
+        if failure:
+            with pytest.raises(RuntimeError, match="CLEF unavailable"):
+                await condition_met(decisions, **request)
+        else:
+            assert await condition_met(decisions, **request)
+    finally:
+        logger.remove(sink)
+    evidence = next(message for message in messages if "Guide visual evidence" in message)
+    assert request["observation"] in evidence and request["condition"] in evidence
+    assert "heat_water" in evidence and "alice" in evidence and "42" in evidence and "revision=3" in evidence
+    results = [message for message in messages if "Guide visual decision" in message]
+    assert len(results) == (0 if failure else 1)
+    if results:
+        assert "choice=yes" in results[0] and "confidence=" in results[0]

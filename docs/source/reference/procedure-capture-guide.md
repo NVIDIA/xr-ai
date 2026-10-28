@@ -513,25 +513,33 @@ tea sample's workflow YAML:
   not need to be visible. The brewing settings are fixed in the guide; the
   brewing reference is not retrieved at runtime.
 - Its three visual steps require two distinct fresh frames and two affirmative
-  CLEF decisions. Cosmos describes the printed tea name, labeled measurement, or
+  CLEF decisions. Cosmos describes the printed tea name, temperature display, or
   bag-water contact; CLEF compares that evidence with the step's condition. The
   runtime applies the predefined completion patch after confirmation. Neither
   a plain YES from Cosmos nor an incidental matching word completes a step.
   The foreground LLM handles conversation and controls. Both perception and
   decision models can make mistakes; inspect their separate outputs during
   evaluation rather than interpreting a well-formed reply as proof of accuracy.
-- The heating check verifies a displayed current temperature at the brewing
-  target, not a target setting or a “heating underway” threshold. Guide
-  does not expose the tea sample's typed temperature tools: this is model-based visual verification, not a deterministic temperature measurement or safety guarantee.
+- The heating check accepts a visible **100 C or 212 F** reading. It requires
+  the value and temperature unit, but no CURRENT/ACTUAL label or immersed probe;
+  TARGET/SET and unlabeled readings also qualify. This checks displayed text,
+  not whether the displayed setting measures the water's actual temperature.
+  Guide does not expose the tea sample's typed temperature tools.
 - Immersion detection does not start the timer. Say **next** promptly after
   immersion is confirmed to enter the timer step. The runtime then measures a
   full 300 seconds; time spent waiting at the immersion step is not subtracted.
   Timer verification does not inspect images or prove continued immersion.
 - The final step sets `finish_on_complete: true`, so expiry ends the active run,
   clears progress, and announces completion without another **next** command.
-- Skipping a visual prerequisite ends the run as skipped instead of assuming
-  the prerequisite was satisfied. Skipping the timer also cannot produce a
-  verified-completion announcement.
+- Skipping the temperature check advances to tea immersion, then the full
+  five-minute timer. The skipped temperature stays unverified, and the run ends
+  with a skipped-steps announcement. Skipping packet identification or immersion
+  ends the run. Skipping the timer also cannot produce a verified completion.
+- The per-run `worker.log` records each visual observation, its step and frame
+  identity, the condition, and CLEF's choice and confidence at DEBUG level.
+  These records describe verification attempts; two fresh affirmative observations
+  are still required for completion. Evidence is saved before the decision request
+  so it remains available if CLEF fails.
 
 Regression tests load this exact example and exercise its state transitions,
 distinct-frame evidence, skip behavior, and timer with simulated observations.
@@ -638,6 +646,7 @@ assertions, not additional guides.
 | File under `example-guides/tea-making/evaluation/` | Purpose |
 |---|---|
 | `scenarios/step_verification.yaml` | Presents incorrect then correct scenes for each visual step; checks blocked advancement and verified completion, then stops before the timer |
+| `scenarios/skip_heating.yaml` | Skips temperature verification, still verifies immersion, and checks that the full steeping timer starts |
 | `scenarios/full_run.yaml` | Independent successful run through the five-minute timer, completion, restart, and stop |
 | `scenarios/label_reading.yaml` | Checks chamomile name variations, other tea names, and unreadable labels in the identification step |
 | `scenarios/routing.yaml` | Independent conversation probes for controls, negation, quoted instructions, and visual questions; restarts before each probe |
@@ -706,7 +715,7 @@ uv run --project worker python example-guides/tea-making/evaluation/evaluate_vis
   --render-only --output artifacts/tea-preview
 ```
 
-With the existing model servers running, evaluate the 25 visual cases three
+With the existing model servers running, evaluate the 27 visual cases three
 times each, then run the complete conversational scenario:
 
 ```bash

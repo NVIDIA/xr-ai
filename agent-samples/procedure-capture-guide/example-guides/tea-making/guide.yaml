@@ -7,14 +7,14 @@ schema_version: 1
 task:
   id: tea_making
   name: Tea Making
-  version: 5
+  version: 6
   status: approved
   start_step: identify
   foreground_prompt: >-
     Guide brewing chamomile tea. Accept any tea packet or box with the word
     chamomile visibly printed on it, regardless of brand or blend. This recipe
     follows the tea sample's brewing reference: boiling water, verified here by
-    a current water reading of 100 C or 212 F, and a five-minute steep selected
+    a visible temperature reading of 100 C or 212 F, and a five-minute steep selected
     from its 5–7 minute range. Do not silently change the recipe. If the package
     instructions require different brewing settings, or local boiling temperature
     cannot reach this display target, stop and adapt the guide rather than
@@ -25,7 +25,9 @@ task:
     temperature-conversion tools are available. Say next advances a verified
     visual step. The timer starts only on entering the fourth step, not when
     immersion is first detected. When the timer expires the run ends automatically;
-    no next command is needed to finish. Start guide begins a fresh run.
+    no next command is needed to finish. Skipping the temperature check continues
+    to tea immersion and the timer, leaving temperature unverified.
+    Start guide begins a fresh run.
   complete_message: Five minutes have elapsed. Your chamomile tea guide is complete. Carefully remove the tea bag and let the drink cool before tasting.
 
 state:
@@ -35,7 +37,7 @@ state:
     initial: false
   water_at_target:
     type: boolean
-    description: A current water-temperature reading visibly shows 100 C or 212 F.
+    description: A visible temperature display shows 100 C or 212 F.
     initial: false
   tea_immersed:
     type: boolean
@@ -94,38 +96,41 @@ steps:
       interval_s: 2
       arguments:
         question: >-
-          Focus on the temperature display and any thermometer probe. Copy each
-          visible label, value, and unit, pairing them correctly when several
-          readings appear. If a physical thermometer probe is visible, describe its tip and surrounding contents; otherwise report no visible probe. State which
-          labels or digits cannot be read. Do not convert units or infer a reading
-          from steam, lights, or expected settings.
+          Focus on the temperature display. Copy the visible numbers and their
+          temperature units exactly, pairing each value with its unit. Include
+          labels when present and report unreadable or missing digits or units.
+          Do not convert units or infer a reading from steam, lights, or expected
+          settings. Describe the display rather than judging brewing readiness.
       result_field: text
     evidence:
       condition: >-
-        A current water-temperature measurement is exactly 100 C or 212 F. It must be labeled
-        CURRENT or ACTUAL, or come from a thermometer probe visibly immersed in water. A probe
-        is not required when CURRENT or ACTUAL is readable. TARGET or SET alone, an unlabeled
-        number, a missing unit, and a different current value do not establish this condition.
+        The display visibly contains at least one complete number-and-unit pair:
+        100 C (100 degrees Celsius) or 212 F (212 degrees Fahrenheit).
+        Both the number and its temperature unit must be explicitly readable;
+        100 alone without a unit is insufficient. Any label or absent label is
+        accepted, including TARGET or SET, and no probe is required. Other
+        displayed readings do not invalidate a qualifying pair. The desired
+        temperature mentioned without a matching visible reading is insufficient.
       consecutive: 2
       commit: {water_at_target: true}
     voice:
       prompt: >-
-        Ask for boiling water and a safely visible current temperature display
-        of 100 C or 212 F. Use current_view for readings. Do not substitute a
-        heater indicator, steam, a target setting, or an elapsed-time estimate.
-        Show a CURRENT or ACTUAL label with the reading, or an immersed
-        thermometer. An unlabeled display cannot establish that it is a measured
-        temperature. If current temperature cannot be read, say verification is unavailable.
-        Never direct heating an empty vessel, overfilling, or defeating an
-        appliance's controls to reach a reading.
+        Ask for boiling water and a safely visible temperature display of 100 C
+        or 212 F. Use current_view to read it. No CURRENT or ACTUAL label or
+        thermometer probe is required; the check accepts any visible display
+        reading with the qualifying value and unit. Do not infer the reading
+        from steam or an elapsed-time estimate. If the user skips this check,
+        continue to tea immersion and then the timer without claiming the
+        temperature was verified. Never direct heating an empty vessel,
+        overfilling, or defeating an appliance's controls to reach a reading.
       tools: [current_view]
     complete_when: {water_at_target: true}
     next: start_steeping
-    complete_on_skip: true
+    complete_on_skip: false
     messages:
-      enter: Heat fresh water according to your appliance instructions. Show a current water-temperature reading of 100 degrees Celsius or 212 Fahrenheit.
-      complete: The displayed current water temperature is at the brewing target. Say next to put the tea in the water.
-      skip: Temperature verification skipped; ending this run without claiming the water is ready.
+      enter: Heat fresh water according to your appliance instructions. Show a temperature reading of 100 degrees Celsius or 212 Fahrenheit.
+      complete: The display shows the brewing target temperature. Say next to put the tea in the water.
+      skip: Temperature verification skipped; continuing without verifying the water temperature.
 
   - id: start_steeping
     title: Put the tea in water

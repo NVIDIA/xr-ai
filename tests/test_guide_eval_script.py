@@ -70,7 +70,7 @@ def evaluator(monkeypatch):
 
 def test_scenes_are_reproducible_and_distinct(evaluator, tmp_path):
     cases, guide = evaluator.prepare(_TEA_EVAL / "fixtures/visual_expectations.yaml", tmp_path / "images")
-    assert len(cases) == 25
+    assert len(cases) == 27
     assert guide.path == _SAMPLE / "example-guides/tea-making/guide.yaml"
     assert guide.workflow.steps["steep_timer"].trigger.arguments["duration_s"] == 300
     scenes = yaml.safe_load((_TEA_EVAL / "fixtures/image_scenes.yaml").read_text())
@@ -105,7 +105,7 @@ def test_visual_entry_point_renders_tea_manifest_without_models(tmp_path, monkey
     )
     assert result.returncode == 0, result.stdout + result.stderr
     provenance = json.loads((output / "provenance.json").read_text())
-    assert len(provenance["images"]) == 25
+    assert len(provenance["images"]) == 27
     assert str(_SAMPLE / "example-guides/tea-making/guide.yaml") in provenance["source_sha256"]
     assert str(_TEA_EVAL / "_scene_rendering.py") in provenance["source_sha256"]
     assert str(_TEA_EVAL / "_visual_expectations.py") in provenance["source_sha256"]
@@ -212,7 +212,7 @@ async def test_timeout_is_not_a_correct_negative(evaluator, tmp_path, monkeypatc
         _TEA_EVAL / "fixtures/visual_expectations.yaml", tmp_path / "timeouts",
         _SAMPLE / "yaml/models.json", 1, 1,
     )
-    assert summary["unavailable"] == 25
+    assert summary["unavailable"] == 27
     assert summary["scored"] == summary["gate_correct"] == 0
     assert not summary["passed"]
     fake_vlm.close.assert_awaited_once()
@@ -369,7 +369,7 @@ def test_inline_scene_manifest_preserves_provenance(evaluator, tmp_path):
     provenance = json.loads((tmp_path / "output/provenance.json").read_text())
     assert provenance["scenes"] == manifest["scenes"]
     assert str(path) in provenance["source_sha256"]
-    assert len(cases) == len(provenance["images"]) == 25
+    assert len(cases) == len(provenance["images"]) == 27
 
 
 @pytest.mark.parametrize("accepted", [False, True])
