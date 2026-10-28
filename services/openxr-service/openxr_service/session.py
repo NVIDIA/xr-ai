@@ -83,7 +83,11 @@ class HardwarePoseSource:
                 if error is not None:
                     return unavailable_pose(error)
             self._device_session.update()
-            data = self._tracker.get_head(self._device_session).data
+            head = self._tracker.get_head(self._device_session)
+            # Isaac Teleop 1.3/1.4 wrap the pose in .data; 1.5 returns it directly.
+            data = getattr(head, "data", head)
+            if data is None:
+                return unavailable_pose("head tracker inactive")
         return from_native_pose(data)
 
     def health(self) -> dict[str, Any]:
