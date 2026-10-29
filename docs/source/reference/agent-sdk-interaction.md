@@ -39,6 +39,11 @@ that share a `response_id`, carry `final=False`, and end with an empty
 interrupt flags or stream identifiers themselves.
 
 `ResponseOutputs` frames these messages so agents do not build them by hand.
+When answering a `UserQuery`, use `query.request_id` when it is supplied by an
+input policy; otherwise use `ctx.metadata.message_id`. The router handles this
+choice automatically. Unset request identities are omitted from serialized
+ordinary-query payloads.
+
 It wraps anything with an async `publish(topic, message, *, participant_id=...)`
 method, such as `AgentRuntime` or the `RuntimeContext` passed to a subscriber:
 

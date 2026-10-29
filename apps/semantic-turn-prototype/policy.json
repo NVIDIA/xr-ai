@@ -1,0 +1,11 @@
+{
+  "stable_s": 0.15,
+  "followup_s": 2.0,
+  "min_confidence": 0.8,
+  "decision_timeout_s": 1.0,
+  "max_chars": 4000,
+  "max_sessions": 16,
+  "max_pending_segments": 32,
+  "max_queue": 8,
+  "independent": "queue"
+}

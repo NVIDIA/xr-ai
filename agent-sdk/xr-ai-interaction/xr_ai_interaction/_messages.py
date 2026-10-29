@@ -5,9 +5,9 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 
 
 class UserQuery(BaseModel):
@@ -20,6 +20,21 @@ class UserQuery(BaseModel):
 
     timestamp_us: int = Field(ge=0)
     """Input presentation time as Unix microseconds."""
+
+    request_id: str | None = Field(default=None, min_length=1)
+    """Optional input-owned request identity, including semantic voice turns.
+
+    Consumers use this identity when present; otherwise use the runtime
+    message ID. Responses must answer the same identity. An unset identity
+    is omitted from serialized payloads, preserving ordinary query payloads.
+    """
+
+    @model_serializer(mode="wrap")
+    def _serialize(self, handler: Any) -> dict[str, Any]:
+        result = handler(self)
+        if self.request_id is None:
+            result.pop("request_id", None)
+        return result
 
 
 class ParticipantJoined(BaseModel):

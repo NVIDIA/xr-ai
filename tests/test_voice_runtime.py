@@ -621,6 +621,46 @@ async def test_participant_lifecycle_publications_preserve_order() -> None:
     assert recorder.participants == {"alice"}
 
 
+async def test_semantic_query_waits_for_prior_participant_lifecycle_delivery() -> None:
+    from types import SimpleNamespace
+
+    session = _Session()
+    recorder = _BlockingParticipantLifecycle()
+    runtime = AgentRuntime()
+    runtime.register("recorder", recorder)
+    voice = _voice_agent(
+        session, query_topic=QUERY_TOPIC, text_input=False,
+        turn_policy=SimpleNamespace(settle_s=0),
+        participant_joined_topic=PARTICIPANT_JOINED_TOPIC,
+        participant_left_topic=PARTICIPANT_LEFT_TOPIC,
+        interrupted_topic=INTERRUPTED_TOPIC,
+    )
+    runtime.register("voice", voice)
+    original_publish = runtime.publish
+    published_queries = []
+
+    async def publish(topic, message, **kwargs):
+        if topic == QUERY_TOPIC:
+            published_queries.append(message)
+        await original_publish(topic, message, **kwargs)
+
+    runtime.publish = publish
+    async with _running_voice(runtime, voice, session):
+        await session.run_options["on_participant_joined"]("alice")
+        await asyncio.wait_for(recorder.first_join_started.wait(), 1)
+        query = asyncio.create_task(session.handler(VoiceQuery(
+            participant_id="alice", text="New query", timestamp_us=1, request_id="new",
+        )))
+        try:
+            # Let the publication task run to its first await; no clock-based wait.
+            await asyncio.sleep(0)
+            assert published_queries == []
+        finally:
+            recorder.release_first_join.set()
+            await asyncio.wait_for(query, 1)
+    assert published_queries[0].request_id == "new"
+
+
 async def test_replacement_query_publishes_interruption_before_query() -> None:
     session = _Session()
     recorder = _OrderedRecorder()
@@ -1354,9 +1394,9 @@ def test_query_schema_has_no_display_only_speaker_metadata():
     query = UserQuery(text="look around", timestamp_us=123)
     assert not hasattr(query, "_speaker_id")
     assert query.model_dump() == {"text": "look around", "timestamp_us": 123}
-    assert set(UserQuery.model_json_schema()["properties"]) == {"text", "timestamp_us"}
+    assert set(UserQuery.model_json_schema()["properties"]) == {"text", "timestamp_us", "request_id"}
     assert [field.name for field in fields(VoiceQuery)] == [
-        "participant_id", "text", "timestamp_us", "interrupted_output",
+        "participant_id", "text", "timestamp_us", "interrupted_output", "request_id",
     ]
     with pytest.raises(ValidationError):
         UserQuery(text="look around", timestamp_us=123, speaker_id=7)

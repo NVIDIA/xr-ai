@@ -24,8 +24,9 @@ from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, Topic, subscribe
 from xr_ai_voicegate import VoiceGateConfig
 
 from ._processors import VadConfig
-from ._session import _VoiceSession
+from ._session import _validate_turn_policy, _VoiceSession
 from ._transport import HubVoiceTransport
+from ._turn_policy import VoiceTurnPolicy
 from ._types import VoiceQuery
 
 _OPEN_STREAM_CAPACITY = 1024
@@ -169,6 +170,12 @@ class VoiceAgent(Agent):
     Each agent copies its effective speaker settings; the shared voice-gate
     configuration is unchanged. Other ``VadConfig`` fields tune batch STT only.
 
+    ``turn_policy`` optionally admits authorized incremental transcripts through
+    sample-owned semantics. It requires required speaker ASR in conversation
+    mode without per-query wake phrases; unsupported configurations fail before
+    media allocation. Its ASR segments do not determine semantic completion.
+    The caller owns policy/model resources; the session owns policy scheduling.
+
     Accepted queries also return participant-routed UTF-8 display text on
     ``voice.user-query``. Speaker ASR includes its session-local speaker label;
     ordinary STT and typed input use ``User``. This display does not change
@@ -209,7 +216,10 @@ class VoiceAgent(Agent):
         interrupt_on_supersede: bool = False,
         combiner: Callable[[Sequence[str]], Awaitable[str]] | None = None,
         stream_idle_timeout_s: float = 15.0,
+        turn_policy: VoiceTurnPolicy | None = None,
     ) -> None:
+        if turn_policy is not None and interrupted_topic is None:
+            raise ValueError("turn_policy requires an interrupted_topic connected to the application task owner")
         if response_capacity <= 0:
             raise ValueError("voice response capacity must be positive")
         if stream_idle_timeout_s <= 0:
@@ -226,7 +236,9 @@ class VoiceAgent(Agent):
             text_topic=text_topic,
             idle_timeout_secs=idle_timeout_secs,
             transport=transport,
+            turn_policy=turn_policy,
         )
+        self._turn_policy = turn_policy
         self.query_topic = query_topic
         self.response_capacity = response_capacity
         self.text_input = text_input
@@ -272,6 +284,7 @@ class VoiceAgent(Agent):
         interrupt_on_supersede: bool = False,
         combiner: Callable[[Sequence[str]], Awaitable[str]] | None = None,
         stream_idle_timeout_s: float = 15.0,
+        turn_policy: VoiceTurnPolicy | None = None,
     ) -> VoiceAgent:
         """Construct voice input from loaded models and voice-gate settings.
 
@@ -289,10 +302,13 @@ class VoiceAgent(Agent):
         """
 
         # Reject invalid limits before allocating the factory-owned batch client.
+        if turn_policy is not None and interrupted_topic is None:
+            raise ValueError("turn_policy requires an interrupted_topic connected to the application task owner")
         if response_capacity <= 0:
             raise ValueError("voice response capacity must be positive")
         if stream_idle_timeout_s <= 0:
             raise ValueError("voice stream idle timeout must be positive")
+        _validate_turn_policy(voice_gate, turn_policy)
         speaker = voice_gate._speaker
         stt = (
             None
@@ -319,6 +335,7 @@ class VoiceAgent(Agent):
             interrupt_on_supersede=interrupt_on_supersede,
             combiner=combiner,
             stream_idle_timeout_s=stream_idle_timeout_s,
+            turn_policy=turn_policy,
         )
 
     async def run(self, runtime: AgentRuntime, *, source: str = "voice") -> None:
@@ -349,7 +366,7 @@ class VoiceAgent(Agent):
                     on_participant_joined=self._participant_joined,
                     on_participant_left=self._participant_left,
                     on_interrupted=(
-                        self._publish_interrupted
+                        (self._publish_turn_interrupted if self._turn_policy is not None else self._publish_interrupted)
                         if self.interrupted_topic is not None
                         else None
                     ),
@@ -544,6 +561,12 @@ class VoiceAgent(Agent):
 
     async def _publish_input(self, query: VoiceQuery) -> None:
         runtime = self._running_runtime()
+        if self._turn_policy is not None:
+            # Deliver earlier lifecycle events before admitting this lifecycle's
+            # query. Cancelling the input must not cancel the owned event tail.
+            tail = self._participant_lifecycle_tails.get(query.participant_id)
+            if tail is not None:
+                await asyncio.shield(tail)
         if query.interrupted_output and self.interrupted_topic is not None:
             await runtime.publish(
                 self.interrupted_topic,
@@ -553,7 +576,7 @@ class VoiceAgent(Agent):
             )
         await runtime.publish(
             self.query_topic,
-            UserQuery(text=query.text, timestamp_us=query.timestamp_us),
+            UserQuery(text=query.text, timestamp_us=query.timestamp_us, request_id=query.request_id),
             participant_id=query.participant_id,
             source=self._source,
         )
@@ -679,6 +702,12 @@ class VoiceAgent(Agent):
                 source=self._source,
             ),
             name=f"voice-participant-left:{participant_id}",
+        )
+
+    async def _publish_turn_interrupted(self, participant_id: str | None) -> None:
+        # Semantic replacement must drain cancellation before the next admission.
+        await self._running_runtime().publish(
+            self.interrupted_topic, Interrupted(), participant_id=participant_id, source=self._source,
         )
 
     def _publish_interrupted(self, participant_id: str | None) -> None:

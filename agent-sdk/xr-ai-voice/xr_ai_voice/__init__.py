@@ -12,8 +12,13 @@ from ._combiner import llm_update_combiner
 from ._processors import VadConfig
 from ._runtime import VOICE_OUTPUT_TOPIC, VOICE_TRANSCRIPT_TOPIC, VoiceAgent, VoiceStreamClosedError, VoiceTranscript
 from ._transport import HubVoiceTransport
+from ._turn_policy import TranscriptUpdate, VoiceOutputState, VoiceTurnAction, VoiceTurnPolicy
 
 __all__ = [
+    "TranscriptUpdate",
+    "VoiceOutputState",
+    "VoiceTurnAction",
+    "VoiceTurnPolicy",
     "HubVoiceTransport",
     "VadConfig",
     "llm_update_combiner",

@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import time
+import uuid
 from collections import deque
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from dataclasses import dataclass
@@ -37,7 +38,9 @@ from .._frames import (
     _OutputDoneFrame,
     _SpeakerDiagnosticFrame,
     _SpeakerGatedQueryFrame,
+    _TurnInterruptFrame,
 )
+from .._turn_policy import VoiceOutputState
 from .._types import UpdateCombiner, VoiceInputSink, VoiceQuery, VoiceResponse
 
 if TYPE_CHECKING:
@@ -115,6 +118,7 @@ class _VoiceIOProcessor(FrameProcessor):
         # floor, so an interruption only ever flushes that output's audio.
         self._floor: dict[str, _Output] = {}
         self._input_tasks: set[asyncio.Task[None]] = set()
+        self._input_participants: dict[asyncio.Task[None], str] = {}
         self._queued_replies: dict[str, deque[_QueuedResponse]] = {}
         self._queued_urgent: dict[str, deque[_QueuedResponse]] = {}
         self._pending_updates: dict[str, deque[_PendingUpdate]] = {}
@@ -125,6 +129,9 @@ class _VoiceIOProcessor(FrameProcessor):
         self._user_speaking: set[str] = set()
         # Completed output may still be draining through TTS when new input arrives.
         self._seen_output: set[str] = set()
+        self._on_turn_output: Callable[[VoiceOutputState], None] | None = None
+        self._reset_turn_policy: Callable[[str], None] | None = None
+        self._authorize_turn: Callable[[str, object | None], bool] | None = None
 
     async def enqueue_query(
         self,
@@ -135,12 +142,17 @@ class _VoiceIOProcessor(FrameProcessor):
     ) -> None:
         """Submit typed text through the same path as accepted speech."""
 
+        request_id = None
+        if self._reset_turn_policy is not None:
+            self._reset_turn_policy(participant_id)
+            request_id = uuid.uuid4().hex
         await self._spawn_query(
             GatedQueryFrame(
                 participant_id=participant_id,
                 text=text,
                 fresh_match=False,
                 pts_us=pts_us if pts_us is not None else time.time_ns() // 1_000,
+                request_id=request_id,
             )
         )
 
@@ -231,6 +243,11 @@ class _VoiceIOProcessor(FrameProcessor):
 
         if isinstance(frame, InterruptionFrame):
             pid = frame.transport_source
+            if isinstance(frame, _TurnInterruptFrame):
+                self._supersede(pid, frame.request_id)
+                active = self._active_request.get(pid)
+                if active is not None and active != frame.request_id:
+                    return
             if pid:
                 logger.info("voice cancel pid={!r} reason=interruption", pid)
                 _ = await self._barge_in(pid)
@@ -249,6 +266,7 @@ class _VoiceIOProcessor(FrameProcessor):
             output = self._floor.get(frame.pid)
             if output is not None and output is frame.output:
                 del self._floor[frame.pid]
+                self._turn_output(output, "done")
                 await self._start_next(frame.pid)
             return
 
@@ -314,10 +332,16 @@ class _VoiceIOProcessor(FrameProcessor):
 
     async def _spawn_query(self, frame: GatedQueryFrame) -> None:
         pid = frame.participant_id
+        if not self._turn_is_authorized(frame):
+            return
+        if frame.request_id is not None and frame.request_id in self._superseded.get(pid, ()):
+            return
         logger.info("voice input pid={!r}", pid)
         # A query ends the utterance even if its stop frame was not forwarded.
         self._user_speaking.discard(pid)
         interrupted_response = await self._barge_in(pid)
+        if frame.request_id is not None:
+            self._active_request[pid] = frame.request_id
         if interrupted_response is not None and interrupted_response.done():
             interrupted_response = None
         if self._interrupt_on_supersede and pid in self._seen_output:
@@ -327,7 +351,9 @@ class _VoiceIOProcessor(FrameProcessor):
             name=f"voice-input-{pid}",
         )
         self._input_tasks.add(task)
+        self._input_participants[task] = pid
         task.add_done_callback(self._input_tasks.discard)
+        task.add_done_callback(lambda done: self._input_participants.pop(done, None))
         await self._start_next(pid)
 
     async def _run_query(
@@ -340,11 +366,14 @@ class _VoiceIOProcessor(FrameProcessor):
         try:
             if interrupted_response is not None:
                 await asyncio.gather(interrupted_response, return_exceptions=True)
+            if not self._turn_is_authorized(frame):
+                return
             query = VoiceQuery(
                 participant_id=pid,
                 text=frame.text,
                 timestamp_us=frame.pts_us,
                 interrupted_output=interrupted_response is not None,
+                request_id=frame.request_id,
             )
             speaker = f"Speaker {frame.speaker_id}" if isinstance(frame, _SpeakerGatedQueryFrame) else "User"
             # Both deliveries belong to this input task, so shutdown drains them.
@@ -367,6 +396,12 @@ class _VoiceIOProcessor(FrameProcessor):
         except Exception:
             # isolation boundary: this task supervises both input deliveries.
             logger.exception("voice input delivery failed pid={!r}", pid)
+
+    def _turn_is_authorized(self, frame: GatedQueryFrame) -> bool:
+        return frame._turn_authority is None or (
+            self._authorize_turn is not None
+            and self._authorize_turn(frame.participant_id, frame._turn_authority)
+        )
 
     async def _display(self, message: DataMessage) -> None:
         if self._transport is None:
@@ -474,6 +509,7 @@ class _VoiceIOProcessor(FrameProcessor):
             elif current:
                 # Nothing reached TTS, so there is no audio to wait for.
                 del self._floor[pid]
+                self._turn_output(output, "done")
                 await self._start_next(pid)
             await self._close_response(item.response)
 
@@ -510,6 +546,7 @@ class _VoiceIOProcessor(FrameProcessor):
         if self._floor.get(pid) is not output or not self._may_speak(output.item):
             return False
         output.playing = True
+        self._turn_output(output, "committed")
         self._discard_updates(pid, output.item.updates)
         return True
 
@@ -633,7 +670,17 @@ class _VoiceIOProcessor(FrameProcessor):
         task = await self._cancel_output(pid)
         if request_id := self._active_request.pop(pid, None):
             self._supersede(pid, request_id)
+        if self._reset_turn_policy is not None:
+            await self._drain_turn_input(pid)
         return task
+
+    async def _drain_turn_input(self, pid: str) -> None:
+        tasks = tuple(task for task, owner in self._input_participants.items()
+                      if owner == pid and task is not asyncio.current_task())
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
 
     async def _barge_in_all(self) -> None:
         pids = {*self._floor, *self._queued_replies, *self._active_request}
@@ -660,6 +707,7 @@ class _VoiceIOProcessor(FrameProcessor):
         output = self._floor.get(pid)
         if output is None:
             return None
+        self._turn_output(output, "interrupted")
         task = output.task
         if task is not None and not task.done():
             task.cancel()
@@ -668,6 +716,11 @@ class _VoiceIOProcessor(FrameProcessor):
             if output.item.urgent:
                 self._queued_urgent.setdefault(pid, deque()).appendleft(output.item)
         return task
+
+    def _turn_output(self, output: _Output, stage: str) -> None:
+        request_id = output.item.request_id
+        if self._on_turn_output is not None and request_id is not None:
+            self._on_turn_output(VoiceOutputState(output.item.participant_id, request_id, stage))
 
     def _release(self, pid: str) -> None:
         """Give up ``pid``'s floor; its task never outlives it."""
@@ -702,6 +755,8 @@ class _VoiceIOProcessor(FrameProcessor):
 
     async def _forget(self, pid: str) -> None:
         _ = await self._cancel_output(pid)
+        if self._reset_turn_policy is not None:
+            await self._drain_turn_input(pid)
         for queued in self._queued_urgent.pop(pid, ()):
             await self._close_response(queued.response)
         self._pending_updates.pop(pid, None)
@@ -753,6 +808,7 @@ class _VoiceIOProcessor(FrameProcessor):
             if not task.done():
                 task.cancel()
         self._input_tasks.clear()
+        self._input_participants.clear()
 
 
 __all__ = ["_VoiceIOProcessor"]

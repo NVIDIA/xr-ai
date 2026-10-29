@@ -11,9 +11,40 @@ and synthesized-text response boundaries live here.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
-from pipecat.frames.frames import DataFrame, InputAudioRawFrame, TranscriptionFrame, UninterruptibleFrame
+from pipecat.frames.frames import (
+    DataFrame,
+    InputAudioRawFrame,
+    InterruptionFrame,
+    TranscriptionFrame,
+    UninterruptibleFrame,
+)
+
+from ._turn_policy import TranscriptUpdate
+
+
+@dataclass
+class _TurnTranscriptFrame(DataFrame):
+    """Selected-speaker snapshot; the gate must still authorize its delivery."""
+
+    update: TranscriptUpdate
+    authority: object | None = None
+
+
+@dataclass
+class _TurnResetFrame(DataFrame):
+    """Revoke pending policy decisions across an authorization/source reset."""
+
+    participant_id: str
+    interruptible: bool = field(default=False, init=False)
+
+
+@dataclass(kw_only=True)
+class _TurnInterruptFrame(InterruptionFrame):
+    """Retire one policy request even if it has not reached IO admission yet."""
+
+    request_id: str
 
 
 @dataclass(kw_only=True)
@@ -110,6 +141,8 @@ class GatedQueryFrame(DataFrame):
     text: str
     fresh_match: bool
     pts_us: int
+    request_id: str | None = None
+    _turn_authority: object | None = field(default=None, repr=False)
 
 
 @dataclass(kw_only=True)

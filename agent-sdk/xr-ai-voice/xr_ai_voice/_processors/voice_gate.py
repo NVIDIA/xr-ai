@@ -49,6 +49,7 @@ from .._frames import (
     _SpeakerTranscriptionFrame,
     _SpeakerTurnFrame,
     _UnrecognizedSpeechFrame,
+    _TurnTranscriptFrame,
 )
 
 
@@ -105,6 +106,8 @@ class VoiceGateProcessor(FrameProcessor):
         # so the value is read back inside that callback.
         self._feeding_pts_us: int | None = None
         self._feeding_speaker_id: int | None = None
+        self._semantic_turns = False
+        self._semantic_authority: dict[str, object] = {}
 
     @property
     def gate(self) -> VoiceGate:
@@ -193,6 +196,7 @@ class VoiceGateProcessor(FrameProcessor):
 
         if isinstance(frame, _SpeakerEnrollmentFrame):
             if frame.state == "reset":
+                self._semantic_authority.pop(frame.participant_id, None)
                 was_active = frame.participant_id in self._conversation_active
                 self._conversation_active.discard(frame.participant_id)
                 self._controls.pop(frame.participant_id, None)
@@ -217,11 +221,24 @@ class VoiceGateProcessor(FrameProcessor):
             self._gate.forget(frame.participant_id)
             return
 
+        if isinstance(frame, _TurnTranscriptFrame):
+            update = frame.update
+            if (self._semantic_turns and update.participant_id in self._conversation_active
+                    and self._conversation_cfg is not None
+                    and not self._conversation_cfg._could_be_control(update.text)
+                    and not self._gate._matches_stop(update.text)):
+                frame.authority = self._semantic_authority.get(update.participant_id)
+                await self.push_frame(frame, direction)
+            return
+
         if isinstance(frame, TranscriptionFrame):
             await self._handle_transcription(frame)
             return
 
         if isinstance(frame, (UserStartedSpeakingFrame, UserStoppedSpeakingFrame)):
+            if self._semantic_turns:
+                # Acoustic activity is not semantic admission or barge-in.
+                return
             if self._conversation_cfg is not None and frame.transport_source not in self._conversation_active:
                 if self._mode == "hybrid" and isinstance(frame, UserStartedSpeakingFrame):
                     self._gate.begin_utterance(frame.transport_source)
@@ -241,6 +258,7 @@ class VoiceGateProcessor(FrameProcessor):
             return
 
         if isinstance(frame, ParticipantLeftFrame):
+            self._semantic_authority.pop(frame.participant_id, None)
             self._conversation_active.discard(frame.participant_id)
             self._controls.pop(frame.participant_id, None)
             self._gate.forget(frame.participant_id)
@@ -363,17 +381,21 @@ class VoiceGateProcessor(FrameProcessor):
         self._gate.forget(pid)
         self._early_wake_ack.discard(pid)
         if active:
+            self._semantic_authority[pid] = object()
             self._conversation_active.add(pid)
             text = "I'm listening to you now." if self._use_speaker_asr else "I'm listening now."
             await self._emit_text_response(pid, text)
             return
         self._conversation_active.discard(pid)
+        self._semantic_authority.pop(pid, None)
         stop = InterruptionFrame()
         stop.transport_source = pid
         await self.push_frame(stop)
         await self._emit_text_response(pid, "I've stopped listening. Say the start phrase to talk again.")
 
     async def _on_gate_query(self, pid: str, text: str, fresh_match: bool) -> None:
+        if self._semantic_turns and self._feeding_speech_transcript:
+            return
         if self._mode == "hybrid" and pid not in self._conversation_active and self._on_conversation_transcript is not None:
             await self._on_conversation_transcript(
                 pid, text, self._feeding_pts_us if self._feeding_pts_us is not None else time.time_ns() // 1_000,
@@ -404,11 +426,17 @@ class VoiceGateProcessor(FrameProcessor):
         ))
 
     async def _on_gate_stop(self, pid: str) -> None:
+        if self._semantic_turns and pid in self._conversation_active:
+            self._semantic_authority[pid] = object()
         logger.info("stop ack emit pid={!r}", pid)
         f = InterruptionFrame()
         f.transport_source = pid
         await self.push_frame(f)
         await self._emit_text_response(pid, _STOP_ACK_TEXT)
+
+    def _accepts_turn_snapshot(self, pid: str, authority: object | None) -> bool:
+        return (authority is not None and pid in self._conversation_active
+                and self._semantic_authority.get(pid) is authority)
 
     async def _on_gate_phrase_only(self, pid: str) -> None:
         await self._emit_chime(pid, early=False)

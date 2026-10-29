@@ -72,7 +72,10 @@ class _RuntimeRouting:
         return subscriber_type(self._owner)
 
     async def _query(self, request: UserQuery, ctx: RuntimeContext) -> None:
-        turn = AgentTurn(_participant(ctx), ctx.metadata.message_id, request.text, timestamp_us=request.timestamp_us)
+        turn = AgentTurn(
+            _participant(ctx), request.request_id or ctx.metadata.message_id,
+            request.text, timestamp_us=request.timestamp_us,
+        )
         state = _RuntimeTurn(ctx)
         await self._owner._submit(turn, emit=partial(self._output, state), runtime_turn=state)
 

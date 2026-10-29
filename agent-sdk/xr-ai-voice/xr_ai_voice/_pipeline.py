@@ -28,6 +28,8 @@ from ._processors.vad_stt import VadConfig, VadSttProcessor
 from ._processors.voice_gate import VoiceGateProcessor
 from ._processors.speaker_stt import _SpeakerSttProcessor
 from ._transport import HubVoiceTransport
+from ._turn_policy import VoiceTurnPolicy
+from ._processors.turn_policy import _TurnPolicyProcessor
 
 
 def _build_voice_pipeline(
@@ -42,6 +44,7 @@ def _build_voice_pipeline(
     text_topic: str = "agent.response",
     idle_timeout_secs: float | None = None,
     use_speaker_asr: bool = False,
+    turn_policy: VoiceTurnPolicy | None = None,
 ) -> tuple[Pipeline, PipelineWorker]:
     """Assemble the unified voice pipeline.
 
@@ -68,6 +71,15 @@ def _build_voice_pipeline(
     """
     voice_gate_proc = VoiceGateProcessor(cfg=voice_gate_cfg, tts=tts)
     voice_gate_proc._use_speaker_asr = use_speaker_asr
+    voice_gate_proc._semantic_turns = turn_policy is not None
+    turn_processor = (
+        _TurnPolicyProcessor(turn_policy, authorize=voice_gate_proc._accepts_turn_snapshot)
+        if turn_policy is not None else None
+    )
+    if turn_processor is not None:
+        io_processor._on_turn_output = turn_processor.output
+        io_processor._reset_turn_policy = turn_processor._reset
+        io_processor._authorize_turn = voice_gate_proc._accepts_turn_snapshot
     # Control phrases and closed-session speech must not reach caption sinks.
     if voice_gate_cfg._conversation is not None:
         voice_gate_proc._on_conversation_transcript = on_final_transcript
@@ -88,6 +100,7 @@ def _build_voice_pipeline(
         speaker_cfg._validate()
         vad_stt = _SpeakerSttProcessor(
             cfg=speaker_cfg,
+            transcript_updates=turn_policy is not None,
             on_partial_transcript=(
                 voice_gate_proc.handle_partial_transcript
                 if voice_gate_cfg._conversation is not None else None
@@ -111,6 +124,7 @@ def _build_voice_pipeline(
         transport.input(),
         vad_stt,
         voice_gate_proc,
+        *([turn_processor] if turn_processor is not None else []),
         io_processor,
         streaming_tts,
         transport.output(),

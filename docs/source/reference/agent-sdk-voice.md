@@ -522,3 +522,10 @@ filtering does not currently emit STT scopes. The media pipeline emits one
 sample rate plus a transcript result mark; TTS records its sentence. Raw audio
 is never written to Relay events, and these timings end at provider handoff,
 not client playback.
+
+## Optional semantic turn admission
+
+`VoiceAgent(turn_policy=...)` can admit authorized selected-speaker transcript
+updates independently of ASR silence-finalized segments. The default remains
+unchanged. See {doc}`/guides/semantic-turn-prototype` for the experimental
+contract, sample-owned Clef policy, cancellation, and qualification limits.

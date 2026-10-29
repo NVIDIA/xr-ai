@@ -20,6 +20,7 @@ class VoiceQuery:
     timestamp_us: int
     #: The voice consumer closed active output before accepting this replacement.
     interrupted_output: bool = False
+    request_id: str | None = None
 
 
 VoiceInputSink: TypeAlias = Callable[[VoiceQuery], Awaitable[None]]

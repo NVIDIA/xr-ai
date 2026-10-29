@@ -218,6 +218,17 @@ async def _control(_turn, _source, _text):
     return None
 
 
+async def test_policy_owned_request_identity_reaches_destination_and_output():
+    async with _app() as (runtime, _router, destinations, output, _status):
+        await runtime.publish(
+            QUERIES, UserQuery(text="Describe the panel", timestamp_us=1234, request_id="policy:7"),
+            participant_id="alice",
+        )
+        await asyncio.wait_for(output.wait(1), 1)
+        assert destinations["conversation"].turns[0].turn_id == "policy:7"
+        assert output.items[0][0].request_id == "policy:7"
+
+
 @pytest.mark.parametrize("started_first", [False, True])
 async def test_runtime_turn_failure_publishes_at_most_one_failure_message(started_first):
     class Failing(_Destination):

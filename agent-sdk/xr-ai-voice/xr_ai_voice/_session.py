@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import math
 import signal
 from collections.abc import Awaitable, Callable, Iterable, Mapping
 from pathlib import Path
@@ -23,6 +24,7 @@ from ._processors.vad_stt import VadConfig
 from ._readiness import ProbeFn, wait_for_services
 from ._speaker_client import _select_speaker_asr
 from ._transport import HubVoiceTransport
+from ._turn_policy import VoiceTurnPolicy
 from ._types import UpdateCombiner, VoiceInputSink, VoiceResponse
 
 _STATUS_REANNOUNCE_INTERVAL_S = 2.0
@@ -36,6 +38,19 @@ async def _reannounce_status(transport: HubVoiceTransport) -> None:
             await transport.endpoint.republish_statuses()
         except Exception:
             logger.opt(exception=True).warning("agent-status reannouncement failed")
+
+
+def _validate_turn_policy(voice_gate: VoiceGateConfig, turn_policy: VoiceTurnPolicy | None) -> None:
+    if turn_policy is not None:
+        if not math.isfinite(turn_policy.settle_s) or turn_policy.settle_s < 0:
+            raise ValueError("turn policy settle_s must be finite and nonnegative")
+        speaker, conversation = voice_gate._speaker, voice_gate._conversation
+        if (speaker is None or speaker.backend != "required"
+                or voice_gate._mode != "conversation" or conversation is None
+                or conversation.require_wake_phrase):
+            raise ValueError(
+                "turn_policy requires required speaker ASR and conversation mode without per-query wake phrases"
+            )
 
 
 class _VoiceSession:
@@ -54,7 +69,10 @@ class _VoiceSession:
         text_topic: str = "agent.response",
         idle_timeout_secs: float | None = None,
         transport: HubVoiceTransport | None = None,
+        turn_policy: VoiceTurnPolicy | None = None,
     ) -> None:
+        _validate_turn_policy(voice_gate, turn_policy)
+        self.turn_policy = turn_policy
         if stt is None:
             speaker = voice_gate._speaker
             if speaker is None or speaker.backend != "required":
@@ -145,6 +163,7 @@ class _VoiceSession:
             text_topic=self.text_topic,
             idle_timeout_secs=self.idle_timeout_secs,
             use_speaker_asr=use_speaker_asr,
+            turn_policy=self.turn_policy,
         )
         self._io_processor = io_processor
         loop = asyncio.get_running_loop()

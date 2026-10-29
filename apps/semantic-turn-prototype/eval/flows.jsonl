@@ -1,0 +1,20 @@
+{"kind":"open"}
+{"kind":"text","segment":0,"text":"um","at":0}
+{"kind":"poll","at":0.2,"labels":{"disposition":"filler","relation":"separate"},"expect":["ignore"]}
+{"kind":"text","segment":1,"text":"Could you move the panel to","at":1}
+{"kind":"poll","at":1.2,"labels":{"disposition":"hold","relation":"separate"},"expect":["hold"]}
+{"kind":"poll","at":90,"labels":{"disposition":"hold","relation":"separate"},"expect":[]}
+{"kind":"text","segment":2,"text":"the left of the window","at":91}
+{"kind":"poll","at":91.2,"labels":{"disposition":"ready","relation":"separate"},"expect":["dispatch"]}
+{"kind":"text","segment":3,"text":"and make it half as wide","at":91.4}
+{"kind":"poll","at":91.6,"labels":{"disposition":"ready","relation":"continuation"},"expect":["supersede","dispatch"]}
+{"kind":"response","request_id":"track-1:2","stage":"playing"}
+{"kind":"text","segment":4,"text":"actually keep the original width","at":92}
+{"kind":"poll","at":92.2,"labels":{"disposition":"ready","relation":"continuation"},"expect":["interrupt","dispatch"]}
+{"kind":"text","segment":5,"text":"What is the battery level?","at":92.4}
+{"kind":"poll","at":92.6,"labels":{"disposition":"ready","relation":"separate"},"expect":["queue"]}
+{"kind":"response","request_id":"track-1:3","stage":"done","expect":["dispatch"]}
+{"kind":"text","segment":6,"text":"stop","at":93}
+{"kind":"poll","at":93.2,"labels":{"disposition":"stop","relation":"separate"},"expect":["interrupt"]}
+{"kind":"text","segment":7,"text":"What does the word like mean?","at":94}
+{"kind":"poll","at":94.2,"labels":{"disposition":"ready","relation":"separate"},"expect":["dispatch"]}
