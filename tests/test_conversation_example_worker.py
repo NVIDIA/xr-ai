@@ -37,6 +37,7 @@ from xr_ai_models import (
 from xr_ai_runtime import Agent, AgentRuntime, Topic, subscribe
 from xr_ai_voice import VOICE_OUTPUT_TOPIC, TranscriptUpdate, VoiceAgent, VoiceOutputState
 from xr_ai_voice import _runtime as voice_runtime_module
+from xr_ai_voice import _session as voice_session_module
 from xr_ai_voice._session import _VoiceSession as VoiceSession
 from xr_ai_voice._types import VoiceQuery
 from xr_ai_voicegate import VoiceGateConfig
@@ -1749,6 +1750,12 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
             super().__init__()
             runtimes.append(self)
 
+    async def select_speaker_backend(speaker):
+        if semantic_turns_enabled:
+            assert speaker is not None and speaker.backend == "required"
+        return semantic_turns_enabled
+
+    monkeypatch.setattr(voice_session_module, "_select_speaker_asr", select_speaker_backend)
     monkeypatch.setattr(app, "AgentRuntime", RecordingRuntime)
     monkeypatch.setattr(app, "AgentRouter", RecordingRouter)
     monkeypatch.setattr(app, "Conversation", RecordingConversation)
@@ -1836,7 +1843,7 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     _CurrentFrameTool.instances.clear()
     _StreamingImageQueryTool.instances.clear()
 
-    await app.run_app(config, ready_file=ready_file)
+    await asyncio.wait_for(app.run_app(config, ready_file=ready_file), timeout=5.0)
 
     assert (sessions[0].turn_policy is not None) == semantic_turns_enabled
     if semantic_turns_enabled:
