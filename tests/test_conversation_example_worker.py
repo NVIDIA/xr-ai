@@ -38,6 +38,7 @@ from xr_ai_runtime import Agent, AgentRuntime, Topic, subscribe
 from xr_ai_voice import VOICE_OUTPUT_TOPIC, VoiceAgent
 from xr_ai_voice import _runtime as voice_runtime_module
 from xr_ai_voice._session import _VoiceSession as VoiceSession
+from xr_ai_voice._types import VoiceQuery
 from xr_ai_voicegate import VoiceGateConfig
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -1775,7 +1776,7 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
                 )
             assert (
                 await handler(
-                    SimpleNamespace(
+                    VoiceQuery(
                         participant_id="alice",
                         text="What is in front of me?",
                         timestamp_us=123,
@@ -1787,7 +1788,7 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
             await asyncio.wait_for(response_complete.wait(), 1.0)
             response_complete.clear()
             await handler(
-                SimpleNamespace(
+                VoiceQuery(
                     participant_id="alice",
                     text="What should I remember?",
                     timestamp_us=124,

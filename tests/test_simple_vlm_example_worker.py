@@ -27,6 +27,7 @@ from xr_ai_voice import VoiceAgent
 from xr_ai_voice import _runtime as voice_runtime_module
 from xr_ai_voice._readiness import wait_for_services
 from xr_ai_voice._session import _VoiceSession as VoiceSession
+from xr_ai_voice._types import VoiceQuery
 from xr_ai_voicegate import VoiceGateConfig
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -604,7 +605,7 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
             run_options.update(options)
             assert (
                 await handler(
-                    SimpleNamespace(
+                    VoiceQuery(
                         participant_id="alice",
                         text="What is in front of me?",
                         timestamp_us=123,

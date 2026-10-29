@@ -4,7 +4,7 @@ Private transcript-stream experiment using the existing Clef DecisionService.
 Replay prints admission actions; the optional live worker connects the public
 SDK admission hook to microphone input and spoken replies. It does not execute tools.
 
-See the [prototype guide](../../docs/source/guides/semantic-turn-prototype.md)
+See the [prototype guide](https://nvidia.github.io/xr-ai/latest/guides/semantic-turn-prototype.html)
 for behavior, event contracts, limitations, and qualification.
 
 From this directory, exercise orchestration without downloading a model:
