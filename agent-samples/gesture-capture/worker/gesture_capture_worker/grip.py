@@ -54,7 +54,9 @@ class GripHysteresis:
                 self._release_start = timestamp_us
             if timestamp_us - self._release_start >= self._release_us:
                 self.state = Grip.OPEN
-            return False
+            # Release evidence changes the remembered grip only after dwell.
+            # Until then, usable pointer motion belongs to the held pinch.
+            return self.state is Grip.PINCHED
         self._release_start = None
         if ratio <= self._pinch and self.state is Grip.OPEN:
             self._closed_samples += 1

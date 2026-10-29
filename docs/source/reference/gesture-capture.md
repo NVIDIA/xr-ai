@@ -113,8 +113,10 @@ keeps its first arc without a stationary hold. Once pinched, the gap between
 motion. Uncertain grip distance does not mean the pointer disappeared.
 
 Only sustained positive open evidence over `release_s` (default 0.4s) releases
-the grip. An open outlier suppresses that sample without releasing; intermediate
-or missing evidence breaks release confirmation. Missing/ambiguous/outlier pointer
+the grip. Until release is confirmed, the retained pinch continues collecting
+usable observed pointer motion, including during brief open-distance evidence.
+The confirming OPEN sample stops the stroke and cannot recognize a circle.
+Intermediate or missing evidence breaks release confirmation. Missing/ambiguous/outlier pointer
 observations add no trajectory points. `circle.occlusion_grace_s` (default 2s)
 retains confirmed grip and the current path while the hand is missing, ambiguous
 or implausible on otherwise fresh video. The progress hum continues during this

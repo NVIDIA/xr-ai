@@ -23,13 +23,13 @@ def test_two_closed_observations_enter_and_band_retains_observed_motion():
     assert grip.observe(0.2, 160_000)
     assert grip.state is Grip.PINCHED
     assert grip.observe(0.35, 240_000)
-    # A single open outlier suppresses that point but cannot flip the grip.
-    assert not grip.observe(0.8, 320_000)
+    # Unconfirmed release evidence retains grip and usable observed motion.
+    assert grip.observe(0.8, 320_000)
     assert grip.state is Grip.PINCHED
     assert grip.observe(0.3, 400_000)
-    assert not grip.observe(0.8, 480_000)
+    assert grip.observe(0.8, 480_000)
     assert not grip.observe(None, 560_000)
-    assert not grip.observe(0.8, 640_000)
+    assert grip.observe(0.8, 640_000)
     assert grip.state is Grip.PINCHED
     assert not grip.observe(0.8, 840_000)
     assert grip.state is Grip.OPEN
@@ -159,3 +159,41 @@ def test_completed_circle_stays_latched_across_loss_and_held_pinch():
         assert trigger.observe(_pinch(*path[0], released=True), 3_000_000 + i * 100_000) is None
     results = [trigger.observe(_pinch(*point), 3_600_000 + i * 80_000) for i, point in enumerate(path)]
     assert sum(region is not None for region in results) == 1
+
+
+@pytest.mark.parametrize("legacy", [False, True])
+def test_unconfirmed_open_motion_does_not_strand_circle_pointer(monkeypatch, legacy):
+    import math
+    if legacy:
+        previous = GripHysteresis.observe
+        def suppress_open_motion(self, ratio, timestamp):
+            permitted = previous(self, ratio, timestamp)
+            return permitted and (ratio is None or ratio < self._release)
+        monkeypatch.setattr(GripHysteresis, "observe", suppress_open_motion)
+    trigger = PinchCircleTrigger(CircleSettings())
+    recognized = []
+    for i in range(21):
+        angle = math.radians(18 * i)
+        point = (200 + 90 * math.cos(angle), 100 + 90 * math.sin(angle))
+        region = trigger.observe(_pinch(*point, released=5 <= i <= 7), (i + 1) * 100_000)
+        if i == 7:
+            assert trigger._grip.state is Grip.PINCHED
+            assert len(trigger._points) == (5 if legacy else 8)
+        if region is not None:
+            recognized.append(i)
+    # Same samples: previous policy freezes the pointer and resets the stroke;
+    # retained-grip policy recognizes the actual observed near-closed loop.
+    assert recognized == ([] if legacy else [17])
+
+
+def test_confirmed_open_sample_cannot_complete_circle():
+    trigger = PinchCircleTrigger(CircleSettings())
+    path = _path(310, 14)
+    for i, point in enumerate(path[:13]):
+        assert trigger.observe(_pinch(*point), (i + 1) * 80_000) is None
+    # Start release confirmation at a stationary actual observation, then place
+    # the last point only on the confirming OPEN frame: it must not recognize.
+    assert trigger.observe(_pinch(*path[12], released=True), 1_120_000) is None
+    assert trigger._grip.state is Grip.PINCHED
+    assert trigger.observe(_pinch(*path[-1], released=True), 1_520_000) is None
+    assert trigger._grip.state is Grip.OPEN and not trigger.active
