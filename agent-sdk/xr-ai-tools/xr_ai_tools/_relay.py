@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Shared validation at the NeMo Relay service boundary."""
+"""Handler lifetime and request validation at the tools package's Relay boundary."""
 
 from __future__ import annotations
 
@@ -20,6 +20,9 @@ class RelayHandlers:
     ``async with RelayHandlers() as handlers:`` around the Relay call and pass each handler
     through :meth:`track` or :meth:`track_stream`; leaving the block, including by
     cancellation, waits until those handlers have finished.
+
+    Tracks https://github.com/NVIDIA/xr-ai/issues/697. Remove the lifetime
+    wrapper once the supported Relay version awaits handler cleanup itself.
     """
 
     def __init__(self) -> None:
@@ -47,8 +50,14 @@ class RelayHandlers:
         async def tracked(*args: Any) -> AsyncIterator[T]:
             self._enter()
             try:
-                async for item in handler(*args):
-                    yield item
+                stream = handler(*args)
+                try:
+                    async for item in stream:
+                        yield item
+                finally:
+                    close = getattr(stream, "aclose", None)
+                    if close is not None:
+                        await close()
             finally:
                 self._exit()
 
@@ -57,14 +66,15 @@ class RelayHandlers:
     async def settled(self) -> None:
         """Wait until no tracked handler is running; a cancellation received meanwhile is re-raised after."""
 
-        cancelled = False
+        cancelled = None
         while not self._idle.is_set():
             try:
                 await self._idle.wait()
-            except asyncio.CancelledError:
-                cancelled = True
-        if cancelled:
-            raise asyncio.CancelledError
+            except asyncio.CancelledError as error:
+                if cancelled is None:
+                    cancelled = error
+        if cancelled is not None:
+            raise cancelled
 
     def _enter(self) -> None:
         self._running += 1

@@ -225,17 +225,26 @@ class _ImageInference:
         request: nemo_relay.LLMRequest,
     ) -> AsyncIterator[dict[str, Any]]:
         inputs, query, system_prompt = vision_inputs(request.content)
-        async for token in self.vlm.stream_images(
+        stream = self.vlm.stream_images(
             [self.images.resolve(ImageReference(uri=uri)) for uri, _timestamp in inputs],
             timestamped_question(query, [timestamp for _uri, timestamp in inputs]),
             system_prompt=system_prompt,
             headers=headers_from_relay(request.headers),
-        ):
-            yield {"choices": [{"delta": {"content": token}}]}
+        )
+        try:
+            async for token in stream:
+                yield {"choices": [{"delta": {"content": token}}]}
+        finally:
+            close = getattr(stream, "aclose", None)
+            if close is not None:
+                await close()
 
 
 class ImageQueryTool(Tool[ImageQueryRequest, ImageQueryResult]):
-    """Answer a question about one caller-selected image."""
+    """Answer a question about one caller-selected image.
+
+    Cancellation waits for the model call's cleanup before propagating.
+    """
 
     def __init__(self, *, images: ImageRegistry, vlm: VLMService, system_prompt: str = "") -> None:
         inference = _ImageInference(images, vlm, system_prompt)
@@ -286,7 +295,10 @@ class VideoQueryTool(Tool[VideoQueryRequest, ImageQueryResult]):
 
 
 class StreamingImageQueryTool(AsyncTool[ImageQueryRequest, ImageQueryChunk]):
-    """Stream an answer about one caller-selected image."""
+    """Stream an answer about one caller-selected image.
+
+    Cancellation or explicit stream closure waits for the model stream's cleanup.
+    """
 
     def __init__(self, *, images: ImageRegistry, vlm: VLMService, system_prompt: str = "") -> None:
         inference = _ImageInference(images, vlm, system_prompt)
