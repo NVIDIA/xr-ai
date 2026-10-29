@@ -7,10 +7,10 @@
 
 ## Overview
 
-A useful assistant needs to carry a conversation across turns and use
-information gathered elsewhere in your application. The conversation agent
-provides that continuity, letting you give it your application's instructions
-and share relevant context such as saved notes or background findings.
+Add conversation that uses earlier dialogue and information supplied by other
+agents, such as saved notes or background observations. The conversation agent
+combines that context with your application's instructions to answer follow-up
+questions.
 
 ## Compose a conversation
 

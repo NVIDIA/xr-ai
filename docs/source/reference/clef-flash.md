@@ -7,10 +7,9 @@
 
 ## Overview
 
-Your application may need a model to choose which agent handles a request or
-judge whether an image matches a condition. Clef-Flash provides decisions
-among choices you define, giving routing and visual checks a dedicated
-decision service.
+Use Clef-Flash for decisions among choices defined by your application, such
+as routing a request to an agent or checking a visible condition. This local
+service exposes those decisions through the SDK's decision interface.
 
 ## Service contract
 

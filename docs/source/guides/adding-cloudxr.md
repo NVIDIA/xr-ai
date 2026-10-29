@@ -7,10 +7,9 @@
 
 ## Overview
 
-Some XR applications need to show rendered objects or scenes alongside what
-the user sees and says. CloudXR lets you render that content on the server and
-stream it to an XR client, adding a visual output channel to your agent
-application.
+Use CloudXR when your agent application needs to display a server-rendered
+scene on an XR device. Adding the shared runtime gives your application a
+rendering connection alongside the hub's camera, audio, and data connection.
 
 For the broader orchestrator pattern, refer to {doc}`adding-a-sample`.
 

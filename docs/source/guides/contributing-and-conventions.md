@@ -7,10 +7,9 @@
 
 ## Overview
 
-Developing your application may reveal a capability or fix that belongs in the
-shared XR AI code. Following the contribution contracts makes that change
-reusable by other applications and keeps its behavior documented and testable
-as the repository evolves.
+Repository contracts for changes to shared code, dependencies, documentation,
+and release guidance. Application-owned projects under `apps/` are outside the
+repository contribution tooling described here.
 
 ## Repository contracts
 

@@ -7,10 +7,9 @@
 
 ## Overview
 
-The device your users wear or hold determines how they share their
-surroundings and receive your application's responses. The supplied clients
-give you a starting point for putting an agent in a browser, phone, or XR
-device and trying the interaction on the platform you intend to support.
+Connect your agent to a browser, phone, or XR device using the supplied client
+applications. Use them to test an interaction on your target device or as a
+starting point for your own client integration.
 
 (which-clients-exist)=
 ## Client matrix

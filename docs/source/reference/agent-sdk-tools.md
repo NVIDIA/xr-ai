@@ -7,11 +7,10 @@
 
 ## Overview
 
-For an agent to do something useful, it needs access to your application's
-capabilities: reading a scene, changing an object, or checking task progress.
-Tools make those actions callable by application code or a model, with
-validated inputs and results that connect model reasoning to real application
-behavior.
+Tools let an agent call your application's functions, such as reading a
+display, editing a scene, or checking task progress. They provide validated
+inputs and results for actions invoked directly by another agent or selected
+by a model.
 
 ## Tool contract
 

@@ -7,10 +7,9 @@
 
 ## Overview
 
-A visual observer, a task workflow, and a notification agent may all need to
-react to the same application activity. The runtime lets them cooperate
-through typed events while each agent manages its own state and work, making
-it easier to compose capabilities into your application.
+Use the runtime to connect agents that need to react to each other's results,
+such as a visual monitor and an agent that announces changes. Events let those
+agents cooperate while keeping their state and background work separate.
 
 ## Agents and tools
 

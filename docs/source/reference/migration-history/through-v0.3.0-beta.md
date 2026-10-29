@@ -7,13 +7,12 @@
 
 ## Overview
 
-An application built on an older XR AI checkout may need intermediate updates
-before it can use the current release. These historical instructions bring its
-integration through v0.3.0-beta so you can then apply the migrations for your
-target release.
+Archived migration instructions for upgrades from earlier development versions
+through `v0.3.0-beta`. Commands and API behavior apply to that historical
+release.
 
-These notes were not separated by source release. Commands and API behavior
-apply to `v0.3.0-beta`. Refer to {doc}`../migrations` for the current
+These notes were not separated by source release. Refer to
+{doc}`../migrations` for the current
 transition and {doc}`../migration-history` for other archived guides.
 
 ## Swift microphone cleanup errors

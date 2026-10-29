@@ -7,10 +7,10 @@ Sample configuration reference
 Overview
 --------
 
-Adapting a sample often starts with changing its models, device connection, or
-interaction settings. The checked-in configuration gives you a way to tailor
-that starting point to your application and hardware before changing its
-implementation.
+Checked-in YAML and JSON configuration for samples and model services,
+including example values and field comments. Use the catalog to locate
+settings before editing them; the operational guides explain when and how to
+apply changes.
 
 Configuration catalog
 ---------------------

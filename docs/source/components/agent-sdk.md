@@ -7,10 +7,10 @@
 
 ## Overview
 
-An XR assistant needs to act on what a user sees and says, keep track of the
-interaction, and respond in a useful way. The Agent SDK provides device access,
-model and tool integration, voice interaction, and agent coordination that you
-can build on, leaving your application code to define the task and behavior.
+The Agent SDK helps you build applications that respond to what users see and
+say. It provides reusable support for device input, model calls, tools,
+conversation, and voice output, so you can focus on the behavior specific to
+your application.
 
 ## Packages
 

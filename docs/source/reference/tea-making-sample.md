@@ -7,10 +7,11 @@
 
 ## Overview
 
-An assistant guiding a real-world procedure needs to track the user's progress
-and use observations to check when a step is complete. This sample uses tea
-making to demonstrate a workflow whose progression stays under application
-control while models interpret the scene and answer the user's questions.
+Use this reference for procedural assistants that combine spoken guidance with
+visual checks of task progress. Tea making is the example: the application
+controls the steps and completion rules, while models interpret observations
+and answer questions. Adapt the workflow and its tools to guide other
+procedures.
 
 To run the sample, refer to the
 {doc}`quickstart </getting_started/quickstart>`.
@@ -20,7 +21,7 @@ For speech deployment and explicit batch-STT selection, refer to
 
 ## What to copy
 
-Use this sample when your application needs one or more of these patterns:
+Reusable patterns include:
 
 - a foreground agent that changes its tool catalog based on explicit state;
 - a guided procedure whose evidence comes from current visual observations;

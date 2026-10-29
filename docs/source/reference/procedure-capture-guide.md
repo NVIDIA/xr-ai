@@ -8,10 +8,10 @@
 
 ## Overview
 
-If your application should help someone perform a task, a narrated
-demonstration can provide the starting evidence for its instructions. This
-sample connects capturing that demonstration to drafting and reviewing a
-procedure, then guiding another user through an approved version.
+Use this reference for applications that record task demonstrations and guide
+users through approved procedures. It shows how to capture images and
+narration, author a guide from the saved evidence, and run that guide with
+spoken instructions and progress checks.
 
 ## Run a demonstration
 

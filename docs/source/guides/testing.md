@@ -7,10 +7,9 @@
 
 ## Overview
 
-An application can answer a typed question while its microphone or camera path
-still fails. Validation needs to exercise the interaction your users will rely
-on, combining repeatable tests of application behavior with checks of the real
-clients, services, and hardware involved.
+Run the repository's test suites and documentation checks when changing shared
+packages, services, or samples. The sections below distinguish CPU checks from
+tests that require GPU hardware or additional services.
 
 ## Prepare the test environment
 

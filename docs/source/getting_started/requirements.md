@@ -7,10 +7,9 @@
 
 ## Overview
 
-Your deployment needs enough capacity for the models you choose and for moving
-media between the device and the agent. Establishing those needs first helps
-you choose a development host and decide which inference services to run
-locally or elsewhere.
+Hardware and software prerequisites for the hub, model services, and sample
+clients. Requirements differ depending on which sample you run and whether
+inference is local or hosted.
 
 ## Hardware
 

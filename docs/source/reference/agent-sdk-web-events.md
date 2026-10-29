@@ -7,10 +7,9 @@
 
 ## Overview
 
-Some application activity is easier to inspect visually than to hear in a
-spoken response. A live, read-only browser view lets you expose selected
-readings, observations, or progress updates so you can check what your agents
-are doing while trying the application.
+Display selected agent events in a browser while your application runs. Use
+the live view to inspect readings, observations, or progress updates as you
+test the interaction.
 
 ## Publishing selected events
 

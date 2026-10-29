@@ -7,10 +7,10 @@
 
 ## Overview
 
-A headset or phone must reach both your application's connection service and
-its media streams, which may run on another machine. Getting those network
-paths right makes it possible to test the interaction on the user's device and
-move from a local demo to a remote deployment.
+Configure the network connections between your clients and the XR AI host,
+including firewall ports, TLS, and proxies. This is relevant when connecting
+from another device, using a remote host, or adding CloudXR or an application
+viewer.
 
 ## Required ports
 

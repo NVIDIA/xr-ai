@@ -7,11 +7,10 @@
 
 ## Overview
 
-Your assistant may need to answer questions about the user's surroundings
-while carrying on a conversation or taking notes. This sample brings those
-capabilities into one interaction and supports visual alerts in the
-background, giving you a starting point for an application with several
-specialized agents.
+Use this reference to build assistants that let a user switch between
+conversation and focused tasks while background work continues. The sample
+combines visual questions, note-taking, and one-shot alerts to demonstrate how
+specialized agents share context and a voice interface.
 
 For a new application, start with this sample in place of deprecated
 {doc}`simple-vlm-example`. Refer to the {doc}`quickstart

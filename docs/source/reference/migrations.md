@@ -7,10 +7,9 @@
 
 ## Overview
 
-Updating XR AI can affect the SDK calls, configuration, and running services
-your application depends on. Applying the changes from v0.3.0-beta to
-v0.4.0-beta keeps an existing application aligned with the new release while
-you adopt its capabilities.
+Required changes when upgrading from `v0.3.0-beta` to `v0.4.0-beta`. Apply the
+entries relevant to your application's SDK usage, configuration, clients, and
+services.
 
 ## Changes since v0.3.0-beta
 

@@ -7,10 +7,10 @@
 
 ## Overview
 
-Turn a working XR AI sample into an application for your own users and task.
-Keeping your application in its own workspace lets you change its behavior and
-configuration while continuing to use the shared SDK and services from the
-checkout.
+Build your own XR AI application from a sample and keep its code and
+configuration under `apps/`. This gives you an application workspace where you
+can develop your task-specific behavior while using the checkout's SDK and
+services.
 
 ## Start from a source checkout
 

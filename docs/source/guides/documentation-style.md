@@ -13,15 +13,23 @@ the same change. Document scoped exceptions in the affected content.
 <a id="opening-summaries"></a>
 ## Opening overviews
 
-Long reader-facing narrative pages open with an **Overview** section. Explain
-why the capability or workflow matters when developing an XR AI application:
-start with a concrete application need, then describe what it enables the
-developer to build or accomplish. An overview motivates reading the details;
-it does not describe the page's contents, list APIs, or compress instructions.
-Use plain language before introducing implementation terminology. Keep
-operational requirements and technical detail in the body.
+Long reader-facing narrative pages open with an **Overview** section suited
+to their audience and purpose. For capabilities and architecture, explain
+what the developer can build and why the capability helps. Use concrete
+behavior rather than generic claims about what an assistant needs.
 
-Fold existing introductory motivation into the overview and remove repeated
+Frame maintained samples as references for a broader class of applications.
+Identify the reusable pattern, then explain how the sample demonstrates it.
+Base generalizations on the implementation and its extension points; keep
+sample-specific behavior distinct from what a developer must adapt.
+
+For policies, references, prerequisites, troubleshooting, and migration notes,
+state the scope, applicable setup or versions, and the task the reader can
+complete. These openings do not need an application-building rationale.
+Deprecated samples lead with their status and replacement. Keep all openings
+concise; leave API lists, instructions, and technical detail in the body.
+
+Fold existing introductory context into the overview and remove repeated
 framing afterward. Follow it with the first useful example, procedure, or
 design detail. Preserve unique technical guidance in the appropriate section.
 Short navigation pages and redirects do not need an overview. Generated API

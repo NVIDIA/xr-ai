@@ -7,10 +7,10 @@
 
 ## Overview
 
-The models and GPU settings that suit a demo may differ from those your
-application needs. Customizing the model stack lets you choose a different
-checkpoint, fit the services to your hardware, or connect to hosted inference
-while keeping your worker's configuration aligned.
+Change a sample's model selection, GPU placement, or inference endpoints to
+suit your application and hardware. Keep the model-server settings and worker
+profile aligned, and stop the relevant services before applying deployment
+changes.
 
 ## Existing services
 

@@ -7,10 +7,9 @@
 
 ## Overview
 
-A spoken assistant needs to listen, answer aloud, and handle interruptions as
-the user continues speaking. `VoiceAgent` supplies that interaction layer so
-your application can concentrate on answering requests and producing useful
-updates while sharing one voice session.
+`VoiceAgent` connects speech input and spoken responses to your application
+agents. It handles voice gating, interruptions, and session cleanup, letting
+several agents share a voice interface while handling their own tasks.
 
 <a id="usage"></a>
 (agent-sdk-voice-usage)=

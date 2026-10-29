@@ -7,10 +7,9 @@
 
 ## Overview
 
-If your application demonstrates a useful XR interaction, contributing it as a
-sample lets other developers run it and adapt the approach to their own tasks.
-Following the sample conventions makes that application discoverable and
-runnable with the same tooling as the rest of XR AI.
+Prepare an existing application for contribution to the repository's sample
+catalog. Follow the naming, packaging, launcher, and configuration conventions
+below so it works with repository tooling.
 
 Build the application first with {doc}`building-your-app`; for a current
 voice-and-vision sample foundation, refer to

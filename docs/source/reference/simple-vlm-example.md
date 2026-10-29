@@ -7,15 +7,14 @@
 
 ## Overview
 
-A question about the user's current view is a useful first interaction for a
-visual assistant. This minimal demo lets you try that path from spoken or
-typed input to an answer, or maintain an existing integration built around it.
-
 ```{warning}
 Simple VLM is deprecated. It remains available for the browser demo and
 existing integrations. Use {doc}`conversation-example` as the starting point
 for new applications.
 ```
+
+This legacy reference shows a single visual-question pipeline, from spoken or
+typed input through image selection to a streamed answer.
 
 Refer to the {doc}`quickstart </getting_started/quickstart>` to run the demo.
 

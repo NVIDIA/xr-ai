@@ -7,10 +7,10 @@
 
 ## Overview
 
-A working XR application brings together a device connection, agent workers,
-and the services they need. The launcher turns that collection into a
-repeatable application startup, waits for dependencies, and shuts down the
-application together when a process fails.
+An XR AI application runs a hub, agent workers, and any additional services it
+needs. The launcher starts those processes in dependency order, waits for
+readiness, and stops the application stack if a monitored process exits. Use
+it to make your application repeatable to launch and operate.
 
 ## Declare the application stack
 

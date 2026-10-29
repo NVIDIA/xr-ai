@@ -7,11 +7,9 @@
 
 ## Overview
 
-Your application's inference services can run on infrastructure managed
-separately from its device hub and agent workers. NIM endpoints provide a
-deployment option for those models; connecting through the existing model
-interfaces lets you keep developing the same application against that
-deployment.
+Connect application workers to independently deployed NVIDIA NIM endpoints.
+Configure and validate the required model roles, then switch the worker
+profiles while keeping model deployment separate from application startup.
 
 ## Ownership and protocol boundaries
 

@@ -7,10 +7,10 @@
 
 ## Overview
 
-A coding agent can help turn your application idea into a running XR AI
-project, but it needs the repository's setup and development conventions.
-These skills give it those workflows so it can prepare the environment, launch
-a demo, and build toward your application's goal.
+Choose a coding-agent workflow for running a demo, setting up a checkout,
+building an application, or reviewing repository changes. Each skill supplies
+the instructions for that workflow; installation and invocation examples are
+below.
 
 Skills are small `SKILL.md` modules under the open
 [Agent Skills](https://agentskills.io) spec that a coding agent installs and

@@ -7,10 +7,9 @@
 
 ## Overview
 
-Your application needs access to model downloads and inference endpoints
-before it can answer a user. Configuring credentials outside the application
-code lets you use the same checkout with your own accounts and deployments
-without putting secrets in the repository.
+Configure credentials for model downloads, inference services, and LiveKit
+connections. The required credentials depend on the models and deployment you
+use; the sections below describe their sources and precedence.
 
 ## LiveKit credentials
 

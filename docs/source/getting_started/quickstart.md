@@ -7,10 +7,9 @@
 
 ## Overview
 
-Before adapting XR AI to your own task, try a complete interaction: connect a
-device, ask about its camera view, and hear the answer. A working sample gives
-you a baseline for developing your application and checking how changes affect
-the user's experience.
+Run a sample, connect a client, and try its main interaction before adapting
+it to your own application. Choose Conversation for a voice-and-vision
+starting point, or one of the task-specific samples below.
 
 <!-- Compatibility anchor for the earlier setup heading. -->
 <a id="set-up-with-a-coding-agent"></a>

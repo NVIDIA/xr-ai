@@ -7,10 +7,10 @@
 
 ## Overview
 
-If your application should let users create or change XR content by speaking,
-the agent's decisions must affect the scene they see. This sample connects
-conversation and visual perception to scene-editing tools and streamed XR
-rendering, giving you an example to adapt for spatial interactions.
+Use this reference for spatial assistants that let users inspect and edit an
+XR scene through conversation. It coordinates specialized agents and scene
+tools while a separate process owns and renders the scene, providing a
+structure you can adapt to other spatial tasks.
 
 Refer to
 {doc}`/getting_started/quickstart` to run the sample. For inference-server

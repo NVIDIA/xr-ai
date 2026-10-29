@@ -7,10 +7,10 @@
 
 ## Overview
 
-Your application may need different models to understand speech, interpret a
-camera view, and generate an answer. XR AI's reusable inference services let
-you assemble those capabilities and choose where the models run while
-developing your application's behavior independently.
+Build your application's speech, vision, and reasoning capabilities using the
+shared inference services. Your workers call these services through model
+interfaces, allowing you to choose supported models and local or hosted
+endpoints as your application develops.
 
 ## Available services
 

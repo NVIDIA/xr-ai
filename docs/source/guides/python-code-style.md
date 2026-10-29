@@ -7,14 +7,12 @@
 
 ## Overview
 
-When your application depends on shared XR AI code, clear public interfaces
-and predictable errors make that code easier to extend and integrate. These
-conventions apply when you change the repository's Python packages or samples;
-your application under `apps/` keeps its own conventions.
+Python conventions for the repository's SDK, utilities, services, samples, and
+tests. These rules govern public interfaces, error handling, and module
+layout. Application-owned code under `apps/` is outside their scope.
 
 ## Scope and conventions
 
-The rules cover the SDK, utilities, services, samples, and tests.
 Package surfaces and their documented behavior live in
 each package's `__all__` and docstrings; this reference covers only the
 conventions that keep them consistent.

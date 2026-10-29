@@ -7,10 +7,10 @@
 
 ## Overview
 
-An assistant can help users follow several instruments without asking them to
-check every display repeatedly. This sample demonstrates identifying
-instruments by visual markers, tracking their readings, and announcing
-relevant changes, a pattern you can adapt to your own visual monitoring task.
+Use this reference for applications that identify objects in a camera view,
+track observations about each object over time, and notify users of changes.
+The sample uses marked lab instruments to demonstrate how identification,
+visual readings, state tracking, and notifications work together.
 
 To run the sample, refer to the
 {doc}`quickstart </getting_started/quickstart>`.
@@ -20,7 +20,7 @@ For speech deployment and explicit batch-STT selection, refer to
 
 ## What to copy
 
-Use this sample when your application needs one or more of these patterns:
+Reusable patterns include:
 
 - a foreground agent that selects participant-bound tools;
 - visual queries without exposing participant IDs or raw images to the model;

@@ -7,10 +7,9 @@
 
 ## Overview
 
-When your agent cannot connect, see an image, or produce an answer, the
-failure may be outside your application logic. Tracing the symptom to the
-responsible client, process, or model service helps you restore a working
-interaction and continue developing your application.
+Diagnose setup, startup, model-service, and client-connection failures using
+process logs and the symptoms below. Start with the launcher's failure summary
+when a stack fails to start.
 
 For an issue not covered here, open an issue on the
 [repository](https://github.com/NVIDIA/xr-ai).
