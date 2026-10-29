@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Awaitable, Callable
+from dataclasses import replace
 
 from loguru import logger
 from pipecat.frames.frames import (
@@ -224,9 +225,12 @@ class VoiceGateProcessor(FrameProcessor):
         if isinstance(frame, _TurnTranscriptFrame):
             update = frame.update
             if (self._semantic_turns and update.participant_id in self._conversation_active
-                    and self._conversation_cfg is not None
-                    and not self._conversation_cfg._could_be_control(update.text)
-                    and not self._gate._matches_stop(update.text)):
+                    and self._conversation_cfg is not None):
+                if (self._conversation_cfg._could_be_control(update.text)
+                        or self._gate._matches_stop(update.text)):
+                    # A same-segment correction must revoke older pending words
+                    # without admitting or exposing a held conversation control.
+                    frame.update = replace(update, text="")
                 frame.authority = self._semantic_authority.get(update.participant_id)
                 await self.push_frame(frame, direction)
             return

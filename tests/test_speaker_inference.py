@@ -765,3 +765,19 @@ def test_released_speaker_does_not_carry_its_last_word_into_reenrollment(_stream
         activity[:] = speakers
         events.extend(session._feed(bytes(5120)))
     assert [e["kind"] for e in events if e["kind"] in {"released", "enrolled"}] == ["released", "enrolled"]
+
+
+def test_selected_asr_retraction_emits_empty_replacement_once(_streaming_models, monkeypatch):
+    from speaker_stt._inference import _Session
+
+    models, activity, _calls, _masks, _allocations, text = _streaming_models
+    session = _Session(models, _SpeakerConfig(), audio_origin_us=1_000_000)
+    session.selection.owner = 7
+    # Replace decoded snapshots directly; the fixture tokenizer appends tokens.
+    monkeypatch.setattr(session, "_decode", lambda *args: text[0])
+    activity[:] = [7]
+    text[0] = "Move the panel"
+    assert {"kind": "partial", "text": text[0]} in session._feed(bytes(5120))
+    text[0] = ""
+    assert {"kind": "partial", "text": ""} in session._feed(bytes(5120))
+    assert not any(e["kind"] == "partial" for e in session._feed(bytes(5120)))

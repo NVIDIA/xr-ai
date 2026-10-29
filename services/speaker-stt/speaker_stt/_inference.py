@@ -510,7 +510,7 @@ class _Session:
                         self.selection._finished and self.selection.silence >= self.selection.cfg.silence_duration,
                     )
                     text = self.selection.text
-                    if self.selection.owner is not None and text and text != self.last_partial:
+                    if self.selection.owner is not None and text != self.last_partial:
                         events.append({"kind": "partial", "text": text})
                         self.last_partial = text
                 if self.selection.cfg.diagnostics:

@@ -29,7 +29,9 @@ still supports attribution and ASR segmentation; silence does not force a query.
 - Incomplete or uncertain input stays pending through arbitrary pauses, within
   text/session bounds. Unchanged silence causes no repeated model polling.
 - A ready candidate with sufficient confidence is submitted. Corrections replace
-  a segment snapshot instead of appending duplicate text.
+  a segment snapshot instead of appending duplicate text. Empty replacements
+  retract that segment’s pending words and invalidate an awaiting decision; a
+  new empty segment preserves earlier incomplete input.
 - An unspoken, side-effect-free request can be superseded by a combined query.
   After TTS commitment or started effects, only the new words become new intent;
   the previous request is supplied as explicitly labeled context. External
@@ -95,6 +97,12 @@ before starting an external side effect. The live demonstration opts into
 merging because it has no tools and cannot perform external actions.
 
 ## Cumulative ASR and recovery
+
+Use the speaker service from the same checkout for this experiment: earlier
+service revisions suppress changed empty partials, so the policy cannot observe
+those retractions. Held conversation-control words are delivered as empty
+replacements for their segment, preserving invalidation without admitting the
+control words.
 
 The live adapter maps cumulative ASR snapshots to logical candidate segments.
 After admission it suppresses an identical snapshot or punctuation-only suffix;

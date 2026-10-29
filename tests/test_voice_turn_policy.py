@@ -240,8 +240,8 @@ async def test_withheld_control_prefix_is_restored_before_semantic_admission():
         snapshots = [
             c.args[0].update for c in speaker.push_frame.call_args_list if isinstance(c.args[0], _TurnTranscriptFrame)
         ]
-        assert [u.text for u in snapshots] == ["hey agent explain the chart"] * 2
-        assert snapshots[0].segment_id == snapshots[1].segment_id
+        assert [u.text for u in snapshots] == ["hey agent"] + ["hey agent explain the chart"] * 2
+        assert snapshots[-2].segment_id == snapshots[-1].segment_id
         assert snapshots[-1].final is True
     finally:
         await speaker.cleanup()
@@ -399,3 +399,35 @@ async def test_semantic_interruption_drains_only_its_participants_input_publicat
         assert completed == ["b"]
     finally:
         await io.cleanup()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind,text", [("partial", ""), ("partial", "hey agent"), ("control_pending", "hey agent")])
+async def test_same_segment_retraction_reaches_policy_without_control_words(kind, text):
+    cfg = load_voice_gate_config(_CFG)
+    speaker = _SpeakerSttProcessor(cfg=cfg._speaker, transcript_updates=True)
+    gate = VoiceGateProcessor(cfg=cfg, tts=SimpleNamespace())
+    gate._semantic_turns = True
+    snapshots = []
+
+    async def capture(frame, *args):
+        if isinstance(frame, _TurnTranscriptFrame):
+            snapshots.append(frame.update)
+
+    async def to_gate(frame, *args):
+        await gate.process_frame(frame, FrameDirection.DOWNSTREAM)
+
+    speaker.push_frame = to_gate
+    gate.push_frame = capture
+    try:
+        await speaker._event("wearer", {"kind": "enrolled"})
+        await speaker._event("wearer", {"kind": "speech_start"})
+        await speaker._event("wearer", {"kind": "partial", "text": "Move the panel"})
+        await speaker._event("wearer", {"kind": kind, "text": text, "pts_us": 123_000, "speaker_id": 0})
+        assert [u.text for u in snapshots] == ["Move the panel", ""]
+        assert snapshots[0].source_epoch == snapshots[1].source_epoch
+        assert snapshots[0].segment_id == snapshots[1].segment_id
+        assert snapshots[1].revision > snapshots[0].revision
+    finally:
+        await speaker.cleanup()
+        await gate.cleanup()

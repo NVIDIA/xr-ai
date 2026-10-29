@@ -298,6 +298,8 @@ class _SpeakerSttProcessor(FrameProcessor):
         elif kind == "partial":
             text = event["text"]
             if self._cfg._could_be_control(text):
+                if self._transcript_updates:
+                    await self._emit_update(pid, text, final=False)
                 return
             # The assembled pipeline owns STOP policy, including its opt-out.
             # Only standalone processors fall back to default recognition.
@@ -316,6 +318,7 @@ class _SpeakerSttProcessor(FrameProcessor):
             pts_us = event["pts_us"]
             if kind == "control_pending" and self._transcript_updates:
                 self._held_words[pid] = text
+                await self._emit_update(pid, text, final=True, timestamp_us=pts_us)
             if kind == "transcript" and self._on_final is not None:
                 await self._on_final(pid, text, pts_us)
             if kind == "transcript" and self._transcript_updates:

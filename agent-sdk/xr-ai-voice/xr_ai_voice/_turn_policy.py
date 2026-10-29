@@ -28,7 +28,12 @@ class TranscriptUpdate:
     revision: int
     """Increasing snapshot revision within the segment."""
     text: str
-    """Complete current segment text, including any meaningful hesitations."""
+    """Complete current segment text, including any meaningful hesitations.
+
+    Empty text retracts this segment's pending words. Held conversation controls
+    also replace its pending text with an empty snapshot, without exposing the
+    control words. A new empty segment does not retract earlier segments.
+    """
     timestamp_us: int
     """Unix microseconds of the capture chunk associated with segment onset.
 

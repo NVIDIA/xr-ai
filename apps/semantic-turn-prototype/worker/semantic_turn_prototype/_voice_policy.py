@@ -67,12 +67,17 @@ class _ClefVoicePolicy:
             logger.warning(
                 "post-admission ASR correction needs clarification pid={!r} text={!r}", pid, text
             )
-            return
-        tail = text[len(source.prefix) :].strip()
+            tail = ""
+        else:
+            tail = text[len(source.prefix) :].strip()
         source.snapshot = text
         source.latest_pts = update.timestamp_us
         if not tail.strip(" \t\n.,!?;:…"):
-            return
+            if not source.tail_open:
+                return
+            # Retraction must replace pending text and invalidate an awaiting
+            # decision, even when the new snapshot has no admissible words.
+            tail = ""
         if not source.tail_open:
             source.logical += 1
             source.tail_open = True
