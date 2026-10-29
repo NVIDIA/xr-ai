@@ -5,23 +5,18 @@
 
 # Tea-making guidance — building deterministic visual workflows
 
-**TL;DR:** Use this sample when an application needs to help a participant
-follow a visual procedure while keeping progress explicit and verifiable. Its
-workflow rules remain under application control as the participant and visual
-observer gather evidence.
+## Overview
+
+An assistant guiding a real-world procedure needs to track the user's progress
+and use observations to check when a step is complete. This sample uses tea
+making to demonstrate a workflow whose progression stays under application
+control while models interpret the scene and answer the user's questions.
 
 To run the sample, refer to the
 {doc}`quickstart </getting_started/quickstart>`.
 
 For speech deployment and explicit batch-STT selection, refer to
 {doc}`/guides/customizing-model-servers`.
-
-The defining pattern is a deterministic workflow around an agentic core. YAML
-declares the steps and state contract. A VLM describes each current view, and
-the observation LLM judges that natural-language caption and selects native
-tools. Application code validates the resulting state proposal and counts any
-required consecutive confirmations. The model does not choose which workflow
-is active, mutate arbitrary state, or advance a step implicitly.
 
 ## What to copy
 
@@ -90,6 +85,12 @@ records remain under `agent-samples/tea-making-sample/artifacts/`; the viewer
 is only a bounded view of the current worker process.
 
 ## Architecture
+
+YAML declares the workflow steps and state contract. A VLM describes each
+current view, and the observation LLM judges that caption and selects native
+tools. Application code validates the resulting state proposal and counts any
+required consecutive confirmations. The model does not choose which workflow
+is active, mutate arbitrary state, or advance a step implicitly.
 
 ```text
 camera frames ────────────────> ParticipantImageAgent

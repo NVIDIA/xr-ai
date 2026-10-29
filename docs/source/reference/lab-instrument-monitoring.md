@@ -5,22 +5,18 @@
 
 # Lab instrument monitoring — building marker-associated visual agents
 
-**TL;DR:** Use this sample when a lab needs to identify several instruments
-visually, track their readings over time, and notify participants about changes
-without requiring them to ask about every scan. Its separated agent roles can
-be adapted to other visual monitoring workflows.
+## Overview
+
+An assistant can help users follow several instruments without asking them to
+check every display repeatedly. This sample demonstrates identifying
+instruments by visual markers, tracking their readings, and announcing
+relevant changes, a pattern you can adapt to your own visual monitoring task.
 
 To run the sample, refer to the
 {doc}`quickstart </getting_started/quickstart>`.
 
 For speech deployment and explicit batch-STT selection, refer to
 {doc}`/guides/customizing-model-servers`.
-
-The central design choice is to separate perception, interpretation, state,
-policy, and presentation. A marker scan identifies an instrument, a VLM reads
-its display, a stateful agent decides whether the reading changed, and a
-separate subscriber decides whether to speak. Each concern can therefore be
-replaced without rewriting the others.
 
 ## What to copy
 
@@ -38,6 +34,11 @@ The instrument-reading behavior is sample-specific. The runtime, voice,
 tool-loop, image-selection, visual-query, and event patterns are reusable.
 
 ## Architecture
+
+Perception, interpretation, state, policy, and presentation have separate
+owners. A marker scan identifies an instrument, a VLM reads its display, a
+stateful agent decides whether the reading changed, and a separate subscriber
+decides whether to speak. Each concern can be replaced independently.
 
 ```text
 camera frames ────────────────> ParticipantImageAgent

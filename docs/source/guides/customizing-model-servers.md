@@ -5,10 +5,14 @@
 
 # Customizing model servers
 
-**TL;DR:** When a sample's model services or endpoints need to change, use
-this workflow to keep its worker and long-running model stack in sync. It helps
-you apply the change without disrupting another stack or losing track of which
-processes need to be restarted.
+## Overview
+
+The models and GPU settings that suit a demo may differ from those your
+application needs. Customizing the model stack lets you choose a different
+checkpoint, fit the services to your hardware, or connect to hosted inference
+while keeping your worker's configuration aligned.
+
+## Existing services
 
 Each agent sample has a `model-servers/` convenience launcher that brings up
 only its required local inference servers. It waits for readiness and returns;
@@ -16,8 +20,6 @@ the servers remain running while you start, stop, or develop the agent sample.
 These launchers are editable development presets. Applications can also use
 compatible services launched individually or independently operated endpoints.
 Refer to {doc}`deploying-with-nim` for external NIM endpoints.
-
-## Existing services
 
 Inspect the selected services' configured ports before invoking a model
 launcher. Server identities are shared across samples, but reuse checks differ:

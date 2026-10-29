@@ -5,23 +5,19 @@
 
 # AI inference servers
 
-**TL;DR:** Use this reference to select, configure, or operate XR AI model
-services. It shows how workers connect through typed model clients, how local
-services differ from independently operated endpoints, and where to find
-deployment workflows.
+## Overview
 
-For the
-orchestrator pattern that wires servers into a sample, refer to
-{doc}`/guides/adding-a-sample`. For an end-to-end procedure covering custom
-shared server defaults, sample GPU overrides, and consumer model configuration, refer to
-{doc}`/guides/customizing-model-servers`.
+Your application may need different models to understand speech, interpret a
+camera view, and generate an answer. XR AI's reusable inference services let
+you assemble those capabilities and choose where the models run while
+developing your application's behavior independently.
+
+## Available services
 
 Multiple reusable inference and typed capability services are available as
 launchable peers of `services/device-io-hub/`. Model HTTP is encapsulated by
 the typed factories in `xr-ai-models`; workers must not add vendor SDKs or
-hand-written HTTP clients. Reference services cover vision-language reasoning,
-speech recognition, text-to-speech, embeddings, large language models,
-recorded video, and document retrieval.
+hand-written HTTP clients.
 
 | Server | Command | Port | Model | Backend |
 |---|---|---|---|---|
@@ -37,6 +33,10 @@ recorded video, and document retrieval.
 | `services/ocr-server/` | Operator-run container | 8000 (container); 8112 in example | Nemotron OCR v2 multilingual | Hugging Face in a local CUDA container |
 | `services/video-memory-service/` | `video_memory_service` | 8310 | — | Typed recorded-video capability |
 | `services/rag-service/` | `rag_service` | 8340 | — | Typed dense document retrieval capability |
+
+For model configuration and the launch workflow, refer to
+{doc}`/guides/customizing-model-servers`. For the orchestrator pattern, refer to
+{doc}`/guides/adding-a-sample`.
 
 Launcher-managed local model artifacts land in the service's `model_cache` directory, set per
 YAML and resolved relative to the YAML file. Operators configure self-hosted

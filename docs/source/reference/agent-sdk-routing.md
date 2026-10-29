@@ -5,15 +5,17 @@
 
 # xr-ai-routing
 
-**TL;DR:** Use `xr-ai-routing` to send each participant's requests to
-application-owned destinations while keeping admission, focus, cancellation,
-and completion policy explicit. Destinations retain ownership of their model
-calls, application state, and resources.
+## Overview
+
+An assistant that can chat, inspect the scene, and take notes needs to decide
+which capability should handle each request. Routing lets specialized agents
+share one interaction and keep a task in focus, so a multi-step activity can
+continue across user turns.
+
+## Route a turn
 
 Each registered destination implements the public `RoutableAgent` protocol;
 the router uses the typed `DecisionService` for route selection.
-
-## Route a turn
 
 Configure `AgentRouter(output=...)` with an async callback for router-owned
 admission, clarification, and acknowledgment text. The callback receives the

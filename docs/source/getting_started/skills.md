@@ -5,10 +5,12 @@
 
 # Skills
 
-**TL;DR:** Use these skills to have a coding agent try XR AI, prepare a
-development checkout, or build an application. Each skill provides a focused
-workflow the agent can follow; this reference explains when to use them and
-how to install them.
+## Overview
+
+A coding agent can help turn your application idea into a running XR AI
+project, but it needs the repository's setup and development conventions.
+These skills give it those workflows so it can prepare the environment, launch
+a demo, and build toward your application's goal.
 
 Skills are small `SKILL.md` modules under the open
 [Agent Skills](https://agentskills.io) spec that a coding agent installs and

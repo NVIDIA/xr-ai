@@ -5,9 +5,11 @@
 
 # Simple VLM example
 
-**TL;DR:** Understand how a minimal demo turns a spoken or typed question into
-an answer about the participant's camera view. Use this reference to explore
-that interaction or maintain an existing Simple VLM setup.
+## Overview
+
+A question about the user's current view is a useful first interaction for a
+visual assistant. This minimal demo lets you try that path from spoken or
+typed input to an answer, or maintain an existing integration built around it.
 
 ```{warning}
 Simple VLM is deprecated. It remains available for the browser demo and
@@ -15,14 +17,11 @@ existing integrations. Use {doc}`conversation-example` as the starting point
 for new applications.
 ```
 
-The simple VLM example is the smallest complete voice-and-vision application in
-the repository. It answers spoken or typed questions about each participant's
-current camera view and streams the answer to both Pocket TTS and the
-`vlm.response` data topic. Refer to the {doc}`quickstart
-</getting_started/quickstart>` to run the sample. This reference owns the
-sample's design and operational details.
+Refer to the {doc}`quickstart </getting_started/quickstart>` to run the demo.
 
 ## Composition
+
+Responses stream to Pocket TTS and the `vlm.response` data topic.
 
 The orchestrator starts DeviceIOHub and the worker. Passing `--session-recording` also
 starts passive session capture; capture is disabled by default. The

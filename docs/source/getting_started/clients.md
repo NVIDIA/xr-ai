@@ -5,10 +5,12 @@
 
 # Connecting clients
 
-**TL;DR:** Use this reference to build and connect a web, mobile, or XR client
-to an agent sample. It helps client developers select a platform and configure
-its media and connection behavior; refer to {doc}`quickstart` to start a sample
-and {doc}`networking` for firewall and TLS configuration.
+## Overview
+
+The device your users wear or hold determines how they share their
+surroundings and receive your application's responses. The supplied clients
+give you a starting point for putting an agent in a browser, phone, or XR
+device and trying the interaction on the platform you intend to support.
 
 (which-clients-exist)=
 ## Client matrix

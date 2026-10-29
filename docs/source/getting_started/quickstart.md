@@ -5,10 +5,12 @@
 
 # Quickstart
 
-**TL;DR:** Try a working XR AI interaction from launch through client
-connection, either with a coding agent or by following the manual commands.
-Use the legacy browser demo for a quick trial, or start with the recommended
-conversation sample when building a new voice-and-vision application.
+## Overview
+
+Before adapting XR AI to your own task, try a complete interaction: connect a
+device, ask about its camera view, and hear the answer. A working sample gives
+you a baseline for developing your application and checking how changes affect
+the user's experience.
 
 <!-- Compatibility anchor for the earlier setup heading. -->
 <a id="set-up-with-a-coding-agent"></a>

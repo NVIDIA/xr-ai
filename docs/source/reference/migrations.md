@@ -5,14 +5,15 @@
 
 # Release migration
 
-**TL;DR:** Use these migration instructions to move an existing deployment
-from `v0.3.0-beta` to `v0.4.0-beta`. Review the changes that affect your
-application before updating so its services, configuration, and SDK usage
-continue to work together.
+## Overview
+
+Updating XR AI can affect the SDK calls, configuration, and running services
+your application depends on. Applying the changes from v0.3.0-beta to
+v0.4.0-beta keeps an existing application aligned with the new release while
+you adopt its capabilities.
 
 ## Changes since v0.3.0-beta
 
-These instructions cover changes from `v0.3.0-beta` to `v0.4.0-beta`.
 If upgrading from an older release, first apply
 {doc}`migration-history/through-v0.3.0-beta`, then apply the changes
 below. Refer to {doc}`migration-history` for completed migration guides.

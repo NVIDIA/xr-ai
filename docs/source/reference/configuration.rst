@@ -4,9 +4,16 @@
 Sample configuration reference
 ==============================
 
-**TL;DR:** Use this catalog to find the checked-in file that owns a sample
-setting before editing it. Values are sample- and hardware-specific examples;
-refer to the handwritten guides for operational choices and deployment steps.
+Overview
+--------
+
+Adapting a sample often starts with changing its models, device connection, or
+interaction settings. The checked-in configuration gives you a way to tailor
+that starting point to your application and hardware before changing its
+implementation.
+
+Configuration catalog
+---------------------
 
 This reference is generated directly from configuration files under each
 top-level sample's ``yaml/`` and ``model-servers/yaml/`` directories in

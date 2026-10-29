@@ -5,10 +5,14 @@
 
 # Testing
 
-**TL;DR:** Use this reference to choose checks that show whether a repository
-change works under the conditions that matter for it. It helps contributors
-account for hardware, client, and service requirements before relying on a
-passing test result.
+## Overview
+
+An application can answer a typed question while its microphone or camera path
+still fails. Validation needs to exercise the interaction your users will rely
+on, combining repeatable tests of application behavior with checks of the real
+clients, services, and hardware involved.
+
+## Prepare the test environment
 
 The `tests/` project exercises SDKs, utilities, service wrappers, sample
 behavior, generated documentation invariants, and the DeviceIOHub IPC path.

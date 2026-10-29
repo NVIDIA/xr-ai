@@ -5,9 +5,12 @@
 
 # Adding a new sample
 
-**TL;DR:** If your XR AI application is ready to share in the repository's
-sample catalog, use this reference to make it easy for other contributors to
-run, understand, and extend.
+## Overview
+
+If your application demonstrates a useful XR interaction, contributing it as a
+sample lets other developers run it and adapt the approach to their own tasks.
+Following the sample conventions makes that application discoverable and
+runnable with the same tooling as the rest of XR AI.
 
 Build the application first with {doc}`building-your-app`; for a current
 voice-and-vision sample foundation, refer to

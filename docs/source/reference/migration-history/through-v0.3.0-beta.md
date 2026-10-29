@@ -5,14 +5,15 @@
 
 # Migration notes through v0.3.0-beta
 
-**TL;DR:** Bring an older checkout up to `v0.3.0-beta` before applying later
-migrations. This archive preserves the instructions for that historical
-transition; continue with the migration instructions for your target release.
+## Overview
 
-These cumulative notes cover upgrades from earlier development versions through
-`v0.3.0-beta`. They retain the instructions published with that release; the
-entries were not separated by source release. Commands and API behavior apply
-to that historical release. Refer to {doc}`../migrations` for the current
+An application built on an older XR AI checkout may need intermediate updates
+before it can use the current release. These historical instructions bring its
+integration through v0.3.0-beta so you can then apply the migrations for your
+target release.
+
+These notes were not separated by source release. Commands and API behavior
+apply to `v0.3.0-beta`. Refer to {doc}`../migrations` for the current
 transition and {doc}`../migration-history` for other archived guides.
 
 ## Swift microphone cleanup errors

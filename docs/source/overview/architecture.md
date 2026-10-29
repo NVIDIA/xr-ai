@@ -5,24 +5,18 @@
 
 # Architecture
 
-**TL;DR:** Use this overview to understand how XR AI connects clients, agents,
-and model services, and where each process owns its work. It helps application
-developers choose the right extension point without coupling their agents to
-transport or model-serving details.
+## Overview
 
-XR AI connects interactive clients, including XR glasses and headsets, phones,
-and web browsers, to agent workers and AI services without making transport,
-media, or model implementation details part of application logic. The system
-is process-oriented: the device I/O hub, workers, model servers, and optional
-capability services run independently and communicate through small, explicit
-interfaces.
-
-This architecture overview describes the system shape, runtime paths, and
-ownership boundaries.
-The component pages linked under [Where details live](#where-details-live)
-contain configuration, protocol, and operational details.
+As your application adds perception, conversation, actions, or XR rendering,
+you need to decide where each capability belongs and how it connects to the
+others. XR AI separates these responsibilities so you can extend your
+application's behavior while reusing its device connections and model
+services.
 
 ## System context
+
+The device I/O hub, workers, model servers, and optional capability services
+run as independent processes and communicate through explicit interfaces.
 
 ```text
                                      control plane

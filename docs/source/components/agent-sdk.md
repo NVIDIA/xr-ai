@@ -5,9 +5,14 @@
 
 # Agent SDK
 
-**TL;DR:** Use this overview to choose XR AI's Python packages for an agent
-worker. It explains which package owns each runtime boundary and points to the
-generated API reference for exact names and behavior.
+## Overview
+
+An XR assistant needs to act on what a user sees and says, keep track of the
+interaction, and respond in a useful way. The Agent SDK provides device access,
+model and tool integration, voice interaction, and agent coordination that you
+can build on, leaving your application code to define the task and behavior.
+
+## Packages
 
 The SDK is split by dependency boundary. Directory names match the Python
 imports developers use; distribution names remain stable for package

@@ -4,9 +4,15 @@
 Command-line reference
 ======================
 
-**TL;DR:** Use this reference to find the command and supported options for
-starting or controlling a top-level XR AI sample. Its generated entries keep
-launch commands aligned with the installed sample interfaces.
+Overview
+--------
+
+Adapting a sample to your own application starts with being able to run it
+repeatably. These entry points let you launch a working baseline and select
+the sample's supported modes as you try the interaction you want to build on.
+
+Sample commands
+---------------
 
 This reference is generated from the installed commands in each top-level
 sample's ``pyproject.toml`` under ``agent-samples/``,

@@ -5,26 +5,23 @@
 
 # Conversation example
 
-**TL;DR:** Start here to build a voice-and-vision application that can keep a
-conversation going while helping with what a participant sees. The sample
-shows how specialized agents can share an interaction without losing track
-of the participant's current task. It is the recommended starting point for
-new applications in place of the deprecated {doc}`simple-vlm-example`.
+## Overview
 
-The conversation example combines four distinct roles: general conversation,
-direct questions about the current view, one-shot background visual alerts, and
-foreground note-taking. An alert watches for a requested visible condition,
-notifies the participant once, then stops. Its observations stay private to the
-alert job. Notes capture participant-authored text and can share saved notes
-with conversation.
+Your assistant may need to answer questions about the user's surroundings
+while carrying on a conversation or taking notes. This sample brings those
+capabilities into one interaction and supports visual alerts in the
+background, giving you a starting point for an application with several
+specialized agents.
 
-The sample composes these roles with `xr_ai_routing.AgentRouter` and
-`xr_ai_conversation.Conversation`. Responses use the same voice output path to
-Pocket TTS and the `vlm.response` data topic. Refer to the {doc}`quickstart
-</getting_started/quickstart>` for client setup and the sample README for run
-commands.
+For a new application, start with this sample in place of deprecated
+{doc}`simple-vlm-example`. Refer to the {doc}`quickstart
+</getting_started/quickstart>` for run commands and client setup.
 
 ## Runtime boundary
+
+The worker composes `xr_ai_routing.AgentRouter` and
+`xr_ai_conversation.Conversation` with its visual and note-taking agents.
+Responses stream to Pocket TTS and the `vlm.response` data topic.
 
 `AgentRouter` and `VoiceAgent` are registered directly with the same
 `AgentRuntime`. The sample configures the router's query, participant lifecycle,

@@ -5,9 +5,15 @@
 
 # xr-ai-tools
 
-**TL;DR:** Use `xr-ai-tools` to define validated native capabilities that
-agents can call directly or expose to a bounded model loop. Applications keep
-control of prompts, history, retries, participant context, and task ownership.
+## Overview
+
+For an agent to do something useful, it needs access to your application's
+capabilities: reading a scene, changing an object, or checking task progress.
+Tools make those actions callable by application code or a model, with
+validated inputs and results that connect model reasoning to real application
+behavior.
+
+## Tool contract
 
 Finite `Tool` and streaming `AsyncTool` objects share one typed Pydantic
 invocation contract, and every execution passes through NeMo Relay. Refer to

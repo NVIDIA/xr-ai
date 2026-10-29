@@ -5,10 +5,12 @@
 
 # xr-render-demo — architecture
 
-**TL;DR:** This reference explains how `xr-render-demo` combines voice-driven
-scene editing with a separately owned XR scene and typed spatial capabilities.
-Use it to understand the sample's runtime boundaries, deployment, and
-evaluation approach before adapting it.
+## Overview
+
+If your application should let users create or change XR content by speaking,
+the agent's decisions must affect the scene they see. This sample connects
+conversation and visual perception to scene-editing tools and streamed XR
+rendering, giving you an example to adapt for spatial interactions.
 
 Refer to
 {doc}`/getting_started/quickstart` to run the sample. For inference-server

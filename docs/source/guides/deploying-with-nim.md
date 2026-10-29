@@ -5,18 +5,20 @@
 
 # Deploying samples with NIM endpoints
 
-**TL;DR:** This deployment workflow helps application developers connect
-workers to independently operated NVIDIA NIM endpoints while keeping container
-lifecycle with the deployment operator. Use it to configure and validate
-endpoints before running the application against them.
+## Overview
 
-Develop samples with the local `model-servers` profile, then configure the same
-workers to consume independently deployed NVIDIA NIM endpoints. Samples use
-`xr_ai_models` factories and typed service interfaces in both environments.
-They do not launch model containers or require local compatibility proxies.
-The local server defaults and sample model profiles remain the development path.
+Your application's inference services can run on infrastructure managed
+separately from its device hub and agent workers. NIM endpoints provide a
+deployment option for those models; connecting through the existing model
+interfaces lets you keep developing the same application against that
+deployment.
 
 ## Ownership and protocol boundaries
+
+Workers use `xr_ai_models` factories and typed service interfaces for both
+local and NIM inference. They do not launch model containers or require local
+compatibility proxies. The local server defaults and sample model profiles
+remain the development path.
 
 | Responsibility | Owner |
 |---|---|

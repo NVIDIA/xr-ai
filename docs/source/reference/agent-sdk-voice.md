@@ -5,17 +5,19 @@
 
 # xr-ai-voice
 
-**TL;DR:** Use `VoiceAgent` to keep speech input, output, and session cleanup
-behind one voice boundary while application agents exchange typed runtime
-events. This lets applications define query and speaking policy without
-depending on the private media pipeline.
+## Overview
 
-Pipecat implements that private pipeline. Refer to {doc}`python/index` for
-exact constructors, fields, and defaults.
+A spoken assistant needs to listen, answer aloud, and handle interruptions as
+the user continues speaking. `VoiceAgent` supplies that interaction layer so
+your application can concentrate on answering requests and producing useful
+updates while sharing one voice session.
 
 <a id="usage"></a>
 (agent-sdk-voice-usage)=
 ## Voice agent
+
+Pipecat implements the private media pipeline. Refer to {doc}`python/index`
+for exact constructors, fields, and defaults.
 
 Applications construct speech from their loaded model profile and voice-gate
 configuration, then register one `VoiceAgent` with their runtime:

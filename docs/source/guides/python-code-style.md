@@ -5,17 +5,17 @@
 
 # Python code style
 
-**TL;DR:** This reference is for contributors writing or changing Python in
-the SDK, utilities, services, samples, and tests. It defines consistent
-boundaries for public APIs, errors, and module layout so code changes remain
-usable, testable, and documented. Application-owned projects under `apps/`
-follow their own conventions.
+## Overview
 
-This reference governs Python code throughout the repository:
-where the public API ends, how failures are represented, and how modules are
-laid out. It covers the SDK, utilities, services, samples, and tests.
-Application-owned projects under `apps/` are outside repository tooling and
-outside this reference. Package surfaces and their documented behavior live in
+When your application depends on shared XR AI code, clear public interfaces
+and predictable errors make that code easier to extend and integrate. These
+conventions apply when you change the repository's Python packages or samples;
+your application under `apps/` keeps its own conventions.
+
+## Scope and conventions
+
+The rules cover the SDK, utilities, services, samples, and tests.
+Package surfaces and their documented behavior live in
 each package's `__all__` and docstrings; this reference covers only the
 conventions that keep them consistent.
 

@@ -5,16 +5,19 @@
 
 # xr-ai-runtime
 
-**TL;DR:** Connect agents through typed events while letting each agent own
-its work. Use this runtime when several capabilities need to cooperate within
-an application without sharing their internal state or lifecycle.
+## Overview
 
-`xr-ai-agent-runtime` provides typed, participant-scoped publication and fan-out
-for composable agents. It does not own models, planning, memory, tools, media,
-application state, or agent-created tasks. Refer to {doc}`python/index` for the
-exact public APIs.
+A visual observer, a task workflow, and a notification agent may all need to
+react to the same application activity. The runtime lets them cooperate
+through typed events while each agent manages its own state and work, making
+it easier to compose capabilities into your application.
 
 ## Agents and tools
+
+The `xr-ai-agent-runtime` package owns event delivery. Models, planning,
+memory, tools, media, application state, and agent-created tasks remain
+application-owned. Refer to
+{doc}`python/index` for the exact public APIs.
 
 An `Agent` owns private state and exposes ordinary finite `Tool` or streaming
 `AsyncTool` objects from `xr-ai-tools`. Direct callers execute those tools

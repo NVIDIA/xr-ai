@@ -5,20 +5,22 @@
 
 # xr-ai-interaction
 
-**TL;DR:** Let voice and text interfaces work with the same application agents.
-Use these shared messages to express participant requests and responses while
-keeping the interaction independent of how it is delivered.
+## Overview
 
-`xr-ai-interaction` provides the transport-neutral messages exchanged while a
-participant interacts with agents: `UserQuery`, `ResponseOutput`,
-`ParticipantJoined`, `ParticipantLeft`, and `Interrupted`. It depends only on
-Pydantic.
+Your application's capabilities may need to serve both spoken and typed
+requests. Shared interaction messages let the same agents answer through
+either interface and distinguish answers from unsolicited updates, such as a
+timer finishing or a monitored condition changing.
 
-Input and output boundaries adapt these messages to a medium. `VoiceAgent`
-publishes recognized speech as `UserQuery` and speaks `ResponseOutput` from
-`VOICE_OUTPUT_TOPIC`; a text front end can publish and render the same
-messages. Routing and conversation use them without depending on voice.
-Applications choose topic names; the models define only the payloads.
+## Messages
+
+The payload types are `UserQuery`, `ResponseOutput`, `ParticipantJoined`,
+`ParticipantLeft`, and `Interrupted`. The package depends only on Pydantic.
+Applications choose topic names; the types define only the payloads.
+
+`VoiceAgent` publishes recognized speech as `UserQuery` and speaks
+`ResponseOutput` from `VOICE_OUTPUT_TOPIC`. A text front end can publish and
+render the same messages.
 
 ## Reply and update output
 

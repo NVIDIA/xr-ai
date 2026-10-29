@@ -5,10 +5,12 @@
 
 # Credentials
 
-**TL;DR:** Use this reference to configure credentials for local model
-downloads, hosted inference, or a fixed LiveKit deployment. It explains where
-the launcher reads each credential so you can keep secrets out of source and
-sample YAML files.
+## Overview
+
+Your application needs access to model downloads and inference endpoints
+before it can answer a user. Configuring credentials outside the application
+code lets you use the same checkout with your own accounts and deployments
+without putting secrets in the repository.
 
 ## LiveKit credentials
 

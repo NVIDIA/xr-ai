@@ -5,10 +5,12 @@
 
 # Troubleshooting
 
-**TL;DR:** This reference is for developers diagnosing setup, launch, model,
-network, and client failures. Start with the launcher's failure summary and
-service logs, then use the symptom-specific checks to identify the cause and
-recover the affected process or connection.
+## Overview
+
+When your agent cannot connect, see an image, or produce an answer, the
+failure may be outside your application logic. Tracing the symptom to the
+responsible client, process, or model service helps you restore a working
+interaction and continue developing your application.
 
 For an issue not covered here, open an issue on the
 [repository](https://github.com/NVIDIA/xr-ai).

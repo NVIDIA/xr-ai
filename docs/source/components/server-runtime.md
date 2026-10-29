@@ -5,15 +5,14 @@
 
 # Server runtime
 
-**TL;DR:** Use this reference to understand the DeviceIOHub process that
-connects clients to agents. It describes media routing, readiness, and network
-boundaries for operators and developers who need to diagnose or extend the
-shared runtime.
+## Overview
 
-The `services/device-io-hub/` package hosts the **DeviceIOHub** — the single process
-clients connect to and agents fan out from. It owns the internal LiveKit
-transport, the shared-memory + ZMQ IPC boundary to agents, the per-participant
-return path, and the same-origin `wss://` proxy that fronts LiveKit signaling.
+Your agent needs access to a user's camera and microphone and a way to send
+responses back to that user. DeviceIOHub provides that shared connection
+across supported clients, allowing several agents to work with the same
+session while keeping each participant's media and responses separate.
+
+## Run DeviceIOHub
 
 From the repository root, run it as one process:
 
@@ -42,6 +41,9 @@ For where the hub sits in the wider system, refer to
 {doc}`Architecture </overview/architecture>`.
 
 ## DeviceIOHub
+
+The `services/device-io-hub/` package uses LiveKit internally, with shared-memory
+and ZMQ IPC to agents and a same-origin `wss://` proxy for LiveKit signaling.
 
 The hub is one hub, many clients, many agents. A single instance fans the
 inbound media stream out to every connected agent and routes any return

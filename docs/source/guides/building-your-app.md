@@ -5,17 +5,19 @@
 
 # Build your application
 
-**TL;DR:** If you are building an XR AI application outside the repository's
-sample catalog, use this workflow to take it from a source checkout to a
-validated application that is ready for handoff. For new voice-and-vision
-applications, start with {doc}`conversation-example </reference/conversation-example>`.
+## Overview
+
+Turn a working XR AI sample into an application for your own users and task.
+Keeping your application in its own workspace lets you change its behavior and
+configuration while continuing to use the shared SDK and services from the
+checkout.
+
+## Start from a source checkout
 
 The directions below assume the application is under `apps/<your-app>/`. The
 XR AI SDK distributions are not published to a package registry; they resolve
 through relative `[tool.uv.sources]` entries in each application's
 `pyproject.toml`.
-
-## Start from a source checkout
 
 Use the latest stable release by default, falling back to the latest
 prerelease when no stable release exists. Use `main` when the application

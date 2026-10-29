@@ -5,10 +5,14 @@
 
 # Launcher and process model
 
-**TL;DR:** Use this reference to understand how a sample starts and supervises
-its hub, workers, and optional capability services. It explains process
-ownership and readiness so application developers can choose what the launcher
-manages and what remains an independently operated service.
+## Overview
+
+A working XR application brings together a device connection, agent workers,
+and the services they need. The launcher turns that collection into a
+repeatable application startup, waits for dependencies, and shuts down the
+application together when a process fails.
+
+## Declare the application stack
 
 Application samples own their DeviceIOHub and worker processes. Model services may
 instead be declared with `launch_mode="reuse"` and started separately through the

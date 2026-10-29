@@ -5,10 +5,14 @@
 
 # Networking and firewall
 
-**TL;DR:** Use this reference to expose XR AI to clients across local or
-remote networks. It identifies the ports and TLS paths needed for client media,
-signaling, and optional viewers so an operator can allow only the traffic the
-deployment uses.
+## Overview
+
+A headset or phone must reach both your application's connection service and
+its media streams, which may run on another machine. Getting those network
+paths right makes it possible to test the interaction on the user's device and
+move from a local demo to a remote deployment.
+
+## Required ports
 
 DeviceIOHub, CloudXR, and optional application viewers use the following
 ports. Open only the externally reachable ports required by the deployment.

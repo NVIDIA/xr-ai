@@ -5,9 +5,14 @@
 
 # Contributing and conventions
 
-**TL;DR:** Use this reference when contributing to XR AI so your changes fit
-the repository and remain understandable and maintainable for other
-contributors across releases.
+## Overview
+
+Developing your application may reveal a capability or fix that belongs in the
+shared XR AI code. Following the contribution contracts makes that change
+reusable by other applications and keeps its behavior documented and testable
+as the repository evolves.
+
+## Repository contracts
 
 Refer to the root
 [`CONTRIBUTING.md`](https://github.com/NVIDIA/xr-ai/blob/main/CONTRIBUTING.md)

@@ -5,10 +5,12 @@
 
 # Requirements
 
-**TL;DR:** Use this checklist to prepare a host that can run XR AI samples.
-It helps you estimate the GPU and software needed for your setup; hosted models
-can remove the local model-service allocation, while the hub's media path still
-uses GPU hardware for video codecs.
+## Overview
+
+Your deployment needs enough capacity for the models you choose and for moving
+media between the device and the agent. Establishing those needs first helps
+you choose a development host and decide which inference services to run
+locally or elsewhere.
 
 ## Hardware
 

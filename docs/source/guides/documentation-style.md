@@ -10,15 +10,22 @@ and reStructuredText. Match the surrounding document and keep edits scoped.
 When maintainers adopt a repository-wide convention, update this reference in
 the same change. Document scoped exceptions in the affected content.
 
-## Opening summaries
+<a id="opening-summaries"></a>
+## Opening overviews
 
-Long reader-facing narrative pages open with a concise **TL;DR:** paragraph
-directly below the title. State who the content is for, what it helps them do,
-and the outcome or value they can expect. Keep the technical explanation,
-requirements, commands, and details in the body; the summary is an orientation,
-not a substitute for them. Short, self-evident navigation pages and redirects
-do not need a summary. Generated API pages are also exempt; narrative pages
-that feed generated catalogs follow this convention when they are long.
+Long reader-facing narrative pages open with an **Overview** section. Explain
+why the capability or workflow matters when developing an XR AI application:
+start with a concrete application need, then describe what it enables the
+developer to build or accomplish. An overview motivates reading the details;
+it does not describe the page's contents, list APIs, or compress instructions.
+Use plain language before introducing implementation terminology. Keep
+operational requirements and technical detail in the body.
+
+Fold existing introductory motivation into the overview and remove repeated
+framing afterward. Follow it with the first useful example, procedure, or
+design detail. Preserve unique technical guidance in the appropriate section.
+Short navigation pages and redirects do not need an overview. Generated API
+pages are also exempt; judge catalog pages by their rendered length.
 
 ## Cross-references
 
