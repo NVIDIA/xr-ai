@@ -5,6 +5,10 @@
 
 # Agent SDK
 
+**TL;DR:** Use this overview to choose XR AI's Python packages for an agent
+worker. It explains which package owns each runtime boundary and points to the
+generated API reference for exact names and behavior.
+
 The SDK is split by dependency boundary. Directory names match the Python
 imports developers use; distribution names remain stable for package
 installation.
@@ -48,14 +52,18 @@ connectivity, deployment ownership, credentials, and model-specific wire
 details remain inside that package. Refer to {doc}`ai-services` for deployment and
 operational guidance.
 
-`VoiceAgent` owns readiness, hub transport, voice gating, its private media
-pipeline, signal handling, and cleanup. It publishes final pre-gate transcripts
-separately from gate-accepted user queries, optionally publishes typed
-participant lifecycle events, and consumes typed voice output. Join and leave
-publication stays non-blocking for the media pipeline while preserving order per
-participant. Application agents subscribe to the events they own and clean up
-their own participant state. Pipecat and the media session remain implementation
-details.
+When given the worker's ready file, `VoiceAgent` signals process readiness
+after its private media transport initializes; DeviceIOHub separately owns
+client readiness. `VoiceAgent` also owns hub transport, voice gating, its
+private media pipeline, signal handling, and cleanup. Its transcript
+publication follows the active mode and ASR backend's policy, so only selected
+final pre-gate transcripts are published separately from gate-accepted user
+queries. It can also publish
+typed participant lifecycle events and consumes typed voice output. Join and
+leave publication stays non-blocking for the media pipeline while preserving
+order per participant. Application agents subscribe to the events they own and
+clean up their own participant state. Pipecat and the media session remain
+implementation details.
 
 Applications may publish selected compact payloads to `WEB_EVENT_TOPIC` for a
 `WebEventsAgent` to display. The viewer owns only a bounded live history and a

@@ -5,6 +5,11 @@
 
 # xr-ai-hub
 
+**TL;DR:** Use `xr-ai-hub-client` as the worker-side boundary for subscribing
+to participant media and lifecycle events, requesting frames, and returning
+data or audio through DeviceIOHub. It keeps transport and media-server details
+out of agent code.
+
 `xr-ai-hub-client` is the minimal agent-side DeviceIOHub boundary. It depends
 only on pyzmq and msgpack and contains no LiveKit, web-server, model, tool, or
 voice-pipeline code. Refer to the generated {doc}`python/index` for public types

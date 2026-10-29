@@ -5,6 +5,11 @@
 
 # Architecture
 
+**TL;DR:** Use this overview to understand how XR AI connects clients, agents,
+and model services, and where each process owns its work. It helps application
+developers choose the right extension point without coupling their agents to
+transport or model-serving details.
+
 XR AI connects interactive clients, including XR glasses and headsets, phones,
 and web browsers, to agent workers and AI services without making transport,
 media, or model implementation details part of application logic. The system

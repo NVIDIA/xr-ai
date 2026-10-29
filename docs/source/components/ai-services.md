@@ -5,7 +5,12 @@
 
 # AI inference servers
 
-Read this when calling or operating an inference server. For the
+**TL;DR:** Use this reference to select, configure, or operate XR AI model
+services. It shows how workers connect through typed model clients, how local
+services differ from independently operated endpoints, and where to find
+deployment workflows.
+
+For the
 orchestrator pattern that wires servers into a sample, refer to
 {doc}`/guides/adding-a-sample`. For an end-to-end procedure covering custom
 shared server defaults, sample GPU overrides, and consumer model configuration, refer to
@@ -543,14 +548,15 @@ its persistent process with `start_new_session=True`, reuses a healthy server
 that survived a previous stack run, and is stopped by the sample's model
 command with `--stop` when selected in that stack.
 
-Each sample's model-server list selects speaker ASR. The launcher waits for
-model loading, decoder warmup and HTTP readiness
-before reporting readiness, and reuses warm instances with matching configuration.
-Configuration changes require stopping and restarting the service. `--stop`
-stops only the sample's explicitly selected server list, using its configured
-ports and the existing process-ownership guards. The speaker service listens
-on port 8102 and supports streaming audio
-over a private WebSocket.
+Most shipped model-server profiles that include voice select speaker ASR;
+`procedure-capture-guide` selects batch STT for narration without speaker
+enrollment. When selected, the speaker STT launcher waits for model loading,
+decoder warmup, and HTTP readiness before reporting ready, then reuses a warm
+instance with matching configuration. Configuration changes require stopping
+and restarting the service. `--stop` stops only the sample's explicitly
+selected server list, using its configured ports and the existing
+process-ownership guards. The speaker service listens on port 8102 and supports
+streaming audio over a private WebSocket.
 Native NIM speech uses independently deployed Riva endpoints rather than this
 local model stack. Refer to {doc}`/guides/deploying-with-nim` and
 {doc}`/reference/agent-sdk-voice` for worker backend selection and enrollment.

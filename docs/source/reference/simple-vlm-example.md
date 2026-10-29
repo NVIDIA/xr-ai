@@ -5,6 +5,16 @@
 
 # Simple VLM example
 
+**TL;DR:** Understand how a minimal demo turns a spoken or typed question into
+an answer about the participant's camera view. Use this reference to explore
+that interaction or maintain an existing Simple VLM setup.
+
+```{warning}
+Simple VLM is deprecated. It remains available for the browser demo and
+existing integrations. Use {doc}`conversation-example` as the starting point
+for new applications.
+```
+
 The simple VLM example is the smallest complete voice-and-vision application in
 the repository. It answers spoken or typed questions about each participant's
 current camera view and streams the answer to both Pocket TTS and the
@@ -21,7 +31,7 @@ adapters and endpoints. `yaml/voice_gate.yaml` configures the speaker-ASR
 endpoint. Start those endpoints together with
 the sample's model-server stack.
 
-`VoiceAgent` owns application readiness, hub transport, voice gating, TTS, signals,
+`VoiceAgent` owns worker readiness, hub transport, voice gating, TTS, signals,
 and cleanup. It publishes accepted speech and typed text as a participant-scoped
 `UserQuery`. `SimpleVlmAgent` always invokes `CurrentFrameTool`. The tool uses
 the hub's fresh frame when DeviceIOHub is already observing video for that
@@ -39,7 +49,7 @@ already streaming do not receive a redundant capture request.
 
 A newer participant turn cancels the superseded vision request and interrupts
 its voice response. Participant departure releases the sample agent's cached
-frames and tasks. This is the reference composition for a single foreground
+frames and tasks. This is a minimal composition for a single foreground
 streaming image query.
 
 The shared voice layer returns accepted queries as UTF-8 text on
@@ -79,8 +89,10 @@ Before announcing readiness, the worker performs a streaming VLM request with
 a 1280×720 JPEG and consumes the response. This exercises the production
 multimodal path so the first user query does not pay its initialization cost.
 The warmup retries failed inference requests until one succeeds. It does not
-call a health endpoint first. STT and TTS do not gate worker startup; start the
-sample's model-server stack before the sample so speech requests can succeed.
+call a health endpoint first. With the checked-in voice-gate configuration,
+startup also waits for the required speaker-ASR service. Batch STT and TTS
+health do not gate startup; start the sample's model-server stack before the
+sample so speech requests can succeed.
 
 ## Configuration
 

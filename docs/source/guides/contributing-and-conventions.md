@@ -5,6 +5,10 @@
 
 # Contributing and conventions
 
+**TL;DR:** Use this reference when contributing to XR AI so your changes fit
+the repository and remain understandable and maintainable for other
+contributors across releases.
+
 Refer to the root
 [`CONTRIBUTING.md`](https://github.com/NVIDIA/xr-ai/blob/main/CONTRIBUTING.md)
 for setup, testing, pull requests, and DCO sign-off. Refer to

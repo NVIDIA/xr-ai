@@ -5,6 +5,10 @@
 
 # Adding CloudXR to a sample
 
+**TL;DR:** Add remote-rendered XR content to an agent application. This
+integration workflow helps you connect the shared CloudXR runtime and choose
+the transport that matches your client.
+
 `services/cloudxr-runtime/` is the shared CloudXR service.
 Any sample can stream XR content to a device by adding one line to its
 orchestrator and a configuration file under the sample's `yaml/` directory. For the broader

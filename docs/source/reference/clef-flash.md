@@ -5,11 +5,15 @@
 
 # Clef-Flash local decision server
 
-The optional Clef-Flash 9B service exposes the upstream joint-schema model over
-the typed SystemOne HTTP contract used by `make_decision`. It loads the pinned
-release's `joint_schema_model.py` directly from the model directory and calls
-its native `load_release_model` and `systemone` functions. The service does not
-route decisions through a generation endpoint.
+**TL;DR:** Use this optional local service when an application needs typed
+SystemOne choice decisions from Clef-Flash, including ordered image inputs.
+The service enforces its request limits before inference and loads one pinned
+model release.
+
+The service exposes the upstream joint-schema model over the typed SystemOne
+HTTP contract used by `make_decision` for the optional Clef-Flash 9B model. It loads the pinned release's
+`joint_schema_model.py` directly from the model directory and calls its native
+`load_release_model` and `systemone` functions rather than a generation endpoint.
 
 The service supports choice questions about text and ordered images. A request
 must name the configured model, include state, and provide at least one question with a

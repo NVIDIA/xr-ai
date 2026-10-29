@@ -5,12 +5,13 @@
 
 # Tea-making guidance — building deterministic visual workflows
 
-The tea-making sample is a reference for applications that combine a guided
-procedure, visual evidence, foreground questions, independent background
-observers, and voice output. Refer to the
-{doc}`quickstart </getting_started/quickstart>` to run the sample. This
-architecture reference explains how to adapt the sample to another procedure
-rather than merely changing model settings.
+**TL;DR:** Use this sample when an application needs to help a participant
+follow a visual procedure while keeping progress explicit and verifiable. Its
+workflow rules remain under application control as the participant and visual
+observer gather evidence.
+
+To run the sample, refer to the
+{doc}`quickstart </getting_started/quickstart>`.
 
 For speech deployment and explicit batch-STT selection, refer to
 {doc}`/guides/customizing-model-servers`.

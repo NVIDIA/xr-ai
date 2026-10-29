@@ -5,6 +5,11 @@
 
 # Networking and firewall
 
+**TL;DR:** Use this reference to expose XR AI to clients across local or
+remote networks. It identifies the ports and TLS paths needed for client media,
+signaling, and optional viewers so an operator can allow only the traffic the
+deployment uses.
+
 DeviceIOHub, CloudXR, and optional application viewers use the following
 ports. Open only the externally reachable ports required by the deployment.
 

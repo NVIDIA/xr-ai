@@ -5,6 +5,10 @@
 
 # xr-ai-web-events
 
+**TL;DR:** Make an application's activity visible while it is running. Use
+this browser viewer to present selected agent events so developers and users
+can follow what the application is doing.
+
 `xr-ai-web-events` presents application-selected runtime events in a bounded,
 read-only browser view. It does not tail files, persist data, or enter model,
 voice, media, or DeviceIOHub authentication paths. Refer to {doc}`python/index`

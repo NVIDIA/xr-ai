@@ -4,6 +4,10 @@
 Sample configuration reference
 ==============================
 
+**TL;DR:** Use this catalog to find the checked-in file that owns a sample
+setting before editing it. Values are sample- and hardware-specific examples;
+refer to the handwritten guides for operational choices and deployment steps.
+
 This reference is generated directly from configuration files under each
 top-level sample's ``yaml/`` and ``model-servers/yaml/`` directories in
 ``agent-samples/``, and from configuration files beside a direct capability

@@ -5,6 +5,10 @@
 
 # xr-ai-interaction
 
+**TL;DR:** Let voice and text interfaces work with the same application agents.
+Use these shared messages to express participant requests and responses while
+keeping the interaction independent of how it is delivered.
+
 `xr-ai-interaction` provides the transport-neutral messages exchanged while a
 participant interacts with agents: `UserQuery`, `ResponseOutput`,
 `ParticipantJoined`, `ParticipantLeft`, and `Interrupted`. It depends only on

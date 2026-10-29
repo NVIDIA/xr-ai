@@ -5,10 +5,13 @@
 
 # xr-ai-voice
 
-`xr-ai-voice` owns the voice-facing boundary for an XR agent. Pipecat implements
-the private media pipeline; applications use typed runtime events and model
-service protocols. Refer to {doc}`python/index` for exact constructors, fields,
-and defaults.
+**TL;DR:** Use `VoiceAgent` to keep speech input, output, and session cleanup
+behind one voice boundary while application agents exchange typed runtime
+events. This lets applications define query and speaking policy without
+depending on the private media pipeline.
+
+Pipecat implements that private pipeline. Refer to {doc}`python/index` for
+exact constructors, fields, and defaults.
 
 <a id="usage"></a>
 (agent-sdk-voice-usage)=
@@ -44,10 +47,12 @@ async with runtime:
     await voice.run(runtime)
 ```
 
-`VoiceAgent` owns application readiness, hub transport, VAD and STT, voice gating,
-typed text ingress, TTS, signals, pipeline cancellation, and cleanup. Its media
-session remains private. Applications that need a shared public
-`HubVoiceTransport` construct and inject one explicitly.
+`VoiceAgent` marks its worker ready after its configured dependency checks pass
+and the voice transport starts; DeviceIOHub owns aggregated client readiness.
+`VoiceAgent` also owns hub transport, VAD and
+STT, voice gating, typed text ingress, TTS, signals, pipeline cancellation,
+and cleanup. Its media session remains private. Applications that need a shared
+public `HubVoiceTransport` construct and inject one explicitly.
 
 Set utterance-ending silence once through `VadConfig.silence_duration` passed
 to `VoiceAgent`. It controls the active backend: Silero VAD for batch STT, or
@@ -187,8 +192,9 @@ once against the packaged baseline.
 (voice-conversation-controls)=
 ## Conversation controls
 
-The Simple VLM, Tea making, lab monitoring and XR render samples start with
-their microphone conversation closed.
+The `simple-vlm-example`, `conversation-example`, `tea-making-sample`,
+`lab-instrument-monitoring`, and `xr-render-demo` samples start with microphone
+conversation closed.
 After connecting, say `Hey agent, let's start talking`, then speak naturally
 without a wake phrase. Say `Hey agent, let's stop talking` to close the
 conversation and interrupt the current response. A short `stop` interrupts the
@@ -204,7 +210,7 @@ Choose a mode in each sample's voice-gate YAML:
 | `always_on` | All recognized speech | No persistent conversation | No persistent owner |
 
 `wake_only` and `hybrid` require non-empty `magic_phrases`. The packaged default
-is `always_on`, preserving the existing ungated fallback; the four conversation
+is `always_on`, preserving the existing ungated fallback; the conversation
 samples explicitly select `conversation`. Procedure capture instead uses
 ungated narration with STOP disabled. Change the sample's `mode` field to
 choose another interaction policy without maintaining a separate preset copy.
@@ -349,7 +355,8 @@ to the agent; the latency-saving interruption is not undone.
 ## Speaker filtering and backend selection
 
 The same conversation controls work with ordinary STT and speaker filtering.
-Shipped samples select required speaker ASR alongside `conversation`:
+The conversation samples select required speaker ASR alongside
+`conversation`:
 
 ```yaml
 speaker:
@@ -413,7 +420,7 @@ candidate transcripts before
 enrollment and additionally transcribes non-owner voices after enrollment. It
 returns activity and ignored text on `voice.speaker-diagnostic` through the
 existing participant-routed data channel. These messages cannot invoke or
-interrupt an agent or change enrollment. See
+interrupt an agent or change enrollment. Refer to
 {doc}`../components/ai-services` for decoder ownership and diagnostic resource cost. The
 simple VLM sample enables diagnostics for live inspection. They have no effect
 when ordinary STT is selected.
@@ -443,19 +450,23 @@ uv --config-file uv.toml run --project services/speaker-stt \
   python -m speaker_stt --config services/speaker-stt/speaker_stt.yaml
 ```
 
-Alternatively, each sample-local model stack starts speaker ASR. Stop a
-standalone instance before switching to the stack's hardware configuration;
-their configuration fingerprints can differ. From the repository root:
+Each conversation sample's local model stack starts speaker ASR. The
+`procedure-capture-guide` model stack uses batch STT instead. Stop a standalone
+speaker ASR instance before switching to a conversation sample stack's
+hardware configuration; their configuration fingerprints can differ.
+From the repository root:
 
 ```bash
-uv --config-file uv.toml run --project agent-samples/simple-vlm-example/model-servers \
-  simple_vlm_example_model_servers
+uv --config-file uv.toml run --project agent-samples/conversation-example/model-servers \
+  conversation_example_model_servers
 ```
 
-It composes the `services/speaker-stt/speaker_stt.yaml`
-defaults with that sample's `model-servers/yaml/<gpu-profile>.yaml` placement
+The conversation-example launcher composes the
+`services/speaker-stt/speaker_stt.yaml` defaults with that sample's
+`model-servers/yaml/<gpu-profile>.yaml` placement
 and capacity overrides, waits for decoder warmup, and reuses matching warm
-instances. The sample's model command with `--stop` includes the speaker service. Stop the stack
+instances. The sample's model command with `--stop` includes the speaker
+service. Stop the stack
 before changing its speaker-service YAML. Native NIM deployment configures the
 worker's ordinary speech adapters for independently deployed Riva endpoints;
 disable `speaker.enabled` when choosing that speech path. Refer to

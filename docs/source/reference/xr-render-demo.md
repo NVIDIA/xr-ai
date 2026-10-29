@@ -5,7 +5,12 @@
 
 # xr-render-demo — architecture
 
-This architecture reference describes the xr-render-demo sample. Refer to
+**TL;DR:** This reference explains how `xr-render-demo` combines voice-driven
+scene editing with a separately owned XR scene and typed spatial capabilities.
+Use it to understand the sample's runtime boundaries, deployment, and
+evaluation approach before adapting it.
+
+Refer to
 {doc}`/getting_started/quickstart` to run the sample. For inference-server
 mechanics shared with other samples, refer to
 {doc}`/components/ai-services`.

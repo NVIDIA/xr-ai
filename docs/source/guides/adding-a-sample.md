@@ -5,10 +5,15 @@
 
 # Adding a new sample
 
-Read {doc}`building-your-app` first to build the application. Read this when
-preparing it as a repository sample. For a working sample reference, refer to
-`agent-samples/simple-vlm-example/`. Hard rules and the checklist live in
-`AGENTS.md`; this file holds the boilerplate templates.
+**TL;DR:** If your XR AI application is ready to share in the repository's
+sample catalog, use this reference to make it easy for other contributors to
+run, understand, and extend.
+
+Build the application first with {doc}`building-your-app`; for a current
+voice-and-vision sample foundation, refer to
+{doc}`conversation-example </reference/conversation-example>`.
+`simple-vlm-example` is a deprecated legacy sample; its names remain in
+mechanical examples below. Hard rules and the checklist live in `AGENTS.md`.
 
 ## Naming conventions
 
@@ -71,7 +76,7 @@ When the worker is small, keep its implementation in the package's
 `__main__.py`. Split it once argument parsing, lifecycle, configuration, and
 workflow composition become distinct responsibilities.
 
-Suggested split (used by `simple-vlm-example`):
+Suggested split (the `simple-vlm-example` worker is a legacy illustration):
 
 | File | Responsibility |
 |---|---|
@@ -213,7 +218,9 @@ if __name__ == "__main__":
 
 Use this template when the worker talks directly to `ProcessorEndpoint`. Native
 voice workers keep argument parsing in `__main__.py` and delegate composition
-to sibling `app.py` and `config.py` modules. Refer to
+to sibling `app.py` and `config.py` modules. For current voice-and-vision
+composition, refer to {doc}`conversation-example </reference/conversation-example>`;
+the following linked worker is the deprecated Simple VLM implementation. Refer to
 [`simple-vlm-example`](https://github.com/NVIDIA/xr-ai/tree/main/agent-samples/simple-vlm-example/worker/simple_vlm_example_worker/)
 for that shape. Fill in the sections marked `# ← FILL IN`.
 

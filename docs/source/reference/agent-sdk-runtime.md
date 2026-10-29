@@ -5,6 +5,10 @@
 
 # xr-ai-runtime
 
+**TL;DR:** Connect agents through typed events while letting each agent own
+its work. Use this runtime when several capabilities need to cooperate within
+an application without sharing their internal state or lifecycle.
+
 `xr-ai-agent-runtime` provides typed, participant-scoped publication and fan-out
 for composable agents. It does not own models, planning, memory, tools, media,
 application state, or agent-created tasks. Refer to {doc}`python/index` for the

@@ -5,6 +5,12 @@
 
 # Python code style
 
+**TL;DR:** This reference is for contributors writing or changing Python in
+the SDK, utilities, services, samples, and tests. It defines consistent
+boundaries for public APIs, errors, and module layout so code changes remain
+usable, testable, and documented. Application-owned projects under `apps/`
+follow their own conventions.
+
 This reference governs Python code throughout the repository:
 where the public API ends, how failures are represented, and how modules are
 laid out. It covers the SDK, utilities, services, samples, and tests.

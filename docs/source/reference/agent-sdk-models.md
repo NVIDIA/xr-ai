@@ -5,11 +5,16 @@
 
 # xr-ai-models
 
+**TL;DR:** Use typed model protocols and deployment profiles to keep worker
+inference code consistent across local and hosted endpoints. Model-server
+operation and hardware placement remain separate deployment concerns.
+
 <a id="contract"></a>
 (agent-sdk-models-contract)=
-`xr-ai-models` defines typed LLM, VLM, STT, TTS, embedding, decision, and OCR protocols and
-constructs concrete clients from deployment profiles. Workers depend on those
-protocols instead of hand-written HTTP or vendor SDK calls. Refer to
+`xr-ai-models` defines typed model protocols and constructs clients from
+deployment profiles, so workers use service contracts instead of hand-written
+HTTP or vendor SDK calls. The protocols cover LLM, VLM, STT, TTS, embedding,
+decision, and OCR services. Refer to
 {doc}`python/index` for exact classes, methods, fields, and defaults. Refer to
 {doc}`/components/ai-services` for server operation.
 

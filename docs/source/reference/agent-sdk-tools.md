@@ -5,10 +5,13 @@
 
 # xr-ai-tools
 
-`xr-ai-tools` is the toolkit-independent native tool layer. Finite `Tool` and
-streaming `AsyncTool` objects share one typed Pydantic invocation contract, and
-every execution passes through NeMo Relay. Refer to {doc}`python/index` for the
-exact public APIs.
+**TL;DR:** Use `xr-ai-tools` to define validated native capabilities that
+agents can call directly or expose to a bounded model loop. Applications keep
+control of prompts, history, retries, participant context, and task ownership.
+
+Finite `Tool` and streaming `AsyncTool` objects share one typed Pydantic
+invocation contract, and every execution passes through NeMo Relay. Refer to
+{doc}`python/index` for the exact public APIs.
 
 (native-tools-and-model-tool-calls)=
 ## Bounded model tool loops

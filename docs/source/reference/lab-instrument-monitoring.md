@@ -5,12 +5,13 @@
 
 # Lab instrument monitoring — building marker-associated visual agents
 
-The lab instrument sample is a reference for applications that combine
-foreground questions, opt-in background work, persistent participant state,
-visual identification, and event-driven notifications. Refer to the
-{doc}`quickstart </getting_started/quickstart>` to run the sample. This
-architecture reference focuses on reusing the sample's structure for another
-application.
+**TL;DR:** Use this sample when a lab needs to identify several instruments
+visually, track their readings over time, and notify participants about changes
+without requiring them to ask about every scan. Its separated agent roles can
+be adapted to other visual monitoring workflows.
+
+To run the sample, refer to the
+{doc}`quickstart </getting_started/quickstart>`.
 
 For speech deployment and explicit batch-STT selection, refer to
 {doc}`/guides/customizing-model-servers`.

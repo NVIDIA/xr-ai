@@ -5,6 +5,11 @@
 
 # Requirements
 
+**TL;DR:** Use this checklist to prepare a host that can run XR AI samples.
+It helps you estimate the GPU and software needed for your setup; hosted models
+can remove the local model-service allocation, while the hub's media path still
+uses GPU hardware for video codecs.
+
 ## Hardware
 
 The bundled GPU profiles target two 48 GB NVIDIA Ada GPUs, a single NVIDIA RTX PRO

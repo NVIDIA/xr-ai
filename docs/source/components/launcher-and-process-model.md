@@ -5,6 +5,11 @@
 
 # Launcher and process model
 
+**TL;DR:** Use this reference to understand how a sample starts and supervises
+its hub, workers, and optional capability services. It explains process
+ownership and readiness so application developers can choose what the launcher
+manages and what remains an independently operated service.
+
 Application samples own their DeviceIOHub and worker processes. Model services may
 instead be declared with `launch_mode="reuse"` and started separately through the
 sample's separate `model-servers/` convenience launcher.

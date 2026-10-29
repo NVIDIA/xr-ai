@@ -5,6 +5,11 @@
 
 # Quickstart
 
+**TL;DR:** Try a working XR AI interaction from launch through client
+connection, either with a coding agent or by following the manual commands.
+Use the legacy browser demo for a quick trial, or start with the recommended
+conversation sample when building a new voice-and-vision application.
+
 <!-- Compatibility anchor for the earlier setup heading. -->
 <a id="set-up-with-a-coding-agent"></a>
 
@@ -24,13 +29,14 @@ Before launching a voice sample, refer to {ref}`onnx-runtime-telemetry`.
 If outbound ONNX Runtime telemetry is unwanted, export
 `ORT_DISABLE_TELEMETRY=1` in the launch environment before starting the process.
 
-Every sample follows the same pattern: **start the sample's model stack, wait for
-its launcher to report readiness and return, start the sample from the same
-terminal, then connect a client.** Once the sample is ready, any supported
-client — web browser, Android app, iOS/visionOS app, or AR glasses — can join
-the session using the token printed on startup. Each procedure below starts
-with a `cd` from the repository root; keep running that procedure's commands
-from the selected sample directory.
+Start only the local model services the sample needs, wait for their launcher
+to report readiness and return, then start the sample from the same terminal.
+For model services hosted externally, configure and validate those endpoints
+before starting the sample; a mixed setup can use both local and external
+services. Once the sample is ready, any supported client — web browser, Android
+app, iOS/visionOS app, or AR glasses — can join the session using the token
+printed on startup. Each procedure below starts with a `cd` from the repository
+root; keep running that procedure's commands from the selected sample directory.
 
 Each interactive procedure includes one concrete spoken request that exercises
 the sample's main path. In the shipped voice-gated samples, first say
@@ -65,9 +71,52 @@ stack and agent. This releases unused models and applies the current settings
 without keeping track of previous launches. Refer to
 {doc}`/guides/customizing-model-servers` for configuration and the full flow.
 
+## Conversation example
+
+Start here for a new voice-and-vision application. The sample combines
+conversation and questions about the current view with opt-in visual alerts
+and note-taking. Refer to {doc}`/reference/conversation-example` for its
+behavior, configuration, and architecture.
+
+From the repository root, enter the sample directory and start its local models:
+
+```bash
+cd agent-samples/conversation-example
+uv run --project model-servers conversation_example_model_servers
+```
+
+Wait for the model launcher to report readiness and return, then start the
+sample from the same terminal:
+
+```bash
+uv sync
+uv run conversation_example
+```
+
+Open the authenticated web-client URL printed by DeviceIOHub, allow microphone
+and camera access, and connect. After the agent reports ready, say
+“Hey agent, let's start talking,” then ask “What is in front of me?” while
+pointing the camera at an object. Typed questions also work without opening a
+voice conversation. Refer to {doc}`clients` for other client platforms.
+
+Press Ctrl+C to stop the sample. Its local model services remain running;
+stop them separately from the same sample directory:
+
+```bash
+uv run --project model-servers conversation_example_model_servers --stop
+```
+
 ## Simple VLM example (vision Q&A over voice + text)
 
-End-to-end voice + vision sample. Speak into the mic or type into the data
+```{warning}
+Simple VLM is deprecated and remains available as a small browser demo and
+legacy reference. For a new voice-and-vision application, start with
+{doc}`/reference/conversation-example`, which is the recommended foundation.
+The `run-demo` workflow still uses Simple VLM to provide a quick end-to-end
+demo.
+```
+
+Legacy end-to-end voice + vision demo. Speak into the mic or type into the data
 channel; both routes use the same VLM pipeline against the latest video frame.
 Replies arrive as streaming Pocket TTS audio plus a `vlm.response` text message.
 

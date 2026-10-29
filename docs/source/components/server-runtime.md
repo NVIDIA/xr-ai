@@ -5,6 +5,11 @@
 
 # Server runtime
 
+**TL;DR:** Use this reference to understand the DeviceIOHub process that
+connects clients to agents. It describes media routing, readiness, and network
+boundaries for operators and developers who need to diagnose or extend the
+shared runtime.
+
 The `services/device-io-hub/` package hosts the **DeviceIOHub** — the single process
 clients connect to and agents fan out from. It owns the internal LiveKit
 transport, the shared-memory + ZMQ IPC boundary to agents, the per-participant

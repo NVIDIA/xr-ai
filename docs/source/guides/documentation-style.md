@@ -10,6 +10,16 @@ and reStructuredText. Match the surrounding document and keep edits scoped.
 When maintainers adopt a repository-wide convention, update this reference in
 the same change. Document scoped exceptions in the affected content.
 
+## Opening summaries
+
+Long reader-facing narrative pages open with a concise **TL;DR:** paragraph
+directly below the title. State who the content is for, what it helps them do,
+and the outcome or value they can expect. Keep the technical explanation,
+requirements, commands, and details in the body; the summary is an orientation,
+not a substitute for them. Short, self-evident navigation pages and redirects
+do not need a summary. Generated API pages are also exempt; narrative pages
+that feed generated catalogs follow this convention when they are long.
+
 ## Cross-references
 
 Introduce documentation links with **Refer to** or **refer to**, not "See" or

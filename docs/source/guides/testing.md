@@ -5,6 +5,11 @@
 
 # Testing
 
+**TL;DR:** Use this reference to choose checks that show whether a repository
+change works under the conditions that matter for it. It helps contributors
+account for hardware, client, and service requirements before relying on a
+passing test result.
+
 The `tests/` project exercises SDKs, utilities, service wrappers, sample
 behavior, generated documentation invariants, and the DeviceIOHub IPC path.
 Most tests are CPU-only and run without Docker or LiveKit. Node.js 24 is also

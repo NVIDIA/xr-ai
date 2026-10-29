@@ -5,11 +5,10 @@
 
 # Connecting clients
 
-Every interactive agent sample starts DeviceIOHub and then accepts one or more
-platform clients.
-This client reference is the canonical build and connection guide for the
-clients under `client-samples/`. Refer to {doc}`quickstart` for starting an
-agent sample and {doc}`networking` for firewall and TLS configuration.
+**TL;DR:** Use this reference to build and connect a web, mobile, or XR client
+to an agent sample. It helps client developers select a platform and configure
+its media and connection behavior; refer to {doc}`quickstart` to start a sample
+and {doc}`networking` for firewall and TLS configuration.
 
 (which-clients-exist)=
 ## Client matrix

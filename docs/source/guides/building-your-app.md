@@ -5,11 +5,15 @@
 
 # Build your application
 
-Read this when building an XR AI application. The directions below assume the
-application is under `apps/<your-app>/`. This directory is for applications
-that are not part of the repository's sample catalog. The XR AI SDK
-distributions are not published to a package registry; they resolve through
-relative `[tool.uv.sources]` entries in each application's `pyproject.toml`.
+**TL;DR:** If you are building an XR AI application outside the repository's
+sample catalog, use this workflow to take it from a source checkout to a
+validated application that is ready for handoff. For new voice-and-vision
+applications, start with {doc}`conversation-example </reference/conversation-example>`.
+
+The directions below assume the application is under `apps/<your-app>/`. The
+XR AI SDK distributions are not published to a package registry; they resolve
+through relative `[tool.uv.sources]` entries in each application's
+`pyproject.toml`.
 
 ## Start from a source checkout
 
@@ -113,10 +117,14 @@ identical. In particular, `xr-ai-hub-client` comes from
 `agent-sdk/xr-ai-runtime`. Refer to {doc}`/components/agent-sdk` for package
 ownership boundaries and composition guidance.
 
-## Copy the reference application
+<a id="copy-the-reference-application"></a>
+## Legacy recipe: copy the Simple VLM application
 
-`agent-samples/simple-vlm-example/` is the smallest complete voice-and-vision
-application. Copy its tracked files from the repository root and rename its
+`agent-samples/simple-vlm-example/` is deprecated and is retained here as a
+minimal legacy copy-and-rename recipe. For a new voice-and-vision application,
+use `conversation-example` as the foundation. The commands and rename guidance
+below still apply when adapting the legacy Simple VLM layout from a matching
+checkout. Copy its tracked files from the repository root and rename its
 Python package and worker configuration:
 
 ```bash

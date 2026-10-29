@@ -5,9 +5,14 @@
 
 # Skills
 
-Skills guide a coding agent through xr-ai workflows: small
-`SKILL.md` modules under the open [Agent Skills](https://agentskills.io) spec
-that the agent installs and follows.
+**TL;DR:** Use these skills to have a coding agent try XR AI, prepare a
+development checkout, or build an application. Each skill provides a focused
+workflow the agent can follow; this reference explains when to use them and
+how to install them.
+
+Skills are small `SKILL.md` modules under the open
+[Agent Skills](https://agentskills.io) spec that a coding agent installs and
+follows.
 
 ## Run the browser demo
 
@@ -21,6 +26,10 @@ Choose `run-demo` to try xr-ai. Paste this to your coding agent:
 running, and returns its link, interaction verification status, and stop
 instructions. Local model servers remain running independently of the sample;
 model shutdown is a separate action.
+
+The demo uses the deprecated Simple VLM sample, which remains available for
+trying the stack. For new voice-and-vision application work, use
+{doc}`/reference/conversation-example` as the recommended foundation.
 
 Prefer to do it by hand? Follow {doc}`/getting_started/quickstart`.
 
@@ -72,7 +81,7 @@ the table, and download it into the directory used by your coding agent:
 
 ```bash
 SKILLS_DIR=/path/to/your/agent/skills
-REF=main  # or a release tag such as v0.3.0
+REF=main  # or a release tag such as v0.4.0-beta
 SKILL=run-demo
 curl -fsSL --create-dirs -o "$SKILLS_DIR/$SKILL/SKILL.md" \
   "https://raw.githubusercontent.com/NVIDIA/xr-ai/$REF/skills/$SKILL/SKILL.md"

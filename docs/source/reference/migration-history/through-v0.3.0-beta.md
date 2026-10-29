@@ -5,6 +5,10 @@
 
 # Migration notes through v0.3.0-beta
 
+**TL;DR:** Bring an older checkout up to `v0.3.0-beta` before applying later
+migrations. This archive preserves the instructions for that historical
+transition; continue with the migration instructions for your target release.
+
 These cumulative notes cover upgrades from earlier development versions through
 `v0.3.0-beta`. They retain the instructions published with that release; the
 entries were not separated by source release. Commands and API behavior apply

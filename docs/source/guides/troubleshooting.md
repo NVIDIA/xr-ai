@@ -5,8 +5,13 @@
 
 # Troubleshooting
 
-Common issues and their fixes. If you hit something not listed here, open an
-issue on the [repository](https://github.com/NVIDIA/xr-ai).
+**TL;DR:** This reference is for developers diagnosing setup, launch, model,
+network, and client failures. Start with the launcher's failure summary and
+service logs, then use the symptom-specific checks to identify the cause and
+recover the affected process or connection.
+
+For an issue not covered here, open an issue on the
+[repository](https://github.com/NVIDIA/xr-ai).
 
 ## Investigating a failed run
 

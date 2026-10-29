@@ -6,10 +6,15 @@
 (task-capture)=
 # Procedure capture and guidance
 
+**TL;DR:** Turn a narrated demonstration into a procedure someone else can
+review and follow. This workflow connects evidence capture, draft authoring,
+human approval, and guided execution. Read on to understand what each stage
+can establish before relying on the resulting guide.
+
 The procedure-capture-guide sample records narrated demonstrations between
 spoken commands. It saves snapshots, visual captions, and transcribed narration for review and downstream
 processing. Guide mode guides participants through a locally approved procedure
-and verifies progress with visual observations and elapsed-time checks.
+and checks progress with visual observations and elapsed-time checks.
 
 ## Run a demonstration
 
