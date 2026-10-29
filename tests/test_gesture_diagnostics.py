@@ -115,7 +115,7 @@ async def test_agent_measures_real_boundary_without_logging_frame_or_identity(mo
     reference = images.put(output.getvalue(), owner='private-participant')
     async def frames(_):
         return SimpleNamespace(track_id='private-track', sequence=7, timestamp_us=123456789,
-                               image=reference)
+                               image=reference, width=400, height=200)
     async def hands(_):
         clock[0] = 1
         return HandTrackingResult(width=400, height=200, hands=[])

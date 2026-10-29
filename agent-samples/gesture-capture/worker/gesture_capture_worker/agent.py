@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 
 from xr_ai_hub import FrameUnavailable
@@ -44,6 +45,7 @@ class GestureCaptureAgent:
         self._selector = selector
         self._settings = settings
         self._last_frame = None
+        self._tracking_needs_reset = False
         self._feedback = feedback
         self._turn_active = False
         self._pending = None
@@ -70,16 +72,30 @@ class GestureCaptureAgent:
         if self._turn_active and self._pending is None:
             return None
         frame = await self._frames.execute(CurrentFrameRequest(participant_id=participant_id, allow_capture=False))
-        identity = (frame.track_id, frame.sequence, frame.timestamp_us)
+        identity = (frame.track_id, frame.sequence, frame.timestamp_us, frame.width, frame.height)
         if identity == self._last_frame:
             self._diagnostics.count("duplicate_frame")
             return None
-        if self._last_frame is not None and self._last_frame[0] != frame.track_id:
+        source_changed = self._last_frame is not None and (
+            self._last_frame[0] != frame.track_id or self._last_frame[3:] != (frame.width, frame.height)
+            or frame.sequence < self._last_frame[1] or frame.timestamp_us < self._last_frame[2]
+            or frame.timestamp_us - self._last_frame[2] > self._settings.max_gap_s * 1_000_000)
+        if (not source_changed and self._last_frame is not None
+                and frame.timestamp_us // 1000 <= self._last_frame[2] // 1000):
+            self._diagnostics.count("duplicate_frame_timestamp")
+            self._last_frame = identity
+            return None
+        if source_changed or self._tracking_needs_reset:
+            await asyncio.to_thread(self._hands.reset)
+            self._tracking_needs_reset = False
+        if source_changed:
             self._diagnostics.count("source_changed")
             self._selector.reset()
+            if self._pending is not None:
+                raise ValueError("Circle selection expired after video source interruption; draw again")
         self._last_frame = identity
         started = time.monotonic()
-        hands = await self._hands.execute(HandTrackingRequest(image=frame.image))
+        hands = await self._hands.execute(HandTrackingRequest(image=frame.image, timestamp_us=frame.timestamp_us))
         if self._diagnostics.enabled:
             self._diagnostics.frame(frame.timestamp_us, len(hands.hands), (time.monotonic() - started) * 1000)
         if self._pending is not None:
@@ -111,6 +127,7 @@ class GestureCaptureAgent:
         return answer.text
 
     def unavailable(self) -> None:
+        self._tracking_needs_reset = True
         if self._pending is not None:
             self._pending.clear_since = None
             if self._pending.expired:

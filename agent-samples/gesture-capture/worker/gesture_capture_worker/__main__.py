@@ -45,8 +45,6 @@ async def _run(settings: Settings, ready_file: Path | None) -> None:
         frames = CurrentFrameTool(endpoint=endpoint, images=images)
         capture = StillCaptureTool(endpoint=endpoint, images=images)
         resources.callback(capture.close)
-        hands = HandTrackingTool(images=images, model_path=settings.model_path)
-        resources.push_async_callback(asyncio.to_thread, hands.close)
         models = load_models_config(settings.models)
         vlm = make_vlm(models, "vlm")
         resources.push_async_callback(vlm.close)
@@ -57,39 +55,51 @@ async def _run(settings: Settings, ready_file: Path | None) -> None:
         stopped = asyncio.Event()
 
         async def poll(participant_id: str) -> None:
-            diagnostics = GestureDiagnostics(settings.gesture_diagnostics)
-            feedback = GestureFeedback(endpoint, participant_id, enabled=settings.gesture_audio,
-                                       max_gap_s=settings.max_gap_s)
-            agent = GestureCaptureAgent(
-                frames=frames, hands=hands, capture=capture, crop=crop, query=query,
-                selector=RegionSelector(settings, diagnostics=diagnostics), feedback=feedback, diagnostics=diagnostics,
-                settings=settings,
-            )
-            try:
-                while True:
-                    try:
-                        text = await agent.step(participant_id)
-                        if text is not None:
-                            await endpoint.send_return_data(DataMessage(
-                                participant_id=participant_id, topic="gesture.response",
-                                pts_us=time.time_ns() // 1_000, data=text.encode(),
-                            ))
-                    except FrameUnavailable:
-                        agent.unavailable()
-                        await feedback.stop()
-                    except Exception:  # noqa: BLE001 — per-participant application boundary
-                        # A failed observation/action must not kill other participants
-                        # or rearm a held gesture. The user releases before retrying.
-                        agent.unavailable()
-                        await feedback.stop()
-                        _LOG.exception("Gesture capture failed for %s", participant_id)
-                    finally:
-                        await agent.finish_turn()
-                        images.release_owner(participant_id)
-                    await asyncio.sleep(settings.poll_interval_s)
-            finally:
-                await feedback.close()
-                frames.release(participant_id)
+            async with AsyncExitStack() as participant_resources:
+                constructing = asyncio.create_task(asyncio.to_thread(
+                    HandTrackingTool, images=images, model_path=settings.model_path, mode="video"))
+                try:
+                    hands = await asyncio.shield(constructing)
+                except asyncio.CancelledError:
+                    result = (await asyncio.gather(constructing, return_exceptions=True))[0]
+                    if not isinstance(result, BaseException):
+                        await asyncio.to_thread(result.close)
+                    raise
+                participant_resources.push_async_callback(asyncio.to_thread, hands.close)
+                diagnostics = GestureDiagnostics(settings.gesture_diagnostics)
+                feedback = GestureFeedback(endpoint, participant_id, enabled=settings.gesture_audio,
+                                           max_gap_s=settings.max_gap_s)
+                agent = GestureCaptureAgent(
+                    frames=frames, hands=hands, capture=capture, crop=crop, query=query,
+                    selector=RegionSelector(settings, diagnostics=diagnostics),
+                    feedback=feedback, diagnostics=diagnostics,
+                    settings=settings,
+                )
+                try:
+                    while True:
+                        try:
+                            text = await agent.step(participant_id)
+                            if text is not None:
+                                await endpoint.send_return_data(DataMessage(
+                                    participant_id=participant_id, topic="gesture.response",
+                                    pts_us=time.time_ns() // 1_000, data=text.encode(),
+                                ))
+                        except FrameUnavailable:
+                            agent.unavailable()
+                            await feedback.stop()
+                        except Exception:  # noqa: BLE001 — per-participant application boundary
+                            # A failed observation/action must not kill other participants
+                            # or rearm a held gesture. The user releases before retrying.
+                            agent.unavailable()
+                            await feedback.stop()
+                            _LOG.exception("Gesture capture failed for %s", participant_id)
+                        finally:
+                            await agent.finish_turn()
+                            images.release_owner(participant_id)
+                        await asyncio.sleep(settings.poll_interval_s)
+                finally:
+                    await feedback.close()
+                    frames.release(participant_id)
 
         async def participant(event: ParticipantEvent) -> None:
             if event.joined:
@@ -120,7 +130,7 @@ async def _run(settings: Settings, ready_file: Path | None) -> None:
                 await endpoint_task
         finally:
             # Stop admission before draining participants; native detection may outlive
-            # a cancelled coroutine and is drained by hands.close() under its lock.
+            # a cancelled coroutine; each participant drains its detector on exit.
             endpoint_task.cancel()
             stop_task.cancel()
             for task in tuple(owned):

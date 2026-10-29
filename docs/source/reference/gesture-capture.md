@@ -42,11 +42,12 @@ The packaged system prompt treats framing hands as selectors, asks about visible
 target content, and requires an obstruction response rather than inventing hidden
 objects when the selected view is blocked.
 
-The worker owns one polling task per participant and one shared local hand
-detector. IMAGE mode keeps observations independent across participants. Native
-calls are serialized off the event loop; teardown waits for actual native
-inference after polling cancellation. Disconnect cancels the participant task
-and releases its image handles. Tool execution uses Relay, with raw pixels
+The worker owns one polling task and one VIDEO-mode hand detector per participant.
+MediaPipe can reuse its previous hand region instead of running palm detection
+on every frame. Temporal state is never shared between participants. Native
+calls, reset and close are serialized off the event loop; teardown waits for
+actual native inference after polling cancellation. Disconnect closes that
+participant's detector and releases its image handles. Tool execution uses Relay, with raw pixels
 kept outside tool requests and results.
 
 ## Select a region
@@ -159,10 +160,23 @@ Spatial continuity uses image pixels and palm scale, ignoring handedness label
 flicker and tolerating a distant second detection while tracing. Ambiguous nearby
 hands retain only bounded grace. This is best-effort spatial association, not
 person identity: nearby hand switches cannot always be detected. MediaPipe
-IMAGE mode processes frames independently; changing a tracking-confidence setting
-would not supply temporal tracking. The existing detector requests up to two
-hands, including single-hand input; three or more visible hands can exceed its
-capacity. No backend confidence controls or new SDK API are introduced here.
+VIDEO mode supplies temporal tracking, but does not provide stable person identity
+or guarantee recovery from occlusion/back-of-hand poses. The detector requests
+up to two hands, including single-hand input; three or more visible hands can
+exceed its capacity. Detection, presence and tracking confidence defaults remain
+0.5; no confidence tuning is applied.
+
+`HandTrackingTool` preserves independent IMAGE mode by default. For a temporal
+source, construct it with `mode="video"`, pass each frame's `timestamp_us` in
+`HandTrackingRequest`, and call `reset()` when changing sources. Use a distinct
+tool for each concurrent source. VIDEO timestamps must strictly increase after
+conversion to integer milliseconds. The sample skips identical/same-millisecond
+frames and resets on track, dimensions, sequence/clock rollback, or a video gap
+longer than `max_gap_s`. Frame unavailability schedules one reset before the
+next fresh observation. Pending selections cannot cross a source interruption.
+The current LiveKit producer timestamps decoded frames at hub ingestion; these
+are not camera-sensor timestamps. No receipt/poll timestamps are substituted by
+the gesture worker.
 
 Defaults poll every 80 ms and require eight distinct points. Faster polling
 increases potential CPU use; inference time also limits actual cadence.

@@ -9,7 +9,10 @@ Frame a rectangle with two opposing thumb/index L shapes (tips need not touch),
 or pinch and draw a near-closed circle, to ask a VLM about the selected camera region. The sample
 starts a hub and worker and reuses a separately running VLM service. It crops
 streamed video by default; optional aligned-photo mode requests a separate
-higher-resolution photograph.
+higher-resolution photograph. Each participant has a separate MediaPipe VIDEO
+tracker; source interruptions reset its temporal state. SDK IMAGE mode remains
+available for independent images. Confidence thresholds remain at their defaults;
+VIDEO tracking still needs physical qualification on your camera.
 
 Refer to the [gesture-capture guide](https://nvidia.github.io/xr-ai/main/reference/gesture-capture.html)
 for model provisioning, licenses, browser requirements, alignment, and behavior.

@@ -324,7 +324,7 @@ async def test_worker_roster_is_idempotent_and_departure_drains_polling(monkeypa
 
     class Agent:
         def __init__(self, **kwargs):
-            constructed.append(self)
+            constructed.append(kwargs["hands"])
         async def finish_turn(self):
             pass
         async def step(self, participant_id):
@@ -350,6 +350,10 @@ async def test_worker_roster_is_idempotent_and_departure_drains_polling(monkeypa
         await asyncio.wait_for(polling.wait(), 2)
         await endpoint.participant_callback(ParticipantEvent(participant_id="alice", joined=True, pts_us=2))
         assert len(constructed) == 1
+        polling.clear()
+        await endpoint.participant_callback(ParticipantEvent(participant_id="bob", joined=True, pts_us=2))
+        await asyncio.wait_for(polling.wait(), 2)
+        assert len(constructed) == 2 and constructed[0] is not constructed[1]
         await endpoint.participant_callback(ParticipantEvent(participant_id="alice", joined=False, pts_us=3))
         assert departed.is_set()
     finally:
@@ -357,6 +361,7 @@ async def test_worker_roster_is_idempotent_and_departure_drains_polling(monkeypa
         with pytest.raises(asyncio.CancelledError):
             await app
     assert set(closed) == {"hands", "vlm", "endpoint stopped", "endpoint closed"}
+    assert closed.count("hands") == 2
 
 
 def _settings(**kwargs):
@@ -618,3 +623,75 @@ async def test_box_vlm_input_is_open_interior_with_target_retained(angle):
         assert finger_color not in pixels
     assert question == "Describe the selected region"
     assert system_prompt == worker._REGION_SYSTEM_PROMPT
+
+
+async def test_video_backend_uses_source_ms_and_resets_epoch(monkeypatch):
+    from mediapipe.tasks.python.vision import HandLandmarker, RunningMode
+    created = []
+    class Detector:
+        def __init__(self, options):
+            self.options, self.timestamps, self.closed = options, [], 0
+        def detect_for_video(self, image, timestamp):
+            self.timestamps.append(timestamp)
+            return SimpleNamespace(hand_landmarks=[], handedness=[])
+        def close(self):
+            self.closed += 1
+    def create(options):
+        detector = Detector(options)
+        created.append(detector)
+        return detector
+    monkeypatch.setattr(HandLandmarker, "create_from_options", create)
+    images = ImageRegistry()
+    tool = HandTrackingTool(images=images, model_path=Path("provided.task"), mode="video")
+    ref = images.put(_png())
+    try:
+        assert created[0].options.running_mode == RunningMode.VIDEO
+        with pytest.raises(ValueError, match="requires timestamp_us"):
+            await tool.execute(HandTrackingRequest(image=ref))
+        await tool.execute(HandTrackingRequest(image=ref, timestamp_us=100_123))
+        for timestamp in (100_999, 99_000):
+            with pytest.raises(ValueError, match="strictly increase"):
+                await tool.execute(HandTrackingRequest(image=ref, timestamp_us=timestamp))
+        await tool.execute(HandTrackingRequest(image=ref, timestamp_us=101_000))
+        await asyncio.to_thread(tool.reset)
+        await tool.execute(HandTrackingRequest(image=ref, timestamp_us=0))
+        assert created[0].timestamps == [100, 101]
+        assert created[1].timestamps == [0]
+        assert created[0].closed == 1
+    finally:
+        await asyncio.to_thread(tool.close)
+    assert [d.closed for d in created] == [1, 1]
+
+
+async def test_video_reset_drains_cancelled_native_inference(monkeypatch):
+    from mediapipe.tasks.python.vision import HandLandmarker
+    entered, release = Event(), Event()
+    events = []
+    class Detector:
+        def detect_for_video(self, image, timestamp):
+            entered.set()
+            assert release.wait(5)
+            events.append("inference finished")
+            return SimpleNamespace(hand_landmarks=[], handedness=[])
+        def close(self):
+            events.append("closed")
+    def create(options):
+        events.append("created")
+        return Detector()
+    monkeypatch.setattr(HandLandmarker, "create_from_options", create)
+    images = ImageRegistry()
+    tool = HandTrackingTool(images=images, model_path=Path("provided.task"), mode="video")
+    pending = asyncio.create_task(tool.execute(HandTrackingRequest(image=images.put(_png()), timestamp_us=0)))
+    assert await asyncio.to_thread(entered.wait, 5)
+    pending.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await pending
+    resetting = asyncio.create_task(asyncio.to_thread(tool.reset))
+    try:
+        await asyncio.sleep(0.01)
+        assert events == ["created"]
+    finally:
+        release.set()
+        await resetting
+        await asyncio.to_thread(tool.close)
+    assert events == ["created", "inference finished", "closed", "created", "closed"]

@@ -148,7 +148,7 @@ async def test_turn_cooldown_lasts_until_delivery_or_failure_cleanup(failure):
     selector = SimpleNamespace(circle_selected=False,
                                observe=lambda *_args: ImageRegion(left=0.2, top=0.2, right=0.8, bottom=0.8))
     agent = GestureCaptureAgent(
-        frames=SimpleNamespace(execute=frame), hands=SimpleNamespace(execute=hands),
+        frames=SimpleNamespace(execute=frame), hands=SimpleNamespace(execute=hands, reset=lambda: None),
         capture=None, crop=ImageCropTool(images=images), query=SimpleNamespace(execute=query),
         selector=selector, settings=_settings(),
     )
@@ -205,7 +205,7 @@ async def test_each_gesture_cues_once_per_turn_and_recovers_after_failure(gestur
     feedback = Feedback()
     settings = _settings(hold_s=0.2, release_s=0.2)
     agent = GestureCaptureAgent(
-        frames=SimpleNamespace(execute=frame), hands=SimpleNamespace(execute=hands), capture=None,
+        frames=SimpleNamespace(execute=frame), hands=SimpleNamespace(execute=hands, reset=lambda: None), capture=None,
         crop=ImageCropTool(images=images), query=SimpleNamespace(execute=query),
         selector=RegionSelector(settings), settings=settings, feedback=feedback,
     )

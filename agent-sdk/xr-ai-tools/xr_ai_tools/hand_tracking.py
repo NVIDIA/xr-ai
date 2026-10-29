@@ -9,6 +9,7 @@ import asyncio
 import io
 from pathlib import Path
 from threading import Lock
+from typing import Literal
 
 import numpy as np
 from PIL import Image, ImageOps
@@ -47,6 +48,9 @@ class HandTrackingRequest(StrictRequest):
     image: ImageReference
     """Image selected by a frame, still, or other image tool."""
 
+    timestamp_us: int | None = Field(default=None, ge=0)
+    """Source-frame timestamp in microseconds; required in VIDEO mode, unused in IMAGE mode."""
+
 
 class HandTrackingResult(BaseModel):
     """Hand observations in one source image."""
@@ -64,11 +68,18 @@ class HandTrackingTool(Tool[HandTrackingRequest, HandTrackingResult]):
 
     Install ``hand-tracking`` and provide a locally provisioned Hand Landmarker
     task bundle. No model is downloaded automatically. Independent IMAGE-mode
-    calls avoid sharing temporal state between participants. The tool owns one
-    detector; close it after use. Gestures and image acquisition belong to callers.
+    calls avoid sharing temporal state between participants. VIDEO mode owns one
+    temporal source: use a separate tool per participant/track and reset it when
+    that source changes or becomes stale. VIDEO requests need increasing source
+    timestamps at millisecond resolution; no motion/timestamps are synthesized.
+    The tool owns its detector; close it after use. Gestures and image acquisition
+    belong to callers.
     """
 
-    def __init__(self, *, images: ImageRegistry, model_path: Path, num_hands: int = 2) -> None:
+    def __init__(self, *, images: ImageRegistry, model_path: Path, num_hands: int = 2,
+                 mode: Literal["image", "video"] = "image") -> None:
+        if mode not in ("image", "video"):
+            raise ValueError("hand tracking mode must be image or video")
         if num_hands < 1:
             raise ValueError("num_hands must be positive")
         import mediapipe as mp
@@ -79,30 +90,47 @@ class HandTrackingTool(Tool[HandTrackingRequest, HandTrackingResult]):
         self._images = images
         self._lock = Lock()
         self._closed = False
-        self._detector = HandLandmarker.create_from_options(HandLandmarkerOptions(
+        self._mode = mode
+        self._last_timestamp_ms: int | None = None
+        self._create_detector = HandLandmarker.create_from_options
+        self._options = HandLandmarkerOptions(
             base_options=BaseOptions(model_asset_path=str(model_path)),
-            running_mode=RunningMode.IMAGE, num_hands=num_hands,
-        ))
+            running_mode=RunningMode.VIDEO if mode == "video" else RunningMode.IMAGE, num_hands=num_hands,
+        )
+        self._detector = self._create_detector(self._options)
         super().__init__("track_hands", "Detect hand landmarks in a selected image.",
                          HandTrackingRequest, HandTrackingResult, self._track)
 
     async def _track(self, request: HandTrackingRequest) -> HandTrackingResult:
         source = self._images.resolve(request.image)
-        return await asyncio.to_thread(self._detect, source)
+        return await asyncio.to_thread(self._detect, source, request.timestamp_us)
 
-    def _detect(self, source: ImageInput) -> HandTrackingResult:
+    def _detect(self, source: ImageInput, timestamp_us: int | None = None) -> HandTrackingResult:
         # Cancellation cannot stop native inference. Close and every detector
         # access share this lock so teardown waits for actual native completion.
         with self._lock:
             if self._closed:
                 raise RuntimeError("hand tracking is closed")
+            if self._detector is None:
+                raise RuntimeError("hand tracking detector is unavailable; reset it before retrying")
+            if self._mode == "video":
+                if timestamp_us is None:
+                    raise ValueError("VIDEO hand tracking requires timestamp_us")
+                timestamp_ms = timestamp_us // 1000
+                if self._last_timestamp_ms is not None and timestamp_ms <= self._last_timestamp_ms:
+                    raise ValueError("VIDEO hand tracking timestamps must strictly increase at millisecond resolution")
             if isinstance(source, str) and "://" in source:
                 raise ValueError("hand tracking requires image bytes or a local path")
             with Image.open(io.BytesIO(source) if isinstance(source, bytes) else Path(source)) as image:
                 rgb = np.asarray(ImageOps.exif_transpose(image).convert("RGB"))
-            result = self._detector.detect(self._mp.Image(
+            native_image = self._mp.Image(
                 image_format=self._mp.ImageFormat.SRGB, data=np.ascontiguousarray(rgb),
-            ))
+            )
+            if self._mode == "video":
+                self._last_timestamp_ms = timestamp_ms
+                result = self._detector.detect_for_video(native_image, timestamp_ms)
+            else:
+                result = self._detector.detect(native_image)
             hands = [
                 TrackedHand(
                     landmarks=[HandLandmark(x=p.x, y=p.y, z=p.z) for p in points],
@@ -113,12 +141,28 @@ class HandTrackingTool(Tool[HandTrackingRequest, HandTrackingResult]):
             ]
             return HandTrackingResult(hands=hands, width=rgb.shape[1], height=rgb.shape[0])
 
+    def reset(self) -> None:
+        """Discard temporal state and recreate the detector for a new source.
+
+        This waits for native inference. Call off the event loop during async
+        use; IMAGE mode may also reset its detector. All options are retained.
+        """
+        with self._lock:
+            if self._closed:
+                raise RuntimeError("hand tracking is closed")
+            if self._detector is not None:
+                self._detector.close()
+            self._detector = None
+            self._last_timestamp_ms = None
+            self._detector = self._create_detector(self._options)
+
     def close(self) -> None:
         """Wait for native detection and close; call off the event loop during async use."""
         with self._lock:
             if not self._closed:
                 self._closed = True
-                self._detector.close()
+                if self._detector is not None:
+                    self._detector.close()
 
 
 __all__ = ["HandLandmark", "TrackedHand", "HandTrackingRequest", "HandTrackingResult", "HandTrackingTool"]
