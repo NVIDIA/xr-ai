@@ -13,6 +13,9 @@ users through approved procedures. It shows how to capture images and
 narration, author a guide from the saved evidence, and run that guide with
 spoken instructions and progress checks.
 
+Guide mode is at an early stage of development. For a more comprehensive
+example of procedural guidance, refer to the separate {doc}`tea-making-sample`.
+
 ## Run a demonstration
 
 Run commands from `agent-samples/procedure-capture-guide/`:
