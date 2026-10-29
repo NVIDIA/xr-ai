@@ -1,15 +1,19 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Sample-owned Clef policy adapter for the opt-in public voice boundary."""
 
 from __future__ import annotations
 
 import asyncio
-from collections import OrderedDict
 from dataclasses import dataclass, field
 
 from loguru import logger
 from xr_ai_voice import TranscriptUpdate, VoiceOutputState, VoiceTurnAction
 
-from ._turns import _Policy, _TurnController
+from ._semantic_turns import _Policy, _TurnController
+
+_REQUEST_PREFIX = "semantic:"
 
 
 @dataclass
@@ -23,16 +27,15 @@ class _Source:
     tail_open: bool = False
     pending_pts: int | None = None
     latest_pts: int = 0
-    request_pts: OrderedDict[str, int] = field(default_factory=OrderedDict)
+    request_pts: dict[str, int] = field(default_factory=dict)
+    request_text: dict[str, str] = field(default_factory=dict)
 
 
 class _ClefVoicePolicy:
-    def __init__(
-        self, decisions, policy: _Policy | None = None, *, allow_unspoken_merge: bool = False
-    ):
+    def __init__(self, decisions, policy: _Policy | None = None, *, allow_unspoken_merge: bool = False):
         policy = policy or _Policy()
         self.settle_s = policy.stable_s
-        self._controller = _TurnController(decisions, policy)
+        self._controller = _TurnController(decisions, policy, request_prefix=_REQUEST_PREFIX)
         self._sources: dict[str, _Source] = {}
         self._pending: dict[str, list] = {}
         self._allow_unspoken_merge = allow_unspoken_merge
@@ -64,9 +67,7 @@ class _ClefVoicePolicy:
         if source.prefix and not text.startswith(source.prefix):
             # A correction to already-admitted text cannot silently become a
             # second execution. Keep it visible for acoustic qualification.
-            logger.warning(
-                "post-admission ASR correction needs clarification pid={!r} text={!r}", pid, text
-            )
+            logger.warning("post-admission ASR correction needs clarification pid={!r} text={!r}", pid, text)
             tail = ""
         else:
             tail = text[len(source.prefix) :].strip()
@@ -107,9 +108,23 @@ class _ClefVoicePolicy:
             self._pending.setdefault(state.participant_id, []).extend(actions)
 
     def effects_started(self, participant_id: str, request_id: str) -> None:
-        """Call before starting external effects when opting into unspoken merges."""
-        source = self._sources[participant_id]
-        self._controller.mark_effects(participant_id, source.epoch, request_id)
+        """Authorize this request before effects; reject replaced speech work."""
+        # Opt-in typed input uses SDK-generated UUIDs, outside this namespace.
+        # Keep speech identity recognizable even after its source has reset.
+        if not request_id.startswith(_REQUEST_PREFIX):
+            return
+        source = self._sources.get(participant_id)
+        if source is None or not self._controller.mark_effects(participant_id, source.epoch, request_id):
+            raise asyncio.CancelledError("semantic request was replaced or reset before effects")
+
+    def participant_text(self, participant_id: str, request_id: str, fallback: str) -> str:
+        """Return admitted participant words, excluding synthetic routing context."""
+        source = self._sources.get(participant_id)
+        if not request_id.startswith(_REQUEST_PREFIX):
+            return fallback
+        if source is None or request_id not in source.request_text:
+            raise asyncio.CancelledError("semantic participant text is no longer available")
+        return source.request_text[request_id]
 
     async def decide(self, participant_id: str) -> list[VoiceTurnAction]:
         source = self._sources.get(participant_id)
@@ -130,10 +145,19 @@ class _ClefVoicePolicy:
                     source.request_pts[a.request_id] = (
                         source.pending_pts if source.pending_pts is not None else source.latest_pts
                     )
-                    while len(source.request_pts) > 32:
-                        source.request_pts.popitem(last=False)
+                    source.request_text[a.request_id] = a.text
+
             source.pending_pts = None
-        actions = self._pending.pop(participant_id, []) + classified
+        live = self._controller.live_request_ids(participant_id, source.epoch)
+        for retired in source.request_pts.keys() - live:
+            source.request_pts.pop(retired)
+            source.request_text.pop(retired, None)
+        active = self._controller.active_request_id(participant_id, source.epoch)
+        actions = [
+            action
+            for action in self._pending.pop(participant_id, []) + classified
+            if action.kind != "dispatch" or action.request_id == active
+        ]
         result = []
         for action in actions:
             if action.kind in {"supersede", "interrupt"}:
@@ -158,7 +182,5 @@ class _ClefVoicePolicy:
                 if not self._allow_unspoken_merge:
                     self.effects_started(participant_id, action.request_id)
             elif action.kind == "hold":
-                logger.debug(
-                    "semantic voice held pid={!r} reason={}", participant_id, action.reason
-                )
+                logger.debug("semantic voice held pid={!r} reason={}", participant_id, action.reason)
         return result

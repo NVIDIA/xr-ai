@@ -87,6 +87,7 @@ class VisualAlertAgent(RoutableAgent):
         check_interval_secs: float = 1.0,
         confirm_interval_secs: float = 3.0,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        effects_started: Callable[[str, str], None] | None = None,
     ) -> None:
         """Create the agent.
 
@@ -100,6 +101,7 @@ class VisualAlertAgent(RoutableAgent):
 
         if check_interval_secs < 0 or confirm_interval_secs < check_interval_secs:
             raise ValueError("alert intervals must satisfy 0 <= check_interval_secs <= confirm_interval_secs")
+        self._effects_started = effects_started
         self._frames = frames
         self._images = images
         self._decisions = decisions
@@ -133,6 +135,8 @@ class VisualAlertAgent(RoutableAgent):
         return Admission("accept")
 
     async def answer(self, turn: AgentTurn, *, started: Callable[[], Awaitable[None]]) -> DestinationResult:
+        if self._effects_started is not None:
+            self._effects_started(turn.participant_id, turn.turn_id)
         action = self._take_pending(turn)
         if action is None:
             return _NO_ANSWER

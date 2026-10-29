@@ -51,3 +51,14 @@ compaction_input_budget_bytes: 12000
 # alert_check_interval_secs (0 <= check <= confirm).
 # alert_check_interval_secs: 1.0
 # alert_confirm_interval_secs: 3.0
+
+# Experimental semantic admission using the existing Clef router service.
+# Enable, then launch conversation_example normally. Requires the checked-in
+# required-speaker conversation gate without per-query wake phrases.
+semantic_turns:
+  enabled: false
+  stable_s: 0.15          # unchanged-text delay before classifying; not a silence endpoint
+  min_confidence: 0.8    # experimental; qualify with real ASR/Clef
+  followup_s: 2.0        # completed-response follow-up window
+  independent: queue    # queue or interrupt for unrelated follow-ups
+  decision_timeout_s: 1.0

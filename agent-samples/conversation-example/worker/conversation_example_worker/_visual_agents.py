@@ -39,10 +39,12 @@ class VisualObservationAgent(RoutableAgent):
         *,
         runtime: AgentRuntime,
         output_topic: Topic[ResponseOutput],
+        effects_started: Callable[[str, str], None] | None = None,
     ) -> None:
         self._outputs = ResponseOutputs(
             runtime, output_topic, source="observation", closed_errors=(RuntimeClosedError,)
         )
+        self._effects_started = effects_started
         self._frames = frames
         self._vision = vision
 
@@ -73,6 +75,8 @@ class VisualObservationAgent(RoutableAgent):
             raise
 
     async def _answer(self, turn: AgentTurn, emit: Callable[[str], Awaitable[None]]) -> DestinationResult:
+        if self._effects_started is not None:
+            self._effects_started(turn.participant_id, turn.turn_id)
         try:
             frame = await self._frames.execute(CurrentFrameRequest(participant_id=turn.participant_id))
         except FrameUnavailable:

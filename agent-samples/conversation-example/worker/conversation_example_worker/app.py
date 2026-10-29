@@ -41,6 +41,7 @@ from xr_ai_voicegate import VoiceGateConfig, load_voice_gate_config
 
 from ._alert_agent import VisualAlertAgent
 from ._note_taking import NoteTakingAgent
+from ._semantic_voice import _ClefVoicePolicy
 from ._topics import (
     INTERRUPTED_TOPIC,
     PARTICIPANT_JOINED_TOPIC,
@@ -128,11 +129,17 @@ async def run_app(
         else None
     )
     decisions: DecisionService = make_decision(models, "router")
+    turn_policy = (
+        _ClefVoicePolicy(decisions, config.semantic_turns_policy, allow_unspoken_merge=True)
+        if config.semantic_turns_enabled else None
+    )
+    effects_started = turn_policy.effects_started if turn_policy is not None else None
     vlm = make_vlm(models, "vlm")
     tts = make_tts(models, "tts")
     transport = HubVoiceTransport()
     voice = _voice_agent(
-        config, models, voice_gate, transport, tts=tts, llm=llm, decisions=decisions, vlm=vlm, ready_file=ready_file
+        config, models, voice_gate, transport, tts=tts, llm=llm, decisions=decisions, vlm=vlm, ready_file=ready_file,
+        turn_policy=turn_policy
     )
 
     # Current images remain on the hub path; the worker receives image references.
@@ -162,12 +169,15 @@ async def run_app(
         StreamingImageQueryTool(images=images, vlm=vlm, system_prompt=config.system_prompt),
         runtime=runtime,
         output_topic=VOICE_OUTPUT_TOPIC,
+        effects_started=effects_started,
     )
     notes = NoteTakingAgent(
         decisions,
         runtime=runtime,
         output_topic=VOICE_OUTPUT_TOPIC,
         publish_note=_context_publisher(runtime, NOTES_CONTEXT_TOPIC),
+        participant_text=turn_policy.participant_text if turn_policy is not None else None,
+        effects_started=effects_started,
     )
     alerts = VisualAlertAgent(
         frames,
@@ -180,6 +190,7 @@ async def run_app(
         output_topic=VOICE_OUTPUT_TOPIC,
         check_interval_secs=config.alert_check_interval_secs,
         confirm_interval_secs=config.alert_confirm_interval_secs,
+        effects_started=effects_started,
     )
 
     async def release_frames(participant_id: str) -> None:
@@ -236,6 +247,7 @@ def _voice_agent(
     decisions: DecisionService,
     vlm: VLMService,
     ready_file: Path | None,
+    turn_policy: _ClefVoicePolicy | None = None,
 ) -> VoiceAgent:
     """Build the voice front end; it owns transport, speech handling, readiness, and voice cleanup."""
 
@@ -259,6 +271,7 @@ def _voice_agent(
         participant_left_topic=PARTICIPANT_LEFT_TOPIC,
         interrupted_topic=INTERRUPTED_TOPIC,
         interrupt_on_supersede=True,
+        turn_policy=turn_policy,
     )
 
 

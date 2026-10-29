@@ -683,6 +683,7 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
   - `xr-ai-voice` → [`xr-ai-voice`](agent-sdk/xr-ai-voice/) (local, editable)
   - `xr-ai-voicegate` → [`xr-ai-voicegate`](utils/xr-ai-voicegate/) (local, editable)
   - `loguru>=0.7`
+  - `httpx>=0.27`
   - `pyyaml>=6.0`
 - Optional dependency groups: none
 - Commands:

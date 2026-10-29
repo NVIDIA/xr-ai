@@ -1,7 +1,11 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Replay incremental ASR snapshots through real Clef or a labeled plumbing fixture."""
 
 from __future__ import annotations
 
+# ruff: noqa: E402
 import argparse
 import asyncio
 import json
@@ -10,14 +14,16 @@ import time
 from dataclasses import asdict
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "worker"))
+
+from conversation_example_worker._semantic_turns import _QUESTIONS, _Policy, _TurnController
+from conversation_example_worker.config import load_config
 from xr_ai_models import (
     DecisionAnswer,
     DecisionResponse,
     load_models_config_from_dict,
     make_decision,
 )
-
-from ._turns import _QUESTIONS, _Policy, _TurnController
 
 
 class _FixtureDecisions:
@@ -29,9 +35,7 @@ class _FixtureDecisions:
         answers = {}
         for key, question in questions.items():
             choice = self.labels[key]
-            answers[key] = DecisionAnswer(
-                choice, 1.0, {k: float(k == choice) for k in question.criteria}
-            )
+            answers[key] = DecisionAnswer(choice, 1.0, {k: float(k == choice) for k in question.criteria})
         return DecisionResponse(answers, "scripted-plumbing-only", {}, {})
 
     async def close(self):
@@ -39,7 +43,7 @@ class _FixtureDecisions:
 
 
 async def _run(args) -> int:
-    policy = _Policy(**json.loads(args.policy.read_text())) if args.policy else _Policy()
+    policy = load_config(args.config).semantic_turns_policy
     if args.fixture:
         decisions = _FixtureDecisions()
     else:
@@ -146,12 +150,8 @@ async def _classify(decisions, path: Path, policy: _Policy) -> int:
                 {
                     "case": case["id"],
                     "labels": labels,
-                    "confidence": {
-                        key: answer.confidence for key, answer in result.answers.items()
-                    },
-                    "probabilities": {
-                        key: dict(answer.probabilities) for key, answer in result.answers.items()
-                    },
+                    "confidence": {key: answer.confidence for key, answer in result.answers.items()},
+                    "probabilities": {key: dict(answer.probabilities) for key, answer in result.answers.items()},
                     "model": result.model,
                     "backend": "real-clef",
                     "passed": passed,
@@ -166,45 +166,26 @@ async def _classify(decisions, path: Path, policy: _Policy) -> int:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "events", type=Path, nargs="?", help="JSONL transcript, clock, and output lifecycle events"
-    )
-    parser.add_argument(
-        "--live", action="store_true", help="Run the tool-free microphone prototype"
-    )
-    parser.add_argument(
-        "--models", type=Path, help="Existing llm, router, and tts model configuration"
-    )
-    parser.add_argument(
-        "--voice-gate", type=Path, help="Required-speaker conversation gate configuration"
-    )
+    parser.add_argument("events", type=Path, nargs="?", help="JSONL transcript, clock, and output lifecycle events")
     parser.add_argument(
         "--clef-url",
         default="http://127.0.0.1:8120",
-        help="Replay/classification endpoint; live mode uses the model configuration",
+        help="Replay/classification endpoint",
     )
     parser.add_argument(
-        "--policy", type=Path, help="JSON overrides for the private experimental policy"
+        "--config",
+        type=Path,
+        default=Path(__file__).resolve().parents[1] / "yaml/conversation_example_worker.yaml",
+        help="Conversation worker YAML supplying semantic-turn policy settings",
     )
-    parser.add_argument(
-        "--fixture", action="store_true", help="Use scripted labels; tests plumbing, not Clef"
-    )
-    parser.add_argument(
-        "--classify", action="store_true", help="Score independent cases using real Clef"
-    )
+    parser.add_argument("--fixture", action="store_true", help="Use scripted labels; tests plumbing, not Clef")
+    parser.add_argument("--classify", action="store_true", help="Score independent cases using real Clef")
     args = parser.parse_args()
     if args.fixture and args.classify:
         parser.error("--classify requires real Clef; fixture labels cannot establish model quality")
-    if args.live and (args.fixture or args.classify or args.events is not None):
-        parser.error("--live cannot be combined with replay or fixture inputs")
-    if not args.live and args.events is None:
-        parser.error("supply an events file or --live")
+    if args.events is None:
+        parser.error("supply an events file")
     try:
-        if args.live:
-            from ._live import run_live
-
-            asyncio.run(run_live(args))
-            return
         raise SystemExit(asyncio.run(_run(args)))
     except (ValueError, RuntimeError, OSError) as exc:
         parser.exit(2, f"{exc}\n")

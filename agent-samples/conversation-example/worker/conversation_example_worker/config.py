@@ -9,11 +9,13 @@ Only worker-package modules and repository tests import this module.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+from ._semantic_turns import _Policy
 
 _DEFAULT_PROMPT = Path(__file__).parent / "prompts" / "system.txt"
 
@@ -37,6 +39,8 @@ class WorkerConfig:
     acknowledgment_delay_secs: float | None = None
     alert_check_interval_secs: float = 1.0
     alert_confirm_interval_secs: float = 3.0
+    semantic_turns_enabled: bool = False
+    semantic_turns_policy: _Policy = field(default_factory=_Policy)
 
 
 def _resolve(config_path: Path | None, raw: str) -> Path:
@@ -68,6 +72,17 @@ def load_config(path: Path | None) -> WorkerConfig:
     """Load worker YAML and resolve the sample's fixed model configuration."""
 
     data = _read_config(path)
+    semantic = data.get("semantic_turns", {})
+    if not isinstance(semantic, dict):
+        raise ValueError("semantic_turns must be a mapping")
+    semantic = dict(semantic)
+    enabled = semantic.pop("enabled", False)
+    if type(enabled) is not bool:
+        raise ValueError("semantic_turns.enabled must be a boolean")
+    try:
+        policy = _Policy(**semantic)
+    except TypeError as exc:
+        raise ValueError(f"invalid semantic_turns settings: {exc}") from exc
     idle_timeout = data.get("idle_timeout_secs")
     acknowledgment_delay = data.get("acknowledgment_delay_secs")
     acknowledgment_delay_secs = float(acknowledgment_delay) if acknowledgment_delay is not None else None
@@ -108,4 +123,6 @@ def load_config(path: Path | None) -> WorkerConfig:
         acknowledgment_delay_secs=acknowledgment_delay_secs,
         alert_check_interval_secs=alert_check_interval_secs,
         alert_confirm_interval_secs=alert_confirm_interval_secs,
+        semantic_turns_enabled=enabled,
+        semantic_turns_policy=policy,
     )

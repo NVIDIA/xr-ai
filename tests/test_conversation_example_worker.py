@@ -35,7 +35,7 @@ from xr_ai_models import (
     load_models_config,
 )
 from xr_ai_runtime import Agent, AgentRuntime, Topic, subscribe
-from xr_ai_voice import VOICE_OUTPUT_TOPIC, VoiceAgent
+from xr_ai_voice import VOICE_OUTPUT_TOPIC, TranscriptUpdate, VoiceAgent, VoiceOutputState
 from xr_ai_voice import _runtime as voice_runtime_module
 from xr_ai_voice._session import _VoiceSession as VoiceSession
 from xr_ai_voice._types import VoiceQuery
@@ -51,6 +51,7 @@ from conversation_example_worker import app  # noqa: E402  # pyright: ignore[rep
 from conversation_example_worker._note_taking import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     NoteTakingAgent,
 )
+from conversation_example_worker._semantic_turns import _Policy  # noqa: E402
 from conversation_example_worker._topics import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     INTERRUPTED_TOPIC,
     PARTICIPANT_JOINED_TOPIC,
@@ -259,6 +260,12 @@ class _RouteDecisions:
         self.close_calls += 1
 
     async def decide(self, state, _questions, *, timeout=None):
+        if "disposition" in _questions:
+            return DecisionResponse(
+                {key: DecisionAnswer(choice, 1.0, {k: float(k == choice) for k in _questions[key].criteria})
+                 for key, choice in {"disposition": "ready", "relation": "separate"}.items()},
+                "fake", {}, {},
+            )
         self.states.append(state)
         self.questions.append(_questions)
         choice = self.destinations.pop(0) if len(self.destinations) > 1 else self.destinations[0]
@@ -1680,13 +1687,17 @@ async def test_acknowledgment_publish_does_not_affect_the_answer(fail_acknowledg
     assert all(message.final and message.response_id is None for message in acknowledgments)
 
 
+@pytest.mark.parametrize("semantic_turns_enabled", [False, True])
 async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     monkeypatch,
     tmp_path,
+    semantic_turns_enabled,
 ) -> None:
     config = replace(
         load_config(_SAMPLE_DIR / "yaml" / "conversation_example_worker.yaml"),
         acknowledgment_delay_secs=None,
+        semantic_turns_enabled=semantic_turns_enabled,
+        semantic_turns_policy=_Policy(stable_s=0),
     )
     ready_file = tmp_path / "ready"
     stt = _Service()
@@ -1747,7 +1758,11 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     worker_log.parent.mkdir()
     monkeypatch.setattr(app, "setup_logging", lambda _name: worker_log)
     monkeypatch.setattr(app, "load_models_config", lambda path: path)
-    monkeypatch.setattr(app, "load_voice_gate_config", lambda _path: VoiceGateConfig())
+    real_gate_loader = app.load_voice_gate_config
+    monkeypatch.setattr(
+        app, "load_voice_gate_config",
+        lambda path: real_gate_loader(path) if semantic_turns_enabled else VoiceGateConfig(),
+    )
     monkeypatch.setattr(voice_runtime_module, "make_stt", lambda _models, _name: stt)
     monkeypatch.setattr(app, "make_llm", lambda _models, _name: llm)
     monkeypatch.setattr(app, "make_decision", lambda _models, _name: decisions)
@@ -1774,27 +1789,19 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
                 await runtimes[0].publish(
                     app.NOTES_CONTEXT_TOPIC, ConversationContextUpdate(text=text), participant_id=participant_id
                 )
-            assert (
-                await handler(
-                    VoiceQuery(
-                        participant_id="alice",
-                        text="What is in front of me?",
-                        timestamp_us=123,
-                        interrupted_output=False,
-                    )
-                )
-                is None
-            )
+            async def submit(text, pts, segment):
+                if session.turn_policy is not None:
+                    session.turn_policy.update(TranscriptUpdate("alice", "source", segment, 0, text, pts))
+                    action, = await session.turn_policy.decide("alice")
+                    assert action.kind == "submit" and action.text == text
+                    await handler(VoiceQuery("alice", action.text, pts, request_id=action.request_id))
+                else:
+                    await handler(VoiceQuery("alice", text, pts))
+
+            await submit("What is in front of me?", 123, 0)
             await asyncio.wait_for(response_complete.wait(), 1.0)
             response_complete.clear()
-            await handler(
-                VoiceQuery(
-                    participant_id="alice",
-                    text="What should I remember?",
-                    timestamp_us=124,
-                    interrupted_output=False,
-                )
-            )
+            await submit("What should I remember?", 124, 1)
             await asyncio.wait_for(response_complete.wait(), 1.0)
             await options["on_participant_left"]("alice")
 
@@ -1814,6 +1821,9 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
             async def consume() -> None:
                 text = response if isinstance(response, str) else "".join([chunk async for chunk in response])
                 responses.append((participant_id, text, request_id, pts_us))
+                if session.turn_policy is not None:
+                    session.turn_policy.output(VoiceOutputState(participant_id, request_id, "committed"))
+                    session.turn_policy.output(VoiceOutputState(participant_id, request_id, "done"))
                 response_complete.set()
 
             response_tasks.append(asyncio.create_task(consume()))
@@ -1828,6 +1838,12 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
 
     await app.run_app(config, ready_file=ready_file)
 
+    assert (sessions[0].turn_policy is not None) == semantic_turns_enabled
+    if semantic_turns_enabled:
+        assert sessions[0].turn_policy._controller._decisions is decisions
+        for name in ("observation", "notes", "alerts"):
+            assert wired_front_ends[0][name]._effects_started.__self__ is sessions[0].turn_policy
+        assert [row[2] for row in responses] == ["semantic:source:1", "semantic:source:2"]
     assert len(wired_front_ends) == 1
     assert set(wired_front_ends[0]) == {"conversation", "observation", "alerts", "notes"}
     assert isinstance(wired_front_ends[0]["conversation"], Conversation)
@@ -1852,7 +1868,8 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     assert llm.health_calls >= 1
     assert decisions.health_calls >= 1
     assert vlm.stream_calls == []
-    assert stt.close_calls == tts.close_calls == vlm.close_calls == llm.close_calls == decisions.close_calls == 1
+    assert stt.close_calls == (0 if semantic_turns_enabled else 1)
+    assert tts.close_calls == vlm.close_calls == llm.close_calls == decisions.close_calls == 1
     assert transport.shutdown_calls == 1
     assert sessions[0].text_topic == "vlm.response"
     assert _CurrentFrameTool.instances[0].kwargs["endpoint"] is transport.endpoint
@@ -2075,3 +2092,47 @@ async def test_conversation_example_agent_handles_global_interruption_event() ->
             source="voice.interruption",
         )
         await asyncio.wait_for(cancelled.wait(), 1.0)
+
+
+@pytest.mark.parametrize(
+    "settings",
+    [True, {"enabled": "yes"}, {"enabled": True, "independent": "merge"}, {"enabled": True, "unknown": 1}],
+)
+def test_semantic_turn_config_rejects_invalid_opt_in(tmp_path, settings):
+    path = tmp_path / "worker.yaml"
+    path.write_text(yaml.safe_dump({"semantic_turns": settings}))
+    with pytest.raises(ValueError):
+        load_config(path)
+
+
+async def test_notes_mark_effect_before_saving_participant_text():
+    marked = []
+
+    class Notes(NoteTakingAgent):
+        async def _save_note(self, participant_id, text):
+            assert marked == [(participant_id, "note")]
+            return await super()._save_note(participant_id, text)
+
+    notes = Notes(
+        _NoteDecisions("capture"), runtime=CaptureRuntime(), output_topic=VOICE_OUTPUT_TOPIC,
+        effects_started=lambda pid, request: marked.append((pid, request)),
+    )
+    turn = AgentTurn("alice", "note", "Remember the red panel.")
+    assert (await notes.admit(turn, focused=True)).disposition == "accept"
+    await _answer(notes, turn, emit=_ignore)
+    assert notes._read_back("alice") == "Your notes: Remember the red panel."
+
+
+async def test_observation_marks_effect_before_camera_acquisition():
+    marked = []
+
+    class Frames(_ConversationFrames):
+        async def execute(self, request):
+            assert marked == [(request.participant_id, "view")]
+            return await super().execute(request)
+
+    observation = VisualObservationAgent(
+        Frames(), _StreamingImageQueryTool(), runtime=CaptureRuntime(), output_topic=VOICE_OUTPUT_TOPIC,
+        effects_started=lambda pid, request: marked.append((pid, request)),
+    )
+    await _answer(observation, AgentTurn("alice", "view", "What is there?"), emit=_ignore)

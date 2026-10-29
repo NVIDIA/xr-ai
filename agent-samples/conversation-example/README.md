@@ -74,6 +74,13 @@ Alternatively, run the source file directly after synchronization:
 uv run main.py
 ```
 
+To try experimental semantic voice turns, set `semantic_turns.enabled: true` in
+`yaml/conversation_example_worker.yaml`, then use the same `uv run conversation_example`
+command. This retains general conversation, observation, notes and alerts, sharing
+the existing Clef service. The option defaults to false. See the
+[semantic-turn guide](https://nvidia.github.io/xr-ai/latest/guides/semantic-turn-prototype.html)
+for policy settings, replay commands and qualification limits.
+
 Session recording is disabled by default. To record participant video, bidirectional
 audio, and data-channel traffic, opt in explicitly:
 

@@ -5,11 +5,14 @@
 
 # Semantic-turn prototype
 
-The application under `apps/semantic-turn-prototype/` provides a replay harness
-and a tool-free live microphone worker. Both use the same sample-owned Clef
-turn controller. The live worker uses the opt-in `VoiceAgent(turn_policy=...)`
-extension and existing speaker-ASR, Clef, LLM, and TTS services. Existing voice
-behavior is unchanged when the extension is omitted.
+The conversation sample supports opt-in semantic turn admission using its existing
+Clef client, router, destinations, hub, and voice pipeline. Set
+`semantic_turns.enabled: true` in
+`agent-samples/conversation-example/yaml/conversation_example_worker.yaml`,
+then launch `conversation_example` normally. Omitting the option or leaving it
+false preserves the existing voice path. The controller and policy adapter live
+in private modules of `conversation_example_worker`; there is no separate live
+worker to start.
 
 This is an experimental implementation. Scripted tests validate orchestration;
 real Clef accuracy, acoustic behavior, tail latency, and target-GPU memory remain
@@ -83,7 +86,8 @@ Pipecat frame types are exposed to the application.
 
 `UserQuery.request_id`, when present, is the identity a response must answer;
 otherwise consumers use the runtime message ID. The router honors this field.
-The tool-free live worker demonstrates the same rule without the router.
+The conversation sample routes policy-owned identities through the same router
+and response path used by ordinary input.
 
 {py:class}`~xr_ai_voice.VoiceOutputState` reports `committed`, `done`, or
 `interrupted` for the matching request. `committed` means the first text was
@@ -91,10 +95,17 @@ committed to TTS, not that the headset heard it. `done` means transport output
 was drained, not a measured client playback acknowledgment. Treat commitment
 conservatively as non-replayable.
 
-The sample adapter defaults to non-replayable requests. A tool sample that
-explicitly opts into unspoken merging must call its `effects_started` method
-before starting an external side effect. The live demonstration opts into
-merging because it has no tools and cannot perform external actions.
+The conversation sample allows unspoken general-conversation generation to be
+combined with a continuation. Sample-owned callbacks mark notes and alert
+operations before their answer path starts and mark camera acquisition before
+requesting a frame. The synchronous pre-effect guard rejects replaced or reset speech requests even
+if SDK interruption delivery is still pending. Marks invalidate in-flight merge
+decisions. Notes use a separate bounded raw-input lookup so routing context and
+earlier intent cannot be saved as participant-authored note text. Once an
+effect starts, follow-ups carry only new intent plus labeled context, avoiding
+automatic replay of the original action. Cancellation cannot undo a saved note,
+camera request, or alert that has already started. Typed input bypasses and
+resets the speech policy; marking a typed turn does not create speech state.
 
 ## Cumulative ASR and recovery
 
@@ -120,20 +131,32 @@ revoke pending authority. Late query frames and late output markers are checked
 against request/source identity. Shutdown closes admission, resets policy state,
 and cancels/awaits the owned decision worker before closing model clients.
 
-## Running the live worker
+## Running the conversation sample
 
-Use the commands in `apps/semantic-turn-prototype/README.md`, with that directory
-as the working directory. Start the existing conversation model stack and hub,
-then run the prototype instead of the normal conversation worker. Do not run
-two voice workers against the same participant subscriptions for this test.
-Connect the existing browser or XR client and use the configured conversation
-start phrase. The worker itself does not download or start model services.
+From `agent-samples/conversation-example/`, start the normal model stack for your
+GPU profile, enable `semantic_turns.enabled` in the worker YAML, then start the
+sample:
 
-The convenience model stack retains the selected sample GPU profile. This
-prototype reuses its Clef endpoint and adds no draft or turn-detection checkpoint.
-The stack may load Cosmos even though this tool-free worker does not use it;
-that allocation remains part of the selected profile. Other samples without
-Clef need an additional service and a separate memory assessment.
+```bash
+uv --config-file ../../uv.toml run --project model-servers conversation_example_model_servers --gpu-profile 96G_blackwell
+uv --config-file ../../uv.toml run conversation_example
+```
+
+Choose the existing profile for your hardware. The normal hub, Clef router,
+general conversation, observation, notes, and alerts all remain available. Open
+the hub's client URL and say the configured conversation start phrase. The same
+sample command supports ordinary typed queries and optional session recording.
+Disable the option and restart to return to acoustic admission.
+
+The worker YAML also holds stability, confidence, follow-up-window, timeout and
+independent-query policy settings. These are experimental values, not measured
+latency guarantees. Semantic admission shares Clef with routing, notes and alert
+checks; contention must be measured under representative load.
+
+The selected model profile is unchanged. This integration reuses Clef and adds
+no draft or turn-detection checkpoint. All profile allocations, including
+Cosmos for observation and alerts, remain part of the GPU budget. Other samples
+without Clef need an additional service and a separate memory assessment.
 
 ## Replay and model evaluation
 
@@ -142,6 +165,19 @@ participant has a unique source epoch. Text events supply monotonically
 increasing segment IDs, revisions and observation times, with the complete
 current segment snapshot. Response events identify the request and its stage.
 The replay prints admission actions rather than executing application work.
+
+From the conversation sample directory, replay the checked-in scenarios using
+the same policy settings as the worker:
+
+```bash
+uv --config-file ../../uv.toml run --project worker python eval/semantic_turns.py eval/semantic-turn-flows.jsonl --fixture
+uv --config-file ../../uv.toml run --project worker python eval/semantic_turns.py eval/semantic-turn-classification.jsonl --classify
+```
+
+The second command requires real Clef; it does not start or download services.
+The worker YAML supplies policy values even when its live opt-in is disabled.
+Controller, adapter, effect-boundary and sample-composition tests are under
+`tests/` and run in the normal CPU CI matrix.
 
 The fixture backend is labeled `scripted-plumbing-only` and validates
 orchestration. Removing `--fixture` calls real Clef through the existing typed

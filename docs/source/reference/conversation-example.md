@@ -18,6 +18,19 @@ Pocket TTS and the `vlm.response` data topic. Refer to the {doc}`quickstart
 </getting_started/quickstart>` for client setup and the sample README for run
 commands.
 
+## Optional semantic voice turns
+
+The worker YAML's `semantic_turns.enabled` option selects transcript-based Clef
+admission through the existing voice pipeline. It is disabled by default. With
+it enabled, incomplete speech can span long pauses, filler-only candidates are
+ignored, and quick follow-ups can combine, queue or interrupt according to the
+sample policy. All four destinations remain available. Effect tracking prevents
+automatic replay of notes, alerts and camera requests after they start.
+
+See {doc}`/guides/semantic-turn-prototype` for activation, configuration, replay,
+contracts and qualification limits. The existing Clef service is shared; no new
+model checkpoint is loaded.
+
 ## Runtime boundary
 
 `AgentRouter` and `VoiceAgent` are registered directly with the same

@@ -1,12 +1,20 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Boundary tests use scripted classifications, not claimed Clef accuracy."""
 
 from __future__ import annotations
 
+# ruff: noqa: E402
 import asyncio
 import math
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "agent-samples/conversation-example/worker"))
 
 import pytest
-from semantic_turn_prototype._turns import _Policy, _TurnController
+from conversation_example_worker._semantic_turns import _Policy, _TurnController
 from xr_ai_models import DecisionAnswer, DecisionResponse
 
 
@@ -46,9 +54,7 @@ def _setup(**kwargs):
     return controller, decisions
 
 
-def _feed(
-    controller, text="Open the panel", *, segment=0, revision=0, now=1, who="a", epoch="session"
-):
+def _feed(controller, text="Open the panel", *, segment=0, revision=0, now=1, who="a", epoch="session"):
     return controller.feed(who, epoch, segment=segment, revision=revision, text=text, now=now)
 
 

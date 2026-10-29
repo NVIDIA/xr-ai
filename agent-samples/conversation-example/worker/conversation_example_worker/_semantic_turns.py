@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Transcript-driven turn admission; the application executes returned actions."""
 
 from __future__ import annotations
@@ -119,7 +122,8 @@ class _TurnController:
     the injected DecisionService.
     """
 
-    def __init__(self, decisions: DecisionService, policy: _Policy | None = None) -> None:
+    def __init__(self, decisions: DecisionService, policy: _Policy | None = None, *, request_prefix: str = "") -> None:
+        self._request_prefix = request_prefix
         self._decisions = decisions
         self._policy = policy or _Policy()
         self._sessions: dict[str, _Session] = {}
@@ -144,11 +148,22 @@ class _TurnController:
         self._closed = True
         self._sessions.clear()
 
-    def mark_effects(self, participant: str, epoch: str, request_id: str) -> None:
+    def live_request_ids(self, participant: str, epoch: str) -> set[str]:
         s = self._session(participant, epoch)
-        if s.active is not None and s.active.id == request_id and not s.active.effects_started:
+        return {q.id for q in s.queued} | ({s.active.id} if s.active is not None else set())
+
+    def active_request_id(self, participant: str, epoch: str) -> str | None:
+        active = self._session(participant, epoch).active
+        return active.id if active is not None else None
+
+    def mark_effects(self, participant: str, epoch: str, request_id: str) -> bool:
+        s = self._session(participant, epoch)
+        if s.active is None or s.active.id != request_id or s.active.stage == "done":
+            return False
+        if not s.active.effects_started:
             s.active.effects_started = True
             s.revision += 1
+        return True
 
     def _session(self, participant: str, epoch: str) -> _Session:
         s = self._sessions.get(participant)
@@ -184,9 +199,7 @@ class _TurnController:
         # Refuse the entire candidate on overflow. Releasing its old prefix
         # would silently drop a constraint from the rejected update.
         size = sum(len(v[1]) + 1 for k, v in s.segments.items() if k != segment) + len(text)
-        if size > self._policy.max_chars or (
-            old is None and len(s.segments) >= self._policy.max_pending_segments
-        ):
+        if size > self._policy.max_chars or (old is None and len(s.segments) >= self._policy.max_pending_segments):
             s.blocked = True
             s.revision += 1
             return [_Action("hold", participant, reason="overflow_requires_reset")]
@@ -264,12 +277,13 @@ class _TurnController:
         revision = s.revision
         s.attempted = revision
         # Bound total state, rather than truncating a question's meaning.
-        if len(text) + (len(previous.text) if previous else 0) > self._policy.max_chars:
+        if len(text) + (len(previous.text) + len(previous.previous_text) if previous else 0) > self._policy.max_chars:
             s.blocked = True
             return [_Action("hold", participant, reason="context_overflow_requires_reset")]
         state = {
             "candidate": text,
             "previous_request": previous.text if previous else "",
+            "previous_context": previous.previous_text if previous else "",
             "response_stage": previous.stage if previous else "none",
             "effects_started": previous.effects_started if previous else False,
             "gap_s": max(0, s.changed_at - anchor) if previous else None,
@@ -311,13 +325,9 @@ class _TurnController:
             self._consume(s)
             return [_Action("ignore", participant, text=text, reason="filler_only")]
         if disposition.choice == "stop":
-            actions = [
-                _Action("cancel", participant, q.id, reason="explicit_stop") for q in s.queued
-            ]
+            actions = [_Action("cancel", participant, q.id, reason="explicit_stop") for q in s.queued]
             if s.active:
-                actions.append(
-                    _Action("interrupt", participant, s.active.id, reason="explicit_stop")
-                )
+                actions.append(_Action("interrupt", participant, s.active.id, reason="explicit_stop"))
             self._consume(s)
             s.active = s.previous = None
             s.queued.clear()
@@ -325,27 +335,22 @@ class _TurnController:
         eligible = previous is not None and (
             previous.stage != "done" or s.changed_at - anchor <= self._policy.followup_s
         )
-        if eligible and (
-            relation.confidence < self._policy.min_confidence or relation.choice == "uncertain"
-        ):
+        if eligible and (relation.confidence < self._policy.min_confidence or relation.choice == "uncertain"):
             return [_Action("hold", participant, reason="uncertain_followup_relation")]
         continuation = eligible and relation.choice == "continuation"
         safe_replace = bool(
-            continuation
-            and previous
-            and previous.stage in {"preparing", "queued"}
-            and not previous.effects_started
+            continuation and previous and previous.stage in {"preparing", "queued"} and not previous.effects_started
         )
         if s.active and len(s.queued) >= self._policy.max_queue and not safe_replace:
             return [_Action("hold", participant, reason="queue_capacity")]
         self._next_request += 1
-        request = _Request(f"{epoch}:{self._next_request}", text, now)
+        request = _Request(f"{self._request_prefix}{epoch}:{self._next_request}", text, now)
         actions = []
         if safe_replace:
             request.text = previous.text + "\n" + text
-            actions.append(
-                _Action("supersede", participant, previous.id, reason="unspoken_continuation")
-            )
+            request.previous_request_id = previous.previous_request_id
+            request.previous_text = previous.previous_text
+            actions.append(_Action("supersede", participant, previous.id, reason="unspoken_continuation"))
             if s.queued:
                 request.stage = "queued"
                 s.queued[-1] = request
@@ -355,24 +360,22 @@ class _TurnController:
             # Only the new words are a new intent. Old words are context, so
             # effectful tools are never automatically replayed by this controller.
             request.previous_request_id = previous.id
-            request.previous_text = previous.text
+            request.previous_text = (
+                previous.previous_text + "\n" + previous.text if previous.previous_text else previous.text
+            )
             if s.queued:
                 request.stage = "queued"
                 s.queued.append(request)
             else:
                 if s.active:
-                    actions.append(
-                        _Action("interrupt", participant, s.active.id, reason="contextual_followup")
-                    )
+                    actions.append(_Action("interrupt", participant, s.active.id, reason="contextual_followup"))
                 s.active = request
         elif s.active and self._policy.independent == "queue":
             request.stage = "queued"
             s.queued.append(request)
         else:
             if s.active:
-                actions.append(
-                    _Action("interrupt", participant, s.active.id, reason="independent_query")
-                )
+                actions.append(_Action("interrupt", participant, s.active.id, reason="independent_query"))
             s.active = request
         self._consume(s)
         if request.stage == "queued":
