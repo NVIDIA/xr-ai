@@ -1,0 +1,103 @@
+xr_ai_web_events
+================
+
+.. py:module:: xr_ai_web_events
+
+.. autoapi-nested-parse::
+
+   Live, participant-aware browser views over typed agent events.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   xr_ai_web_events.WEB_EVENT_TOPIC
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   xr_ai_web_events.WebEventsAgent
+   xr_ai_web_events.WebEvent
+
+
+Package Contents
+----------------
+
+.. py:class:: WebEventsAgent(*, host: str = '127.0.0.1', port: int = 8092, max_events: int = 5000, title: str = 'XR AI Agent Events')
+
+
+
+   Serve selected runtime events in a bounded participant-aware web view.
+
+
+   .. py:property:: running
+      :type: bool
+
+
+      Whether the HTTP server is currently running.
+
+
+
+   .. py:property:: url
+      :type: str
+
+
+      Return the configured or currently bound HTTP URL.
+
+
+
+   .. py:method:: start() -> None
+      :async:
+
+
+      Bind the HTTP listener and start serving the viewer.
+
+
+
+   .. py:method:: stop() -> None
+      :async:
+
+
+      Stop the HTTP listener without discarding retained events.
+
+
+
+.. py:data:: WEB_EVENT_TOPIC
+
+   Shared runtime topic consumed by :class:`WebEventsAgent`.
+
+
+.. py:class:: WebEvent
+
+
+
+   One application event selected for the live browser view.
+
+
+   .. py:attribute:: topic
+      :type:  str
+
+      Stable presentation topic used to group the event in the browser.
+
+
+
+   .. py:attribute:: payload
+      :type:  dict[str, pydantic.JsonValue]
+
+      JSON-compatible application payload, limited to 16 KiB when serialized.
+
+
+
+   .. py:attribute:: title
+      :type:  str | None
+
+      Optional human-readable title for the presentation topic.
+
+
+
