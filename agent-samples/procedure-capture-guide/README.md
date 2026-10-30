@@ -9,11 +9,43 @@ Record narrated demonstrations with spoken start and stop commands. The sample
 saves sampled frames, visual captions, and narration as local evidence packets.
 Guide mode provides spoken guidance and evidence checks for an approved local guide.
 
-To generate a guide from a captured packet, start with
-`guide-generation-skills/SKILL.md`, which coordinates drafting, evaluation, and
-revision. Refer to the
+## From capture to guide
+
+A capture is raw evidence, not a guide. Open `artifacts/sessions/<session-id>/summary.md`
+first: its **Combined timeline** lists what was heard (narration) and seen (captions)
+in time order. The two can disagree, and nothing reconciles them yet; that happens
+when a coding agent drafts the guide. Turning a capture into a runnable guide takes
+four steps, all run from the repository root:
+
+1. **Draft.** The guide-generation skills are instructions for an external coding
+   agent such as Claude Code, not a script. Start the agent in the repository and ask:
+
+   ```text
+   Read agent-samples/procedure-capture-guide/guide-generation-skills/SKILL.md and
+   follow it to draft a guide from
+   agent-samples/procedure-capture-guide/artifacts/sessions/<session-id>/packet.json.
+   Name the guide <slug>-guide and leave task.status draft.
+   ```
+
+   It writes `<slug>-guide/guide.yaml` and `review.md` beside this README. `review.md`
+   records how narration and captions were reconciled, corrections, and open
+   questions for you.
+2. **Validate.**
+
+   ```bash
+   uv run --project agent-samples/procedure-capture-guide/worker python -m procedure_capture_guide_worker._validate_guide agent-samples/procedure-capture-guide/<slug>-guide/guide.yaml
+   ```
+
+3. **Evaluate.** With the model servers running, replay the captured frames through the
+   real guide runtime. This writes `evaluation.md` and run artifacts; the agent
+   workflow does this and revises the draft from the findings.
+4. **Approve and run.** Read `review.md` and `evaluation.md`, resolve the questions,
+   set `task.status: approved` by hand, then, from this directory,
+   `uv run main.py --mode guide <slug>-guide/guide.yaml` and say **start guide**.
+
+Refer to the
 [guide-generation reference](https://nvidia.github.io/xr-ai/latest/reference/procedure-capture-guide.html#generate-a-draft-guide)
-for the authoring request, validation, and human review workflow.
+for the full request, the evaluation command, and the human-review checklist.
 
 ## Directory map
 
