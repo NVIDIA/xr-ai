@@ -67,7 +67,10 @@ these commands to record another task without reconnecting. The worker announces
 and finalization. On connection, the worker explains these commands once.
 Other speech while idle does not trigger a reply.
 
-To choose where packets are saved, launch with `uv run main.py --mode capture --output-root PATH`.
+Recorded procedures are saved under
+`procedure-capture-guide/artifacts/sessions/<session-id>/` (frames, captions,
+transcript, and summary). To choose another location, launch with
+`uv run main.py --mode capture --output-root PATH`.
 
 To test guide mode with the included chamomile tea example:
 
