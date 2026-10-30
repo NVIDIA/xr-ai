@@ -116,7 +116,7 @@ and test discovery exclude that top-level directory.
 
 When preparing a repository sample, refer to
 [Adding a sample](docs/source/guides/adding-a-sample.md) and the
-[`simple-vlm-example`](agent-samples/simple-vlm-example/README.md) reference.
+[`conversation-example`](agent-samples/conversation-example/README.md) reference.
 
 ## Change contract
 

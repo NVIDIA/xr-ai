@@ -94,8 +94,10 @@ uv sync
 uv run conversation_example
 ```
 
-Open the authenticated web-client URL printed by DeviceIOHub, allow microphone
-and camera access, and connect. After the agent reports ready, say
+Open the authenticated web-client URL printed by DeviceIOHub and select
+**Connect**. Choose **Live video** or **On-demand images** under **Camera Mode**,
+then select **Start Microphone** and grant camera and microphone access when
+prompted. After the agent reports ready, say
 “Hey agent, let's start talking,” then ask “What is in front of me?” while
 pointing the camera at an object. Typed questions also work without opening a
 voice conversation. Refer to {doc}`clients` for other client platforms.

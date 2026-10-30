@@ -5,14 +5,10 @@
 
 # Migration notes through v0.3.0-beta
 
-## Overview
-
-Archived migration instructions for upgrades from earlier development versions
-through `v0.3.0-beta`. Commands and API behavior apply to that historical
-release.
-
-These notes were not separated by source release. Refer to
-{doc}`../migrations` for the current
+These cumulative notes cover upgrades from earlier development versions through
+`v0.3.0-beta`. They retain the instructions published with that release; the
+entries were not separated by source release. Commands and API behavior apply
+to that historical release. Refer to {doc}`../migrations` for the current
 transition and {doc}`../migration-history` for other archived guides.
 
 ## Swift microphone cleanup errors

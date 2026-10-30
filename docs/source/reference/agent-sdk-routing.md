@@ -7,10 +7,9 @@
 
 ## Overview
 
-An assistant that can chat, inspect the scene, and take notes needs to decide
-which capability should handle each request. Routing lets specialized agents
-share one interaction and keep a task in focus, so a multi-step activity can
-continue across user turns.
+Route user turns among specialized agents for conversation, scene inspection,
+or note-taking. Routing lets those agents share one interaction and keep a
+task in focus, so a multi-step activity can continue across user turns.
 
 ## Route a turn
 

@@ -50,10 +50,10 @@ async with runtime:
 
 `VoiceAgent` marks its worker ready after its configured dependency checks pass
 and the voice transport starts; DeviceIOHub owns aggregated client readiness.
-`VoiceAgent` also owns hub transport, VAD and
-STT, voice gating, typed text ingress, TTS, signals, pipeline cancellation,
-and cleanup. Its media session remains private. Applications that need a shared
-public `HubVoiceTransport` construct and inject one explicitly.
+`VoiceAgent` also owns hub transport, VAD and STT, voice gating, typed text
+ingress, TTS, signals, pipeline cancellation, and cleanup. Its media session
+remains private. Applications that need a shared public `HubVoiceTransport`
+construct and inject one explicitly.
 
 Set utterance-ending silence once through `VadConfig.silence_duration` passed
 to `VoiceAgent`. It controls the active backend: Silero VAD for batch STT, or

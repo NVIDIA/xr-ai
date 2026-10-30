@@ -7,7 +7,7 @@
 
 ## Overview
 
-Use this reference for applications that identify objects in a camera view,
+Use this reference for applications that identify marked objects in a camera view,
 track observations about each object over time, and notify users of changes.
 The sample uses marked lab instruments to demonstrate how identification,
 visual readings, state tracking, and notifications work together.

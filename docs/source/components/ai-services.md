@@ -14,10 +14,9 @@ endpoints as your application develops.
 
 ## Available services
 
-Multiple reusable inference and typed capability services are available as
-launchable peers of `services/device-io-hub/`. Model HTTP is encapsulated by
-the typed factories in `xr-ai-models`; workers must not add vendor SDKs or
-hand-written HTTP clients.
+Launch these inference and typed capability services alongside
+`services/device-io-hub/`. Model HTTP stays inside `xr-ai-models`; workers must
+not add vendor SDKs or hand-written HTTP clients.
 
 | Server | Command | Port | Model | Backend |
 |---|---|---|---|---|

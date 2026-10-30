@@ -272,11 +272,21 @@ samples. No sample launcher option or model-serving process is needed.
 
 The conversation example also requires its Clef `router` entry. Keep that entry
 when replacing the inference roles: the NIM reference profile does not provide
-a replacement decision service. Keep Clef running locally or configure an
-independently operated compatible endpoint. Refer to {doc}`/reference/clef-flash`
-for service operation. Validate only the NIM roles with `smoke_test.py`; the
-smoke check rejects a profile containing `router`. The worker separately checks
-the decision service's health during startup.
+a replacement decision service. Stopping the conversation model stack also
+stops its local Clef service. After stopping the stack, restart Clef separately
+from the repository root before starting the conversation worker:
+
+```bash
+uv --config-file uv.toml run --project services/clef-server clef_server \
+  --config services/clef-server/clef_server.yaml
+```
+
+Alternatively, configure the `router` entry for an independently operated
+compatible endpoint. Keep its address aligned with the service configuration;
+refer to {doc}`/reference/clef-flash` for operation and readiness. Validate only
+the NIM roles with `smoke_test.py`; the smoke check rejects a profile containing
+`router`. The worker separately checks the decision service's health during
+startup.
 
 Use the worker's selected `voice_gate_yaml` path for `gate_path` (Tea making
 defaults to `voice_gate.yaml`). Disable speaker ASR in that file, and back up

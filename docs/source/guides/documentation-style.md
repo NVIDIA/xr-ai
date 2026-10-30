@@ -10,7 +10,6 @@ and reStructuredText. Match the surrounding document and keep edits scoped.
 When maintainers adopt a repository-wide convention, update this reference in
 the same change. Document scoped exceptions in the affected content.
 
-<a id="opening-summaries"></a>
 ## Opening overviews
 
 Long reader-facing narrative pages open with an **Overview** section suited

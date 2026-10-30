@@ -7,10 +7,10 @@
 
 ## Overview
 
-Your agent needs access to a user's camera and microphone and a way to send
-responses back to that user. DeviceIOHub provides that shared connection
-across supported clients, allowing several agents to work with the same
-session while keeping each participant's media and responses separate.
+DeviceIOHub receives camera, microphone, and data input from supported clients
+and delivers agent responses to the originating participant. Several agents
+can share the same session while each participant's media and responses stay
+separate.
 
 ## Run DeviceIOHub
 
