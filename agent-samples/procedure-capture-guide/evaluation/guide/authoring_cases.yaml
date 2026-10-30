@@ -43,7 +43,7 @@
     - "Handle trigger question includes clipping/attachment, front, and notch facing up."
     - "Does not turn camera adjustment into a step or copy the example workpiece task."
     - "Records stale-caption conflict and unavailable-image review gap with actual source IDs."
-    - "Clearly instructed observable assembly results retain normal live ready gates, not disabled gates solely for missing source images."
+    - "Clearly instructed observable assembly results retain normal LLM-judged visual checks, not disabled gates solely for missing source images."
     - "Recorded replay distinguishes text/state audit from unavailable image tests; no invented visual pass results."
 
 - id: prerequisite_count
@@ -84,7 +84,7 @@
     media_access: "No images supplied."
   checks:
     - "Separate visual setup and timer wait with duration_s 15, not the example's 10."
-    - "Setup directly commits its own boolean after visual evidence; no model-written timer start."
+    - "The local observation LLM judges descriptive visual evidence and proposes the setup boolean; the runtime owns the later timer start."
     - "Setup complete_on_skip true prevents waiting without verified placement."
     - "Wait uses clock__timer with duration_s only, expired result, ^true$ and direct boolean commit."
     - "No visual checks on wait, invented timestamp, or claim of continuously maintained placement."

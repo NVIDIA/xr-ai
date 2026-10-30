@@ -71,8 +71,13 @@ def validate_actions(manifest: dict, cases: dict) -> None:
             if isinstance(count, bool) or not isinstance(count, int) or count <= 0:
                 raise ValueError(f"{label}: observe count must be a positive integer")
             if "case" in action:
-                if not isinstance(action["case"], str) or action["case"] not in cases or "answers" in action:
+                if (not isinstance(action["case"], str) or action["case"] not in cases
+                        or "answers" in action or "expect_evidence" in action):
                     raise ValueError(f"{label}: observe requires a defined case or answers, not both")
+            elif "expect_evidence" in action:
+                if "answers" in action or not isinstance(action["expect_evidence"], str):
+                    raise ValueError(f"{label}: use one evidence regex or answers")
+                re.compile(action["expect_evidence"])
             elif (not isinstance(action.get("answers"), list) or not action["answers"]
                   or not all(isinstance(item, str) for item in action["answers"])):
                 raise ValueError(f"{label}: observe requires answers or a defined case")
@@ -154,6 +159,10 @@ async def evaluate(manifest_path: Path, output: Path) -> bool:
                         item["available"] and item["question"] == question
                         and matches_answer(case["answer"], item["answer"]) for item in results
                     )
+                elif "expect_evidence" in action:
+                    action_passed = all(item["available"] and matches_answer(
+                        action["expect_evidence"], item["answer"],
+                    ) for item in results)
                 else:
                     action_passed = all(item["available"] and any(
                         matches_answer(re.escape(" ".join(answer.split())), item["answer"])

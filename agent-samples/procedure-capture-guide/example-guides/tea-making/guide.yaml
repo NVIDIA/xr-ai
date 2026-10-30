@@ -7,7 +7,7 @@ schema_version: 1
 task:
   id: tea_making
   name: Tea Making
-  version: 4
+  version: 5
   status: approved
   start_step: identify
   foreground_prompt: >-
@@ -56,18 +56,21 @@ steps:
       interval_s: 1.5
       arguments:
         question: >-
-          Is CHAMOMILE visibly printed on the tea packet or box? Answer YES
-          if the word is legible, alone or within a longer tea name, regardless
-          of case or brand; the brand need not be visible. Answer NO if the
-          tea name is readable but lacks CHAMOMILE. Answer UNKNOWN if no packet
-          or box is visible or its label is obscured or unreadable. Read actual
-          words; do not infer from colors, flowers, or the requested tea.
-          Output only YES, NO, or UNKNOWN.
+          Read the tea name printed on the visible packet or box. Copy the
+          legible words, preserving the blend name. Describe any obscured or
+          unreadable text. If no packet or box is visible, say so. Do not infer
+          the name from colors, flowers, or an expected tea type.
       result_field: text
+    agent:
+      prompt: >-
+        Judge the observed package text. Commit tea_identified true only if
+        the word chamomile is visibly legible in the tea name, alone or within
+        a blend, regardless of case or brand. A readable different tea, a
+        guess, or obscured text is not sufficient; use empty updates.
+      tools: []
     evidence:
-      pattern: '(?i)^YES$'
+      source: model
       consecutive: 2
-      commit: {tea_identified: true}
     voice:
       prompt: >-
         Ask to see the tea packet or box so the word chamomile is legible.
@@ -94,18 +97,26 @@ steps:
       interval_s: 2
       arguments:
         question: >-
-          Read the temperature display label and value. Copy the actual label,
-          number and unit as LABEL | NUMBER UNIT. Preserve labels such as CURRENT,
-          ACTUAL, TARGET or SET. If several readings are shown, select CURRENT
-          or ACTUAL. If only TARGET or SET is shown, copy that label, not CURRENT.
-          For an immersed thermometer use THERMOMETER as label. Return UNKNOWN
-          if no measurement label or immersed thermometer can be identified.
-          Output only the label and reading; do not convert units.
+          Describe the visible temperature measurement. Copy each displayed
+          label, number, and unit exactly, keeping CURRENT or ACTUAL readings
+          distinct from TARGET or SET settings. State if the display is
+          unlabeled. If a thermometer is present, describe whether its probe
+          is visibly immersed in water. Report unreadable or hidden details;
+          do not convert units or infer temperature from steam or lights.
       result_field: text
+    agent:
+      prompt: >-
+        Commit water_at_target true only when the observation supports a
+        current water measurement of exactly 100 C or 212 F. Require an
+        explicit CURRENT or ACTUAL label, or a thermometer visibly immersed
+        in water. TARGET or SET alone is not a measurement. With multiple
+        readings, judge the current reading, not the target. An unlabeled
+        number, missing unit, hidden measurement, or different temperature
+        is insufficient; use empty updates. Do not guess or round to the target.
+      tools: []
     evidence:
-      pattern: '(?i)^(?:CURRENT|ACTUAL|THERMOMETER)\s*\|\s*(?:100(?:\.0+)?\s*(?:°\s*)?C|212(?:\.0+)?\s*(?:°\s*)?F|100(?:\.0+)?\s*℃|212(?:\.0+)?\s*℉)$'
+      source: model
       consecutive: 2
-      commit: {water_at_target: true}
     voice:
       prompt: >-
         Ask for boiling water and a safely visible current temperature display
@@ -134,18 +145,23 @@ steps:
       interval_s: 2
       arguments:
         question: >-
-          Is a tea bag visibly in water inside a vessel? A bag floating on the
-          liquid surface counts; it need not sink. Require visible liquid and
-          visible bag contact, not just a bag inside a cup. Answer YES only for
-          that contact, NO for a dry bag in an empty vessel or a bag above or
-          beside water, UNKNOWN if liquid or contact is obscured. The cup rim,
-          cup outline, and a string alone are not evidence of water. Output only
-          YES, NO, or UNKNOWN.
+          Describe the vessel contents and tea bag position. Report visible
+          liquid and whether the bag touches its surface, is immersed, or is
+          above or beside it. Distinguish a dry bag inside an empty vessel from
+          contact with liquid. State when contents or contact are obscured.
+          A cup rim, outline, or string alone does not establish water or contact.
       result_field: text
+    agent:
+      prompt: >-
+        Commit tea_immersed true only when the evidence shows both water and
+        the tea bag in contact with it inside the same vessel. Floating on the
+        surface counts; sinking is not required. A dry bag in an empty vessel,
+        a bag above or beside water, or a string alone is insufficient. If
+        liquid or contact is obscured or ambiguous, use empty updates.
+      tools: []
     evidence:
-      pattern: '(?i)^YES$'
+      source: model
       consecutive: 2
-      commit: {tea_immersed: true}
     voice:
       prompt: >-
         Guide placing the tea bag in the prepared water safely. Use current_view
