@@ -5,6 +5,15 @@
 
 # Networking and firewall
 
+## Overview
+
+Configure the network connections between your clients and the XR AI host,
+including firewall ports, TLS, and proxies. This is relevant when connecting
+from another device, using a remote host, or adding CloudXR or an application
+viewer.
+
+## Required ports
+
 DeviceIOHub, CloudXR, and optional application viewers use the following
 ports. Open only the externally reachable ports required by the deployment.
 

@@ -5,12 +5,17 @@
 
 # xr-ai-web-events
 
-`xr-ai-web-events` presents application-selected runtime events in a bounded,
-read-only browser view. It does not tail files, persist data, or enter model,
-voice, media, or DeviceIOHub authentication paths. Refer to {doc}`python/index`
-for the public APIs.
+## Overview
+
+Display selected agent events in a browser while your application runs. Use
+the live view to inspect readings, observations, or progress updates as you
+test the interaction.
 
 ## Publishing selected events
+
+The viewer keeps a bounded live history. It does not tail files, persist data,
+or enter model, voice, media, or DeviceIOHub authentication paths. Refer to
+{doc}`python/index` for the public APIs.
 
 Applications explicitly project compact JSON-compatible payloads to
 `WEB_EVENT_TOPIC`. Each event's serialized `payload` is limited to 16 KiB.
