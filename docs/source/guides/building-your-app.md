@@ -5,13 +5,19 @@
 
 # Build your application
 
-Read this when building an XR AI application. The directions below assume the
-application is under `apps/<your-app>/`. This directory is for applications
-that are not part of the repository's sample catalog. The XR AI SDK
-distributions are not published to a package registry; they resolve through
-relative `[tool.uv.sources]` entries in each application's `pyproject.toml`.
+## Overview
+
+Build your own XR AI application from a sample and keep its code and
+configuration under `apps/`. This gives you an application workspace where you
+can develop your task-specific behavior while using the checkout's SDK and
+services.
 
 ## Start from a source checkout
+
+The directions below assume the application is under `apps/<your-app>/`. The
+XR AI SDK distributions are not published to a package registry; they resolve
+through relative `[tool.uv.sources]` entries in each application's
+`pyproject.toml`.
 
 Use the latest stable release by default, falling back to the latest
 prerelease when no stable release exists. Use `main` when the application
@@ -113,33 +119,34 @@ identical. In particular, `xr-ai-hub-client` comes from
 `agent-sdk/xr-ai-runtime`. Refer to {doc}`/components/agent-sdk` for package
 ownership boundaries and composition guidance.
 
-## Copy the reference application
+<a id="copy-the-reference-application"></a>
+## Copy the Conversation application
 
-`agent-samples/simple-vlm-example/` is the smallest complete voice-and-vision
-application. Copy its tracked files from the repository root and rename its
-Python package and worker configuration:
+`agent-samples/conversation-example/` combines conversation, visual questions,
+one-shot alerts, and note-taking. Copy its tracked files from the repository
+root and rename its Python package and worker configuration. Keep only the
+destinations your application needs. The deprecated
+{doc}`Simple VLM sample </reference/simple-vlm-example>` remains available for
+the browser demo and existing integrations.
 
 ```bash
 mkdir -p apps/my-app
-git archive HEAD agent-samples/simple-vlm-example |
+git archive HEAD agent-samples/conversation-example |
   tar -x --strip-components=2 -C apps/my-app
-mv apps/my-app/worker/simple_vlm_example_worker apps/my-app/worker/my_app_worker
-mv apps/my-app/yaml/simple_vlm_example_worker.yaml apps/my-app/yaml/my_app_worker.yaml
+mv apps/my-app/worker/conversation_example_worker apps/my-app/worker/my_app_worker
+mv apps/my-app/yaml/conversation_example_worker.yaml apps/my-app/yaml/my_app_worker.yaml
 ```
 
 Replace the sample names consistently:
 
 | Existing name | Application name |
 |---|---|
-| `simple_vlm_example_worker` | `my_app_worker` |
-| `simple-vlm-example` | `my-app` |
-| `simple_vlm_example` | `my_app` |
-| `simple-vlm` | `my-app` |
-| `simple_vlm` | `my_app` |
-| `SimpleVlmAgent` | `MyAppAgent` |
+| `conversation_example_worker` | `my_app_worker` |
+| `conversation-example` | `my-app` |
+| `conversation_example` | `my_app` |
 
 Substitute the application's real kebab-case name for `my-app`, then derive its
-snake-case package and CamelCase class names mechanically. Apply the
+snake-case package and command names mechanically. Apply the
 replacements in the listed order across the entire copied tree, including
 comments and docstrings. Update any remaining `agent-samples/`
 working-directory references to `apps/`, and change prose that still describes
@@ -147,7 +154,7 @@ the application as a repository sample. The following check should produce no
 output:
 
 ```bash
-grep -rniE 'simple[-_ ]?vlm' apps/my-app
+rg -ni 'conversation[-_ ]example' apps/my-app
 ```
 
 The `apps/` and `agent-samples/` directories are at the same depth, so the
@@ -156,7 +163,7 @@ copied projects' relative sources continue to work. Keep each
 `[project].dependencies`. Every unpublished XR AI dependency must retain a
 repository source mapping.
 
-Use this map to separate reusable scaffolding from the VLM example:
+Use this map to separate reusable scaffolding from the sample's capabilities:
 
 | Files | Reuse | Replace or adapt |
 |---|---|---|
@@ -164,17 +171,21 @@ Use this map to separate reusable scaffolding from the VLM example:
 | `yaml/device_io_hub.yaml` | Keep the typed DeviceIOHub configuration shape. | Set the room, ports, web client, and network behavior. Refer to the [DeviceIOHub reference YAML](https://github.com/NVIDIA/xr-ai/blob/main/services/device-io-hub/device_io_hub.yaml) for coupled port and URL changes. |
 | `worker/pyproject.toml`, `__init__.py`, and `__main__.py` | Keep the named-package layout, console entry point, argument parsing, and delegation to `run_app()`. | Rename the distribution, package, and entry point. Remove dependencies only after their imports and features are gone. |
 | `worker/.../config.py` and `yaml/*_worker.yaml` | Keep typed loading and paths resolved relative to the YAML file. | Replace the prompt, frame, model, voice, and application-specific settings with the fields the application consumes. |
-| `worker/.../app.py` | Keep the `AgentRuntime` composition and the `VoiceAgent` lifecycle when the application uses voice. | Replace the VLM warmup, model roles, and paired `CurrentFrameTool` and `StreamingImageQueryTool` composition with the application's services and agents. |
-| `worker/.../agent.py` and `worker/.../prompts/system.txt` | Keep the participant-scoped task ownership, detached-task context and scope, and cancellation patterns. Refer to {doc}`/reference/agent-sdk-runtime`. | Replace the vision question-and-answer workflow, topics, tool calls, and prompt. |
+| `worker/.../app.py` | Keep the `AgentRuntime`, `AgentRouter`, and `VoiceAgent` composition and lifecycle for the capabilities retained. | Adapt registered destinations, model roles, health probes, output topics, and context subscriptions together. Keep the router decision service while using routing. |
+| `worker/.../_visual_agents.py`, `_alert_agent.py`, `_alert_checks.py`, `_alert_compile.py`, `_note_taking.py`, and `prompts/` | Keep participant-scoped ownership and cancellation patterns. Refer to {doc}`/reference/conversation-example` for their boundaries. | Adapt or remove the current-view, alert, and note-taking destinations and their prompts, tools, and subscriptions. Do not leave removed destinations registered. |
 | `yaml/models.json` | Keep the adapter and endpoint separation. | Declare only the logical model roles, client adapters, and shared endpoints the application needs. Do not add model-server deployment or readiness settings. |
 | `yaml/voice_gate.yaml` | Keep it when the application uses voice. | Choose conversation controls or direct speech using {ref}`voice-conversation-controls`, and test the application's first spoken request. |
 | `README.md` | Keep a short configure and run path. | Describe the application, its owned and reused processes, settings, and exact start commands. |
 
 Rewrite the copied README as application-owned documentation. Replace its title
-and the “Simple VLM example” and “This sample” descriptions, and remove links to
-the Simple VLM sample reference. In particular, make sure the name replacements
-did not leave a nonexistent `/reference/my-app.html` link. Change its working
-directory to `apps/my-app/` and use the model-server command shown below.
+and the “Conversation example” and “This sample” descriptions, and remove links
+to the Conversation sample reference. In particular, make sure the name
+replacements did not leave a nonexistent `/reference/my-app.html` link. Change
+its working directory to `apps/my-app/` and use the model-server command shown
+below.
+The copied `model-servers/` directory is an application-owned preset if you
+choose to maintain it; the commands below reuse the repository's Conversation
+stack without changing its configuration.
 
 The copied DeviceIOHub YAML leaves credentials blank, so the hub generates a
 fresh pair at startup. To use a fixed pair, set `LIVEKIT_API_KEY` and
@@ -199,22 +210,23 @@ uv --config-file ../../uv.toml sync --project worker
 
 The model launcher requires `HF_TOKEN`. Configure it through one of the
 sources in {doc}`/getting_started/credentials` before starting the application.
-The copied application reuses speaker ASR, VLM, and TTS services. Start those shared
-services first and wait for the launcher to report that all processes are
-ready:
+The copied application reuses speaker ASR, LLM, VLM, TTS, and the Clef decision
+service. Start those shared services first and wait for the launcher to report
+that all processes are ready:
 
 ```bash
 uv --config-file ../../uv.toml run \
-  --project ../../agent-samples/simple-vlm-example/model-servers simple_vlm_example_model_servers
+  --project ../../agent-samples/conversation-example/model-servers conversation_example_model_servers
 ```
 
 ### Hosted endpoints
 
-Follow {doc}`/guides/deploying-with-nim` to configure and validate the STT, VLM,
-and TTS roles in the application's `yaml/models.json`. Keep a copy of the local
-profile before replacing its entries. Apply the guide's voice-gate settings
-for hosted speech to disable the copied local speaker backend. Start the
-application after endpoint validation.
+Follow {doc}`/guides/deploying-with-nim` to configure and validate the STT, LLM,
+VLM, and TTS roles in the application's `yaml/models.json`. Retain the `router`
+role and start Clef separately or use a compatible decision endpoint as that
+guide describes. Keep a copy of the local profile before replacing its entries.
+Apply the guide's voice-gate settings for hosted speech to disable the copied
+local speaker backend. Start the application after endpoint validation.
 
 ### Start the application
 
@@ -247,12 +259,12 @@ targets before handing the application to its user.
 The application launcher owns only DeviceIOHub, the worker, and any other
 application processes. The separate model-server launcher owns shared model
 startup and readiness. The voice runtime checks required speaker ASR
-readiness, and the copied worker exercises VLM inference as an application
-warmup before announcing readiness. Keep or replace that probe according to the
-capabilities the application must warm or verify. When a model role changes,
-update `yaml/models.json` and the worker's service construction. Do not add
-shared model services to the application's `PROCESSES` list. If a process
-fails, use its launch context and run-log directory to investigate through
+readiness, and the copied worker checks LLM, router, and VLM health before
+announcing readiness; it does not perform VLM inference as a startup warmup.
+Adapt those probes to the capabilities the application retains. When a model
+role changes, update `yaml/models.json` and the worker's service construction.
+Do not add shared model services to the application's `PROCESSES` list. If a
+process fails, use its launch context and run-log directory to investigate through
 {doc}`troubleshooting`.
 
 ## Verify without hardware
@@ -264,7 +276,7 @@ request, and the recovery behavior for unavailable inputs. Keep these checks in
 
 From the repository root, load the worker configuration before starting
 services. This check imports the renamed package, reads the application YAML,
-and resolves packaged files such as the system prompt:
+and resolves packaged prompt files:
 
 ```bash
 uv --config-file uv.toml run --project apps/my-app/worker \
@@ -279,9 +291,13 @@ PY
 Exercise model wire behavior with `tests/_stub_openai.py`, which provides an
 `httpx.MockTransport` implementation of OpenAI-compatible endpoints. The wire
 tests exercise `xr_ai_models` clients without importing the application worker.
-Use `tests/test_simple_vlm_example_wire.py` as the small STT, VLM, and TTS
-wire-format pattern; use `tests/test_xr_render_demo_wire.py` for LLM tool-call
-flows.
+The deprecated sample's `tests/test_simple_vlm_example_wire.py` remains a small
+STT, VLM, and TTS wire-format test pattern. Use
+`tests/test_xr_render_demo_wire.py` for LLM tool-call flows. For the copied
+application's routing, context, and destination behavior, adapt the CPU cases
+in `tests/test_conversation_example_worker.py` and
+`tests/test_conversation_example_agents.py`; use a fake decision service
+rather than starting Clef for these checks.
 
 The `hub`, `make_connector`, and `make_processor` fixtures in
 `tests/conftest.py` run DeviceIOHub IPC over local ZMQ sockets. They demonstrate

@@ -5,10 +5,13 @@
 
 # Adding CloudXR to a sample
 
-`services/cloudxr-runtime/` is the shared CloudXR service.
-Any sample can stream XR content to a device by adding one line to its
-orchestrator and a configuration file under the sample's `yaml/` directory. For the broader
-orchestrator pattern, refer to {doc}`adding-a-sample <adding-a-sample>`.
+## Overview
+
+Use CloudXR when your agent application needs to display a server-rendered
+scene on an XR device. Adding the shared runtime gives your application a
+rendering connection alongside the hub's camera, audio, and data connection.
+
+For the broader orchestrator pattern, refer to {doc}`adding-a-sample`.
 
 ## 1 — Add the process to the orchestrator
 

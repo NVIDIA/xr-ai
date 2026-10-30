@@ -81,8 +81,10 @@ audio, and data-channel traffic, opt in explicitly:
 uv run conversation_example --session-recording
 ```
 
-Open the authenticated web-client URL printed by DeviceIOHub, allow microphone
-and camera access, and connect. After the agent reports ready, say
+Open the authenticated web-client URL printed by DeviceIOHub and select
+**Connect**. Choose **Live video** or **On-demand images** under **Camera Mode**,
+then select **Start Microphone** and grant camera and microphone access when
+prompted. After the agent reports ready, say
 “Hey agent, let's start talking,” then speak questions without a wake phrase.
 Say “Hey agent, let's stop talking” to close the conversation. Typed questions
 remain available without opening a voice conversation. With `--session-recording`, each connection is recorded under
