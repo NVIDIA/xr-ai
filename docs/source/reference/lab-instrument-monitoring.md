@@ -5,25 +5,22 @@
 
 # Lab instrument monitoring — building marker-associated visual agents
 
-The lab instrument sample is a reference for applications that combine
-foreground questions, opt-in background work, persistent participant state,
-visual identification, and event-driven notifications. Refer to the
-{doc}`quickstart </getting_started/quickstart>` to run the sample. This
-architecture reference focuses on reusing the sample's structure for another
-application.
+## Overview
+
+Use this reference for applications that identify marked objects in a camera view,
+track observations about each object over time, and notify users of changes.
+The sample uses marked lab instruments to demonstrate how identification,
+visual readings, state tracking, and notifications work together.
+
+To run the sample, refer to the
+{doc}`quickstart </getting_started/quickstart>`.
 
 For speech deployment and explicit batch-STT selection, refer to
 {doc}`/guides/customizing-model-servers`.
 
-The central design choice is to separate perception, interpretation, state,
-policy, and presentation. A marker scan identifies an instrument, a VLM reads
-its display, a stateful agent decides whether the reading changed, and a
-separate subscriber decides whether to speak. Each concern can therefore be
-replaced without rewriting the others.
-
 ## What to copy
 
-Use this sample when your application needs one or more of these patterns:
+Reusable patterns include:
 
 - a foreground agent that selects participant-bound tools;
 - visual queries without exposing participant IDs or raw images to the model;
@@ -37,6 +34,11 @@ The instrument-reading behavior is sample-specific. The runtime, voice,
 tool-loop, image-selection, visual-query, and event patterns are reusable.
 
 ## Architecture
+
+Perception, interpretation, state, policy, and presentation have separate
+owners. A marker scan identifies an instrument, a VLM reads its display, a
+stateful agent decides whether the reading changed, and a separate subscriber
+decides whether to speak. Each concern can be replaced independently.
 
 ```text
 camera frames ────────────────> ParticipantImageAgent

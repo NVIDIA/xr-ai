@@ -5,20 +5,22 @@
 
 # Conversation example
 
-The conversation example combines four distinct roles: general conversation,
-direct questions about the current view, one-shot background visual alerts, and
-foreground note-taking. An alert watches for a requested visible condition,
-notifies the participant once, then stops. Its observations stay private to the
-alert job. Notes capture participant-authored text and can share saved notes
-with conversation.
+## Overview
 
-The sample composes these roles with `xr_ai_routing.AgentRouter` and
-`xr_ai_conversation.Conversation`. Responses use the same voice output path to
-Pocket TTS and the `vlm.response` data topic. Refer to the {doc}`quickstart
-</getting_started/quickstart>` for client setup and the sample README for run
-commands.
+Use this reference to build assistants that let a user switch between
+conversation and focused tasks while background work continues. The sample
+combines visual questions, note-taking, and one-shot alerts to demonstrate how
+specialized agents share context and a voice interface.
+
+For a new application, start with this sample in place of deprecated
+{doc}`simple-vlm-example`. Refer to the {doc}`quickstart
+</getting_started/quickstart>` for run commands and client setup.
 
 ## Runtime boundary
+
+The worker composes `xr_ai_routing.AgentRouter` and
+`xr_ai_conversation.Conversation` with its visual and note-taking agents.
+Responses stream to Pocket TTS and the `vlm.response` data topic.
 
 `AgentRouter` and `VoiceAgent` are registered directly with the same
 `AgentRuntime`. The sample configures the router's query, participant lifecycle,
@@ -57,7 +59,7 @@ the sample's local model-server stack. The worker checks LLM, Clef, and VLM
 health and waits for the required speaker STT service before opening the voice
 session; readiness does not send an inference request through the VLM.
 
-`VoiceAgent` owns application readiness, hub transport, voice gating, TTS, signals,
+`VoiceAgent` owns worker readiness, hub transport, voice gating, TTS, signals,
 and cleanup. It publishes accepted speech and typed text as a participant-scoped
 `UserQuery`. `xr_ai_routing.AgentRouter` subscribes directly to the configured
 query topic. Clef routes among general conversation, direct visual observation,
@@ -169,9 +171,10 @@ evenly between the two sections; with the default 12,000 bytes, each gets 6,000.
 default is 12,000 bytes. These are UTF-8 byte budgets, not token limits.
 
 Conversation prompts show the current time and coarse minute-rounded timestamps
-for completed exchanges and named context where available. FE-owned turns use
-their completion time, runtime context uses its publication time, and visual
-evidence includes the frame's source timestamp. Imported history without a time
+for completed exchanges and named context where available. Completed
+conversation turns use their completion time, runtime context uses its
+publication time, and visual evidence includes the frame's source timestamp.
+Imported history without a time
 is labeled unknown. These timestamps help the model distinguish older context
 from a present observation; they do not expire or remove information.
 
@@ -328,7 +331,9 @@ fields, checked-in values, and adjacent YAML comments.
 
 After connecting, say `Hey agent, let's start talking`, then ask questions
 without a wake phrase. Say `Hey agent, let's stop talking` to finish. These
-controls work with the sample's existing STT endpoint, including NIM. Refer to
+controls work with the sample's configured speaker-ASR service. To switch to
+native NIM speech, update both the model profile and the voice-gate backend as
+described in {doc}`/guides/deploying-with-nim`. Refer to
 {ref}`voice-conversation-controls` for paused phrases and the legacy wake mode.
 
 ## Opt-in session capture
