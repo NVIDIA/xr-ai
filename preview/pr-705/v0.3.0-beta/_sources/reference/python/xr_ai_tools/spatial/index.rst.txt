@@ -1,0 +1,60 @@
+xr_ai_tools.spatial
+===================
+
+.. py:module:: xr_ai_tools.spatial
+
+.. autoapi-nested-parse::
+
+   Pure spatial calculations for native XR tools.
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   xr_ai_tools.spatial.offset_user_frame
+   xr_ai_tools.spatial.gaze_target
+   xr_ai_tools.spatial.user_relative
+   xr_ai_tools.spatial.anchor_relative
+   xr_ai_tools.spatial.toward
+   xr_ai_tools.spatial.midpoint
+
+
+Module Contents
+---------------
+
+.. py:function:: offset_user_frame(frame: xr_ai_tools.types.SpatialFrame, start: xr_ai_tools.types.Vector3, *, forward: float = 0.0, right: float = 0.0, up: float = 0.0) -> xr_ai_tools.types.Vector3
+
+   Offset a point along the user's horizontal axes and world-space up.
+
+   The user's forward and right axes are projected onto the horizontal plane.
+   Returned coordinates are rounded to millimeter precision.
+
+
+.. py:function:: gaze_target(frame: xr_ai_tools.types.SpatialFrame, distance: float = 1.5) -> xr_ai_tools.types.Vector3
+
+   Return a point along the user's three-dimensional gaze direction.
+
+
+.. py:function:: user_relative(frame: xr_ai_tools.types.SpatialFrame, direction: Literal['front', 'back', 'left', 'right', 'above', 'below'], distance: float) -> xr_ai_tools.types.Vector3
+
+   Return a point in a named direction from the user's frame origin.
+
+
+.. py:function:: anchor_relative(frame: xr_ai_tools.types.SpatialFrame, anchor: xr_ai_tools.types.Vector3, relation: Literal['toward_user', 'away_from_user', 'left_of', 'right_of', 'above', 'below'], distance: float) -> xr_ai_tools.types.Vector3
+
+   Return a point in a named user-relative direction from an anchor.
+
+
+.. py:function:: toward(start: xr_ai_tools.types.Vector3, target: xr_ai_tools.types.Vector3, distance: float) -> xr_ai_tools.types.Vector3
+
+   Move a point by a signed distance along the line toward a target.
+
+
+.. py:function:: midpoint(first: xr_ai_tools.types.Vector3, second: xr_ai_tools.types.Vector3) -> xr_ai_tools.types.Vector3
+
+   Return the midpoint between two positions.
+
+
