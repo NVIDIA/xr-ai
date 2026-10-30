@@ -7,8 +7,8 @@ from __future__ import annotations
 
 import asyncio
 import math
-from collections import deque
-from dataclasses import dataclass
+from collections import OrderedDict, deque
+from dataclasses import dataclass, field
 
 from loguru import logger
 from xr_ai_voice import TranscriptUpdate, VoiceOutputState, VoiceTurnAction
@@ -28,6 +28,7 @@ class _Source:
     timestamp_us: int = 0
     final: bool = False
     attempted: tuple[int, int] | None = None
+    admission_sources: OrderedDict[str, str] = field(default_factory=OrderedDict)
 
 
 class _ClefVoicePolicy:
@@ -80,8 +81,18 @@ class _ClefVoicePolicy:
         source.prefix = source.text
         self._next_request += 1
         request_id = f"semantic:{source.epoch}:{self._next_request}"
+        source.admission_sources[request_id] = "Clef" if reason == "early_admit" else "VAD"
+        # Retain queued finals plus recently dispatched diagnostics; cancelled
+        # queries may never reach the runtime subscriber that consumes these.
+        while len(source.admission_sources) > 2 * _FINAL_CAPACITY:
+            source.admission_sources.popitem(last=False)
         logger.info("voice endpoint pid={!r} action={} request_id={!r}", pid, reason, request_id)
         return [VoiceTurnAction("submit", request_id, text, source.timestamp_us)]
+
+    def take_admission_source(self, participant_id: str, request_id: str | None) -> str | None:
+        """Consume diagnostic provenance for an actually delivered sample query."""
+        source = self._sources.get(participant_id)
+        return source.admission_sources.pop(request_id, None) if source is not None else None
 
     def _tail(self, participant_id: str, source: _Source) -> str | None:
         if source.prefix and not source.text.startswith(source.prefix):

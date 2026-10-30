@@ -76,8 +76,19 @@ XR_AI_VERBOSE=1 uv --config-file ../../uv.toml run conversation_example
 ```
 
 Accepted queries also emit `voice.user-query`; `semantic:` request IDs correlate
-them with routed responses in Relay. The sample does not add a dedicated client
-status indicator. Raw transcript captions alone do not prove query admission.
+them with routed responses in Relay. The sample sends an additional message on
+that existing client topic when the query reaches the runtime:
+
+- `User [Clef]: …` identifies a positive early-completion trigger.
+- `User [VAD]: …` identifies ordinary ASR/VAD finalization.
+
+The original query message remains, so the source-labelled entry appears beside
+it in the web or XR client's message list. Provenance is correlated by request
+identity, not inferred from the text or arrival time. It is display-only: the
+query sent to the router and models is unchanged. Typed queries and suppressed
+fillers produce no source-labelled entry. Diagnostic delivery is best-effort;
+a failure cannot fail an admitted query. No public SDK API or client protocol
+change is needed. Raw transcript captions alone do not prove query admission.
 
 ## SDK and resource ownership
 

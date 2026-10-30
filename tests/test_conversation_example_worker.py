@@ -145,6 +145,10 @@ class _Transport:
     def __init__(self) -> None:
         self.endpoint = _DataEndpoint()
         self.shutdown_calls = 0
+        self.return_data = []
+
+    async def send_return_data(self, message):
+        self.return_data.append(message)
 
     def shutdown(self) -> None:
         self.shutdown_calls += 1
@@ -1847,6 +1851,12 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     if semantic_turns_enabled:
         assert sessions[0].turn_policy._decisions is decisions
         assert [row[2] for row in responses] == ["semantic:source:1", "semantic:source:2"]
+        assert [m.data.decode() for m in transport.return_data] == [
+            "User [Clef]: What is in front of me?", "User [Clef]: What should I remember?",
+        ]
+        assert all(m.participant_id == "alice" and m.topic == "voice.user-query" for m in transport.return_data)
+    else:
+        assert transport.return_data == []
     assert len(wired_front_ends) == 1
     assert set(wired_front_ends[0]) == {"conversation", "observation", "alerts", "notes"}
     assert isinstance(wired_front_ends[0]["conversation"], Conversation)

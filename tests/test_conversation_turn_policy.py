@@ -175,3 +175,47 @@ async def test_burst_of_native_finals_is_retained_without_model_work():
     p.update(_update("Retired query", segment=4, final=True))
     p.reset("user")
     assert await p.decide("user") == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("final,label", [(False, "Clef"), (True, "VAD")])
+@pytest.mark.parametrize("delivery_fails", [False, True])
+async def test_admitted_query_sends_sample_owned_source_message_without_changing_query(final, label, delivery_fails):
+    from unittest.mock import AsyncMock
+
+    from conversation_example_worker._endpoint_feedback import _EndpointFeedback
+    from conversation_example_worker._topics import USER_QUERY_TOPIC
+    from xr_ai_interaction import UserQuery
+    from xr_ai_runtime import Agent, AgentRuntime, subscribe
+
+    policy = _ClefVoicePolicy(_Decisions())
+    policy.update(_update("What is augmented reality?", final=final))
+    (action,) = await policy.decide("user")
+    received = []
+
+    class Receiver(Agent):
+        @subscribe(USER_QUERY_TOPIC)
+        async def query(self, query: UserQuery, ctx):
+            received.append(query.text)
+
+    send = AsyncMock(side_effect=RuntimeError("closed") if delivery_fails else None)
+    runtime = AgentRuntime()
+    runtime.register("feedback", _EndpointFeedback(policy, SimpleNamespace(send_return_data=send)))
+    runtime.register("receiver", Receiver())
+    async with runtime:
+        await runtime.publish(
+            USER_QUERY_TOPIC,
+            UserQuery(text=action.text, timestamp_us=action.timestamp_us, request_id=action.request_id),
+            participant_id="user",
+        )
+        message = send.call_args.args[0]
+        assert message.topic == "voice.user-query" and message.participant_id == "user"
+        assert message.pts_us == action.timestamp_us
+        assert message.data.decode() == f"User [{label}]: What is augmented reality?"
+        assert received == ["What is augmented reality?"]
+        assert policy.take_admission_source("user", action.request_id) is None
+        await runtime.publish(
+            USER_QUERY_TOPIC, UserQuery(text="Typed input", timestamp_us=1), participant_id="user",
+        )
+        assert send.await_count == 1
+        assert received[-1] == "Typed input"

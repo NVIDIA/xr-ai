@@ -40,6 +40,7 @@ from xr_ai_voice import VOICE_OUTPUT_TOPIC, HubVoiceTransport, VadConfig, VoiceA
 from xr_ai_voicegate import VoiceGateConfig, load_voice_gate_config
 
 from ._alert_agent import VisualAlertAgent
+from ._endpoint_feedback import _EndpointFeedback
 from ._note_taking import NoteTakingAgent
 from ._semantic_voice import _ClefVoicePolicy
 from ._topics import (
@@ -215,6 +216,8 @@ async def run_app(
     runtime.register("conversation-context", context.subscriber())
     runtime.register("conversation-example", router.runtime_subscriber())
     runtime.register("voice", voice)
+    if turn_policy is not None:
+        runtime.register("voice-endpoint-feedback", _EndpointFeedback(turn_policy, transport))
 
     logger.info("Relay events → {}", log_file.parent / "relay-events.jsonl")
     logger.info("conversation-example starting")
