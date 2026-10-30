@@ -470,16 +470,29 @@
 -->
 <section id="release-migration">
 <h1>Release migration<a class="headerlink" href="#release-migration" title="Link to this heading">#</a></h1>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">#</a></h2>
+<p>Required changes when upgrading from <code class="docutils literal notranslate"><span class="pre">v0.3.0-beta</span></code> to <code class="docutils literal notranslate"><span class="pre">v0.4.0-beta</span></code>. Apply the
+entries relevant to your application’s SDK usage, configuration, clients, and
+services.</p>
+</section>
 <section id="changes-since-v0-3-0-beta">
 <h2>Changes since v0.3.0-beta<a class="headerlink" href="#changes-since-v0-3-0-beta" title="Link to this heading">#</a></h2>
-<p>The development version on <code class="docutils literal notranslate"><span class="pre">main</span></code> is unreleased. These instructions cover
-changes from <code class="docutils literal notranslate"><span class="pre">v0.3.0-beta</span></code> to that version. If upgrading from an older release,
-first apply <a class="reference internal" href="migration-history/through-v0.3.0-beta.html"><span class="doc">Migration notes through v0.3.0-beta</span></a>, then apply the changes
+<p>If upgrading from an older release, first apply
+<a class="reference internal" href="migration-history/through-v0.3.0-beta.html"><span class="doc">Migration notes through v0.3.0-beta</span></a>, then apply the changes
 below. Refer to <a class="reference internal" href="migration-history.html"><span class="doc">Migration history</span></a> for completed migration guides.</p>
 <p>Stop running model services with the old checkout’s commands and configuration
 before updating the checkout. Start the updated services before restarting
 workers; launchers can reuse a running service whose identity matches even when
 its application code predates the update.</p>
+<section id="simple-vlm-example-deprecation">
+<h3>Simple VLM example deprecation<a class="headerlink" href="#simple-vlm-example-deprecation" title="Link to this heading">#</a></h3>
+<p>The <a class="reference internal" href="simple-vlm-example.html"><span class="doc">Simple VLM example</span></a> sample is deprecated. Existing demo and launch
+commands remain available. Use <a class="reference internal" href="conversation-example.html"><span class="doc">Conversation example</span></a> as the starting
+point for new voice-and-vision applications. Its routed conversation and
+visual-question behavior differs from Simple VLM; migrating application code
+requires reviewing that composition rather than only renaming the launcher.</p>
+</section>
 <section id="vllm-0-31-security-update">
 <h3>vLLM 0.31 security update<a class="headerlink" href="#vllm-0-31-security-update" title="Link to this heading">#</a></h3>
 <p>The four vLLM service environments pin <code class="docutils literal notranslate"><span class="pre">vllm==0.31.0</span></code>. Their standalone YAMLs
@@ -733,16 +746,18 @@ add this mapping to private voice-gate files retained from <code class="docutils
 <span class="w">  </span><span class="nt">base_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://127.0.0.1:8102</span>
 </pre></div>
 </div>
-<p>A retained YAML without a <code class="docutils literal notranslate"><span class="pre">speaker</span></code> mapping selects batch STT. The new sample
-profiles omit the <code class="docutils literal notranslate"><span class="pre">stt</span></code> role, so this configuration raises <code class="docutils literal notranslate"><span class="pre">KeyError</span></code> during
-worker construction. With the mapping above, workers wait for <code class="docutils literal notranslate"><span class="pre">speaker-stt</span></code>
-before reporting ready. Refer to
+<p>A retained YAML without a <code class="docutils literal notranslate"><span class="pre">speaker</span></code> mapping selects batch STT. The
+speaker-ASR sample profiles omit the <code class="docutils literal notranslate"><span class="pre">stt</span></code> role, so this configuration raises
+<code class="docutils literal notranslate"><span class="pre">KeyError</span></code> during worker construction. With the mapping above, workers wait for
+<code class="docutils literal notranslate"><span class="pre">speaker-stt</span></code> before reporting ready. Refer to
 <a class="reference internal" href="#batch-stt-migration"><span class="std std-ref">the batch alternative</span></a> if retaining batch speech.</p>
 <p>In tea’s worker YAML, replace <code class="docutils literal notranslate"><span class="pre">voice_gate_yaml:</span> <span class="pre">voice_gate.always-on.yaml</span></code> with
 <code class="docutils literal notranslate"><span class="pre">voice_gate_yaml:</span> <span class="pre">voice_gate.yaml</span></code>, then set <code class="docutils literal notranslate"><span class="pre">mode:</span> <span class="pre">always_on</span></code> in that file to
 retain ungated speech. The alternate file is removed; keeping its path loads
 the package’s batch-STT defaults.</p>
-<p id="voice-sample-conversation-defaults">The four voice samples select <code class="docutils literal notranslate"><span class="pre">conversation</span></code>. Say
+<p id="voice-sample-conversation-defaults">Simple VLM, Conversation, lab monitoring, tea making, and XR render select
+<code class="docutils literal notranslate"><span class="pre">conversation</span></code>. Procedure capture and guidance uses <code class="docutils literal notranslate"><span class="pre">always_on</span></code> for commands
+and narration. For a conversation-mode sample, say
 <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">start</span> <span class="pre">talking</span></code> after connecting and
 <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">stop</span> <span class="pre">talking</span></code> to close the conversation.
 Select <code class="docutils literal notranslate"><span class="pre">wake_only</span></code> for addressed turns, <code class="docutils literal notranslate"><span class="pre">hybrid</span></code> for addressed turns alongside
@@ -821,7 +836,9 @@ directly and depend on the earlier defaults, set them in your YAML:</p>
 </section>
 <section id="shared-model-stack-speaker-filtering">
 <h3>Shared model-stack speaker filtering<a class="headerlink" href="#shared-model-stack-speaker-filtering" title="Link to this heading">#</a></h3>
-<p id="batch-stt-migration">The four voice samples use speaker ASR and omit batch STT on port 8103.
+<p id="batch-stt-migration">Simple VLM, Conversation, lab monitoring, tea making, and XR render use
+speaker ASR and omit batch STT on port 8103. Procedure capture and guidance
+keeps batch STT for narration without speaker enrollment.
 Replace unconditional worker <code class="docutils literal notranslate"><span class="pre">make_stt</span></code> calls with <code class="docutils literal notranslate"><span class="pre">VoiceAgent.from_models</span></code>,
 passing the loaded models and voice-gate settings. To retain batch STT, select
 <code class="docutils literal notranslate"><span class="pre">stt</span></code> in the sample’s launcher and hardware overrides and configure the worker’s
@@ -972,7 +989,9 @@ and <a class="reference internal" href="agent-sdk-conversation.html"><span class
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#changes-since-v0-3-0-beta">Changes since v0.3.0-beta</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#simple-vlm-example-deprecation">Simple VLM example deprecation</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#vllm-0-31-security-update">vLLM 0.31 security update</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#interaction-messages-move-to-xr-ai-interaction">Interaction messages move to xr-ai-interaction</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#coding-agent-setup-skill-rename">Coding-agent setup skill rename</a></li>

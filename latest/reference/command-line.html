@@ -199,6 +199,10 @@
   
 
   
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
 </div>
 
     </header>
@@ -462,14 +466,20 @@
                   
   <section id="command-line-reference">
 <h1>Command-line reference<a class="headerlink" href="#command-line-reference" title="Link to this heading">#</a></h1>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">#</a></h2>
+<p>Commands and options for running agent samples and their model-server stacks.
+Worker and service entry points managed by those launchers are outside this
+catalog.</p>
+</section>
+<section id="sample-commands">
+<h2>Sample commands<a class="headerlink" href="#sample-commands" title="Link to this heading">#</a></h2>
 <p>This reference is generated from the installed commands in each top-level
 sample’s <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code> under <code class="docutils literal notranslate"><span class="pre">agent-samples/</span></code>,
-and the literal <code class="docutils literal notranslate"><span class="pre">argparse</span></code> declarations in its
-entry-point module. Worker and service commands are launcher-managed process
-protocols, so they are intentionally excluded from the user-facing catalog.</p>
+and the literal <code class="docutils literal notranslate"><span class="pre">argparse</span></code> declarations in its entry-point module.</p>
 <div class="xr-ai-cli-reference docutils container">
 <section id="conversation-example-model-servers">
-<h2>conversation_example_model_servers<a class="headerlink" href="#conversation-example-model-servers" title="Link to this heading">#</a></h2>
+<h3>conversation_example_model_servers<a class="headerlink" href="#conversation-example-model-servers" title="Link to this heading">#</a></h3>
 <p>Launch the local model servers required by conversation-example.</p>
 <p>Run from <code class="docutils literal notranslate"><span class="pre">agent-samples/conversation-example/model-servers/</span></code>:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>uv<span class="w"> </span>run<span class="w"> </span>conversation_example_model_servers<span class="w"> </span><span class="o">[</span>--stop<span class="o">]</span><span class="w"> </span><span class="o">[</span>--gpu-profile<span class="w"> </span>NAME<span class="o">]</span>
@@ -484,7 +494,7 @@ protocols, so they are intentionally excluded from the user-facing catalog.</p>
 </dl>
 </section>
 <section id="conversation-example">
-<h2>conversation_example<a class="headerlink" href="#conversation-example" title="Link to this heading">#</a></h2>
+<h3>conversation_example<a class="headerlink" href="#conversation-example" title="Link to this heading">#</a></h3>
 <p>Run the conversation-example hub and worker processes.</p>
 <p>Run from <code class="docutils literal notranslate"><span class="pre">agent-samples/conversation-example/</span></code>:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>uv<span class="w"> </span>run<span class="w"> </span>conversation_example<span class="w"> </span><span class="o">[</span>--session-recording<span class="o">]</span>
@@ -497,7 +507,7 @@ protocols, so they are intentionally excluded from the user-facing catalog.</p>
 </dl>
 </section>
 <section id="lab-instrument-monitoring-model-servers">
-<h2>lab_instrument_monitoring_model_servers<a class="headerlink" href="#lab-instrument-monitoring-model-servers" title="Link to this heading">#</a></h2>
+<h3>lab_instrument_monitoring_model_servers<a class="headerlink" href="#lab-instrument-monitoring-model-servers" title="Link to this heading">#</a></h3>
 <p>Launch the local model servers required by lab-instrument-monitoring.</p>
 <p>Run from <code class="docutils literal notranslate"><span class="pre">agent-samples/lab-instrument-monitoring/model-servers/</span></code>:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>uv<span class="w"> </span>run<span class="w"> </span>lab_instrument_monitoring_model_servers<span class="w"> </span><span class="o">[</span>--stop<span class="o">]</span><span class="w"> </span><span class="o">[</span>--gpu-profile<span class="w"> </span>NAME<span class="o">]</span>
@@ -512,7 +522,7 @@ protocols, so they are intentionally excluded from the user-facing catalog.</p>
 </dl>
 </section>
 <section id="lab-instrument-monitoring">
-<h2>lab_instrument_monitoring<a class="headerlink" href="#lab-instrument-monitoring" title="Link to this heading">#</a></h2>
+<h3>lab_instrument_monitoring<a class="headerlink" href="#lab-instrument-monitoring" title="Link to this heading">#</a></h3>
 <p>Launch lab instrument monitoring with reused model dependencies.</p>
 <p>Run from <code class="docutils literal notranslate"><span class="pre">agent-samples/lab-instrument-monitoring/</span></code>:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>uv<span class="w"> </span>run<span class="w"> </span>lab_instrument_monitoring<span class="w"> </span><span class="o">[</span>--expose-web-events<span class="o">]</span><span class="w"> </span><span class="o">[</span>--session-recording<span class="o">]</span><span class="w"> </span><span class="o">[</span>--hub-config<span class="w"> </span>PATH<span class="o">]</span><span class="w"> </span><span class="o">[</span>--health-port<span class="w"> </span>PORT<span class="o">]</span>
@@ -531,7 +541,7 @@ protocols, so they are intentionally excluded from the user-facing catalog.</p>
 </dl>
 </section>
 <section id="procedure-capture-guide-model-servers">
-<h2>procedure_capture_guide_model_servers<a class="headerlink" href="#procedure-capture-guide-model-servers" title="Link to this heading">#</a></h2>
+<h3>procedure_capture_guide_model_servers<a class="headerlink" href="#procedure-capture-guide-model-servers" title="Link to this heading">#</a></h3>
 <p>Launch the speech, language, and vision model servers for the sample.</p>
 <p>Run from <code class="docutils literal notranslate"><span class="pre">agent-samples/procedure-capture-guide/model-servers/</span></code>:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>uv<span class="w"> </span>run<span class="w"> </span>procedure_capture_guide_model_servers<span class="w"> </span><span class="o">[</span>--stop<span class="o">]</span><span class="w"> </span><span class="o">[</span>--gpu-profile<span class="w"> </span>NAME<span class="o">]</span>
@@ -546,7 +556,7 @@ protocols, so they are intentionally excluded from the user-facing catalog.</p>
 </dl>
 </section>
 <section id="procedure-capture-guide">
-<h2>procedure_capture_guide<a class="headerlink" href="#procedure-capture-guide" title="Link to this heading">#</a></h2>
+<h3>procedure_capture_guide<a class="headerlink" href="#procedure-capture-guide" title="Link to this heading">#</a></h3>
 <p>Capture a demonstrated procedure or guide a participant through approved steps.</p>
 <p>Run from <code class="docutils literal notranslate"><span class="pre">agent-samples/procedure-capture-guide/</span></code>:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>uv<span class="w"> </span>run<span class="w"> </span>procedure_capture_guide<span class="w"> </span><span class="o">[</span>--mode<span class="w"> </span><span class="o">{</span>capture,guide<span class="o">}]</span><span class="w"> </span><span class="o">[</span>GUIDE_PATH<span class="o">]</span><span class="w"> </span><span class="o">[</span>--output-root<span class="w"> </span>PATH<span class="o">]</span><span class="w"> </span><span class="o">[</span>--session-recording<span class="o">]</span><span class="w"> </span><span class="o">[</span>--hub-config<span class="w"> </span>PATH<span class="o">]</span><span class="w"> </span><span class="o">[</span>--health-port<span class="w"> </span>PORT<span class="o">]</span>
@@ -572,7 +582,7 @@ protocols, so they are intentionally excluded from the user-facing catalog.</p>
 </dl>
 </section>
 <section id="simple-vlm-example-model-servers">
-<h2>simple_vlm_example_model_servers<a class="headerlink" href="#simple-vlm-example-model-servers" title="Link to this heading">#</a></h2>
+<h3>simple_vlm_example_model_servers<a class="headerlink" href="#simple-vlm-example-model-servers" title="Link to this heading">#</a></h3>
 <p>Launch the local model servers required by simple-vlm-example.</p>
 <p>Run from <code class="docutils literal notranslate"><span class="pre">agent-samples/simple-vlm-example/model-servers/</span></code>:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>uv<span class="w"> </span>run<span class="w"> </span>simple_vlm_example_model_servers<span class="w"> </span><span class="o">[</span>--stop<span class="o">]</span><span class="w"> </span><span class="o">[</span>--gpu-profile<span class="w"> </span>NAME<span class="o">]</span>
@@ -587,7 +597,7 @@ protocols, so they are intentionally excluded from the user-facing catalog.</p>
 </dl>
 </section>
 <section id="simple-vlm-example">
-<h2>simple_vlm_example<a class="headerlink" href="#simple-vlm-example" title="Link to this heading">#</a></h2>
+<h3>simple_vlm_example<a class="headerlink" href="#simple-vlm-example" title="Link to this heading">#</a></h3>
 <p>simple-vlm-example orchestrator — vision Q&amp;A over voice or text.</p>
 <p>Run from <code class="docutils literal notranslate"><span class="pre">agent-samples/simple-vlm-example/</span></code>:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>uv<span class="w"> </span>run<span class="w"> </span>simple_vlm_example<span class="w"> </span><span class="o">[</span>--session-recording<span class="o">]</span><span class="w"> </span><span class="o">[</span>--hub-config<span class="w"> </span>PATH<span class="o">]</span><span class="w"> </span><span class="o">[</span>--health-port<span class="w"> </span>PORT<span class="o">]</span>
@@ -604,7 +614,7 @@ protocols, so they are intentionally excluded from the user-facing catalog.</p>
 </dl>
 </section>
 <section id="tea-making-sample-model-servers">
-<h2>tea_making_sample_model_servers<a class="headerlink" href="#tea-making-sample-model-servers" title="Link to this heading">#</a></h2>
+<h3>tea_making_sample_model_servers<a class="headerlink" href="#tea-making-sample-model-servers" title="Link to this heading">#</a></h3>
 <p>Launch the local model servers required by tea-making-sample.</p>
 <p>Run from <code class="docutils literal notranslate"><span class="pre">agent-samples/tea-making-sample/model-servers/</span></code>:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>uv<span class="w"> </span>run<span class="w"> </span>tea_making_sample_model_servers<span class="w"> </span><span class="o">[</span>--stop<span class="o">]</span><span class="w"> </span><span class="o">[</span>--gpu-profile<span class="w"> </span>NAME<span class="o">]</span>
@@ -619,7 +629,7 @@ protocols, so they are intentionally excluded from the user-facing catalog.</p>
 </dl>
 </section>
 <section id="tea-making-sample">
-<h2>tea_making_sample<a class="headerlink" href="#tea-making-sample" title="Link to this heading">#</a></h2>
+<h3>tea_making_sample<a class="headerlink" href="#tea-making-sample" title="Link to this heading">#</a></h3>
 <p>Launch native tea guidance with reused model services.</p>
 <p>Run from <code class="docutils literal notranslate"><span class="pre">agent-samples/tea-making-sample/</span></code>:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>uv<span class="w"> </span>run<span class="w"> </span>tea_making_sample<span class="w"> </span><span class="o">[</span>--expose-web-events<span class="o">]</span><span class="w"> </span><span class="o">[</span>--session-recording<span class="o">]</span><span class="w"> </span><span class="o">[</span>--hub-config<span class="w"> </span>PATH<span class="o">]</span><span class="w"> </span><span class="o">[</span>--health-port<span class="w"> </span>PORT<span class="o">]</span>
@@ -638,7 +648,7 @@ protocols, so they are intentionally excluded from the user-facing catalog.</p>
 </dl>
 </section>
 <section id="xr-render-demo-model-servers">
-<h2>xr_render_demo_model_servers<a class="headerlink" href="#xr-render-demo-model-servers" title="Link to this heading">#</a></h2>
+<h3>xr_render_demo_model_servers<a class="headerlink" href="#xr-render-demo-model-servers" title="Link to this heading">#</a></h3>
 <p>Launch the local model servers required by xr-render-demo.</p>
 <p>Run from <code class="docutils literal notranslate"><span class="pre">agent-samples/xr-render-demo/model-servers/</span></code>:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>uv<span class="w"> </span>run<span class="w"> </span>xr_render_demo_model_servers<span class="w"> </span><span class="o">[</span>--stop<span class="o">]</span><span class="w"> </span><span class="o">[</span>--gpu-profile<span class="w"> </span>NAME<span class="o">]</span>
@@ -653,7 +663,7 @@ protocols, so they are intentionally excluded from the user-facing catalog.</p>
 </dl>
 </section>
 <section id="xr-render-demo">
-<h2>xr_render_demo<a class="headerlink" href="#xr-render-demo" title="Link to this heading">#</a></h2>
+<h3>xr_render_demo<a class="headerlink" href="#xr-render-demo" title="Link to this heading">#</a></h3>
 <p>xr-render-demo orchestrator. Runs the process stack for this sample.</p>
 <p>Run from <code class="docutils literal notranslate"><span class="pre">agent-samples/xr-render-demo/</span></code>:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>uv<span class="w"> </span>run<span class="w"> </span>xr_render_demo<span class="w"> </span><span class="o">[</span>--session-recording<span class="o">]</span><span class="w"> </span><span class="o">[</span>--hub-config<span class="w"> </span>PATH<span class="o">]</span><span class="w"> </span><span class="o">[</span>--health-port<span class="w"> </span>PORT<span class="o">]</span>
@@ -670,6 +680,7 @@ protocols, so they are intentionally excluded from the user-facing catalog.</p>
 </dl>
 </section>
 </div>
+</section>
 </section>
 
 
@@ -707,9 +718,26 @@ protocols, so they are intentionally excluded from the user-facing catalog.</p>
             
             
 
-<div class="bd-sidebar-secondary"></div>
+
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
 
 
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sample-commands">Sample commands</a></li>
+</ul>
+  </nav></div>
+
+</div></div>
               
             
 

@@ -5,7 +5,14 @@
 
 # xr-render-demo — architecture
 
-This architecture reference describes the xr-render-demo sample. Refer to
+## Overview
+
+Use this reference for spatial assistants that let users inspect and edit an
+XR scene through conversation. It coordinates specialized agents and scene
+tools while a separate process owns and renders the scene, providing a
+structure you can adapt to other spatial tasks.
+
+Refer to
 {doc}`/getting_started/quickstart` to run the sample. For inference-server
 mechanics shared with other samples, refer to
 {doc}`/components/ai-services`.

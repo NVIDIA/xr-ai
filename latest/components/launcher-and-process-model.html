@@ -470,6 +470,15 @@
 -->
 <section id="launcher-and-process-model">
 <h1>Launcher and process model<a class="headerlink" href="#launcher-and-process-model" title="Link to this heading">#</a></h1>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">#</a></h2>
+<p>An XR AI application runs a hub, agent workers, and any additional services it
+needs. The launcher starts those processes in dependency order, waits for
+readiness, and stops the application stack if a monitored process exits. Use
+it to make your application repeatable to launch and operate.</p>
+</section>
+<section id="declare-the-application-stack">
+<h2>Declare the application stack<a class="headerlink" href="#declare-the-application-stack" title="Link to this heading">#</a></h2>
 <p>Application samples own their DeviceIOHub and worker processes. Model services may
 instead be declared with <code class="docutils literal notranslate"><span class="pre">launch_mode=&quot;reuse&quot;</span></code> and started separately through the
 sample’s separate <code class="docutils literal notranslate"><span class="pre">model-servers/</span></code> convenience launcher.</p>
@@ -536,6 +545,7 @@ requirements.</p>
     <span class="n">run_stack</span><span class="p">(</span><span class="n">PROCESSES</span><span class="p">,</span> <span class="n">_BASE</span><span class="p">)</span>
 </pre></div>
 </div>
+</section>
 <section id="rules">
 <h2>Rules<a class="headerlink" href="#rules" title="Link to this heading">#</a></h2>
 <ul class="simple">
@@ -839,6 +849,8 @@ construction remain with their consuming packages.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#declare-the-application-stack">Declare the application stack</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#rules">Rules</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#consumer-model-readiness">Consumer model readiness</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#serial-and-parallel-items">Serial and parallel items</a></li>

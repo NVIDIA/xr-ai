@@ -470,9 +470,17 @@
 -->
 <section id="agent-sdk">
 <h1>Agent SDK<a class="headerlink" href="#agent-sdk" title="Link to this heading">#</a></h1>
-<p>The SDK is split by dependency boundary. Directory names match the Python
-imports developers use; distribution names remain stable for package
-installation.</p>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">#</a></h2>
+<p>The Agent SDK helps you build applications that respond to what users see and
+say. It provides reusable support for device input, model calls, tools,
+conversation, and voice output, so you can focus on the behavior specific to
+your application.</p>
+</section>
+<section id="packages">
+<h2>Packages<a class="headerlink" href="#packages" title="Link to this heading">#</a></h2>
+<p>Packages separate dependency and ownership boundaries. The table maps source
+directories to Python imports; use distribution names for installation.</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Directory</p></th>
@@ -528,6 +536,7 @@ installation.</p>
 <a class="reference internal" href="../reference/agent-sdk-voice.html"><span class="doc">xr-ai-voice</span></a>, and <a class="reference internal" href="../reference/agent-sdk-web-events.html"><span class="doc">xr-ai-web-events</span></a>.
 Refer to the generated <a class="reference internal" href="../reference/python/index.html"><span class="doc">API Reference</span></a> for public names,
 signatures, types, defaults, fields, and method-level behavior.</p>
+</section>
 <section id="ownership-boundaries">
 <h2>Ownership boundaries<a class="headerlink" href="#ownership-boundaries" title="Link to this heading">#</a></h2>
 <p>An <code class="docutils literal notranslate"><span class="pre">Agent</span></code> owns its state, resources, background tasks, lifecycle, and
@@ -544,14 +553,17 @@ on the corresponding typed service protocols. Adapter behavior, endpoint
 connectivity, deployment ownership, credentials, and model-specific wire
 details remain inside that package. Refer to <a class="reference internal" href="ai-services.html"><span class="doc">AI inference servers</span></a> for deployment and
 operational guidance.</p>
-<p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> owns readiness, hub transport, voice gating, its private media
-pipeline, signal handling, and cleanup. It publishes final pre-gate transcripts
-separately from gate-accepted user queries, optionally publishes typed
-participant lifecycle events, and consumes typed voice output. Join and leave
-publication stays non-blocking for the media pipeline while preserving order per
-participant. Application agents subscribe to the events they own and clean up
-their own participant state. Pipecat and the media session remain implementation
-details.</p>
+<p>When given the worker’s ready file, <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> signals process readiness
+after its private media transport initializes; DeviceIOHub separately owns
+client readiness. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> also owns hub transport, voice gating, its
+private media pipeline, signal handling, and cleanup. Its transcript
+publication follows the active mode and ASR backend’s policy, so only selected
+final pre-gate transcripts are published separately from gate-accepted user
+queries. It can also publish typed participant lifecycle events and consumes
+typed voice output. Join and leave publication stays non-blocking for the
+media pipeline while preserving order per participant. Application agents
+subscribe to the events they own and clean up their own participant state.
+Pipecat and the media session remain implementation details.</p>
 <p>Applications may publish selected compact payloads to <code class="docutils literal notranslate"><span class="pre">WEB_EVENT_TOPIC</span></code> for a
 <code class="docutils literal notranslate"><span class="pre">WebEventsAgent</span></code> to display. The viewer owns only a bounded live history and a
 loopback HTTP listener by default. It is not persistence, does not inspect every
@@ -631,6 +643,8 @@ rather than API shape.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#packages">Packages</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#ownership-boundaries">Ownership boundaries</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#documentation-boundary">Documentation boundary</a></li>
 </ul>

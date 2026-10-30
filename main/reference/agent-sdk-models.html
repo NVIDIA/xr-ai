@@ -470,13 +470,23 @@
 -->
 <section id="xr-ai-models">
 <h1>xr-ai-models<a class="headerlink" href="#xr-ai-models" title="Link to this heading">#</a></h1>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">#</a></h2>
+<p>The model that works for your prototype may change as you tune quality,
+hardware use, or deployment. Shared model interfaces let your application call
+the capabilities it needs while configuration selects the supported model
+adapter and endpoint.</p>
+</section>
+<section id="model-interfaces">
+<h2>Model interfaces<a class="headerlink" href="#model-interfaces" title="Link to this heading">#</a></h2>
 <p><a id="contract"></a></p>
-<p id="agent-sdk-models-contract"><code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code> defines typed LLM, VLM, STT, TTS, embedding, decision, and OCR protocols and
-constructs concrete clients from deployment profiles. Workers depend on those
-protocols instead of hand-written HTTP or vendor SDK calls. Refer to
+<p id="agent-sdk-models-contract">The protocols cover LLM, VLM, STT, TTS, embedding, decision, and OCR services.
+Workers construct clients through the factories in <code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code>; model HTTP
+and vendor SDK calls stay inside the adapters. Refer to
 <a class="reference internal" href="python/index.html"><span class="doc">API Reference</span></a> for exact classes, methods, fields, and defaults. Refer to
 <a class="reference internal" href="../components/ai-services.html"><span class="doc">AI inference servers</span></a> for server operation.</p>
 <p><a id="quickstart"></a></p>
+</section>
 <section id="construct-a-model-client">
 <span id="agent-sdk-models-quickstart"></span><h2>Construct a model client<a class="headerlink" href="#construct-a-model-client" title="Link to this heading">#</a></h2>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_models</span><span class="w"> </span><span class="kn">import</span> <span class="n">ChatMessage</span><span class="p">,</span> <span class="n">load_models_config</span><span class="p">,</span> <span class="n">make_llm</span>
@@ -883,6 +893,8 @@ repository root:</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#model-interfaces">Model interfaces</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#construct-a-model-client">Construct a model client</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#annotated-consumer-configuration">Annotated consumer configuration</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#request-failures">Request failures</a></li>

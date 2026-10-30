@@ -470,12 +470,18 @@
 -->
 <section id="xr-ai-hub">
 <h1>xr-ai-hub<a class="headerlink" href="#xr-ai-hub" title="Link to this heading">#</a></h1>
-<p><code class="docutils literal notranslate"><span class="pre">xr-ai-hub-client</span></code> is the minimal agent-side DeviceIOHub boundary. It depends
-only on pyzmq and msgpack and contains no LiveKit, web-server, model, tool, or
-voice-pipeline code. Refer to the generated <a class="reference internal" href="python/index.html"><span class="doc">API Reference</span></a> for public types
-and signatures.</p>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">#</a></h2>
+<p>If your application needs to process device input directly, its worker must
+receive media and participant events and return results to the right user. The
+hub client provides that connection to DeviceIOHub, letting you build a custom
+processor without implementing the device-facing transport.</p>
+</section>
 <section id="processor-endpoints">
 <span id="subscription-and-roster-contract"></span><h2>Processor endpoints<a class="headerlink" href="#processor-endpoints" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">xr-ai-hub-client</span></code> depends only on pyzmq and msgpack. It contains no LiveKit,
+web-server, model, tool, or voice-pipeline code. Refer to the generated
+<a class="reference internal" href="python/index.html"><span class="doc">API Reference</span></a> for public types and signatures.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_hub</span><span class="w"> </span><span class="kn">import</span> <span class="n">DataMessage</span><span class="p">,</span> <span class="n">ProcessorEndpoint</span>
 
 <span class="n">endpoint</span> <span class="o">=</span> <span class="n">ProcessorEndpoint</span><span class="p">(</span>
@@ -609,6 +615,7 @@ new types use new wire identifiers rather than changing existing tags.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#processor-endpoints">Processor endpoints</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#completed-files">Completed files</a></li>
 </ul>

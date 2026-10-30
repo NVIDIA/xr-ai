@@ -470,20 +470,28 @@
 -->
 <section id="simple-vlm-example">
 <h1>Simple VLM example<a class="headerlink" href="#simple-vlm-example" title="Link to this heading">#</a></h1>
-<p>The simple VLM example is the smallest complete voice-and-vision application in
-the repository. It answers spoken or typed questions about each participant’s
-current camera view and streams the answer to both Pocket TTS and the
-<code class="docutils literal notranslate"><span class="pre">vlm.response</span></code> data topic. Refer to the <a class="reference internal" href="../getting_started/quickstart.html"><span class="doc">quickstart</span></a> to run the sample. This reference owns the
-sample’s design and operational details.</p>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">#</a></h2>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>Simple VLM is deprecated. It remains available for the browser demo and
+existing integrations. Use <a class="reference internal" href="conversation-example.html"><span class="doc">Conversation example</span></a> as the starting point
+for new applications.</p>
+</div>
+<p>This legacy reference shows a single visual-question pipeline, from spoken or
+typed input through image selection to a streamed answer.</p>
+<p>Refer to the <a class="reference internal" href="../getting_started/quickstart.html"><span class="doc">quickstart</span></a> to run the demo.</p>
+</section>
 <section id="composition">
 <h2>Composition<a class="headerlink" href="#composition" title="Link to this heading">#</a></h2>
+<p>Responses stream to Pocket TTS and the <code class="docutils literal notranslate"><span class="pre">vlm.response</span></code> data topic.</p>
 <p>The orchestrator starts DeviceIOHub and the worker. Passing <code class="docutils literal notranslate"><span class="pre">--session-recording</span></code> also
 starts passive session capture; capture is disabled by default. The
 <code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code> profile configures the Cosmos3 Nano and Pocket TTS client
 adapters and endpoints. <code class="docutils literal notranslate"><span class="pre">yaml/voice_gate.yaml</span></code> configures the speaker-ASR
 endpoint. Start those endpoints together with
 the sample’s model-server stack.</p>
-<p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> owns application readiness, hub transport, voice gating, TTS, signals,
+<p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> owns worker readiness, hub transport, voice gating, TTS, signals,
 and cleanup. It publishes accepted speech and typed text as a participant-scoped
 <code class="docutils literal notranslate"><span class="pre">UserQuery</span></code>. <code class="docutils literal notranslate"><span class="pre">SimpleVlmAgent</span></code> always invokes <code class="docutils literal notranslate"><span class="pre">CurrentFrameTool</span></code>. The tool uses
 the hub’s fresh frame when DeviceIOHub is already observing video for that
@@ -499,7 +507,7 @@ this?” does not require an always-on video publication, while clients that are
 already streaming do not receive a redundant capture request.</p>
 <p>A newer participant turn cancels the superseded vision request and interrupts
 its voice response. Participant departure releases the sample agent’s cached
-frames and tasks. This is the reference composition for a single foreground
+frames and tasks. This is a minimal composition for a single foreground
 streaming image query.</p>
 <p>The shared voice layer returns accepted queries as UTF-8 text on
 <code class="docutils literal notranslate"><span class="pre">voice.user-query</span></code>; the sample has no display adapter. The web
@@ -554,8 +562,10 @@ accepted queries without speaker diagnostics.</p>
 a 1280×720 JPEG and consumes the response. This exercises the production
 multimodal path so the first user query does not pay its initialization cost.
 The warmup retries failed inference requests until one succeeds. It does not
-call a health endpoint first. STT and TTS do not gate worker startup; start the
-sample’s model-server stack before the sample so speech requests can succeed.</p>
+call a health endpoint first. With the checked-in voice-gate configuration,
+startup also waits for the required speaker-ASR service. Batch STT and TTS
+health do not gate startup; start the sample’s model-server stack before the
+sample so speech requests can succeed.</p>
 </section>
 <section id="configuration">
 <h2>Configuration<a class="headerlink" href="#configuration" title="Link to this heading">#</a></h2>
@@ -709,6 +719,7 @@ sensitive. Inspect a running sample with:</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#composition">Composition</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#source-map">Source map</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#readiness-and-warmup">Readiness and warmup</a></li>

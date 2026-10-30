@@ -470,13 +470,19 @@
 -->
 <section id="build-your-application">
 <h1>Build your application<a class="headerlink" href="#build-your-application" title="Link to this heading">#</a></h1>
-<p>Read this when building an XR AI application. The directions below assume the
-application is under <code class="docutils literal notranslate"><span class="pre">apps/&lt;your-app&gt;/</span></code>. This directory is for applications
-that are not part of the repository’s sample catalog. The XR AI SDK
-distributions are not published to a package registry; they resolve through
-relative <code class="docutils literal notranslate"><span class="pre">[tool.uv.sources]</span></code> entries in each application’s <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code>.</p>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">#</a></h2>
+<p>Build your own XR AI application from a sample and keep its code and
+configuration under <code class="docutils literal notranslate"><span class="pre">apps/</span></code>. This gives you an application workspace where you
+can develop your task-specific behavior while using the checkout’s SDK and
+services.</p>
+</section>
 <section id="start-from-a-source-checkout">
 <h2>Start from a source checkout<a class="headerlink" href="#start-from-a-source-checkout" title="Link to this heading">#</a></h2>
+<p>The directions below assume the application is under <code class="docutils literal notranslate"><span class="pre">apps/&lt;your-app&gt;/</span></code>. The
+XR AI SDK distributions are not published to a package registry; they resolve
+through relative <code class="docutils literal notranslate"><span class="pre">[tool.uv.sources]</span></code> entries in each application’s
+<code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code>.</p>
 <p>Use the latest stable release by default, falling back to the latest
 prerelease when no stable release exists. Use <code class="docutils literal notranslate"><span class="pre">main</span></code> when the application
 needs unreleased changes. The documentation and checkout must use the same
@@ -585,17 +591,21 @@ identical. In particular, <code class="docutils literal notranslate"><span class
 <code class="docutils literal notranslate"><span class="pre">agent-sdk/xr-ai-hub</span></code>, and <code class="docutils literal notranslate"><span class="pre">xr-ai-agent-runtime</span></code> comes from
 <code class="docutils literal notranslate"><span class="pre">agent-sdk/xr-ai-runtime</span></code>. Refer to <a class="reference internal" href="../components/agent-sdk.html"><span class="doc">Agent SDK</span></a> for package
 ownership boundaries and composition guidance.</p>
+<p><a id="copy-the-reference-application"></a></p>
 </section>
-<section id="copy-the-reference-application">
-<h2>Copy the reference application<a class="headerlink" href="#copy-the-reference-application" title="Link to this heading">#</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">agent-samples/simple-vlm-example/</span></code> is the smallest complete voice-and-vision
-application. Copy its tracked files from the repository root and rename its
-Python package and worker configuration:</p>
+<section id="copy-the-conversation-application">
+<h2>Copy the Conversation application<a class="headerlink" href="#copy-the-conversation-application" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">agent-samples/conversation-example/</span></code> combines conversation, visual questions,
+one-shot alerts, and note-taking. Copy its tracked files from the repository
+root and rename its Python package and worker configuration. Keep only the
+destinations your application needs. The deprecated
+<a class="reference internal" href="../reference/simple-vlm-example.html"><span class="doc">Simple VLM sample</span></a> remains available for
+the browser demo and existing integrations.</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>mkdir<span class="w"> </span>-p<span class="w"> </span>apps/my-app
-git<span class="w"> </span>archive<span class="w"> </span>HEAD<span class="w"> </span>agent-samples/simple-vlm-example<span class="w"> </span><span class="p">|</span>
+git<span class="w"> </span>archive<span class="w"> </span>HEAD<span class="w"> </span>agent-samples/conversation-example<span class="w"> </span><span class="p">|</span>
 <span class="w">  </span>tar<span class="w"> </span>-x<span class="w"> </span>--strip-components<span class="o">=</span><span class="m">2</span><span class="w"> </span>-C<span class="w"> </span>apps/my-app
-mv<span class="w"> </span>apps/my-app/worker/simple_vlm_example_worker<span class="w"> </span>apps/my-app/worker/my_app_worker
-mv<span class="w"> </span>apps/my-app/yaml/simple_vlm_example_worker.yaml<span class="w"> </span>apps/my-app/yaml/my_app_worker.yaml
+mv<span class="w"> </span>apps/my-app/worker/conversation_example_worker<span class="w"> </span>apps/my-app/worker/my_app_worker
+mv<span class="w"> </span>apps/my-app/yaml/conversation_example_worker.yaml<span class="w"> </span>apps/my-app/yaml/my_app_worker.yaml
 </pre></div>
 </div>
 <p>Replace the sample names consistently:</p>
@@ -606,35 +616,26 @@ mv<span class="w"> </span>apps/my-app/yaml/simple_vlm_example_worker.yaml<span c
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">simple_vlm_example_worker</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">conversation_example_worker</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">my_app_worker</span></code></p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">simple-vlm-example</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">conversation-example</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">my-app</span></code></p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">simple_vlm_example</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">conversation_example</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">my_app</span></code></p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">simple-vlm</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">my-app</span></code></p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">simple_vlm</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">my_app</span></code></p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">SimpleVlmAgent</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">MyAppAgent</span></code></p></td>
 </tr>
 </tbody>
 </table>
 </div>
 <p>Substitute the application’s real kebab-case name for <code class="docutils literal notranslate"><span class="pre">my-app</span></code>, then derive its
-snake-case package and CamelCase class names mechanically. Apply the
+snake-case package and command names mechanically. Apply the
 replacements in the listed order across the entire copied tree, including
 comments and docstrings. Update any remaining <code class="docutils literal notranslate"><span class="pre">agent-samples/</span></code>
 working-directory references to <code class="docutils literal notranslate"><span class="pre">apps/</span></code>, and change prose that still describes
 the application as a repository sample. The following check should produce no
 output:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>grep<span class="w"> </span>-rniE<span class="w"> </span><span class="s1">'simple[-_ ]?vlm'</span><span class="w"> </span>apps/my-app
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>rg<span class="w"> </span>-ni<span class="w"> </span><span class="s1">'conversation[-_ ]example'</span><span class="w"> </span>apps/my-app
 </pre></div>
 </div>
 <p>The <code class="docutils literal notranslate"><span class="pre">apps/</span></code> and <code class="docutils literal notranslate"><span class="pre">agent-samples/</span></code> directories are at the same depth, so the
@@ -642,7 +643,7 @@ copied projects’ relative sources continue to work. Keep each
 <code class="docutils literal notranslate"><span class="pre">[tool.uv.sources]</span></code> entry paired with its distribution in
 <code class="docutils literal notranslate"><span class="pre">[project].dependencies</span></code>. Every unpublished XR AI dependency must retain a
 repository source mapping.</p>
-<p>Use this map to separate reusable scaffolding from the VLM example:</p>
+<p>Use this map to separate reusable scaffolding from the sample’s capabilities:</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Files</p></th>
@@ -668,12 +669,12 @@ repository source mapping.</p>
 <td><p>Replace the prompt, frame, model, voice, and application-specific settings with the fields the application consumes.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">worker/.../app.py</span></code></p></td>
-<td><p>Keep the <code class="docutils literal notranslate"><span class="pre">AgentRuntime</span></code> composition and the <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> lifecycle when the application uses voice.</p></td>
-<td><p>Replace the VLM warmup, model roles, and paired <code class="docutils literal notranslate"><span class="pre">CurrentFrameTool</span></code> and <code class="docutils literal notranslate"><span class="pre">StreamingImageQueryTool</span></code> composition with the application’s services and agents.</p></td>
+<td><p>Keep the <code class="docutils literal notranslate"><span class="pre">AgentRuntime</span></code>, <code class="docutils literal notranslate"><span class="pre">AgentRouter</span></code>, and <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> composition and lifecycle for the capabilities retained.</p></td>
+<td><p>Adapt registered destinations, model roles, health probes, output topics, and context subscriptions together. Keep the router decision service while using routing.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">worker/.../agent.py</span></code> and <code class="docutils literal notranslate"><span class="pre">worker/.../prompts/system.txt</span></code></p></td>
-<td><p>Keep the participant-scoped task ownership, detached-task context and scope, and cancellation patterns. Refer to <a class="reference internal" href="../reference/agent-sdk-runtime.html"><span class="doc">xr-ai-runtime</span></a>.</p></td>
-<td><p>Replace the vision question-and-answer workflow, topics, tool calls, and prompt.</p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">worker/.../_visual_agents.py</span></code>, <code class="docutils literal notranslate"><span class="pre">_alert_agent.py</span></code>, <code class="docutils literal notranslate"><span class="pre">_alert_checks.py</span></code>, <code class="docutils literal notranslate"><span class="pre">_alert_compile.py</span></code>, <code class="docutils literal notranslate"><span class="pre">_note_taking.py</span></code>, and <code class="docutils literal notranslate"><span class="pre">prompts/</span></code></p></td>
+<td><p>Keep participant-scoped ownership and cancellation patterns. Refer to <a class="reference internal" href="../reference/conversation-example.html"><span class="doc">Conversation example</span></a> for their boundaries.</p></td>
+<td><p>Adapt or remove the current-view, alert, and note-taking destinations and their prompts, tools, and subscriptions. Do not leave removed destinations registered.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code></p></td>
 <td><p>Keep the adapter and endpoint separation.</p></td>
@@ -691,10 +692,14 @@ repository source mapping.</p>
 </table>
 </div>
 <p>Rewrite the copied README as application-owned documentation. Replace its title
-and the “Simple VLM example” and “This sample” descriptions, and remove links to
-the Simple VLM sample reference. In particular, make sure the name replacements
-did not leave a nonexistent <code class="docutils literal notranslate"><span class="pre">/reference/my-app.html</span></code> link. Change its working
-directory to <code class="docutils literal notranslate"><span class="pre">apps/my-app/</span></code> and use the model-server command shown below.</p>
+and the “Conversation example” and “This sample” descriptions, and remove links
+to the Conversation sample reference. In particular, make sure the name
+replacements did not leave a nonexistent <code class="docutils literal notranslate"><span class="pre">/reference/my-app.html</span></code> link. Change
+its working directory to <code class="docutils literal notranslate"><span class="pre">apps/my-app/</span></code> and use the model-server command shown
+below.
+The copied <code class="docutils literal notranslate"><span class="pre">model-servers/</span></code> directory is an application-owned preset if you
+choose to maintain it; the commands below reuse the repository’s Conversation
+stack without changing its configuration.</p>
 <p>The copied DeviceIOHub YAML leaves credentials blank, so the hub generates a
 fresh pair at startup. To use a fixed pair, set <code class="docutils literal notranslate"><span class="pre">LIVEKIT_API_KEY</span></code> and
 <code class="docutils literal notranslate"><span class="pre">LIVEKIT_API_SECRET</span></code> in the launch environment. Never put actual keys or tokens
@@ -715,21 +720,22 @@ uv<span class="w"> </span>--config-file<span class="w"> </span>../../uv.toml<spa
 <h3>Local model services<a class="headerlink" href="#local-model-services" title="Link to this heading">#</a></h3>
 <p>The model launcher requires <code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code>. Configure it through one of the
 sources in <a class="reference internal" href="../getting_started/credentials.html"><span class="doc">Credentials</span></a> before starting the application.
-The copied application reuses speaker ASR, VLM, and TTS services. Start those shared
-services first and wait for the launcher to report that all processes are
-ready:</p>
+The copied application reuses speaker ASR, LLM, VLM, TTS, and the Clef decision
+service. Start those shared services first and wait for the launcher to report
+that all processes are ready:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>../../uv.toml<span class="w"> </span>run<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--project<span class="w"> </span>../../agent-samples/simple-vlm-example/model-servers<span class="w"> </span>simple_vlm_example_model_servers
+<span class="w">  </span>--project<span class="w"> </span>../../agent-samples/conversation-example/model-servers<span class="w"> </span>conversation_example_model_servers
 </pre></div>
 </div>
 </section>
 <section id="hosted-endpoints">
 <h3>Hosted endpoints<a class="headerlink" href="#hosted-endpoints" title="Link to this heading">#</a></h3>
-<p>Follow <a class="reference internal" href="deploying-with-nim.html"><span class="doc">Deploying samples with NIM endpoints</span></a> to configure and validate the STT, VLM,
-and TTS roles in the application’s <code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code>. Keep a copy of the local
-profile before replacing its entries. Apply the guide’s voice-gate settings
-for hosted speech to disable the copied local speaker backend. Start the
-application after endpoint validation.</p>
+<p>Follow <a class="reference internal" href="deploying-with-nim.html"><span class="doc">Deploying samples with NIM endpoints</span></a> to configure and validate the STT, LLM,
+VLM, and TTS roles in the application’s <code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code>. Retain the <code class="docutils literal notranslate"><span class="pre">router</span></code>
+role and start Clef separately or use a compatible decision endpoint as that
+guide describes. Keep a copy of the local profile before replacing its entries.
+Apply the guide’s voice-gate settings for hosted speech to disable the copied
+local speaker backend. Start the application after endpoint validation.</p>
 </section>
 <section id="start-the-application">
 <h3>Start the application<a class="headerlink" href="#start-the-application" title="Link to this heading">#</a></h3>
@@ -757,12 +763,12 @@ targets before handing the application to its user.</p>
 <p>The application launcher owns only DeviceIOHub, the worker, and any other
 application processes. The separate model-server launcher owns shared model
 startup and readiness. The voice runtime checks required speaker ASR
-readiness, and the copied worker exercises VLM inference as an application
-warmup before announcing readiness. Keep or replace that probe according to the
-capabilities the application must warm or verify. When a model role changes,
-update <code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code> and the worker’s service construction. Do not add
-shared model services to the application’s <code class="docutils literal notranslate"><span class="pre">PROCESSES</span></code> list. If a process
-fails, use its launch context and run-log directory to investigate through
+readiness, and the copied worker checks LLM, router, and VLM health before
+announcing readiness; it does not perform VLM inference as a startup warmup.
+Adapt those probes to the capabilities the application retains. When a model
+role changes, update <code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code> and the worker’s service construction.
+Do not add shared model services to the application’s <code class="docutils literal notranslate"><span class="pre">PROCESSES</span></code> list. If a
+process fails, use its launch context and run-log directory to investigate through
 <a class="reference internal" href="troubleshooting.html"><span class="doc">Troubleshooting</span></a>.</p>
 </section>
 </section>
@@ -774,7 +780,7 @@ request, and the recovery behavior for unavailable inputs. Keep these checks in
 <code class="docutils literal notranslate"><span class="pre">apps/my-app/tests/</span></code> using the layout and command below.</p>
 <p>From the repository root, load the worker configuration before starting
 services. This check imports the renamed package, reads the application YAML,
-and resolves packaged files such as the system prompt:</p>
+and resolves packaged prompt files:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>uv.toml<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>apps/my-app/worker<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>python<span class="w"> </span>-<span class="w"> </span><span class="s">&lt;&lt;'PY'</span>
 <span class="s">from pathlib import Path</span>
@@ -787,9 +793,13 @@ and resolves packaged files such as the system prompt:</p>
 <p>Exercise model wire behavior with <code class="docutils literal notranslate"><span class="pre">tests/_stub_openai.py</span></code>, which provides an
 <code class="docutils literal notranslate"><span class="pre">httpx.MockTransport</span></code> implementation of OpenAI-compatible endpoints. The wire
 tests exercise <code class="docutils literal notranslate"><span class="pre">xr_ai_models</span></code> clients without importing the application worker.
-Use <code class="docutils literal notranslate"><span class="pre">tests/test_simple_vlm_example_wire.py</span></code> as the small STT, VLM, and TTS
-wire-format pattern; use <code class="docutils literal notranslate"><span class="pre">tests/test_xr_render_demo_wire.py</span></code> for LLM tool-call
-flows.</p>
+The deprecated sample’s <code class="docutils literal notranslate"><span class="pre">tests/test_simple_vlm_example_wire.py</span></code> remains a small
+STT, VLM, and TTS wire-format test pattern. Use
+<code class="docutils literal notranslate"><span class="pre">tests/test_xr_render_demo_wire.py</span></code> for LLM tool-call flows. For the copied
+application’s routing, context, and destination behavior, adapt the CPU cases
+in <code class="docutils literal notranslate"><span class="pre">tests/test_conversation_example_worker.py</span></code> and
+<code class="docutils literal notranslate"><span class="pre">tests/test_conversation_example_agents.py</span></code>; use a fake decision service
+rather than starting Clef for these checks.</p>
 <p>The <code class="docutils literal notranslate"><span class="pre">hub</span></code>, <code class="docutils literal notranslate"><span class="pre">make_connector</span></code>, and <code class="docutils literal notranslate"><span class="pre">make_processor</span></code> fixtures in
 <code class="docutils literal notranslate"><span class="pre">tests/conftest.py</span></code> run DeviceIOHub IPC over local ZMQ sockets. They demonstrate
 participant routing and worker-facing endpoint coverage without LiveKit, a
@@ -887,9 +897,10 @@ follow <code class="docutils literal notranslate"><span class="pre">AGENTS.md</s
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#start-from-a-source-checkout">Start from a source checkout</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#choose-the-layers-your-application-needs">Choose the layers your application needs</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#copy-the-reference-application">Copy the reference application</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#copy-the-conversation-application">Copy the Conversation application</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#resolve-and-run-the-application">Resolve and run the application</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#local-model-services">Local model services</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#hosted-endpoints">Hosted endpoints</a></li>

@@ -470,9 +470,16 @@
 -->
 <section id="skills">
 <h1>Skills<a class="headerlink" href="#skills" title="Link to this heading">#</a></h1>
-<p>Skills guide a coding agent through xr-ai workflows: small
-<code class="docutils literal notranslate"><span class="pre">SKILL.md</span></code> modules under the open <a class="reference external" href="https://agentskills.io">Agent Skills</a> spec
-that the agent installs and follows.</p>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">#</a></h2>
+<p>Choose a coding-agent workflow for running a demo, setting up a checkout,
+building an application, or reviewing repository changes. Each skill supplies
+the instructions for that workflow; installation and invocation examples are
+below.</p>
+<p>Skills are small <code class="docutils literal notranslate"><span class="pre">SKILL.md</span></code> modules under the open
+<a class="reference external" href="https://agentskills.io">Agent Skills</a> spec that a coding agent installs and
+follows.</p>
+</section>
 <section id="run-the-browser-demo">
 <h2>Run the browser demo<a class="headerlink" href="#run-the-browser-demo" title="Link to this heading">#</a></h2>
 <p>Choose <code class="docutils literal notranslate"><span class="pre">run-demo</span></code> to try xr-ai. Paste this to your coding agent:</p>
@@ -492,6 +499,9 @@ status, and stop instructions.
 running, and returns its link, interaction verification status, and stop
 instructions. Local model servers remain running independently of the sample;
 model shutdown is a separate action.</p>
+<p>The demo uses the deprecated Simple VLM sample, which remains available for
+trying the stack. For new voice-and-vision application work, use
+<a class="reference internal" href="../reference/conversation-example.html"><span class="doc">Conversation example</span></a> as the recommended foundation.</p>
 <p>Prefer to do it by hand? Follow <a class="reference internal" href="quickstart.html"><span class="doc">Quickstart</span></a>.</p>
 </section>
 <section id="set-up-for-development">
@@ -565,7 +575,7 @@ repository; new skills land there with the features they cover.</p>
 <p>Set <code class="docutils literal notranslate"><span class="pre">REF</span></code> to the repository ref you will build against, choose a <code class="docutils literal notranslate"><span class="pre">SKILL</span></code> from
 the table, and download it into the directory used by your coding agent:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">SKILLS_DIR</span><span class="o">=</span>/path/to/your/agent/skills
-<span class="nv">REF</span><span class="o">=</span>main<span class="w">  </span><span class="c1"># or a release tag such as v0.3.0</span>
+<span class="nv">REF</span><span class="o">=</span>main<span class="w">  </span><span class="c1"># or a release tag such as v0.4.0-beta</span>
 <span class="nv">SKILL</span><span class="o">=</span>run-demo
 curl<span class="w"> </span>-fsSL<span class="w"> </span>--create-dirs<span class="w"> </span>-o<span class="w"> </span><span class="s2">"</span><span class="nv">$SKILLS_DIR</span><span class="s2">/</span><span class="nv">$SKILL</span><span class="s2">/SKILL.md"</span><span class="w"> </span><span class="se">\</span>
 <span class="w">  </span><span class="s2">"https://raw.githubusercontent.com/NVIDIA/xr-ai/</span><span class="nv">$REF</span><span class="s2">/skills/</span><span class="nv">$SKILL</span><span class="s2">/SKILL.md"</span>
@@ -635,6 +645,7 @@ directly in the current session.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#run-the-browser-demo">Run the browser demo</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#set-up-for-development">Set up for development</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#build-your-application">Build your application</a></li>

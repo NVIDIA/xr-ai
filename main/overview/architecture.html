@@ -467,18 +467,18 @@
 -->
 <section id="architecture">
 <h1>Architecture<a class="headerlink" href="#architecture" title="Link to this heading">#</a></h1>
-<p>XR AI connects interactive clients, including XR glasses and headsets, phones,
-and web browsers, to agent workers and AI services without making transport,
-media, or model implementation details part of application logic. The system
-is process-oriented: the device I/O hub, workers, model servers, and optional
-capability services run independently and communicate through small, explicit
-interfaces.</p>
-<p>This architecture overview describes the system shape, runtime paths, and
-ownership boundaries.
-The component pages linked under <a class="reference internal" href="#where-details-live">Where details live</a>
-contain configuration, protocol, and operational details.</p>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">#</a></h2>
+<p>As your application adds perception, conversation, actions, or XR rendering,
+you need to decide where each capability belongs and how it connects to the
+others. XR AI separates these responsibilities so you can extend your
+application’s behavior while reusing its device connections and model
+services.</p>
+</section>
 <section id="system-context">
 <h2>System context<a class="headerlink" href="#system-context" title="Link to this heading">#</a></h2>
+<p>The device I/O hub, workers, model servers, and optional capability services
+run as independent processes and communicate through explicit interfaces.</p>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>                                     control plane
                           sample orchestrator + launcher
                          starts, orders, and monitors processes
@@ -831,6 +831,7 @@ contracts. Use these references for implementation and operational detail:</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#system-context">System context</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#components-and-ownership">Components and ownership</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#runtime-data-paths">Runtime data paths</a><ul class="nav section-nav flex-column">

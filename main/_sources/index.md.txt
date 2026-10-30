@@ -52,8 +52,8 @@ verification status.
 :::{grid-item-card} 🚀 Get started
 :link: getting_started/quickstart
 :link-type: doc
-Run a sample in minutes: the model servers, the simple VLM agent, or the full
-xr-render demo.
+Try the recommended conversation sample, explore the legacy Simple VLM browser
+demo, or launch the full xr-render demo.
 :::
 
 :::{grid-item-card} 🧩 Architecture
@@ -71,7 +71,8 @@ The server runtime, agent SDK, AI services, and the launcher.
 :::{grid-item-card} 📦 Build your application
 :link: guides/building-your-app
 :link-type: doc
-Start from the reference application and choose the SDK layers your app needs.
+Start from the recommended conversation-example and choose the SDK layers your
+application needs.
 :::
 
 :::{grid-item-card} 🧱 Add a sample

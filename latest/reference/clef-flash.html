@@ -470,11 +470,18 @@
 -->
 <section id="clef-flash-local-decision-server">
 <h1>Clef-Flash local decision server<a class="headerlink" href="#clef-flash-local-decision-server" title="Link to this heading">#</a></h1>
-<p>The optional Clef-Flash 9B service exposes the upstream joint-schema model over
-the typed SystemOne HTTP contract used by <code class="docutils literal notranslate"><span class="pre">make_decision</span></code>. It loads the pinned
-release’s <code class="docutils literal notranslate"><span class="pre">joint_schema_model.py</span></code> directly from the model directory and calls
-its native <code class="docutils literal notranslate"><span class="pre">load_release_model</span></code> and <code class="docutils literal notranslate"><span class="pre">systemone</span></code> functions. The service does not
-route decisions through a generation endpoint.</p>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">#</a></h2>
+<p>Use Clef-Flash for decisions among choices defined by your application, such
+as routing a request to an agent or checking a visible condition. This local
+service exposes those decisions through the SDK’s decision interface.</p>
+</section>
+<section id="service-contract">
+<h2>Service contract<a class="headerlink" href="#service-contract" title="Link to this heading">#</a></h2>
+<p>The Clef-Flash 9B service exposes the upstream joint-schema model over the
+typed SystemOne HTTP contract used by <code class="docutils literal notranslate"><span class="pre">make_decision</span></code>. It loads the pinned release’s
+<code class="docutils literal notranslate"><span class="pre">joint_schema_model.py</span></code> directly from the model directory and calls its native
+<code class="docutils literal notranslate"><span class="pre">load_release_model</span></code> and <code class="docutils literal notranslate"><span class="pre">systemone</span></code> functions rather than a generation endpoint.</p>
 <p>The service supports choice questions about text and ordered images. A request
 must name the configured model, include state, and provide at least one question with a
 string instruction and two or more named choices. An empty instruction uses
@@ -492,6 +499,7 @@ worker call finishes. <code class="docutils literal notranslate"><span class="pr
 <code class="docutils literal notranslate"><span class="pre">GET</span> <span class="pre">/v1/models</span></code> include model and <code class="docutils literal notranslate"><span class="pre">model_revision</span></code> provenance.
 <code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">/v1/systemone</span></code> returns the standard answers and usage object with the
 same provenance fields.</p>
+</section>
 <section id="launching">
 <h2>Launching<a class="headerlink" href="#launching" title="Link to this heading">#</a></h2>
 <p>Select <code class="docutils literal notranslate"><span class="pre">clef</span></code> in a sample’s model-server stack, or start the service from the
@@ -646,6 +654,8 @@ processing and does not itself guarantee better decisions.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#service-contract">Service contract</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#launching">Launching</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#updating-a-running-service">Updating a running service</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#http-contract">HTTP contract</a></li>

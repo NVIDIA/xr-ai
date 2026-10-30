@@ -5,26 +5,23 @@
 
 # Tea-making guidance — building deterministic visual workflows
 
-The tea-making sample is a reference for applications that combine a guided
-procedure, visual evidence, foreground questions, independent background
-observers, and voice output. Refer to the
-{doc}`quickstart </getting_started/quickstart>` to run the sample. This
-architecture reference explains how to adapt the sample to another procedure
-rather than merely changing model settings.
+## Overview
+
+Use this reference for procedural assistants that combine spoken guidance with
+visual checks of task progress. Tea making is the example: the application
+controls the steps and completion rules, while models interpret observations
+and answer questions. Adapt the workflow and its tools to guide other
+procedures.
+
+To run the sample, refer to the
+{doc}`quickstart </getting_started/quickstart>`.
 
 For speech deployment and explicit batch-STT selection, refer to
 {doc}`/guides/customizing-model-servers`.
 
-The defining pattern is a deterministic workflow around an agentic core. YAML
-declares the steps and state contract. A VLM describes each current view, and
-the observation LLM judges that natural-language caption and selects native
-tools. Application code validates the resulting state proposal and counts any
-required consecutive confirmations. The model does not choose which workflow
-is active, mutate arbitrary state, or advance a step implicitly.
-
 ## What to copy
 
-Use this sample when your application needs one or more of these patterns:
+Reusable patterns include:
 
 - a foreground agent that changes its tool catalog based on explicit state;
 - a guided procedure whose evidence comes from current visual observations;
@@ -89,6 +86,12 @@ records remain under `agent-samples/tea-making-sample/artifacts/`; the viewer
 is only a bounded view of the current worker process.
 
 ## Architecture
+
+YAML declares the workflow steps and state contract. A VLM describes each
+current view, and the observation LLM judges that caption and selects native
+tools. Application code validates the resulting state proposal and counts any
+required consecutive confirmations. The model does not choose which workflow
+is active, mutate arbitrary state, or advance a step implicitly.
 
 ```text
 camera frames ────────────────> ParticipantImageAgent

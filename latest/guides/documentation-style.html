@@ -474,6 +474,27 @@
 and reStructuredText. Match the surrounding document and keep edits scoped.
 When maintainers adopt a repository-wide convention, update this reference in
 the same change. Document scoped exceptions in the affected content.</p>
+<section id="opening-overviews">
+<h2>Opening overviews<a class="headerlink" href="#opening-overviews" title="Link to this heading">#</a></h2>
+<p>Long reader-facing narrative pages open with an <strong>Overview</strong> section suited
+to their audience and purpose. For capabilities and architecture, explain
+what the developer can build and why the capability helps. Use concrete
+behavior rather than generic claims about what an assistant needs.</p>
+<p>Frame maintained samples as references for a broader class of applications.
+Identify the reusable pattern, then explain how the sample demonstrates it.
+Base generalizations on the implementation and its extension points; keep
+sample-specific behavior distinct from what a developer must adapt.</p>
+<p>For policies, references, prerequisites, troubleshooting, and migration notes,
+state the scope, applicable setup or versions, and the task the reader can
+complete. These openings do not need an application-building rationale.
+Deprecated samples lead with their status and replacement. Keep all openings
+concise; leave API lists, instructions, and technical detail in the body.</p>
+<p>Fold existing introductory context into the overview and remove repeated
+framing afterward. Follow it with the first useful example, procedure, or
+design detail. Preserve unique technical guidance in the appropriate section.
+Short navigation pages and redirects do not need an overview. Generated API
+pages are also exempt; judge catalog pages by their rendered length.</p>
+</section>
 <section id="cross-references">
 <h2>Cross-references<a class="headerlink" href="#cross-references" title="Link to this heading">#</a></h2>
 <p>Introduce documentation links with <strong>Refer to</strong> or <strong>refer to</strong>, not “See” or
@@ -575,6 +596,7 @@ In reStructuredText, make title underlines span the full title.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#opening-overviews">Opening overviews</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#cross-references">Cross-references</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#migration-guides">Migration guides</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#slashes-in-prose">Slashes in prose</a></li>

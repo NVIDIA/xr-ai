@@ -470,10 +470,17 @@
 -->
 <section id="xr-render-demo-architecture">
 <h1>xr-render-demo — architecture<a class="headerlink" href="#xr-render-demo-architecture" title="Link to this heading">#</a></h1>
-<p>This architecture reference describes the xr-render-demo sample. Refer to
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">#</a></h2>
+<p>Use this reference for spatial assistants that let users inspect and edit an
+XR scene through conversation. It coordinates specialized agents and scene
+tools while a separate process owns and renders the scene, providing a
+structure you can adapt to other spatial tasks.</p>
+<p>Refer to
 <a class="reference internal" href="../getting_started/quickstart.html"><span class="doc">Quickstart</span></a> to run the sample. For inference-server
 mechanics shared with other samples, refer to
 <a class="reference internal" href="../components/ai-services.html"><span class="doc">AI inference servers</span></a>.</p>
+</section>
 <section id="process-stack">
 <h2>Process stack<a class="headerlink" href="#process-stack" title="Link to this heading">#</a></h2>
 <p>The orchestrator (<code class="docutils literal notranslate"><span class="pre">xr_render_demo</span></code>, via <code class="docutils literal notranslate"><span class="pre">xr-ai-launcher</span></code>) declares and starts
@@ -1242,6 +1249,7 @@ turns from different participants queue rather than interleave.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#process-stack">Process stack</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#source-map-and-extension-points">Source map and extension points</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#selecting-the-client-type-webrtc-vs-native">Selecting the client type (WebRTC vs native)</a></li>

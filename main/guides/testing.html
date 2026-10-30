@@ -470,6 +470,14 @@
 -->
 <section id="testing">
 <h1>Testing<a class="headerlink" href="#testing" title="Link to this heading">#</a></h1>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">#</a></h2>
+<p>Run the repository’s test suites and documentation checks when changing shared
+packages, services, or samples. The sections below distinguish CPU checks from
+tests that require GPU hardware or additional services.</p>
+</section>
+<section id="prepare-the-test-environment">
+<h2>Prepare the test environment<a class="headerlink" href="#prepare-the-test-environment" title="Link to this heading">#</a></h2>
 <p>The <code class="docutils literal notranslate"><span class="pre">tests/</span></code> project exercises SDKs, utilities, service wrappers, sample
 behavior, generated documentation invariants, and the DeviceIOHub IPC path.
 Most tests are CPU-only and run without Docker or LiveKit. Node.js 24 is also
@@ -486,6 +494,7 @@ npm<span class="w"> </span>install<span class="w"> </span>--prefix<span class="w
 <p>An existing <code class="docutils literal notranslate"><span class="pre">client-samples/web-xr-build/node_modules</span></code> installation can also
 supply the SDK when the environment override is unset. No LiveKit server or
 camera device is needed for these tests.</p>
+</section>
 <section id="run-the-suite">
 <h2>Run the suite<a class="headerlink" href="#run-the-suite" title="Link to this heading">#</a></h2>
 <p>From the repository root:</p>
@@ -663,6 +672,8 @@ from the same requirements and full release-tag history available.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#prepare-the-test-environment">Prepare the test environment</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#run-the-suite">Run the suite</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#apple-microphone-transaction-tests">Apple microphone transaction tests</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coverage-boundaries">Coverage boundaries</a></li>

@@ -470,15 +470,22 @@
 -->
 <section id="xr-ai-interaction">
 <h1>xr-ai-interaction<a class="headerlink" href="#xr-ai-interaction" title="Link to this heading">#</a></h1>
-<p><code class="docutils literal notranslate"><span class="pre">xr-ai-interaction</span></code> provides the transport-neutral messages exchanged while a
-participant interacts with agents: <code class="docutils literal notranslate"><span class="pre">UserQuery</span></code>, <code class="docutils literal notranslate"><span class="pre">ResponseOutput</span></code>,
-<code class="docutils literal notranslate"><span class="pre">ParticipantJoined</span></code>, <code class="docutils literal notranslate"><span class="pre">ParticipantLeft</span></code>, and <code class="docutils literal notranslate"><span class="pre">Interrupted</span></code>. It depends only on
-Pydantic.</p>
-<p>Input and output boundaries adapt these messages to a medium. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code>
-publishes recognized speech as <code class="docutils literal notranslate"><span class="pre">UserQuery</span></code> and speaks <code class="docutils literal notranslate"><span class="pre">ResponseOutput</span></code> from
-<code class="docutils literal notranslate"><span class="pre">VOICE_OUTPUT_TOPIC</span></code>; a text front end can publish and render the same
-messages. Routing and conversation use them without depending on voice.
-Applications choose topic names; the models define only the payloads.</p>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">#</a></h2>
+<p>Your application’s capabilities may need to serve both spoken and typed
+requests. Shared interaction messages let the same agents answer through
+either interface and distinguish answers from unsolicited updates, such as a
+timer finishing or a monitored condition changing.</p>
+</section>
+<section id="messages">
+<h2>Messages<a class="headerlink" href="#messages" title="Link to this heading">#</a></h2>
+<p>The payload types are <code class="docutils literal notranslate"><span class="pre">UserQuery</span></code>, <code class="docutils literal notranslate"><span class="pre">ResponseOutput</span></code>, <code class="docutils literal notranslate"><span class="pre">ParticipantJoined</span></code>,
+<code class="docutils literal notranslate"><span class="pre">ParticipantLeft</span></code>, and <code class="docutils literal notranslate"><span class="pre">Interrupted</span></code>. The package depends only on Pydantic.
+Applications choose topic names; the types define only the payloads.</p>
+<p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> publishes recognized speech as <code class="docutils literal notranslate"><span class="pre">UserQuery</span></code> and speaks
+<code class="docutils literal notranslate"><span class="pre">ResponseOutput</span></code> from <code class="docutils literal notranslate"><span class="pre">VOICE_OUTPUT_TOPIC</span></code>. A text front end can publish and
+render the same messages.</p>
+</section>
 <section id="reply-and-update-output">
 <h2>Reply and update output<a class="headerlink" href="#reply-and-update-output" title="Link to this heading">#</a></h2>
 <p>A producer declares what kind of output it emits; the consumer decides when it
@@ -583,6 +590,8 @@ documents the exported names and their fields and validation.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#messages">Messages</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reply-and-update-output">Reply and update output</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#python-api-reference">Python API reference</a></li>
 </ul>

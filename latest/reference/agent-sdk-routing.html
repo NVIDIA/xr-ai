@@ -470,13 +470,16 @@
 -->
 <section id="xr-ai-routing">
 <h1>xr-ai-routing<a class="headerlink" href="#xr-ai-routing" title="Link to this heading">#</a></h1>
-<p><code class="docutils literal notranslate"><span class="pre">xr-ai-routing</span></code> provides typed contracts and a participant-scoped router
-for routing turns among application destinations. Each registered destination
-implements the public <code class="docutils literal notranslate"><span class="pre">RoutableAgent</span></code> protocol. It uses the typed
-<code class="docutils literal notranslate"><span class="pre">DecisionService</span></code> for route selection. Destinations keep ownership of their
-model calls, application state, and resources.</p>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">#</a></h2>
+<p>Route user turns among specialized agents for conversation, scene inspection,
+or note-taking. Routing lets those agents share one interaction and keep a
+task in focus, so a multi-step activity can continue across user turns.</p>
+</section>
 <section id="route-a-turn">
 <h2>Route a turn<a class="headerlink" href="#route-a-turn" title="Link to this heading">#</a></h2>
+<p>Each registered destination implements the public <code class="docutils literal notranslate"><span class="pre">RoutableAgent</span></code> protocol;
+the router uses the typed <code class="docutils literal notranslate"><span class="pre">DecisionService</span></code> for route selection.</p>
 <p>Configure <code class="docutils literal notranslate"><span class="pre">AgentRouter(output=...)</span></code> with an async callback for router-owned
 admission, clarification, and acknowledgment text. The callback receives the
 current <code class="docutils literal notranslate"><span class="pre">AgentTurn</span></code>, route name, and text, so it can preserve participant and
@@ -780,6 +783,7 @@ documents the exported names and their signatures, fields, and behavior.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#route-a-turn">Route a turn</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#response-progress-and-routing-context">Response progress and routing context</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#register-the-router-with-a-runtime">Register the router with a runtime</a></li>

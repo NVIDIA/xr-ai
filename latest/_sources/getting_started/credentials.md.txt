@@ -5,8 +5,11 @@
 
 # Credentials
 
-The launcher manages HuggingFace and NGC API tokens so they are never stored
-in source files or YAML configurations.
+## Overview
+
+Configure credentials for model downloads, inference services, and LiveKit
+connections. The required credentials depend on the models and deployment you
+use; the sections below describe their sources and precedence.
 
 ## LiveKit credentials
 

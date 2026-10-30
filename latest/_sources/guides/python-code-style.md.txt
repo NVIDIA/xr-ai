@@ -5,11 +5,15 @@
 
 # Python code style
 
-This reference governs Python code throughout the repository:
-where the public API ends, how failures are represented, and how modules are
-laid out. It covers the SDK, utilities, services, samples, and tests.
-Application-owned projects under `apps/` are outside repository tooling and
-outside this reference. Package surfaces and their documented behavior live in
+## Overview
+
+Python conventions for the repository's SDK, utilities, services, samples, and
+tests. These rules govern public interfaces, error handling, and module
+layout. Application-owned code under `apps/` is outside their scope.
+
+## Scope and conventions
+
+Package surfaces and their documented behavior live in
 each package's `__all__` and docstrings; this reference covers only the
 conventions that keep them consistent.
 

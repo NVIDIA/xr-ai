@@ -470,6 +470,14 @@
 -->
 <section id="contributing-and-conventions">
 <h1>Contributing and conventions<a class="headerlink" href="#contributing-and-conventions" title="Link to this heading">#</a></h1>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">#</a></h2>
+<p>Repository contracts for changes to shared code, dependencies, documentation,
+and release guidance. Application-owned projects under <code class="docutils literal notranslate"><span class="pre">apps/</span></code> are outside the
+repository contribution tooling described here.</p>
+</section>
+<section id="repository-contracts">
+<h2>Repository contracts<a class="headerlink" href="#repository-contracts" title="Link to this heading">#</a></h2>
 <p>Refer to the root
 <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/main/CONTRIBUTING.md"><code class="docutils literal notranslate"><span class="pre">CONTRIBUTING.md</span></code></a>
 for setup, testing, pull requests, and DCO sign-off. Refer to
@@ -548,6 +556,7 @@ global cutoff. Resolve each affected project with the root config explicitly
 supplied, validate the affected behavior, and regenerate the dependency
 manifest with <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">--script</span> <span class="pre">.github/scripts/generate_dependency_manifest.py</span></code>.
 Commit the generated manifest changes alongside the dependency declarations.</p>
+</section>
 <section id="migration-entries-and-release-rollover">
 <span id="migration-release-rollover"></span><h2>Migration entries and release rollover<a class="headerlink" href="#migration-entries-and-release-rollover" title="Link to this heading">#</a></h2>
 <p><a class="reference internal" href="../reference/migrations.html"><span class="doc">Release migration</span></a> covers changes from the latest published release
@@ -650,6 +659,8 @@ the entry.</p></li>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#repository-contracts">Repository contracts</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#migration-entries-and-release-rollover">Migration entries and release rollover</a></li>
 </ul>
   </nav></div>

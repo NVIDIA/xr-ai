@@ -470,23 +470,21 @@
 -->
 <section id="tea-making-guidance-building-deterministic-visual-workflows">
 <h1>Tea-making guidance — building deterministic visual workflows<a class="headerlink" href="#tea-making-guidance-building-deterministic-visual-workflows" title="Link to this heading">#</a></h1>
-<p>The tea-making sample is a reference for applications that combine a guided
-procedure, visual evidence, foreground questions, independent background
-observers, and voice output. Refer to the
-<a class="reference internal" href="../getting_started/quickstart.html"><span class="doc">quickstart</span></a> to run the sample. This
-architecture reference explains how to adapt the sample to another procedure
-rather than merely changing model settings.</p>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">#</a></h2>
+<p>Use this reference for procedural assistants that combine spoken guidance with
+visual checks of task progress. Tea making is the example: the application
+controls the steps and completion rules, while models interpret observations
+and answer questions. Adapt the workflow and its tools to guide other
+procedures.</p>
+<p>To run the sample, refer to the
+<a class="reference internal" href="../getting_started/quickstart.html"><span class="doc">quickstart</span></a>.</p>
 <p>For speech deployment and explicit batch-STT selection, refer to
 <a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a>.</p>
-<p>The defining pattern is a deterministic workflow around an agentic core. YAML
-declares the steps and state contract. A VLM describes each current view, and
-the observation LLM judges that natural-language caption and selects native
-tools. Application code validates the resulting state proposal and counts any
-required consecutive confirmations. The model does not choose which workflow
-is active, mutate arbitrary state, or advance a step implicitly.</p>
+</section>
 <section id="what-to-copy">
 <h2>What to copy<a class="headerlink" href="#what-to-copy" title="Link to this heading">#</a></h2>
-<p>Use this sample when your application needs one or more of these patterns:</p>
+<p>Reusable patterns include:</p>
 <ul class="simple">
 <li><p>a foreground agent that changes its tool catalog based on explicit state;</p></li>
 <li><p>a guided procedure whose evidence comes from current visual observations;</p></li>
@@ -544,6 +542,11 @@ is only a bounded view of the current worker process.</p>
 </section>
 <section id="architecture">
 <h2>Architecture<a class="headerlink" href="#architecture" title="Link to this heading">#</a></h2>
+<p>YAML declares the workflow steps and state contract. A VLM describes each
+current view, and the observation LLM judges that caption and selects native
+tools. Application code validates the resulting state proposal and counts any
+required consecutive confirmations. The model does not choose which workflow
+is active, mutate arbitrary state, or advance a step implicitly.</p>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>camera frames ────────────────&gt; ParticipantImageAgent
                                       │
 accepted speech or typed query         ├─&gt; GuidanceAgent observation loop
@@ -1121,6 +1124,7 @@ until another concrete application requires the same contract.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-to-copy">What to copy</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#quick-start">Quick start</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#architecture">Architecture</a></li>

@@ -5,8 +5,14 @@
 
 # Troubleshooting
 
-Common issues and their fixes. If you hit something not listed here, open an
-issue on the [repository](https://github.com/NVIDIA/xr-ai).
+## Overview
+
+Diagnose setup, startup, model-service, and client-connection failures using
+process logs and the symptoms below. Start with the launcher's failure summary
+when a stack fails to start.
+
+For an issue not covered here, open an issue on the
+[repository](https://github.com/NVIDIA/xr-ai).
 
 ## Investigating a failed run
 
