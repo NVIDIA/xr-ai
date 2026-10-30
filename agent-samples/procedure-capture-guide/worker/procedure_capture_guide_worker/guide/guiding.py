@@ -26,6 +26,7 @@ import nemo_relay
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field
 from xr_ai_hub import FrameUnavailable
+from xr_ai_models import DecisionService
 from xr_ai_tools import Tool, ToolSet
 from xr_ai_tools.current_frame import CurrentFrameRequest, CurrentFrameTool
 from xr_ai_tools.tool_calling import ToolLoopError
@@ -34,6 +35,7 @@ from xr_ai_tools.vision import ImageQueryRequest, ImageQueryResult, ImageQueryTo
 
 from ._workflow_spec import Step, Workflow, _CurrentViewRequest, _TimerRequest, _TimerResult
 from .guides import SelectedGuide
+from .verification import condition_met
 
 _POLL_INTERVAL_S = 0.25
 
@@ -160,6 +162,7 @@ class _Guide:
         self,
         *,
         guide: SelectedGuide,
+        decisions: DecisionService,
         current_frame: CurrentFrameTool,
         image_query: ImageQueryTool,
         vision_timeout_s: float,
@@ -167,12 +170,17 @@ class _Guide:
         announce: Callable[[str, str], Awaitable[None]],
         invalidate: Callable[[str], Awaitable[None]],
         connected: Callable[[str], bool],
+        decision_timeout_s: float = 15.0,
     ) -> None:
         if not guide.workflow.runnable:
             raise ValueError("guide mode requires an approved guide")
         if not math.isfinite(vision_timeout_s) or vision_timeout_s <= 0:
             raise ValueError("vision_timeout_s must be finite and positive")
+        if not math.isfinite(decision_timeout_s) or decision_timeout_s <= 0:
+            raise ValueError("decision_timeout_s must be finite and positive")
         self._guide = guide
+        self._decisions = decisions
+        self._decision_timeout_s = decision_timeout_s
         self._current_frame = current_frame
         self._image_query = image_query
         self._vision_timeout_s = vision_timeout_s
@@ -533,6 +541,13 @@ class _Guide:
                 if previous is not None and position <= previous:
                     return
                 session.observed_frames[key] = position
+        if step.trigger.function == "current_view":
+            await self._verify_visual(session, step, revision, observation)
+            await self._publish_notices(session)
+            return
+        async with session.lock:
+            if not self._current(session, step, revision):
+                return
             evidence = step.evidence
             if evidence is not None:
                 value = observation.value if isinstance(observation.value, str) else json.dumps(
@@ -548,6 +563,40 @@ class _Guide:
         if run_model:
             await self._observation_turn(session, step, revision, state, observation)
         await self._publish_notices(session)
+
+    async def _verify_visual(
+        self, session: _Session, step: Step, revision: int, observation: _Observation,
+    ) -> None:
+        assert step.evidence is not None and step.evidence.condition is not None
+        assert observation.frame is not None
+        async with session.lock:
+            if not self._current(session, step, revision):
+                return
+            previous_hits = session.evidence_hits
+            # An unavailable, invalid, failed, or cancelled decision breaks the
+            # streak. Only a valid result for this revision can restore it.
+            session.evidence_hits = 0
+        if not isinstance(observation.value, str) or not observation.value.strip():
+            return
+        try:
+            async with asyncio.timeout(self._decision_timeout_s):
+                matched = await condition_met(
+                    self._decisions, condition=step.evidence.condition, observation=observation.value,
+                    frame=observation.frame.model_dump(), step_id=step.id, revision=revision,
+                    timeout_s=self._decision_timeout_s,
+                )
+        except Exception as exc:  # noqa: BLE001 — An unavailable decision cannot authorize progress.
+            # Keep the total deadline and streak reset; cancellation must reach
+            # the monitor owner instead of becoming an ordinary failed check.
+            logger.warning("Guide decision unavailable pid={!r} step={} revision={}: {}: {}",
+                           session.participant_id, step.id, revision, type(exc).__name__, exc)
+            return
+        async with session.lock:
+            if not self._current(session, step, revision):
+                return
+            session.evidence_hits = previous_hits + 1 if matched else 0
+            if step.evidence.commit and session.evidence_hits >= step.evidence.consecutive:
+                self._commit(session, step, step.evidence.commit, "")
 
     async def _observation_turn(
         self,

@@ -24,8 +24,10 @@ The sample's `model-servers` launcher starts batch Parakeet STT on port 8103,
 Pocket TTS on 8105, Nemotron Omni LLM on 8108, and Cosmos VLM on 8100.
 Batch STT accepts narration without speaker enrollment. The capture worker uses
 STT, TTS, and Cosmos; the LLM is available but does not participate in capture
-or generate guides automatically. Guide mode uses Omni for guide questions and
-model-driven observations, alongside the same STT, TTS, and Cosmos services.
+or generate guides automatically. Guide mode uses Omni for conversation, Cosmos for descriptive visual evidence,
+and CLEF (`Cloudflare/clef-flash`, port 8120) to decide whether that evidence
+establishes the step condition. The model-server launcher includes CLEF; guide
+readiness waits for it, while capture does not construct or wait for CLEF.
 The launcher combines shared server defaults with
 `model-servers/yaml/<gpu-profile>.yaml`; use `--gpu-profile NAME` to select a
 profile explicitly. The worker's `yaml/models.json` configures its client
@@ -300,7 +302,13 @@ draft with the captured images and configured local XR-AI models and tools.
 Assess fidelity to the intended task and clarity for someone performing it
 afresh, not just whether the recording passes. Distinguish recording coverage
 gaps, uncertain requirements and actual runtime verification limitations.
-Observe the actual outputs and revise only the guide when findings justify it.
+After a failed run, return to revision within this request. Compare selected
+source images, Cosmos descriptions and CLEF decisions; fix supported question
+or condition defects and rerun. Inspect the first completion's frames for false
+positives as well as missed completions. Do not stop at reporting a failed run
+or let one unsupported check prevent refinement of independently testable steps.
+Preserve unsupported requirements as blockers, and justify any stop without
+revision using the source evidence and actual outputs.
 Revalidate and rerun revised guides without weakening requirements to fit the
 demonstration. Follow the skill's iteration and final-verification rules.
 Report paths, actual results, revision rounds, coverage gaps and approval
@@ -359,6 +367,11 @@ for artifact details and timing limits.
 Use the findings to refine instructions and checks, then rerun from fresh state.
 Default to at most three evaluation-and-update rounds and always verify the
 final revision. Report actual rounds, not retries or formatting-only edits.
+A failed run is an intermediate finding: diagnose the selected frames and both
+model outputs before deciding whether a guide correction is possible. Clarifying
+an observation question does not require changing the task requirements or
+additional approval for the newly authored draft. Check first-completion frames
+for premature acceptance; a higher completion count alone is not improvement.
 Missing models or evidence are blocked tests, never a pass. A fixed recording
 cannot react to guidance, so distinguish timing gaps from guide defects.
 Missing visual evidence in the recording does not by itself invalidate an
@@ -372,7 +385,7 @@ prove a past action sequence, and elapsed time does not prove continuous contact
 Retain unsupported requirements as review blockers rather than weakening them.
 
 Review the YAML and evidence notes before manually setting `task.status` to
-`approved`. Resolve every blocker, including any never-matching draft gate.
+`approved`. Resolve every blocker, including any draft step without a completion commit.
 Switch to `agent-samples/procedure-capture-guide/` and run an approved guide with
 `uv run main.py --mode guide my-procedure-guide/guide.yaml`, then say "start guide".
 
@@ -414,7 +427,7 @@ uv run main.py --mode guide my-procedure-guide/guide.yaml
 uv run main.py --mode guide example-guides/tea-making
 ```
 
-Start the shared models first, as for capture. Guide mode uses the LLM, VLM, STT,
+Start the shared models first, as for capture. Guide mode uses the LLM, VLM, CLEF, STT,
 and TTS endpoints in `yaml/models.json`. Connect using the hub's web
 client URL and enable microphone and camera access. The command line selects
 the guide, but connecting does not start it. Say **start guide** to begin step
@@ -499,34 +512,36 @@ tea sample's workflow YAML:
   blend names such as **Chamomile Lemon**, regardless of brand. The brand does
   not need to be visible. The brewing settings are fixed in the guide; the
   brewing reference is not retrieved at runtime.
-- Its three visual steps require two distinct fresh frames. Identification
-  accepts only `YES` (case-insensitive) to visible `CHAMOMILE` text, not `NO`,
-  `UNKNOWN`, or explanatory prose; the second step reads a current
-  `LABEL | NUMBER UNIT` reading and accepts `CURRENT`, `ACTUAL`, or `THERMOMETER`
-  with `100 C` or `212 F`. It preserves `TARGET` and `SET` labels in the visual
-  result so those readings cannot satisfy completion. Unlabeled displays are
-  unavailable rather than assumed to show current temperature. Matching tolerates
-  equivalent letter case, spacing, degree symbols, and trailing decimal zeros,
-  not different temperatures. Immersion requires `YES` for
-  visible bag contact with visible water, including a floating bag.
-  Missing frames and responses outside each step's accepted format cannot
-  satisfy its evidence requirement. A well-formed answer can still be a
-  visual misclassification; the response contract does not prove visual accuracy.
-  These bounded evidence commits do not use an observation LLM; the foreground
-  LLM still handles questions and controls.
-- The heating check verifies a displayed current temperature at the brewing
-  target, not a target setting or a “heating underway” threshold. Guide
-  does not expose the tea sample's typed temperature tools: this is a VLM
-  judgment, not a deterministic temperature measurement or safety guarantee.
+- Its three visual steps require two distinct fresh frames and two affirmative
+  CLEF decisions. Cosmos describes the printed tea name, temperature display, or
+  bag-water contact; CLEF compares that evidence with the step's condition. The
+  runtime applies the predefined completion patch after confirmation. Neither
+  a plain YES from Cosmos nor an incidental matching word completes a step.
+  The foreground LLM handles conversation and controls. Both perception and
+  decision models can make mistakes; inspect their separate outputs during
+  evaluation rather than interpreting a well-formed reply as proof of accuracy.
+- The heating check accepts a visible **100 C or 212 F** reading. It requires
+  the value and temperature unit, but no CURRENT/ACTUAL label or immersed probe;
+  TARGET/SET and unlabeled readings also qualify. This checks displayed text,
+  not whether the displayed setting measures the water's actual temperature.
+  If an explicitly measured water temperature is also visible, it must match
+  100 C or 212 F; a target cannot override a conflicting measured reading.
+  Guide does not expose the tea sample's typed temperature tools.
 - Immersion detection does not start the timer. Say **next** promptly after
   immersion is confirmed to enter the timer step. The runtime then measures a
   full 300 seconds; time spent waiting at the immersion step is not subtracted.
   Timer verification does not inspect images or prove continued immersion.
 - The final step sets `finish_on_complete: true`, so expiry ends the active run,
   clears progress, and announces completion without another **next** command.
-- Skipping a visual prerequisite ends the run as skipped instead of assuming
-  the prerequisite was satisfied. Skipping the timer also cannot produce a
-  verified-completion announcement.
+- Skipping the temperature check advances to tea immersion, then the full
+  five-minute timer. The skipped temperature stays unverified, and the run ends
+  with a skipped-steps announcement. Skipping packet identification or immersion
+  ends the run. Skipping the timer also cannot produce a verified completion.
+- The per-run `worker.log` records each visual observation, its step and frame
+  identity, the condition, and CLEF's choice and confidence at DEBUG level.
+  These records describe verification attempts; two fresh affirmative observations
+  are still required for completion. Evidence is saved before the decision request
+  so it remains available if CLEF fails.
 
 Regression tests load this exact example and exercise its state transitions,
 distinct-frame evidence, skip behavior, and timer with simulated observations.
@@ -536,7 +551,7 @@ Those tests do not establish accuracy on real tea-making images or appliances.
 
 `example-guides/tea-making/evaluation/run_scenario.py` exercises a manifest's selected guide through
 the actual guide agent, runtime, frame selection, and model
-tools. It uses the sample's configured LLM and VLM. Fixture images replace the
+tools. It uses the sample's configured LLM, VLM, and CLEF. Fixture images replace the
 hub camera endpoint, and typed requests enter the same runtime topic as
 transcribed speech. Microphones, STT, network camera delivery, and audible TTS
 are not covered. The script never manages external model-server processes.
@@ -633,6 +648,7 @@ assertions, not additional guides.
 | File under `example-guides/tea-making/evaluation/` | Purpose |
 |---|---|
 | `scenarios/step_verification.yaml` | Presents incorrect then correct scenes for each visual step; checks blocked advancement and verified completion, then stops before the timer |
+| `scenarios/skip_heating.yaml` | Skips temperature verification, still verifies immersion, and checks that the full steeping timer starts |
 | `scenarios/full_run.yaml` | Independent successful run through the five-minute timer, completion, restart, and stop |
 | `scenarios/label_reading.yaml` | Checks chamomile name variations, other tea names, and unreadable labels in the identification step |
 | `scenarios/routing.yaml` | Independent conversation probes for controls, negation, quoted instructions, and visual questions; restarts before each probe |
@@ -685,13 +701,32 @@ They exercise the same procedure, prompts, and verification rules that users run
 without a separate copy of the tea guide. The purpose-built
 `tests/test_procedure_indicator_guide.yaml` remains a separate, simplified test procedure.
 Identification checks whether chamomile is visibly printed on the packet,
-using the shipped guide's YES, NO, or UNKNOWN contract.
+using descriptive Cosmos evidence and the shipped guide's CLEF condition.
 
 | Layer | What it checks | What it does not establish |
 |---|---|---|
 | CPU regression tests | Reproducible images, shipped-guide selection, scoring, timeout handling, and existing guide state-machine guards | Live model accuracy |
-| Isolated visual cases | Configured VLM responses to the shipped guide's exact questions and evidence gates | Conversation, consecutive-frame enforcement, or task completion |
-| Multi-turn guide scenario | Actual guide agent, frame tools, local LLM and VLM, controls, announcements, and the five-minute timer | Microphone, STT, network camera transport, or audible TTS |
+| Isolated visual cases | Configured Cosmos descriptions and CLEF decisions for the shipped guide | Conversation, consecutive-frame enforcement, or task completion |
+| Multi-turn guide scenario | Actual guide agent, frame tools, local LLM, VLM, and CLEF, controls, announcements, and the five-minute timer | Microphone, STT, network camera transport, or audible TTS |
+
+The sample-wide `evaluation/guide/decision_cases.yaml` contains 24 fixed
+condition/description pairs for the shared CLEF policy: counts, orientation,
+contact, incomplete labels, optional evidence, measurement provenance, and
+unsupported history. These conditions are independent of the tea recipe;
+measurement cases explicitly require a measured value. Run them after changing
+`guide_condition.txt` or decision request construction:
+
+```bash
+uv run --project worker python evaluation/guide/evaluate_conditions.py \
+  --repeats 3 --output artifacts/guide-decisions
+```
+
+This calls the configured CLEF service through production verification code,
+without Cosmos, camera transport, or speech. Expected outcomes remain outside
+the model request. Failed requests are counted as unavailable, never as correct
+negative judgments. Every attempt and a final summary are saved with source
+hashes. CPU tests check evaluator behavior; live-model correctness requires this
+explicit run and the visual cases below.
 
 From the sample directory, generate images for inspection without model calls:
 
@@ -701,7 +736,7 @@ uv run --project worker python example-guides/tea-making/evaluation/evaluate_vis
   --render-only --output artifacts/tea-preview
 ```
 
-With the existing model servers running, evaluate the 25 visual cases three
+With the existing model servers running, evaluate the 27 visual cases three
 times each, then run the complete conversational scenario:
 
 ```bash
@@ -725,8 +760,14 @@ evidence-gate accuracy, false accepts, false rejects, and unavailable requests
 separately. An unavailable model cannot pass a negative case. Correctly rejecting
 a scene while misreading its contents is not a recognition pass. Repetitions
 measure response variability on the same images, not additional independent scenes.
-Evidence-gate scores apply the production regex to the raw stripped answer;
-recognition normalization never changes whether the guide would accept it.
+Decision scores call the production CLEF verifier on the original description.
+If CLEF fails, the case is unavailable for decision scoring, but its VLM answer
+and recognition score are retained. `recognition_scored` counts usable VLM
+answers; `scored` counts cases with both a usable answer and a CLEF decision.
+Use each count as its corresponding accuracy denominator. Result rows record VLM and decision errors
+separately; later cases continue and the final summary includes the failure.
+Recognition regexes are offline diagnostics only and never authorize progress.
+They can also miss valid paraphrases, so retain and inspect the raw descriptions.
 
 The step-verification scenario tests early advance rejection, completion
 announcements, and explicit advancement for the three visual steps, then stops.
@@ -761,7 +802,7 @@ every level, including overrides introduced through YAML merges, instead of
 silently replacing earlier requirements. Invalid guides cannot be used in guide mode,
 even when their `task.status` is `approved`.
 
-- `schema_version` must be `1`.
+- `schema_version` must be `2`.
 - `task` declares `id`, `name`, positive `version`, `status` (`draft` or
   `approved`), `start_step`, `foreground_prompt`, and
   `complete_message`.
@@ -771,24 +812,28 @@ even when their `task.status` is `approved`.
   `voice`, a non-empty `complete_when` mapping, `next`, and `messages` containing
   `enter`, `complete`, and `skip`. The `next` chain must visit every step once
   and end with `null`.
-- `agent` and `voice` each contain a prompt and a tool list. `agent` is optional
-  when `evidence.commit` supplies a deterministic completion patch; that path
-  does not run an observation LLM. Otherwise `agent` is required. Allowed step tools
-  are `current_view`, `clock__now`, and `clock__timer`. Only the observer receives
-  `workflow__commit`. Foreground workflow controls are supplied by the runner,
-  not listed in the guide's step tools.
-- Optional `evidence` contains a full-match regex `pattern`, positive
-  `consecutive` count, and optional `commit` mapping. With `commit`, matching
-  observations directly apply that bounded patch without an observation LLM.
-  The patch must satisfy every `complete_when` requirement. Each step must have
-  at least one initially unmet completion field that no preceding step can write;
-  use a dedicated completion flag rather than reusing a preceding step's flag.
-  Without `commit`, the observation LLM proposes state changes and the evidence
-  count gates completion. Use a precise closed-set VLM answer contract if a
-  regex is used. Visual evidence counts distinct source frames, identified by
-  participant, track, timestamp, and sequence. Repeated or older frames do not
-  increment the count or run another observation-model update. Unavailable
-  observations reset the consecutive evidence count.
+- `voice` contains the foreground prompt and permitted tools. Visual steps omit
+  `agent`: Cosmos describes the scene and CLEF judges the written evidence.
+  Timer steps may use an `agent` policy when they do not directly commit evidence.
+  Foreground workflow controls are supplied by the runner, not the guide.
+- Visual `evidence` requires a prose `condition`, positive `consecutive` count,
+  and a bounded `commit` mapping for approved guides. The question asks Cosmos
+  for observable facts; the condition tells CLEF which facts must all hold.
+  Do not ask Cosmos for a YES/NO or readiness token. CLEF receives the description
+  and condition, without images or conversation history, and chooses yes or no.
+  Only yes counts toward completion. Ambiguity, missing facts, or contradictory
+  evidence should yield no. Confidence is logged, not used as another threshold.
+  Visual steps reject `evidence.pattern` and observation `agent` policies.
+- Timer `evidence` retains its full-match `pattern` (normally `^true$` on
+  `expired`), `consecutive`, and direct `commit`. No CLEF judgment measures time.
+- Every completion patch must satisfy `complete_when` and use only typed writable
+  fields. Each step needs an initially unmet completion field that preceding
+  steps cannot write. Visual confirmations require distinct source frames,
+  identified by participant, track, timestamp, and sequence. Repeated or older
+  frames do not increment the count. Unavailable evidence, failed decisions,
+  and cancelled decisions break the streak; results from an old step or run
+  cannot commit. A draft with an unresolved verification requirement may omit
+  its visual commit; it cannot complete and cannot be approved until resolved.
 - Optional `state_on_skip` writes only declared step fields;
   `complete_on_skip: true` ends the run when explicitly skipped.
 - Optional `finish_on_complete: true` is valid only on a terminal step. Once
@@ -838,7 +883,9 @@ agent is registered. With no mode flag, capture remains the default.
 
 `guide/agent.py` handles connection events, foreground questions, and conversational
 controls. Its `_Guide` backend in `guide/guiding.py` owns guide progress,
-runtime timers, frame evidence, and background verification. Transitions clear
+runtime timers, frame evidence, and background verification.
+`guide/verification.py` uses the typed decision service to judge descriptive
+evidence; its Relay trace retains the source frame, step, and revision. Transitions clear
 local notices under the session lock, so obsolete completion notices cannot
 follow the new step's instruction.
 The foreground receives detached guidance context and scoped tools. Observation
@@ -872,8 +919,8 @@ cannot cancel its own response.
 |---|---|
 | `yaml/worker.yaml` | Shared frame and speech detection settings; capability configuration paths |
 | `yaml/capture-agent-config.yaml` | Task output directory, sampling rate, and caption interval |
-| `yaml/guide-agent-config.yaml` | Visual verification timeout |
-| `yaml/models.json` | Shared batch STT, LLM, VLM, and TTS services and endpoints |
+| `yaml/guide-agent-config.yaml` | Visual and CLEF decision timeouts |
+| `yaml/models.json` | Shared batch STT, LLM, VLM, TTS, and CLEF services and endpoints |
 | `yaml/media_capture.yaml` | Opt-in session recording output, profile, and participant lifetime |
 | `yaml/voice_gate.yaml` | Shared wake-word-free speech input; each mode handles its own commands |
 | `yaml/device_io_hub.yaml` | Room and web server |

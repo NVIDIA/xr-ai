@@ -21,6 +21,7 @@ from collections.abc import Awaitable, Callable
 from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
+from types import SimpleNamespace
 
 import nemo_relay
 import xr_ai_models
@@ -66,6 +67,7 @@ class Camera:
 
     def __init__(self):
         self.listeners = []
+        self._image_capture_listeners = []
         self.frame = None
         self.path = None
         self.sequence = 0
@@ -77,8 +79,30 @@ class Camera:
     def on_participant(self, _callback):
         pass
 
-    def _on_image_capture(self, _callback):
-        return lambda: None
+    def _on_image_capture(self, callback):
+        self._image_capture_listeners.append(callback)
+
+        def unsubscribe():
+            if callback in self._image_capture_listeners:
+                self._image_capture_listeners.remove(callback)
+
+        return unsubscribe
+
+    async def _request_image_capture(self, request):
+        # Playback cannot take a new still when source frames run out or expire.
+        # Use the client's rejection protocol rather than refreshing old pixels.
+        rejected = SimpleNamespace(
+            participant_id=request.participant_id, request_id=request.request_id,
+            pts_us=time.time_ns() // 1000,
+            mime_type="application/vnd.xr-ai.capture-rejection+json",
+            data=b'{"version":1,"status":"rejected"}',
+        )
+        for callback in tuple(self._image_capture_listeners):
+            await callback(rejected)
+
+    async def _cancel_image_capture(self, _request):
+        # Rejections are immediate; there is no client-side capture to cancel.
+        pass
 
     async def request_frame(self, _signal):
         return self.frame
@@ -166,17 +190,31 @@ async def run_evaluation(
         settings = load_config(request)
     models = xr_ai_models.load_models_config(settings.models_config)
     llm, vlm = xr_ai_models.make_llm(models, "llm"), xr_ai_models.make_vlm(models, "vlm")
-    chat = llm.chat
+    decisions = xr_ai_models.make_decision(models, "decision")
+    decide = decisions.decide
     model_origin: ContextVar[tuple[str, int | None, asyncio.Task | None]] = ContextVar(
         "model_origin", default=("unscoped", None, None),
     )
 
-    async def logged_chat(*args, **kwargs):
+    def call_origin():
         origin, turn_id, owner = model_origin.get()
-        # Runtime deliveries and background tasks inherit context variables.
-        # Inheritance alone does not make their model calls part of this turn.
-        if owner is not asyncio.current_task():
-            origin, turn_id = "unscoped", None
+        # Child tasks inherit context, but not ownership of a foreground turn
+        # or observation. Classify both model services at the execution boundary.
+        return (origin, turn_id) if owner is asyncio.current_task() else ("unscoped", None)
+
+    async def logged_decide(state, questions, **kwargs):
+        origin, turn_id = call_origin()
+        result = await decide(state, questions, **kwargs)
+        log("decision", origin=origin, turn_id=turn_id, state=state, answers={
+            name: {"choice": answer.choice, "confidence": answer.confidence}
+            for name, answer in result.answers.items()
+        })
+        return result
+
+    decisions.decide = logged_decide
+    chat = llm.chat
+    async def logged_chat(*args, **kwargs):
+        origin, turn_id = call_origin()
         result = await chat(*args, **kwargs)
         log("model", origin=origin, turn_id=turn_id, text=result.content, calls=[
             {"name": call.name, "arguments": call.arguments} for call in result.tool_calls or ()
@@ -234,9 +272,20 @@ async def run_evaluation(
     ).read_text())
     runtime = AgentRuntime()
     agent = runtime.register("guide", TracedGuideAgent(
-        guide=guide, llm=llm, current_frame=frames, image_query=vision,
+        guide=guide, llm=llm, decisions=decisions, current_frame=frames, image_query=vision,
         vision_timeout_s=settings.guide.vision_timeout_s,
+        decision_timeout_s=settings.guide.decision_timeout_s,
     ))
+    tick = agent._backend._tick
+
+    async def traced_tick(session):
+        token = model_origin.set(("observation", None, asyncio.current_task()))
+        try:
+            return await tick(session)
+        finally:
+            model_origin.reset(token)
+
+    agent._backend._tick = traced_tick
     speech = runtime.register("speech", Speech(log))
     agent.bind_runtime(runtime)
     playback_start = asyncio.Event()
@@ -307,6 +356,7 @@ async def run_evaluation(
         nemo_relay.subscribers.deregister(subscription)
         await llm.close()
         await vlm.close()
+        await decisions.close()
         images.clear()
         # Include SDK modules loaded lazily by model adapters and tools during execution.
         (output / "runtime.json").write_text(json.dumps(_runtime_hashes(settings.models_config, sources), indent=2))

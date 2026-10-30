@@ -34,6 +34,26 @@ must include the fixes for CVE-2026-114050 and CVE-2026-114055 independently of
 the host Python environment. Refer to {doc}`/components/ai-services` for runtime
 selection and container replacement.
 
+### Procedure guides separate visual evidence from decisions
+
+Guide documents now require `schema_version: 2`; version 1 is rejected with a
+migration diagnostic. Capture packets remain at schema version 1.
+
+For each `current_view` step, replace `evidence.pattern` with an explicit prose
+`evidence.condition` and remove its observation `agent` block. Rewrite the
+trigger question to request descriptive visual facts, including the relevant
+region, count, orientation, contact, or labeled measurement. Cosmos supplies
+those facts; CLEF chooses whether they establish the condition. Retain the
+step's `consecutive`, typed `commit`, and `complete_when` requirements. Approved
+visual steps require a commit; unresolved draft steps must remain drafts.
+Timer steps keep their elapsed-time evidence patterns and runtime-owned clocks.
+After migrating the steps, set the guide's `schema_version` to `2`.
+
+Restart the sample's model-server launcher to include CLEF on port 8120 and use
+the updated `yaml/models.json` decision entry. Guide mode waits for CLEF;
+capture mode is unchanged. Re-evaluate existing guides after this migration,
+since regex matching of a visual answer no longer determines completion.
+
 ### Interaction messages move to xr-ai-interaction
 
 Code that imports `UserQuery`, `VoiceOutput`, `VoiceParticipantJoined`,

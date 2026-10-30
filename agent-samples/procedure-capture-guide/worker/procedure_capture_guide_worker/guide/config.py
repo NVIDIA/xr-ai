@@ -3,7 +3,7 @@
 
 """Load guide selection and verification settings for guided procedures.
 
-Read the visual verification timeout from guide-agent-config.yaml and accept
+Read the visual and decision verification timeouts from guide-agent-config.yaml and accept
 the guide path resolved by the launcher. Shared voice, frame,
 and model settings remain in the worker's config.py.
 """
@@ -18,6 +18,7 @@ import yaml
 class GuideConfig:
     guide_path: Path
     vision_timeout_s: float = 15.0
+    decision_timeout_s: float = 15.0
 
 
 def load_guide_config(path: Path, *, guide_path: str | None) -> GuideConfig:
@@ -27,4 +28,9 @@ def load_guide_config(path: Path, *, guide_path: str | None) -> GuideConfig:
     timeout = float(data.get("vision_timeout_s", 15.0))
     if not 0 < timeout < float("inf"):
         raise ValueError("vision_timeout_s must be finite and positive")
-    return GuideConfig(Path(guide_path), timeout)
+    if isinstance(data.get("decision_timeout_s"), bool):
+        raise ValueError("decision_timeout_s must be finite and positive")
+    decision_timeout = float(data.get("decision_timeout_s", 15.0))
+    if not 0 < decision_timeout < float("inf"):
+        raise ValueError("decision_timeout_s must be finite and positive")
+    return GuideConfig(Path(guide_path), timeout, decision_timeout)

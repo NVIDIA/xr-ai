@@ -8,7 +8,6 @@ import copy
 import hashlib
 import importlib.util
 import json
-import re
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -16,6 +15,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 import yaml
+from _procedure_guide_helpers import clef_response, stub_decisions
 from pipecat.frames.frames import BotStartedSpeakingFrame, BotStoppedSpeakingFrame, TextFrame
 from pipecat.processors.frame_processor import FrameDirection
 from xr_ai_hub import FrameUnavailable
@@ -63,15 +63,15 @@ def document():
     def step(name, next_step):
         return {
             "id": name, "title": name, "reads": [], "writes": [name],
-            "trigger": {"function": "current_view", "interval_s": 1, "arguments": {"question": "Aligned?"}},
-            "agent": {"prompt": "Commit only if aligned.", "tools": []},
+            "trigger": {"function": "current_view", "interval_s": 1,
+                        "arguments": {"question": "Describe the alignment of the two edges."}},
             "voice": {"prompt": "Help align the parts.", "tools": ["current_view"]},
-            "evidence": {"pattern": "YES", "consecutive": 2, "commit": {name: True}},
+            "evidence": {"condition": "The parts are visibly aligned.", "consecutive": 2, "commit": {name: True}},
             "complete_when": {name: True}, "next": next_step,
             "messages": {"enter": f"Do {name}.", "complete": f"{name} complete. Say next.", "skip": "Skipped."},
         }
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "task": {"id": "align_parts", "name": "Align Parts", "version": 1, "status": "approved",
                  "start_step": "base", "foreground_prompt": "Guide alignment.",
                  "complete_message": "Alignment complete."},
@@ -99,6 +99,7 @@ def context(pid="alice"):
 @pytest.fixture
 async def connected_engine(document):
     agent = GuideAgent(
+        decisions=stub_decisions(),
         guide=selected(document), llm=Mock(chat=AsyncMock()),
         current_frame=Mock(execute=AsyncMock()), image_query=Mock(execute=AsyncMock()),
         vision_timeout_s=1,
@@ -158,13 +159,10 @@ def test_shipped_tea_guide_is_selectable_by_example_path():
         assert "{{" not in step.enter_message  # Guide messages are not Jinja templates.
         if step.trigger.function == "current_view":
             assert not step.finish_on_complete
-            expected = {"identify": "(?i)^YES$",
-                        "start_steeping": "(?i)^YES$"}
             assert step.evidence.consecutive == 2
-            if step.id in expected:
-                assert step.evidence.pattern == expected[step.id]
+            assert step.evidence.condition and step.evidence.pattern is None
             assert step.voice.tools == ("current_view",)
-            assert step.complete_on_skip  # Do not silently bypass a brewing prerequisite.
+            assert step.complete_on_skip == (step.id != "heat_water")
         else:
             assert step.trigger.arguments == {"duration_s": 300}
             assert step.finish_on_complete
@@ -173,18 +171,12 @@ def test_shipped_tea_guide_is_selectable_by_example_path():
             assert step.voice.tools == ("clock__timer",)
 
 
-@pytest.mark.parametrize(("answer", "should_match"), [
-    ("YES", True), ("yes", True), ("Yes", True),
-    ("NO", False), ("UNKNOWN", False), ("", False),
-    ("NO chamomile", False), ("NOT CHAMOMILE", False),
-    ("UNKNOWN (POSSIBLY CHAMOMILE)", False),
-    ("CHAMOMILE", False), ("CHAMOMILES", False),
-    ("YES, CHAMOMILE", False), ("YES\nNO", False),
-])
-def test_shipped_tea_identification_requires_an_affirmative_answer(answer, should_match):
-    guide = load_guide(_SAMPLE / "example-guides/tea-making/guide.yaml")
-    pattern = guide.workflow.steps["identify"].evidence.pattern
-    assert (re.fullmatch(pattern, answer.strip()) is not None) == should_match
+def test_shipped_tea_identification_uses_description_and_clef_condition():
+    step = load_guide(_SAMPLE / "example-guides/tea-making/guide.yaml").workflow.steps["identify"]
+    assert step.evidence.pattern is None
+    assert "chamomile" in step.evidence.condition.lower()
+    assert "YES" not in step.trigger.arguments["question"]
+    assert step.agent is None
 
 
 def test_tea_identification_eval_uses_the_shipped_guide():
@@ -194,7 +186,7 @@ def test_tea_identification_eval_uses_the_shipped_guide():
     assert guide.path == _SAMPLE / "example-guides/tea-making/guide.yaml"
     scenes = manifest["scenes"]
     assert all(action["scene"] in scenes for action in manifest["actions"] if action["action"] == "image")
-    assert any(action.get("answers") == ["UNKNOWN", "Unknown", "unknown"] for action in manifest["actions"])
+    assert any(action.get("case") == "covered_packet" for action in manifest["actions"])
 
 
 async def test_shipped_tea_guide_verification_and_runtime_timer(engine, monkeypatch):
@@ -228,9 +220,9 @@ async def test_shipped_tea_guide_verification_and_runtime_timer(engine, monkeypa
 
     for step_id in ("identify", "heat_water", "start_steeping"):
         assert session.step_id == step_id and session.timer is None
-        positive = {"identify": "YES", "heat_water": "CURRENT | 100 C",
+        positive = {"identify": "YES", "heat_water": "YES",
                     "start_steeping": "YES"}[step_id]
-        negative = {"identify": "NO", "heat_water": "CURRENT | 80 C", "start_steeping": "NO"}[step_id]
+        negative = {"identify": "NO", "heat_water": "NO", "start_steeping": "NO"}[step_id]
         for answer in (negative, "UNKNOWN", positive):
             await observe(answer)
             assert not backend._is_complete(session)
@@ -280,8 +272,14 @@ async def test_shipped_tea_guide_skip_never_claims_verified_completion(engine, s
     session.step_id = step_id
     backend._enter_step(session)
     response = await control(backend, "advance", skip=True)
-    assert "skipped steps" in response and session.workflow.complete_message not in response
-    assert not session.active and session.timer is None
+    assert session.workflow.complete_message not in response
+    assert session.timer is None
+    if step_id == "heat_water":
+        assert "Temperature verification skipped" in response
+        assert session.active and session.step_id == "start_steeping"
+        assert not session.state["water_at_target"]
+    else:
+        assert "skipped steps" in response and not session.active
 
 
 def test_finish_on_complete_is_opt_in_and_terminal(document):
@@ -464,8 +462,7 @@ def test_invalid_trigger_rejected_before_guide(tmp_path, document, trigger):
 
 
 @pytest.mark.parametrize("path", [
-    ("steps", 0, "evidence", "pattern"),
-    ("steps", 0, "agent", "prompt"),
+    ("steps", 0, "evidence", "condition"),
     ("steps", 0, "voice", "prompt"),
     ("steps", 0, "messages", "enter"),
     ("steps", 0, "messages", "complete"),
@@ -486,15 +483,13 @@ def test_non_string_text_rejected_before_guide(tmp_path, document, path, value):
         load_guide(tmp_path / "test.guide.yaml")
 
 
-def test_string_regex_and_whitespace_keep_their_meaning(document):
-    document["steps"][0]["evidence"]["pattern"] = "  [YES]  "
-    document["steps"][0]["agent"]["prompt"] = "  Observe carefully.  "
+def test_condition_and_voice_prompt_strip_whitespace(document):
+    document["steps"][0]["evidence"]["condition"] = "  Parts aligned.  "
+    document["steps"][0]["voice"]["prompt"] = "  Observe carefully.  "
     step = parse_workflow(yaml.safe_dump(document)).steps["base"]
-    assert step.agent.prompt == "Observe carefully."
-    assert step.evidence.pattern == "[YES]"
-    assert re.fullmatch(step.evidence.pattern, "Y")
-    assert not re.fullmatch(step.evidence.pattern, "YES")
-    document["steps"][0]["evidence"]["pattern"] = " \n "
+    assert step.voice.prompt == "Observe carefully."
+    assert step.evidence.condition == "Parts aligned."
+    document["steps"][0]["evidence"]["condition"] = " "
     with pytest.raises(ValueError, match="must not be empty"):
         parse_workflow(yaml.safe_dump(document))
 
@@ -528,12 +523,12 @@ def test_duplicate_requirements_rejected_before_guide(tmp_path, document, origin
 
 
 def test_safe_aliases_and_non_overlapping_merges_remain_supported(document):
-    document["steps"][0]["voice"] = document["steps"][0]["agent"]
+    document["steps"][1]["voice"] = document["steps"][0]["voice"]
     source = yaml.safe_dump(document, sort_keys=False)
     assert "&id" in source and "*id" in source
     source = source.replace("    type: boolean", "    <<: {type: boolean}")
     workflow = parse_workflow(source)
-    assert workflow.steps["base"].voice == workflow.steps["base"].agent
+    assert workflow.steps["base"].voice == workflow.steps["lid"].voice
     assert workflow.state_fields["base"].type == "boolean"
 
 
@@ -577,6 +572,7 @@ async def test_connected_timer_does_not_start_until_start_guide(connected_engine
         "function": "clock__timer", "interval_s": 1,
         "arguments": {"duration_s": 60}, "result_field": "expired",
     }
+    document["steps"][0]["evidence"] = {"pattern": "true", "consecutive": 1, "commit": {"base": True}}
     backend._guide = selected(document)
     await connected_engine.participant_left(None, context())
     await connected_engine.participant_joined(None, context())
@@ -696,7 +692,7 @@ async def test_model_written_timestamp_cannot_backdate_runtime_timer(engine, doc
     monkeypatch.setattr(guiding, "time", SimpleNamespace(monotonic=lambda: now, time_ns=lambda: 10**20))
     document["state"]["started_us"] = {"type": "integer", "description": "Model-supplied observation"}
     document["steps"][0]["writes"].append("started_us")
-    document["steps"][0].pop("evidence")
+    document["steps"][0]["evidence"]["consecutive"] = 1
     wait = document["steps"][1]
     wait["trigger"] = {"function": "clock__timer", "interval_s": 1, "result_field": "expired",
                        "arguments": {"duration_s": 60}}
@@ -706,10 +702,11 @@ async def test_model_written_timestamp_cannot_backdate_runtime_timer(engine, doc
     backend._start("alice")
     session = backend._sessions["alice"]
     backend._current_frame.execute.return_value = camera_frame(1)
-    backend._image_query.execute.return_value = ImageQueryResult(text="Aligned")
-    engine._llm.chat.return_value = ChatResponse("", None, [ToolCall(
-        id="commit", name="workflow__commit", arguments='{"updates":{"base":true,"started_us":1}}',
-    )], "tool_calls", {})
+    backend._image_query.execute.return_value = ImageQueryResult(text="YES")
+    result = await backend._commit_tool(session, session.step, session.revision).execute(
+        _CommitRequest(updates={"started_us": 1}),
+    )
+    assert result.accepted
     await backend._tick(session)
     assert session.state["started_us"] == 1 and session.state["base"]
     await control(backend, "advance", skip=False)
@@ -751,6 +748,7 @@ async def test_active_timer_duration_cannot_be_rewritten(engine, document, monke
     step = document["steps"][0]
     step["writes"].append("duration")
     step.pop("evidence")
+    step["agent"] = {"prompt": "Observe timer.", "tools": []}
     step["trigger"] = {"function": "clock__timer", "interval_s": 1,
                        "arguments": {"duration_s": "$state.duration"}, "result_field": "expired"}
     backend = engine._backend
@@ -773,6 +771,7 @@ async def test_timer_advance_checks_runtime_even_with_preexisting_completion(eng
     document["steps"][0]["trigger"] = {"function": "clock__timer", "interval_s": 1,
                                       "arguments": {"duration_s": 60}, "result_field": "expired"}
     backend = engine._backend
+    document["steps"][0]["evidence"] = {"pattern": "true", "consecutive": 1, "commit": {"base": True}}
     backend._guide = selected(document)
     backend._start("alice")
     backend._sessions["alice"].state["base"] = True  # Defense in depth against corrupted runtime state.
@@ -796,17 +795,9 @@ def camera_frame(sequence, *, timestamp_us=None, track_id="cam"):
     )
 
 
-@pytest.mark.parametrize("model_commit", [False, True])
 @pytest.mark.parametrize("track_id", ["cam", ""])
-async def test_consecutive_visual_evidence_requires_distinct_source_frames(engine, document, model_commit, track_id):
+async def test_consecutive_visual_evidence_requires_distinct_source_frames(engine, track_id):
     backend = engine._backend
-    if model_commit:
-        document["steps"][0]["evidence"].pop("commit")
-        backend._guide = selected(document)
-        backend._start("alice")
-        engine._llm.chat.return_value = ChatResponse("", None, [ToolCall(
-            id="commit", name="workflow__commit", arguments='{"updates":{"base":true}}',
-        )], "tool_calls", {})
     session = backend._sessions["alice"]
     sequence = 1 if track_id else 0  # On-demand snapshots have no track sequence.
     backend._current_frame.execute.return_value = camera_frame(sequence, timestamp_us=1000, track_id=track_id)
@@ -815,11 +806,8 @@ async def test_consecutive_visual_evidence_requires_distinct_source_frames(engin
         session.next_tick = 0
         await backend._tick(session)
     assert session.evidence_hits == 1 and not session.state["base"]
-    assert engine._llm.chat.call_count == (1 if model_commit else 0)
-    if model_commit:
-        prompt = json.loads(engine._llm.chat.call_args.args[0][1].content)
-        assert prompt["frame"] == {"participant_id": "alice", "track_id": track_id,
-                                   "sequence": sequence, "timestamp_us": 1000}
+    engine._llm.chat.assert_not_called()
+    assert backend._decisions.decide.await_count == 1
     # An older frame cannot supply independent supporting evidence either.
     backend._current_frame.execute.return_value = camera_frame(sequence, timestamp_us=500, track_id=track_id)
     session.next_tick = 0
@@ -1043,6 +1031,7 @@ async def test_timer_question_uses_configured_arguments(
             document["state"][name] = {"type": "integer", "description": name, "initial": value}
         step["reads"] = list(arguments)
         step["trigger"]["arguments"] = {name: f"$state.{name}" for name in arguments}
+    document["steps"][0]["evidence"] = {"pattern": "true", "consecutive": 1, "commit": {"base": True}}
     engine._backend._guide = selected(document)
     engine._backend._start("alice")
 
@@ -1092,6 +1081,7 @@ async def test_missing_timer_state_does_not_block_reset(engine, document):
     step["reads"] = ["duration_s"]
     step["trigger"] = {"function": "clock__timer", "interval_s": 1,
                        "arguments": {"duration_s": "$state.duration_s"}}
+    document["steps"][0]["evidence"] = {"pattern": "true", "consecutive": 1, "commit": {"base": True}}
     engine._backend._guide = selected(document)
     engine._backend._start("alice")
     revision = engine._backend._sessions["alice"].revision
@@ -1116,18 +1106,16 @@ async def test_foreground_guide_order_follows_links_not_yaml_order(engine, docum
     assert context["guide_order"] == ["base", "lid"]
 
 
-async def test_model_observation_uses_guarded_commit(engine, document):
-    document["steps"][0].pop("evidence")
-    engine._backend._guide = selected(document)
-    engine._backend._start("alice")
-    engine._backend._trigger = AsyncMock(return_value=observation("The parts are aligned.", 1))
-    engine._llm.chat.side_effect = [
-        ChatResponse("", None, [ToolCall(id="commit", name="workflow__commit",
-                     arguments='{"updates":{"base":true}}')], "tool_calls", {}),
-        ChatResponse("Done", None, None, "stop", {}),
-    ]
-    await engine._backend._tick(engine._backend._sessions["alice"])
-    assert engine._backend._sessions["alice"].state["base"]
+async def test_clef_decision_uses_bounded_commit_without_conversation_llm(engine):
+    backend = engine._backend
+    session = backend._sessions["alice"]
+    backend._trigger = AsyncMock(side_effect=[observation("YES", 1), observation("YES", 2)])
+    for _ in range(2):
+        session.next_tick = 0
+        await backend._tick(session)
+    assert session.state == {"base": True, "lid": False}
+    assert backend._decisions.decide.await_count == 2
+    engine._llm.chat.assert_not_called()
 
 
 async def test_stale_control_after_restart_rejected(engine):
@@ -1198,6 +1186,7 @@ async def test_stopping_discards_timer_and_restart_starts_new_wait(engine, docum
         "function": "clock__timer", "interval_s": 1, "arguments": {"duration_s": 60}, "result_field": "expired",
     }
     backend = engine._backend
+    document["steps"][0]["evidence"] = {"pattern": "true", "consecutive": 1, "commit": {"base": True}}
     backend._guide = selected(document)
     backend._start("alice")
     session = backend._sessions["alice"]
@@ -1360,10 +1349,10 @@ async def test_observation_updates_do_not_expire_same_step_controls(engine, acti
 
 def test_deterministic_steps_do_not_require_observation_agent(document):
     for step in document["steps"]:
-        step.pop("agent")
+        step.pop("agent", None)
     assert all(step.agent is None for step in selected(document).workflow.steps.values())
     document["steps"][0]["evidence"].pop("commit")
-    with pytest.raises(ValueError, match="agent must be a mapping"):
+    with pytest.raises(ValueError, match="requires evidence.commit"):
         selected(document)
 
 
@@ -1396,11 +1385,67 @@ async def test_skip_state_supplies_typed_inputs_to_later_step(engine, document):
         "result_field": "expired",
     }
     backend = engine._backend
+    document["steps"][1]["evidence"] = {"pattern": "true", "consecutive": 1, "commit": {"lid": True}}
     backend._guide = selected(document)
     backend._start("alice")
     await control(backend, "advance", skip=True)
     assert backend._sessions["alice"].state["duration"] == 23
     assert backend._sessions["alice"].timer.duration_s == 23
+
+
+async def test_tea_skip_heating_preserves_immersion_check_and_full_timer(engine, monkeypatch):
+    from procedure_capture_guide_worker.guide import guiding
+
+    now = 1000.0
+    monkeypatch.setattr(guiding, "time", SimpleNamespace(monotonic=lambda: now))
+    backend = engine._backend
+    backend._guide = load_guide(_SAMPLE / "example-guides/tea-making/guide.yaml")
+    await engine.participant_left(None, context())
+    await engine.participant_joined(None, context())
+    await control(backend, "restart")
+    session = backend._sessions["alice"]
+    sequence = 0
+
+    async def confirm_step():
+        nonlocal sequence
+        for _ in range(2):
+            sequence += 1
+            backend._trigger = AsyncMock(return_value=observation("YES", sequence))
+            session.next_tick = 0
+            await backend._tick(session)
+        assert backend._is_complete(session)
+
+    await confirm_step()
+    await control(backend, "advance", skip=False)
+    assert session.step_id == "heat_water"
+    assert "not complete" in await control(backend, "advance", skip=False)
+    reply = await control(backend, "advance", skip=True)
+    assert "Temperature verification skipped" in reply
+    assert "Carefully put the chamomile" in reply
+    assert session.active and session.step_id == "start_steeping"
+    assert session.skipped and not session.state["water_at_target"]
+    assert session.timer is None and not session.state["tea_immersed"]
+    assert "not complete" in await control(backend, "advance", skip=False)
+    await confirm_step()
+    now += 40
+    await control(backend, "advance", skip=False)
+    assert session.step_id == "steep_timer" and session.timer.started == now
+    assert not session.state["water_at_target"]
+    backend._trigger = _Guide._trigger.__get__(backend)
+    timer = backend._timer_tool("alice")
+    assert (await timer.execute(EmptyRequest())).remaining_s == 300
+    now += 299
+    session.next_tick = 0
+    await backend._tick(session)
+    assert not backend._is_complete(session)
+    now += 1
+    backend._announce = AsyncMock()
+    session.next_tick = 0
+    await backend._tick(session)
+    assert not session.active
+    backend._announce.assert_awaited_once_with(
+        "alice", "Guide ended with skipped steps. Say start guide to begin again.",
+    )
 
 
 @pytest.mark.parametrize("missing", ["session", "timer", "duration"])
@@ -1414,6 +1459,7 @@ async def test_timer_unavailability_is_a_tool_result(engine, document, missing):
         document["steps"][0]["trigger"] = {
             "function": "clock__timer", "interval_s": 1, "arguments": {"duration_s": "$state.duration"},
         }
+        document["steps"][0]["evidence"] = {"pattern": "true", "consecutive": 1, "commit": {"base": True}}
         backend._guide = selected(document)
         backend._start("alice")
     result = await backend._timer_tool("alice").execute(EmptyRequest())
@@ -1421,19 +1467,13 @@ async def test_timer_unavailability_is_a_tool_result(engine, document, missing):
     assert result.expired is None and result.remaining_s is None and result.elapsed_s is None
 
 
-@pytest.mark.parametrize("text,accepted", [
-    ("100 C", True), ("100°C", True), ("100.0 ° C", True), ("100℃", True),
-    ("212°F", True), ("212.00 f", True), ("212℉", True),
-    ("99.9 C", False), ("100.1 C", False), ("211 F", False), ("100", False),
-    ("Target 100 C", False), ("UNKNOWN", False), ("100 C or 212 F", False),
-])
-def test_tea_temperature_accepts_formatting_not_different_measurements(text, accepted):
+def test_tea_temperature_condition_accepts_display_reading_without_label():
     step = load_guide(_SAMPLE / "example-guides/tea-making/guide.yaml").workflow.steps["heat_water"]
-    for source in ("CURRENT", "ACTUAL", "THERMOMETER"):
-        assert bool(re.fullmatch(step.evidence.pattern, f"{source} | {text}")) is accepted
-    for source in ("TARGET", "SET", "PRESET", "UNKNOWN"):
-        assert not re.fullmatch(step.evidence.pattern, f"{source} | {text}")
-    assert not re.fullmatch(step.evidence.pattern, text)
+    assert step.evidence.pattern is None
+    for requirement in ("100 C", "212 F", "absent label", "no probe", "unit"):
+        assert requirement in step.evidence.condition
+    assert not step.complete_on_skip
+    assert step.next_step == "start_steeping"
 
 
 @pytest.mark.parametrize("failed_probe,fail_fast", [
@@ -1491,7 +1531,7 @@ def test_scenario_cli_reports_failures_and_continues_independent_probes(tmp_path
     async def vision(images, query, **kwargs):
         # Only the model boundary is stubbed; decode pixels delivered by the
         # real frame selection and image registry to distinguish the scenes.
-        assert len(images) == 1 and "rectangle blue" in query
+        assert len(images) == 1 and "rectangle" in query
         image = Image.open(io.BytesIO(images[0])).convert("RGB")
         red, _green, blue = image.getpixel((320, 240))
         return SimpleNamespace(content="YES" if blue > red else "NO")
@@ -1499,6 +1539,7 @@ def test_scenario_cli_reports_failures_and_continues_independent_probes(tmp_path
     llm = Mock(chat=AsyncMock(side_effect=chat), close=AsyncMock())
     vlm = Mock(ask_images=AsyncMock(side_effect=vision), close=AsyncMock())
     monkeypatch.setattr(xr_ai_models, "make_llm", lambda *_args: llm)
+    monkeypatch.setattr(xr_ai_models, "make_decision", lambda *_args: stub_decisions())
     monkeypatch.setattr(xr_ai_models, "make_vlm", lambda *_args: vlm)
     output = tmp_path / "results"
     monkeypatch.setattr(sys, "argv", ["guide.py", "--manifest", str(manifest_path), "--output", str(output)])
@@ -1665,7 +1706,7 @@ async def test_capture_composition_does_not_construct_guide_or_llm(tmp_path, mon
     for name in ("make_vlm", "make_stt", "make_tts"):
         monkeypatch.setattr(app, name, lambda *_args: model)
     forbidden = Mock(side_effect=AssertionError("Capture must not construct guide or LLM"))
-    for name in ("make_llm", "GuideAgent", "llm_update_combiner", "load_guide"):
+    for name in ("make_llm", "make_decision", "GuideAgent", "llm_update_combiner", "load_guide"):
         monkeypatch.setattr(app, name, forbidden)
 
     async def receive():
@@ -1723,15 +1764,22 @@ def test_hash_and_approval_use_same_snapshot_during_edit(tmp_path, document, mon
 
 async def test_guide_app_composition_starts_and_cleans_up(tmp_path, document, monkeypatch):
     from procedure_capture_guide_worker import app
+    from procedure_capture_guide_worker.guide.config import load_guide_config
 
     write_guide(tmp_path, document)
+    settings = tmp_path / "guide-config.yaml"
+    settings.write_text("decision_timeout_s: 3.25\n")
     config = WorkerConfig(
         mode="guide", models_config=_SAMPLE / "yaml/models.json",
-        voice_gate_yaml=_SAMPLE / "yaml/voice_gate.yaml", guide=GuideConfig(tmp_path / "test.guide.yaml"),
+        voice_gate_yaml=_SAMPLE / "yaml/voice_gate.yaml",
+        guide=load_guide_config(settings, guide_path=str(tmp_path / "test.guide.yaml")),
     )
     llm = Mock(health=AsyncMock(return_value=True), close=AsyncMock())
     for name in ("make_llm", "make_vlm", "make_stt", "make_tts"):
         monkeypatch.setattr(app, name, lambda *_args: llm)
+    decisions = stub_decisions()
+    factory = Mock(return_value=decisions)
+    monkeypatch.setattr(app, "make_decision", factory)
     async def receive():
         await asyncio.Future()
     endpoint = Mock(run=receive, wait_until_running=AsyncMock())
@@ -1749,14 +1797,22 @@ async def test_guide_app_composition_starts_and_cleans_up(tmp_path, document, mo
     class Voice(Agent):
         def __init__(self, **kwargs):
             super().__init__()
-            assert set(kwargs["probes"]) == {"llm", "vlm", "stt", "tts"}
+            assert set(kwargs["probes"]) == {"llm", "vlm", "stt", "tts", "clef"}
+            assert kwargs["probes"]["clef"] is decisions.health
+            self.decision_probe = kwargs["probes"]["clef"]
             assert not kwargs["voice_gate"].magic_phrases
             assert not kwargs["voice_gate"].stop_commands_enabled
             assert callable(kwargs["combiner"])
 
         async def run(self, runtime):
+            assert await self.decision_probe()
             await runtime.publish(PARTICIPANT_JOINED_TOPIC, ParticipantJoined(), participant_id="alice")
             assert agents[0]._backend._sessions["alice"].step_id == "base"
+            backend = agents[0]._backend
+            await control(backend, "restart")
+            backend._trigger = AsyncMock(return_value=observation("YES", 1))
+            await backend._tick(backend._sessions["alice"])
+            assert decisions.decide.call_args.kwargs["timeout"] == 3.25
             # Simulate worker shutdown while the participant is still connected.
 
     monkeypatch.setattr(app, "GuideAgent", guide)
@@ -1765,6 +1821,9 @@ async def test_guide_app_composition_starts_and_cleans_up(tmp_path, document, mo
     assert not agents[0]._backend._sessions and not agents[0]._connected
     capture.assert_not_called()
     endpoint.close.assert_called_once()
+    factory.assert_called_once_with(app.load_models_config(config.models_config), "decision")
+    decisions.health.assert_awaited_once()
+    decisions.close.assert_awaited_once()
 
 
 async def test_actual_runtime_delivers_guide_and_release(document):
@@ -1781,6 +1840,7 @@ async def test_actual_runtime_delivers_guide_and_release(document):
     llm = Mock(chat=AsyncMock(return_value=ChatResponse("Align the marked edges.", None, None, "stop", {})))
     runtime = AgentRuntime()
     agent = runtime.register("guide", GuideAgent(
+        decisions=stub_decisions(),
         guide=selected(document), llm=llm, current_frame=Mock(), image_query=Mock(),
         vision_timeout_s=1,
     ))
@@ -1828,6 +1888,7 @@ async def test_interrupted_transition_delivers_guidance_through_runtime(document
     ], "tool_calls", {})))
     runtime = AgentRuntime()
     agent = runtime.register("guide", GuideAgent(
+        decisions=stub_decisions(),
         guide=selected(document), llm=llm, current_frame=Mock(), image_query=Mock(),
         vision_timeout_s=1,
     ))
@@ -1911,6 +1972,7 @@ async def test_transition_withdraws_notice_queued_during_foreground_turn(documen
     llm = Mock(chat=AsyncMock(side_effect=chat))
     runtime = AgentRuntime()
     agent = runtime.register("guide", GuideAgent(
+        decisions=stub_decisions(),
         guide=selected(document), llm=llm, current_frame=Mock(), image_query=Mock(),
         vision_timeout_s=1,
     ))
@@ -1958,3 +2020,152 @@ async def test_transition_withdraws_notice_queued_during_foreground_turn(documen
         finally:
             release.set()
             await agent.stop()
+
+
+@pytest.mark.parametrize("failure", ["no", "timeout", "error", "invalid", "cancel", "missing", "empty"])
+async def test_clef_failure_breaks_consecutive_confirmation(engine, failure):
+    from loguru import logger
+
+    backend = engine._backend
+    session = backend._sessions["alice"]
+    backend._trigger = AsyncMock(side_effect=[observation("YES", i) for i in range(1, 5)])
+    await backend._tick(session)
+    assert session.evidence_hits == 1
+    if failure == "empty":
+        backend._trigger.side_effect = [observation("  ", 2), observation("YES", 3), observation("YES", 4)]
+    elif failure == "no":
+        backend._decisions.decide.side_effect = None
+        backend._decisions.decide.return_value = clef_response("no")
+    elif failure == "invalid":
+        backend._decisions.decide.side_effect = None
+        backend._decisions.decide.return_value = clef_response("maybe")
+    elif failure == "missing":
+        backend._decisions.decide.side_effect = None
+        response = clef_response()
+        response.answers.clear()
+        backend._decisions.decide.return_value = response
+    elif failure == "timeout":
+        backend._decision_timeout_s = 0.01
+        async def hang(*args, **kwargs):
+            await asyncio.Future()
+        backend._decisions.decide.side_effect = hang
+    else:
+        backend._decisions.decide.side_effect = (
+            asyncio.CancelledError() if failure == "cancel" else RuntimeError("down")
+        )
+    session.next_tick = 0
+    records = []
+    sink = logger.add(lambda message: records.append(message.record), level="WARNING")
+    try:
+        if failure == "cancel":
+            with pytest.raises(asyncio.CancelledError):
+                await backend._tick(session)
+        else:
+            await asyncio.wait_for(backend._tick(session), 1)
+    finally:
+        logger.remove(sink)
+    if failure in {"timeout", "error", "invalid", "missing"}:
+        assert len(records) == 1
+        assert "Guide decision unavailable" in records[0]["message"]
+        assert records[0]["exception"] is None
+    else:
+        assert not records
+    assert session.evidence_hits == 0 and not session.state["base"]
+    backend._decisions = stub_decisions()
+    for hits in (1, 2):
+        session.next_tick = 0
+        await backend._tick(session)
+        assert session.evidence_hits == hits
+        assert session.state["base"] is (hits == 2)
+
+
+@pytest.mark.parametrize("transition", ["restart", "reset", "advance", "leave"])
+async def test_delayed_clef_result_cannot_commit_after_transition(engine, transition):
+    backend = engine._backend
+    session = backend._sessions["alice"]
+    backend._trigger = AsyncMock(return_value=observation("The parts align.", 1))
+    entered, release = asyncio.Event(), asyncio.Event()
+    async def decide(*args, **kwargs):
+        entered.set()
+        await release.wait()
+        return clef_response()
+    backend._decisions.decide.side_effect = decide
+    session.evidence_hits = 1
+    pending = asyncio.create_task(backend._tick(session))
+    await asyncio.wait_for(entered.wait(), 2)
+    if transition == "leave":
+        await engine.participant_left(None, context())
+    else:
+        await control(backend, transition, **({"skip": True} if transition == "advance" else {}))
+    engine._runtime.publish.reset_mock()
+    release.set()
+    await pending
+    assert not session.state["base"] and not session.state["lid"]
+    engine._runtime.publish.assert_not_awaited()
+
+
+async def test_clef_receives_condition_and_description_not_chat_or_images(engine):
+    backend = engine._backend
+    session = backend._sessions["alice"]
+    backend._trigger = AsyncMock(return_value=observation("Two edges touch; the far side is obscured.", 1))
+    await backend._tick(session)
+    call = backend._decisions.decide.call_args
+    assert call.args[0] == {"condition": session.step.evidence.condition,
+                            "current_observation": "Two edges touch; the far side is obscured."}
+    question = call.args[1]["condition_met"]
+    assert set(question.criteria) == {"yes", "no"}
+    assert "images" not in call.kwargs
+    engine._llm.chat.assert_not_called()
+
+
+@pytest.mark.parametrize("version", [None, 1, True, 2.0, "2", 3])
+def test_guide_schema_version_requires_explicit_migration(document, version):
+    document["schema_version"] = version
+    with pytest.raises(ValueError, match="schema_version must be 2; migrate visual steps"):
+        selected(document)
+
+
+@pytest.mark.parametrize("bad", [{}, {"pattern": "YES"}, {"condition": "Visible.", "pattern": "YES"}])
+def test_visual_evidence_contract_rejects_legacy_or_missing_condition(document, bad):
+    document["steps"][0]["evidence"] = {"consecutive": 1, "commit": {"base": True}, **bad}
+    with pytest.raises(ValueError, match="condition|pattern"):
+        selected(document)
+
+
+@pytest.mark.parametrize("value", [0, -1, True, float("inf"), float("nan")])
+def test_invalid_decision_timeout_rejected(tmp_path, value):
+    from procedure_capture_guide_worker.guide.config import load_guide_config
+    path = tmp_path / "guide.yaml"
+    path.write_text(yaml.safe_dump({"decision_timeout_s": value}))
+    with pytest.raises(ValueError):
+        load_guide_config(path, guide_path="example.yaml")
+
+
+@pytest.mark.parametrize("failure", [False, True])
+async def test_visual_evidence_is_logged_even_when_decision_fails(failure):
+    from loguru import logger
+    from procedure_capture_guide_worker.guide.verification import condition_met
+
+    messages = []
+    sink = logger.add(lambda message: messages.append(message.record["message"]), level="DEBUG")
+    decisions = SimpleNamespace(decide=AsyncMock(return_value=clef_response()))
+    if failure:
+        decisions.decide.side_effect = RuntimeError("CLEF unavailable")
+    request = dict(condition="A display reads 100 C.", observation="The display reads 100 C.",
+                   frame={"participant_id": "alice", "sequence": 42}, step_id="heat_water",
+                   revision=3, timeout_s=15)
+    try:
+        if failure:
+            with pytest.raises(RuntimeError, match="CLEF unavailable"):
+                await condition_met(decisions, **request)
+        else:
+            assert await condition_met(decisions, **request)
+    finally:
+        logger.remove(sink)
+    evidence = next(message for message in messages if "Guide visual evidence" in message)
+    assert request["observation"] in evidence and request["condition"] in evidence
+    assert "heat_water" in evidence and "alice" in evidence and "42" in evidence and "revision=3" in evidence
+    results = [message for message in messages if "Guide visual decision" in message]
+    assert len(results) == (0 if failure else 1)
+    if results:
+        assert "choice=yes" in results[0] and "confidence=" in results[0]
