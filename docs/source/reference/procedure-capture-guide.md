@@ -64,11 +64,9 @@ updating the checkout. If you changed ports in a GPU profile, pass the same
 
 ## Output destination
 
-By default, each capture's frames and captions are saved inside the sample, at
-`agent-samples/procedure-capture-guide/artifacts/sessions/<session-id>/`
-(`frames/` for the JPEG snapshots, `captions.jsonl` for the captions). The
-`~/.local/share/xr-ai/captures/` directory is not used for these; it holds only
-the opt-in [session recordings](#session-recording).
+Recorded procedures are saved under
+`procedure-capture-guide/artifacts/sessions/<session-id>/` (frames, captions,
+transcript, and summary).
 
 Choose an output root at launch without editing configuration:
 
