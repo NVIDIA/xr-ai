@@ -1,0 +1,64 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Paths resolve relative to this YAML file. Provision the model explicitly;
+# see docs/source/reference/gesture-capture.md for download and license details.
+model_path: ../models/hand_landmarker.task
+models: models.json
+# Demonstration settings, requiring tuning on the target camera.
+poll_interval_s: 0.08
+# Gentle progress hum and recognition chime through the participant audio track.
+gesture_audio: true
+# Opt-in one-second numeric/reason summaries in existing worker logs; no images.
+gesture_diagnostics: false
+hold_s: 0.6
+# Stable grip release and gesture rearm dwell; missing frames break confirmation.
+release_s: 0.4
+# Break hold/release continuity if new observations are separated by this gap.
+max_gap_s: 0.5
+# Maximum normalized edge movement during a hold.
+movement_tolerance: 0.05
+# Edge/ray alignment tolerance (sine of angular mismatch). Also disambiguates
+# legacy near-tip clusters; fingertip contact is not required for box framing.
+corner_tolerance: 0.35
+# Maximum absolute cosine of each thumb/index angle (near 90 degrees).
+angle_cosine: 0.45
+# Estimate each framing finger's half-width from its distal joint-to-tip length.
+# Increase if finger borders remain visible; this is not pixel segmentation.
+finger_clearance_ratio: 0.5
+# Default: crop the selected streamed video frame at its actual resolution.
+# Set true to request a separate higher-resolution photo only after verifying
+# the same optical camera, orientation and field of view for video and photo.
+# Aspect ratio validation alone cannot establish alignment.
+aligned_photo: false
+query: "Describe the selected region and explain what is notable about it."
+
+# Pinch and draw a near-closed circle; chime freezes selection. Move the hand
+# clear for a fresh-frame query (or best-effort timeout); stable unpinch rearms.
+# All values below are demonstration settings needing target-camera tuning.
+circle:
+  # Image-space thumb/index distance divided by MCP palm width.
+  # Two accepted closed samples enter; the band retains pinched pointer tracking.
+  pinch_ratio: 0.25
+  release_ratio: 0.45
+  # Bounds on distinct sampled points; excess points cancel rather than truncate.
+  min_points: 8
+  max_points: 256
+  # Minimum diameter as a fraction of the image's shorter side.
+  min_diameter: 0.1
+  # Reject elongated loops and radial deviations from the fitted circle.
+  min_axis_ratio: 0.65
+  radial_tolerance: 0.35
+  # Endpoint distance divided by radius and allowed reverse travel in revolutions.
+  closure_tolerance: 1.0
+  min_sweep_deg: 300
+  # Wait for mostly-clear hand overlap, stable for release_s, or capture anyway.
+  clear_overlap: 0.2
+  clear_timeout_s: 2.0
+  # Keep drawing armed through missing/ambiguous hands on fresh video frames.
+  occlusion_grace_s: 2.0
+  max_backtrack: 0.15
+  # Largest trajectory segment divided by radius; rejects sparsely observed arcs.
+  max_segment_radius: 1.0
+  # Ignore implausible samples; sustained rejected observations expire max_gap_s.
+  max_jump_palm: 2.0
