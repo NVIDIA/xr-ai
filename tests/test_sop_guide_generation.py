@@ -99,7 +99,8 @@ def test_visual_example_uses_same_writable_boolean_and_closed_answers():
     assert step.is_complete({**workflow.initial_state(), **step.evidence.commit})
     assert step.evidence.consecutive >= 2
     assert re.fullmatch(step.evidence.pattern, "ready")
-    for response in ("not ready", "unclear", "ready, but still held", "unavailable"):
+    assert re.fullmatch(step.evidence.pattern, "Ready")  # VLMs often capitalize the answer
+    for response in ("not ready", "Not ready", "unclear", "ready, but still held", "unavailable"):
         assert not re.fullmatch(step.evidence.pattern, response)
     assert step.next_step == "attach_clips"
     assert step.trigger.result_field == "text"
@@ -256,7 +257,8 @@ def test_actual_string_regex_and_whitespace_preserve_existing_meaning(visual):
     (lambda source: source.replace(
         "    evidence:\n", "    evidence: {pattern: wrong, consecutive: 1}\n    evidence:\n"),
      "evidence"),
-    (lambda source: source.replace("      pattern: '^ready$'", "      pattern: '^ready$'\n      pattern: '^ready$'"),
+    (lambda source: source.replace(
+        "      pattern: '(?i)^ready$'", "      pattern: '(?i)^ready$'\n      pattern: '(?i)^ready$'"),
      "pattern"),
     (lambda source: source.replace("    initial: false", "    initial: false\n    \"initial\": true"), "initial"),
 ])

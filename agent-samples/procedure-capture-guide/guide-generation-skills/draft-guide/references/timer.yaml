@@ -48,7 +48,7 @@ steps:
       prompt: "Explain placement inside the marked area. The clock starts on entry to the waiting step."
       tools: [current_view]
     evidence:
-      pattern: '^ready$'
+      pattern: '(?i)^ready$'
       consecutive: 2
       commit:
         placement_done: true
