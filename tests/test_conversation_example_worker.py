@@ -261,11 +261,9 @@ class _RouteDecisions:
         self.close_calls += 1
 
     async def decide(self, state, _questions, *, timeout=None):
-        if "disposition" in _questions:
+        if "ready" in _questions:
             return DecisionResponse(
-                {key: DecisionAnswer(choice, 1.0, {k: float(k == choice) for k in _questions[key].criteria})
-                 for key, choice in {"disposition": "ready", "relation": "separate"}.items()},
-                "fake", {}, {},
+                {"ready": DecisionAnswer("yes", .95, {"yes": .95, "no": .05})}, "fake", {}, {},
             )
         self.states.append(state)
         self.questions.append(_questions)
@@ -1847,9 +1845,7 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
 
     assert (sessions[0].turn_policy is not None) == semantic_turns_enabled
     if semantic_turns_enabled:
-        assert sessions[0].turn_policy._controller._decisions is decisions
-        for name in ("observation", "notes", "alerts"):
-            assert wired_front_ends[0][name]._effects_started.__self__ is sessions[0].turn_policy
+        assert sessions[0].turn_policy._decisions is decisions
         assert [row[2] for row in responses] == ["semantic:source:1", "semantic:source:2"]
     assert len(wired_front_ends) == 1
     assert set(wired_front_ends[0]) == {"conversation", "observation", "alerts", "notes"}
@@ -2110,36 +2106,3 @@ def test_semantic_turn_config_rejects_invalid_opt_in(tmp_path, settings):
     path.write_text(yaml.safe_dump({"semantic_turns": settings}))
     with pytest.raises(ValueError):
         load_config(path)
-
-
-async def test_notes_mark_effect_before_saving_participant_text():
-    marked = []
-
-    class Notes(NoteTakingAgent):
-        async def _save_note(self, participant_id, text):
-            assert marked == [(participant_id, "note")]
-            return await super()._save_note(participant_id, text)
-
-    notes = Notes(
-        _NoteDecisions("capture"), runtime=CaptureRuntime(), output_topic=VOICE_OUTPUT_TOPIC,
-        effects_started=lambda pid, request: marked.append((pid, request)),
-    )
-    turn = AgentTurn("alice", "note", "Remember the red panel.")
-    assert (await notes.admit(turn, focused=True)).disposition == "accept"
-    await _answer(notes, turn, emit=_ignore)
-    assert notes._read_back("alice") == "Your notes: Remember the red panel."
-
-
-async def test_observation_marks_effect_before_camera_acquisition():
-    marked = []
-
-    class Frames(_ConversationFrames):
-        async def execute(self, request):
-            assert marked == [(request.participant_id, "view")]
-            return await super().execute(request)
-
-    observation = VisualObservationAgent(
-        Frames(), _StreamingImageQueryTool(), runtime=CaptureRuntime(), output_topic=VOICE_OUTPUT_TOPIC,
-        effects_started=lambda pid, request: marked.append((pid, request)),
-    )
-    await _answer(observation, AgentTurn("alice", "view", "What is there?"), emit=_ignore)

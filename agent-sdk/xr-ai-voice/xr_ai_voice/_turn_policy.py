@@ -99,7 +99,9 @@ class VoiceTurnPolicy(Protocol):
     Synchronous notifications must be fast and must invalidate in-flight
     decisions when relevant state changes. decide must not start tools or
     application side effects and must propagate cancellation. The SDK owns its scheduling and drains calls
-    before session cleanup. The caller owns model clients and policy lifetime.
+    before session cleanup. A final ASR snapshot cancels an awaiting decision
+    and is scheduled immediately, allowing ordinary endpoint fallback without
+    waiting for optional model advice. The caller owns model clients and policy lifetime.
     """
 
     settle_s: float

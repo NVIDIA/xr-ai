@@ -74,10 +74,10 @@ Alternatively, run the source file directly after synchronization:
 uv run main.py
 ```
 
-To try experimental semantic voice turns, set `semantic_turns.enabled: true` in
+To try early speech endpoint advice and strict filler-only filtering, set `semantic_turns.enabled: true` in
 `yaml/conversation_example_worker.yaml`, then use the same `uv run conversation_example`
-command. This retains general conversation, observation, notes and alerts, sharing
-the existing Clef service. The option defaults to false. See the
+command. Normal ASR/VAD finalization remains the fallback. This retains all four
+destinations and shares the existing Clef service. The option defaults to false. See the
 [semantic-turn guide](https://nvidia.github.io/xr-ai/latest/guides/semantic-turn-prototype.html)
 for policy settings, replay commands and qualification limits.
 

@@ -240,9 +240,6 @@ class VoiceGateProcessor(FrameProcessor):
             return
 
         if isinstance(frame, (UserStartedSpeakingFrame, UserStoppedSpeakingFrame)):
-            if self._semantic_turns:
-                # Acoustic activity is not semantic admission or barge-in.
-                return
             if self._conversation_cfg is not None and frame.transport_source not in self._conversation_active:
                 if self._mode == "hybrid" and isinstance(frame, UserStartedSpeakingFrame):
                     self._gate.begin_utterance(frame.transport_source)

@@ -105,7 +105,7 @@ async def test_selected_partial_dispatches_before_any_stop_or_final_without_vad(
         assert [f.text for f in queries] == ["Show the pressure"]
         assert queries[0].request_id == "request-1"
         assert policy.latest["wearer"].final is False
-        assert not any(isinstance(f, UserStartedSpeakingFrame) for f in seen)
+        assert any(isinstance(f, UserStartedSpeakingFrame) for f in seen)
         assert not any(isinstance(f, InterruptionFrame) for f in seen)
         # Existing ASR silence-finalized transcript is not a second query.
         policy.finished.clear()
@@ -431,3 +431,112 @@ async def test_same_segment_retraction_reaches_policy_without_control_words(kind
     finally:
         await speaker.cleanup()
         await gate.cleanup()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("final_pid", ["user", "other"])
+async def test_final_snapshot_preempts_blocked_early_advice_and_preserves_worker(final_pid):
+    from test_conversation_turn_policy import _ClefVoicePolicy, _Decisions, _Policy
+
+    decisions = _Decisions()
+    decisions.release = asyncio.Event()
+    policy = _ClefVoicePolicy(decisions, _Policy(stable_s=0, decision_timeout_s=30))
+    admission = _TurnPolicyProcessor(policy)
+    received = []
+    submitted = asyncio.Event()
+
+    async def capture(frame, *args):
+        if isinstance(frame, GatedQueryFrame):
+            received.append(frame)
+            if frame.participant_id == final_pid:
+                submitted.set()
+
+    admission.push_frame = capture
+    admission._worker = asyncio.create_task(admission._run())
+    try:
+        await admission.process_frame(
+            _TurnTranscriptFrame(TranscriptUpdate("user", "a", 0, 0, "Explain AR", 100)),
+            FrameDirection.DOWNSTREAM,
+        )
+        await asyncio.wait_for(decisions.entered.wait(), 1)
+        await admission.process_frame(
+            _TurnTranscriptFrame(TranscriptUpdate(final_pid, "a", 0, 1, "What is this?", 100, True)),
+            FrameDirection.DOWNSTREAM,
+        )
+        await asyncio.wait_for(submitted.wait(), 1)
+        assert decisions.cancelled.is_set()
+        assert not decisions.release.is_set()
+        assert [f.text for f in received if f.participant_id == final_pid] == ["What is this?"]
+        assert not admission._worker.done()
+    finally:
+        await admission.cleanup()
+    assert admission._worker is None and admission._decision is None
+
+
+@pytest.mark.asyncio
+async def test_later_partial_does_not_delay_or_overwrite_a_native_final():
+    from test_conversation_turn_policy import _ClefVoicePolicy, _Decisions, _Policy
+
+    decisions = _Decisions(choice="no")
+    policy = _ClefVoicePolicy(decisions, _Policy(stable_s=30))
+    admission = _TurnPolicyProcessor(policy)
+    received = []
+    submitted = asyncio.Event()
+
+    async def capture(frame, *args):
+        if isinstance(frame, GatedQueryFrame):
+            received.append(frame)
+            submitted.set()
+
+    admission.push_frame = capture
+    try:
+        await admission.process_frame(
+            _TurnTranscriptFrame(TranscriptUpdate("a", "source", 0, 0, "Explain AR", 100, True)),
+            FrameDirection.DOWNSTREAM,
+        )
+        await admission.process_frame(
+            _TurnTranscriptFrame(TranscriptUpdate("a", "source", 1, 0, "And how does", 200)),
+            FrameDirection.DOWNSTREAM,
+        )
+        admission._worker = asyncio.create_task(admission._run())
+        await asyncio.wait_for(submitted.wait(), 1)
+        assert [f.text for f in received] == ["Explain AR"] and decisions.calls == []
+    finally:
+        await admission.cleanup()
+
+
+@pytest.mark.asyncio
+async def test_filler_final_then_new_partial_cannot_block_another_participants_final():
+    from test_conversation_turn_policy import _ClefVoicePolicy, _Decisions, _Policy
+
+    decisions = _Decisions()
+    decisions.release = asyncio.Event()
+    policy = _ClefVoicePolicy(decisions, _Policy(stable_s=0, decision_timeout_s=30))
+    admission = _TurnPolicyProcessor(policy)
+    submitted = asyncio.Event()
+    received = []
+
+    async def capture(frame, *args):
+        if isinstance(frame, GatedQueryFrame):
+            received.append(frame)
+            submitted.set()
+
+    admission.push_frame = capture
+    try:
+        for update in [
+            TranscriptUpdate("a", "a-source", 0, 0, "um", 100, True),
+            TranscriptUpdate("a", "a-source", 1, 0, "Explain AR", 200),
+        ]:
+            await admission.process_frame(_TurnTranscriptFrame(update), FrameDirection.DOWNSTREAM)
+        admission._worker = asyncio.create_task(admission._run())
+        await asyncio.wait_for(decisions.entered.wait(), 1)
+        await admission.process_frame(
+            _TurnTranscriptFrame(TranscriptUpdate("b", "b-source", 0, 0, "What is this?", 300, True)),
+            FrameDirection.DOWNSTREAM,
+        )
+        await asyncio.wait_for(submitted.wait(), 1)
+        assert decisions.cancelled.is_set()
+        assert [(f.participant_id, f.text) for f in received] == [("b", "What is this?")]
+        assert not admission._worker.done()
+    finally:
+        await admission.cleanup()

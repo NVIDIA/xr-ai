@@ -704,22 +704,3 @@ async def test_cancelling_or_replacing_an_alert_withdraws_its_unspoken_updates(r
     # The second request takes back the queued description before its own reply.
     assert after_description.index(("withdraw", "")) < after_description.index(("reply", reply))
     await agent.stop()
-
-
-
-@pytest.mark.asyncio
-async def test_alert_marks_effect_before_retiring_a_job():
-    agent, _ = _agent(_Decisions("cancel"), _Frames())
-    marked = []
-    agent._effects_started = lambda pid, request: marked.append((pid, request))
-    original = agent._retire
-
-    async def retire(pid):
-        assert marked == [(pid, "cancel")]
-        await original(pid)
-
-    agent._retire = retire
-    try:
-        await _start(agent, "alice", "Cancel the visual alert.", "cancel")
-    finally:
-        await agent.stop()

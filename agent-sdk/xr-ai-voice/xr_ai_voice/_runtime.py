@@ -173,7 +173,8 @@ class VoiceAgent(Agent):
     ``turn_policy`` optionally admits authorized incremental transcripts through
     sample-owned semantics. It requires required speaker ASR in conversation
     mode without per-query wake phrases; unsupported configurations fail before
-    media allocation. Its ASR segments do not determine semantic completion.
+    media allocation. Policies receive both partial and final ASR snapshots;
+    applications can retain ordinary endpointing while using optional early advice.
     The caller owns policy/model resources; the session owns policy scheduling.
 
     Accepted queries also return participant-routed UTF-8 display text on

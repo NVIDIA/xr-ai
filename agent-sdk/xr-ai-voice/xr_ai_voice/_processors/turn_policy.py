@@ -48,10 +48,15 @@ class _TurnPolicyProcessor(FrameProcessor):
         self._dirty: OrderedDict[str, float] = OrderedDict()
         self._wake = asyncio.Event()
         self._worker: asyncio.Task | None = None
+        self._decision: asyncio.Task | None = None
+        self._preempted: asyncio.Task | None = None
+        self._finals: set[str] = set()
         self._closed = False
 
     def _mark(self, pid: str, *, settle: bool = False) -> None:
-        self._dirty[pid] = asyncio.get_running_loop().time() + (self._policy.settle_s if settle else 0)
+        self._dirty[pid] = asyncio.get_running_loop().time() + (
+            self._policy.settle_s if settle and pid not in self._finals else 0
+        )
         self._wake.set()
 
     def output(self, state: VoiceOutputState) -> None:
@@ -75,6 +80,7 @@ class _TurnPolicyProcessor(FrameProcessor):
         self._authorities.pop(pid, None)
         self._identities.pop(pid, None)
         self._dirty.pop(pid, None)
+        self._finals.discard(pid)
         self._requests.pop(pid, None)
         # Removing an epoch revokes in-flight work. No tombstone grows on churn.
         try:
@@ -129,7 +135,12 @@ class _TurnPolicyProcessor(FrameProcessor):
                 logger.exception("semantic voice update callback failed pid={!r}", pid)
                 self._reset(pid)
                 return
-            self._mark(pid, settle=True)
+            if update.final:
+                self._finals.add(pid)
+                if self._decision is not None and not self._decision.done():
+                    self._preempted = self._decision
+                    self._decision.cancel()
+            self._mark(pid, settle=not update.final)
             return
         elif isinstance(frame, InterruptionFrame):
             # Gate-owned STOP/release revokes pending semantic work too.
@@ -143,7 +154,7 @@ class _TurnPolicyProcessor(FrameProcessor):
                 self._wake.clear()
                 await self._wake.wait()
                 continue
-            pid = min(self._dirty, key=self._dirty.__getitem__)
+            pid = min(self._dirty, key=lambda key: (key not in self._finals, self._dirty[key]))
             delay = self._dirty[pid] - asyncio.get_running_loop().time()
             if delay > 0:
                 self._wake.clear()
@@ -153,10 +164,34 @@ class _TurnPolicyProcessor(FrameProcessor):
                     pass
                 continue
             self._dirty.pop(pid)
+            final = pid in self._finals
+            self._finals.discard(pid)
             identity = self._identities.get(pid)
             authority = self._authorities.get(pid)
             try:
-                actions = await self._policy.decide(pid)
+                decision = asyncio.create_task(self._policy.decide(pid), name=f"voice-endpoint-decision:{pid}")
+                self._decision = decision
+                try:
+                    actions = await decision
+                except asyncio.CancelledError:
+                    if asyncio.current_task().cancelling() or self._preempted is not decision:
+                        raise
+                    # A final snapshot preempts optional model work, even for
+                    # another participant. Preserve a retry for the older input.
+                    if self._identities.get(pid) is identity:
+                        if final:
+                            self._finals.add(pid)
+                            self._mark(pid)
+                        elif pid not in self._dirty:
+                            self._mark(pid, settle=True)
+                    continue
+                finally:
+                    if self._decision is decision:
+                        self._decision = None
+                    if self._preempted is decision:
+                        self._preempted = None
+                if final and self._identities.get(pid) is identity and pid not in self._dirty:
+                    self._mark(pid, settle=True)
                 if self._identities.get(pid) is not identity:
                     continue
                 if self._authorize is not None and not self._authorize(pid, authority):

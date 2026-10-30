@@ -69,13 +69,9 @@ class NoteTakingAgent(RoutableAgent):
         runtime: AgentRuntime,
         output_topic: Topic[ResponseOutput],
         publish_note: ContextPublisher | None = None,
-        effects_started: Callable[[str, str], None] | None = None,
-        participant_text: Callable[[str, str, str], str] | None = None,
     ) -> None:
         self._decisions = decisions
         self._publish_note = publish_note
-        self._effects_started = effects_started
-        self._participant_text = participant_text
         self._outputs = ResponseOutputs(runtime, output_topic, source="notes", closed_errors=(RuntimeClosedError,))
         self._pending: dict[str, tuple[str, str, bool]] = {}
         self._notes: dict[str, list[str]] = {}
@@ -94,8 +90,6 @@ class NoteTakingAgent(RoutableAgent):
         return Admission("accept")
 
     async def answer(self, turn: AgentTurn, *, started: Callable[[], Awaitable[None]]) -> DestinationResult:
-        if self._effects_started is not None:
-            self._effects_started(turn.participant_id, turn.turn_id)
         pending = self._pending.pop(turn.participant_id, None)
         if pending is None or pending[0] != turn.turn_id:
             return _NO_ANSWER
@@ -108,11 +102,7 @@ class NoteTakingAgent(RoutableAgent):
                 await reply.send(text)
 
         if action == "capture":
-            note = (
-                self._participant_text(turn.participant_id, turn.turn_id, turn.query)
-                if self._participant_text is not None else turn.query
-            )
-            text = await self._save_note(turn.participant_id, note)
+            text = await self._save_note(turn.participant_id, turn.query)
             await emit(text)
             return DestinationResult("focus", text)
         if action == "start":

@@ -130,10 +130,13 @@ async def run_app(
     )
     decisions: DecisionService = make_decision(models, "router")
     turn_policy = (
-        _ClefVoicePolicy(decisions, config.semantic_turns_policy, allow_unspoken_merge=True)
+        _ClefVoicePolicy(decisions, config.semantic_turns_policy)
         if config.semantic_turns_enabled else None
     )
-    effects_started = turn_policy.effects_started if turn_policy is not None else None
+    logger.info(
+        "voice endpoint mode={} ordinary_asr_fallback=enabled",
+        "early-advice-and-strict-fillers" if turn_policy is not None else "standard",
+    )
     vlm = make_vlm(models, "vlm")
     tts = make_tts(models, "tts")
     transport = HubVoiceTransport()
@@ -169,15 +172,12 @@ async def run_app(
         StreamingImageQueryTool(images=images, vlm=vlm, system_prompt=config.system_prompt),
         runtime=runtime,
         output_topic=VOICE_OUTPUT_TOPIC,
-        effects_started=effects_started,
     )
     notes = NoteTakingAgent(
         decisions,
         runtime=runtime,
         output_topic=VOICE_OUTPUT_TOPIC,
         publish_note=_context_publisher(runtime, NOTES_CONTEXT_TOPIC),
-        participant_text=turn_policy.participant_text if turn_policy is not None else None,
-        effects_started=effects_started,
     )
     alerts = VisualAlertAgent(
         frames,
@@ -190,7 +190,6 @@ async def run_app(
         output_topic=VOICE_OUTPUT_TOPIC,
         check_interval_secs=config.alert_check_interval_secs,
         confirm_interval_secs=config.alert_confirm_interval_secs,
-        effects_started=effects_started,
     )
 
     async def release_frames(participant_id: str) -> None:
