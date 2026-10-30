@@ -1,0 +1,41 @@
+xr_ai_tools.async_tools
+=======================
+
+.. py:module:: xr_ai_tools.async_tools
+
+.. autoapi-nested-parse::
+
+   Typed tools that yield asynchronous result chunks.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   xr_ai_tools.AsyncTool
+
+
+Module Contents
+---------------
+
+.. py:class:: AsyncTool(name: str, description: str, request_model: type[RequestT], chunk_model: type[ChunkT], handler: collections.abc.Callable[[RequestT], collections.abc.AsyncIterator[ChunkT]])
+
+
+
+   A validated asynchronous tool independent of any output transport.
+
+
+   .. py:method:: stream(request: RequestT | collections.abc.Mapping[str, object]) -> collections.abc.AsyncIterator[ChunkT]
+      :async:
+
+
+      Validate and yield chunks produced in an isolated Relay tool scope.
+
+      The producer task owns the scope and handler cleanup; chunks are yielded
+      in the consumer's context. Parent scope-local registrations are not
+      transferred into the isolated context.
+
+
+

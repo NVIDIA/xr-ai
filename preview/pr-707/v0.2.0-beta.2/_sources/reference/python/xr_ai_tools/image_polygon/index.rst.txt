@@ -1,0 +1,115 @@
+xr_ai_tools.image_polygon
+=========================
+
+.. py:module:: xr_ai_tools.image_polygon
+
+.. autoapi-nested-parse::
+
+   Fill an image-space polygon with opaque magenta pixels.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   xr_ai_tools.image_polygon.ImagePoint
+   xr_ai_tools.image_polygon.ImagePolygonFillRequest
+   xr_ai_tools.image_polygon.ImagePolygonFillResult
+   xr_ai_tools.image_polygon.ImagePolygonFillTool
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   xr_ai_tools.image_polygon.fill_polygon_magenta
+
+
+Module Contents
+---------------
+
+.. py:class:: ImagePoint
+
+
+
+   One non-negative source-image pixel coordinate.
+
+
+   .. py:attribute:: x
+      :type:  float
+
+      Horizontal pixel coordinate from the left edge.
+
+
+
+   .. py:attribute:: y
+      :type:  float
+
+      Vertical pixel coordinate from the top edge.
+
+
+
+.. py:class:: ImagePolygonFillRequest
+
+
+
+   Fill the polygon defined by ordered image-space vertices.
+
+
+   .. py:attribute:: image
+      :type:  xr_ai_tools.image.ImageReference
+
+      Source image returned by an image tool or supplied by the caller.
+
+
+
+   .. py:attribute:: coordinates
+      :type:  list[ImagePoint]
+
+      Ordered vertices, with the final vertex connected to the first.
+
+
+
+.. py:class:: ImagePolygonFillResult
+
+
+
+   A lossless PNG copy containing the filled polygon.
+
+
+   .. py:attribute:: image
+      :type:  xr_ai_tools.image.ImageReference | None
+
+      Opaque reference to the edited PNG image when available.
+
+
+
+   .. py:attribute:: available
+      :type:  bool
+
+      Whether the supplied image and polygon produced an edited image.
+
+
+
+   .. py:attribute:: message
+      :type:  str | None
+
+      Recoverable failure detail when no edited image was produced.
+
+
+
+.. py:function:: fill_polygon_magenta(source: xr_ai_tools.image.ImageInput, coordinates: collections.abc.Sequence[ImagePoint]) -> bytes
+
+   Return lossless PNG bytes with the supplied polygon filled ``#FF00FF``.
+
+
+.. py:class:: ImagePolygonFillTool(*, images: xr_ai_tools.image.ImageRegistry)
+
+
+
+   Create a magenta polygon overlay without changing the source image.
+
+
