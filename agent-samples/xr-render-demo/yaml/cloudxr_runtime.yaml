@@ -1,14 +1,15 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# CloudXR runtime configuration.
-# Full docs: python -m isaacteleop.cloudxr --help
+# CloudXR runtime configuration. Refer to docs/source/guides/adding-cloudxr.md.
 
-# Directory where CloudXR stores runtime state, certs, and logs (default: ~/.cloudxr).
+# Directory where CloudXR stores its SDK, runtime state, certs, and logs
+# (default: ~/.cloudxr).
 cloudxr_install_dir: ~/.cloudxr
 
-# Set to true to accept the NVIDIA CloudXR EULA non-interactively.
-# EULA: https://github.com/NVIDIA/IsaacTeleop/blob/main/deps/cloudxr/CLOUDXR_LICENSE
+# Set to true to accept the NVIDIA CloudXR license agreement non-interactively.
+# The agreement ships with the SDK; a copy is in
+# third_party_licenses/nvidia-cloudxr-runtime-6.2.0/LICENSE.txt.
 # Once accepted the marker is written to <cloudxr_install_dir>/run/eula_accepted
 # and this flag is no longer checked.
 accept_eula: true

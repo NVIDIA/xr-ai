@@ -278,9 +278,8 @@ cd client-samples/web-xr-build
 ```
 
 The idempotent script reads the CloudXR version from `.sdk-version`, reuses a
-matching versioned tarball when present, otherwise reuses the matching
-IsaacTeleop tarball at `~/hub/IsaacTeleop/deps/cloudxr/` when available, and
-finally downloads the public NGC tarball. It installs npm dependencies, writes
+matching versioned tarball when present, and otherwise downloads the public
+NGC tarball. It installs npm dependencies, writes
 both ESM bundles to `../web-xr/vendor/`, and records the SDK version beside
 them. The orchestrator automatically rebuilds missing or stale bundles.
 To bump CloudXR, edit `.sdk-version` and re-run the script. To bump LiveKit,
