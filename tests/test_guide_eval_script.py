@@ -191,6 +191,8 @@ async def test_visual_evaluator_uses_guide_question_not_answer(evaluator, tmp_pa
     decisions = stub_decisions()
     async def decide(state, questions, **kwargs):
         assert state["condition"] and "condition_met" in questions
+        if kwargs.get("images"):
+            return clef_response("no", 0.8)
         return clef_response("yes" if "chamomile" in state["current_observation"] else "no")
     decisions.decide.side_effect = decide
     monkeypatch.setattr(evaluator, "make_decision", lambda *_: decisions)
@@ -266,7 +268,8 @@ async def test_decision_failure_preserves_visual_evidence_and_finishes_run(
     path.write_text(yaml.safe_dump(manifest))
     vlm = SimpleNamespace(close=AsyncMock())
     decisions = stub_decisions()
-    decisions.decide.side_effect = [error_type("decision failed"), clef_response("no")]
+    decisions.decide.side_effect = [clef_response("yes", 0.8), error_type("decision failed"),
+                                    clef_response("no", 0.8), clef_response("no")]
     monkeypatch.setattr(evaluator, "make_vlm", lambda *_: vlm)
     monkeypatch.setattr(evaluator, "make_decision", lambda *_: decisions)
     descriptions = ["The packet reads chamomile.", "The packet reads green tea."]
@@ -600,8 +603,16 @@ async def test_invalid_actions_fail_before_model_work(runtime_evaluator, tmp_pat
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("answer,expected", [(" \nno\t", True), ("YES", False)])
-async def test_runtime_observe_uses_shared_visual_case(runtime_evaluator, tmp_path, answer, expected):
+@pytest.mark.parametrize("direct", [False, True])
+async def test_runtime_observe_uses_shared_visual_case(
+    runtime_evaluator, tmp_path, monkeypatch, answer, expected, direct,
+):
     module = runtime_evaluator
+    if direct:
+        decisions = stub_decisions()
+        decisions.decide.side_effect = None
+        decisions.decide.return_value = clef_response("no" if expected else "yes", 0.95)
+        monkeypatch.setattr(module.runtime.xr_ai_models, "make_decision", lambda *_: decisions)
     module.runtime.xr_ai_models.make_vlm.return_value.ask_images.return_value = SimpleNamespace(content=answer)
     guide = yaml.safe_load((_TEST_DATA / "test_procedure_indicator_guide.yaml").read_text())
     guide["steps"] = guide["steps"][:1]
@@ -619,3 +630,5 @@ async def test_runtime_observe_uses_shared_visual_case(runtime_evaluator, tmp_pa
     }))
     assert await module.evaluate(manifest, tmp_path / "output") is expected
     assert json.loads((tmp_path / "output/visual_cases.json").read_text()) == {"red": cases["cases"][0]}
+    if direct:
+        module.runtime.xr_ai_models.make_vlm.return_value.ask_images.assert_not_awaited()

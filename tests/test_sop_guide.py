@@ -87,7 +87,7 @@ def selected(document):
 
 
 def observation(text, sequence):
-    return _Observation(True, text, _FrameIdentity(
+    return _Observation(True, text.encode(), _FrameIdentity(
         participant_id="alice", track_id="cam", timestamp_us=sequence * 1000, sequence=sequence,
     ))
 
@@ -101,7 +101,8 @@ async def connected_engine(document):
     agent = GuideAgent(
         decisions=stub_decisions(),
         guide=selected(document), llm=Mock(chat=AsyncMock()),
-        current_frame=Mock(execute=AsyncMock()), image_query=Mock(execute=AsyncMock()),
+        current_frame=Mock(execute=AsyncMock(), images=Mock(resolve=Mock(return_value=b"YES"), put=Mock(return_value=ImageReference(uri="xr-image://pinned")))),
+        image_query=Mock(execute=AsyncMock()),
         vision_timeout_s=1,
     )
     agent.bind_runtime(Mock(running=True, publish=AsyncMock()))
@@ -209,6 +210,7 @@ async def test_shipped_tea_guide_verification_and_runtime_timer(engine, monkeypa
             sequence += 1
         backend._current_frame.execute.return_value = camera_frame(sequence)
         backend._image_query.execute.return_value = ImageQueryResult(text=answer)
+        backend._current_frame.images.resolve.return_value = answer.encode()
         session.next_tick = 0
         await backend._tick(session)
 
@@ -925,8 +927,10 @@ async def test_frame_inference_finishing_after_restart_cannot_change_progress(en
 
     backend._current_frame.execute.return_value = camera_frame(1)
     backend._image_query.execute.side_effect = inspect
+    backend._decisions.decide.side_effect = None
+    backend._decisions.decide.return_value = clef_response("yes", 0.8)
     tick = asyncio.create_task(backend._tick(session))
-    await entered.wait()
+    await asyncio.wait_for(entered.wait(), 2)
     await control(backend, "restart")
     release.set()
     await tick
@@ -992,7 +996,9 @@ async def test_visual_questions_keep_camera_and_use_its_result(engine, query, an
     engine._backend._current_frame.execute.assert_awaited_once()
     assert engine._backend._current_frame.execute.call_args.args[0].participant_id == "alice"
     request = engine._backend._image_query.execute.call_args.args[0]
-    assert (request.image, request.query) == (image, query)
+    assert request.query == query
+    engine._backend._current_frame.images.resolve.assert_called_with(image)
+    assert request.image == engine._backend._current_frame.images.put.return_value
     assert engine._backend._sessions["alice"].state == before
 
 
@@ -1142,6 +1148,8 @@ async def test_stop_cancels_verification_and_restart_begins_fresh(engine):
 
     backend._current_frame.execute.return_value = camera_frame(1)
     backend._image_query.execute.side_effect = inspect
+    backend._decisions.decide.side_effect = None
+    backend._decisions.decide.return_value = clef_response("yes", 0.8)
     backend._start_monitor = _Guide._start_monitor.__get__(backend)
     backend._start_monitor("alice")
     await asyncio.wait_for(entered.wait(), 2)
@@ -2080,15 +2088,19 @@ async def test_clef_failure_breaks_consecutive_confirmation(engine, failure):
 
 
 @pytest.mark.parametrize("transition", ["restart", "reset", "advance", "leave"])
-async def test_delayed_clef_result_cannot_commit_after_transition(engine, transition):
+@pytest.mark.parametrize("fallback", [False, True])
+async def test_delayed_clef_result_cannot_commit_after_transition(engine, transition, fallback):
     backend = engine._backend
     session = backend._sessions["alice"]
     backend._trigger = AsyncMock(return_value=observation("The parts align.", 1))
     entered, release = asyncio.Event(), asyncio.Event()
     async def decide(*args, **kwargs):
+        if fallback and kwargs.get("images"):
+            return clef_response("yes", 0.8)
         entered.set()
         await release.wait()
         return clef_response()
+    backend._image_query.execute.return_value = ImageQueryResult(text="The edges touch.")
     backend._decisions.decide.side_effect = decide
     session.evidence_hits = 1
     pending = asyncio.create_task(backend._tick(session))
@@ -2104,17 +2116,18 @@ async def test_delayed_clef_result_cannot_commit_after_transition(engine, transi
     engine._runtime.publish.assert_not_awaited()
 
 
-async def test_clef_receives_condition_and_description_not_chat_or_images(engine):
+async def test_clef_receives_selected_image_and_condition_not_chat_or_caption(engine):
     backend = engine._backend
     session = backend._sessions["alice"]
     backend._trigger = AsyncMock(return_value=observation("Two edges touch; the far side is obscured.", 1))
     await backend._tick(session)
     call = backend._decisions.decide.call_args
     assert call.args[0] == {"condition": session.step.evidence.condition,
-                            "current_observation": "Two edges touch; the far side is obscured."}
+                            "image_role": "The single image is the selected current camera frame."}
     question = call.args[1]["condition_met"]
     assert set(question.criteria) == {"yes", "no"}
-    assert "images" not in call.kwargs
+    assert call.kwargs["images"] == (b"Two edges touch; the far side is obscured.",)
+    backend._image_query.execute.assert_not_awaited()
     engine._llm.chat.assert_not_called()
 
 
@@ -2169,3 +2182,102 @@ async def test_visual_evidence_is_logged_even_when_decision_fails(failure):
     assert len(results) == (0 if failure else 1)
     if results:
         assert "choice=yes" in results[0] and "confidence=" in results[0]
+
+
+@pytest.mark.parametrize("choice", ["yes", "no"])
+@pytest.mark.parametrize("confidence", [0.79, 0.80, 0.800001, 0.99])
+async def test_image_first_cutoff_and_caption_only_fallback(choice, confidence):
+    from procedure_capture_guide_worker.guide.visual_check import VisualCheckTrace, verify_image
+    from xr_ai_tools.image import ImageRegistry
+
+    images = ImageRegistry(capacity=1)
+    original = b"selected-frame"
+    calls = []
+
+    async def decide(state, questions, **kwargs):
+        calls.append((state, kwargs))
+        if len(calls) == 1:
+            assert kwargs["images"] == (original,)
+            assert "current_observation" not in state
+            # Camera production may replace the registered frame while CLEF runs.
+            images.clear()
+            images.put(b"new-camera-frame")
+            return clef_response(choice, confidence)
+        assert "images" not in kwargs
+        assert state == {"condition": "The two contact edges meet.", "current_observation": "Both edges touch."}
+        # Existing caption-only behavior has no second confidence cutoff.
+        return clef_response("no" if choice == "yes" else "yes", 0.6)
+
+    async def describe(request):
+        assert images.resolve(request.image) == original
+        assert request.query == "Describe the contact at both edges."
+        return ImageQueryResult(text="Both edges touch.")
+
+    decisions = Mock(decide=AsyncMock(side_effect=decide))
+    query = Mock(execute=AsyncMock(side_effect=describe))
+    trace = VisualCheckTrace()
+    result = await verify_image(
+        decisions, query, images=images, image=original, condition="The two contact edges meet.",
+        question="Describe the contact at both edges.", frame={"participant_id": "alice", "sequence": 42},
+        step_id="join", revision=1, decision_timeout_s=1, vision_timeout_s=1, trace=trace,
+    )
+    fallback = confidence <= 0.8
+    assert len(calls) == (2 if fallback else 1)
+    assert query.execute.await_count == int(fallback)
+    assert trace.source == ("caption" if fallback else "image")
+    assert trace.image_answer.confidence == confidence
+    assert trace.answer is result
+    assert result.choice == (("no" if choice == "yes" else "yes") if fallback else choice)
+    assert (trace.caption is not None) is fallback
+
+
+@pytest.mark.parametrize("stage", ["image", "caption", "caption_decision"])
+@pytest.mark.parametrize("failure", ["error", "timeout", "cancel"])
+async def test_image_first_failures_preserve_completed_stages_and_cancel(stage, failure):
+    from procedure_capture_guide_worker.guide.visual_check import VisualCheckTrace, verify_image
+    from xr_ai_tools.image import ImageRegistry
+
+    async def fail():
+        if failure == "timeout":
+            await asyncio.Future()
+        raise asyncio.CancelledError() if failure == "cancel" else RuntimeError("service unavailable")
+
+    async def decide(state, questions, **kwargs):
+        if (stage == "image" and "images" in kwargs) or (stage == "caption_decision" and "images" not in kwargs):
+            await fail()
+        return clef_response("yes", 0.8)
+
+    async def describe(request):
+        if stage == "caption":
+            await fail()
+        return ImageQueryResult(text="The edges touch.")
+
+    decisions = Mock(decide=AsyncMock(side_effect=decide))
+    query = Mock(execute=AsyncMock(side_effect=describe))
+    trace = VisualCheckTrace()
+    error = {"error": RuntimeError, "timeout": TimeoutError, "cancel": asyncio.CancelledError}[failure]
+    with pytest.raises(error):
+        await asyncio.wait_for(verify_image(
+            decisions, query, images=ImageRegistry(), image=b"selected", condition="The edges meet.",
+            question="Describe the edges.", frame={"sequence": 1}, step_id="join", revision=1,
+            decision_timeout_s=0.01, vision_timeout_s=0.01, trace=trace,
+        ), 1)
+    assert trace.answer is None
+    assert (trace.image_answer is not None) is (stage != "image")
+    assert (trace.caption is not None) is (stage == "caption_decision")
+    assert query.execute.await_count == (0 if stage == "image" else 1)
+    assert decisions.decide.await_count == (2 if stage == "caption_decision" else 1)
+
+
+@pytest.mark.parametrize("caption", [ImageQueryResult(text="Unavailable", available=False), ImageQueryResult(text=" ")])
+async def test_unusable_caption_cannot_confirm_a_low_confidence_yes(engine, caption):
+    backend = engine._backend
+    session = backend._sessions["alice"]
+    session.evidence_hits = 1
+    backend._trigger = AsyncMock(return_value=observation("YES", 1))
+    backend._decisions.decide.side_effect = None
+    backend._decisions.decide.return_value = clef_response("yes", 0.8)
+    backend._image_query.execute.return_value = caption
+    await backend._tick(session)
+    assert session.evidence_hits == 0 and not session.state["base"]
+    backend._decisions.decide.assert_awaited_once()

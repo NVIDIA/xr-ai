@@ -127,7 +127,7 @@ async def evaluate(manifest_path: Path, output: Path) -> bool:
 
     async def exercise(run: runtime.EvaluationContext) -> bool:
         camera, speech = run.camera, run.speech
-        events, visual_results = run.events, run.visual_results
+        events, visual_results = run.events, run.verification_results
         say, wait_until, log = run.say, run.wait_until, run.log
         speech_offset = 0
         passed = True
@@ -149,13 +149,14 @@ async def evaluate(manifest_path: Path, output: Path) -> bool:
                 results = [item for item in visual_results[before:] if item["image"] == str(camera.path)]
                 if "case" in action:
                     case = cases[action["case"]]
-                    question = guide.workflow.steps[case["step"]].trigger.arguments["question"]
                     action_passed = str(camera.path) == str(fixtures[case["scene"]]) and all(
-                        item["available"] and item["question"] == question
-                        and matches_answer(case["answer"], item["answer"]) for item in results
+                        item["available"] and item["step"] == case["step"]
+                        and item["accepted"] == case["accept"]
+                        and (item["answer"] is None or matches_answer(case["answer"], item["answer"]))
+                        for item in results
                     )
                 else:
-                    action_passed = all(item["available"] and any(
+                    action_passed = all(item["available"] and item["answer"] is not None and any(
                         matches_answer(re.escape(" ".join(answer.split())), item["answer"])
                         for answer in action["answers"]
                     ) for item in results)

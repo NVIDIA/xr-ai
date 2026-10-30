@@ -42,15 +42,18 @@ migration diagnostic. Capture packets remain at schema version 1.
 For each `current_view` step, replace `evidence.pattern` with an explicit prose
 `evidence.condition` and remove its observation `agent` block. Rewrite the
 trigger question to request descriptive visual facts, including the relevant
-region, count, orientation, contact, or labeled measurement. Cosmos supplies
-those facts; CLEF chooses whether they establish the condition. Retain the
+region, count, orientation, contact, or labeled measurement. CLEF first judges
+the image and uses its selected answer only above 80% confidence. Otherwise
+Cosmos supplies those facts and CLEF judges that description. Retain the
 step's `consecutive`, typed `commit`, and `complete_when` requirements. Approved
 visual steps require a commit; unresolved draft steps must remain drafts.
 Timer steps keep their elapsed-time evidence patterns and runtime-owned clocks.
 After migrating the steps, set the guide's `schema_version` to `2`.
 
 Restart the sample's model-server launcher to include CLEF on port 8120 and use
-the updated `yaml/models.json` decision entry. Guide mode waits for CLEF;
+the updated `yaml/models.json` decision entry. The CLEF endpoint must support
+image input; text-only endpoints cannot serve the image-first policy.
+Guide mode waits for CLEF;
 capture mode is unchanged. Re-evaluate existing guides after this migration,
 since regex matching of a visual answer no longer determines completion.
 

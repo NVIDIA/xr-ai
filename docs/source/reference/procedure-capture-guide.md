@@ -24,9 +24,11 @@ The sample's `model-servers` launcher starts batch Parakeet STT on port 8103,
 Pocket TTS on 8105, Nemotron Omni LLM on 8108, and Cosmos VLM on 8100.
 Batch STT accepts narration without speaker enrollment. The capture worker uses
 STT, TTS, and Cosmos; the LLM is available but does not participate in capture
-or generate guides automatically. Guide mode uses Omni for conversation, Cosmos for descriptive visual evidence,
-and CLEF (`Cloudflare/clef-flash`, port 8120) to decide whether that evidence
-establishes the step condition. The model-server launcher includes CLEF; guide
+or generate guides automatically. Guide mode uses Omni for conversation and
+CLEF (`Cloudflare/clef-flash`, port 8120) to judge camera images. When the selected
+answer has confidence at or below 80%, Cosmos provides a focused description
+and CLEF judges that description instead. Foreground visual questions still
+use Cosmos. The model-server launcher includes CLEF; guide
 readiness waits for it, while capture does not construct or wait for CLEF.
 The launcher combines shared server defaults with
 `model-servers/yaml/<gpu-profile>.yaml`; use `--gpu-profile NAME` to select a
@@ -513,8 +515,11 @@ tea sample's workflow YAML:
   not need to be visible. The brewing settings are fixed in the guide; the
   brewing reference is not retrieved at runtime.
 - Its three visual steps require two distinct fresh frames and two affirmative
-  CLEF decisions. Cosmos describes the printed tea name, temperature display, or
-  bag-water contact; CLEF compares that evidence with the step's condition. The
+  CLEF decisions. CLEF first judges the selected image against the condition.
+  Use its chosen yes or no directly only when confidence is **strictly above
+  80%**. At 80% or below, Cosmos describes the same frame using the step's
+  required `trigger.arguments.question`, and CLEF judges only that description
+  against the condition. There is no second confidence cutoff. The
   runtime applies the predefined completion patch after confirmation. Neither
   a plain YES from Cosmos nor an incidental matching word completes a step.
   The foreground LLM handles conversation and controls. Both perception and
@@ -537,11 +542,31 @@ tea sample's workflow YAML:
   five-minute timer. The skipped temperature stays unverified, and the run ends
   with a skipped-steps announcement. Skipping packet identification or immersion
   ends the run. Skipping the timer also cannot produce a verified completion.
-- The per-run `worker.log` records each visual observation, its step and frame
-  identity, the condition, and CLEF's choice and confidence at DEBUG level.
+- Each visual step must provide a caption question focused on the object or
+  part needed to judge its condition, including relevant labels, counts,
+  contact points, orientation, or measurements. Image-first execution does not
+  make that question optional. Foreground `current_view` questions still use
+  Cosmos for descriptive answers; timer steps remain deterministic.
+- Decision errors are unavailable checks, not low-confidence answers. No path
+  can commit after a guide transition. Each CLEF call has its own
+  `decision_timeout_s` deadline; frame selection and captioning each use
+  `vision_timeout_s`. The fallback can therefore take two decision calls and
+  a caption call in addition to frame selection.
+- The per-run `worker.log` records the step and frame identity, condition,
+  decision source, CLEF's choice and confidence, and any fallback description
+  at DEBUG level.
   These records describe verification attempts; two fresh affirmative observations
   are still required for completion. Evidence is saved before the decision request
   so it remains available if CLEF fails.
+
+The sample-local `guide/verification.py` exposes separate image and description
+judgments that retain CLEF's answer and confidence. `guide/visual_check.py`
+provides focused caption generation and composes the fixed image-first policy.
+Both runtime verification and isolated visual evaluation use this composition;
+frame selection and progress mutation stay in the guide backend. All visual
+steps share the 80% cutoff; guides do not currently select models or policies
+per step. Confidence is the model's reported probability, not a calibrated
+guarantee of correctness: a confident wrong answer bypasses fallback.
 
 Regression tests load this exact example and exercise its state transitions,
 distinct-frame evidence, skip behavior, and timer with simulated observations.
@@ -701,12 +726,12 @@ They exercise the same procedure, prompts, and verification rules that users run
 without a separate copy of the tea guide. The purpose-built
 `tests/test_procedure_indicator_guide.yaml` remains a separate, simplified test procedure.
 Identification checks whether chamomile is visibly printed on the packet,
-using descriptive Cosmos evidence and the shipped guide's CLEF condition.
+using the shipped guide's condition and image-first CLEF with Cosmos fallback.
 
 | Layer | What it checks | What it does not establish |
 |---|---|---|
 | CPU regression tests | Reproducible images, shipped-guide selection, scoring, timeout handling, and existing guide state-machine guards | Live model accuracy |
-| Isolated visual cases | Configured Cosmos descriptions and CLEF decisions for the shipped guide | Conversation, consecutive-frame enforcement, or task completion |
+| Isolated visual cases | Image-first decisions and any Cosmos fallback for the shipped guide | Conversation, consecutive-frame enforcement, or task completion |
 | Multi-turn guide scenario | Actual guide agent, frame tools, local LLM, VLM, and CLEF, controls, announcements, and the five-minute timer | Microphone, STT, network camera transport, or audible TTS |
 
 The sample-wide `evaluation/guide/decision_cases.yaml` contains 24 fixed
@@ -760,10 +785,12 @@ evidence-gate accuracy, false accepts, false rejects, and unavailable requests
 separately. An unavailable model cannot pass a negative case. Correctly rejecting
 a scene while misreading its contents is not a recognition pass. Repetitions
 measure response variability on the same images, not additional independent scenes.
-Decision scores call the production CLEF verifier on the original description.
-If CLEF fails, the case is unavailable for decision scoring, but its VLM answer
-and recognition score are retained. `recognition_scored` counts usable VLM
-answers; `scored` counts cases with both a usable answer and a CLEF decision.
+Decision scores call the production image-first policy. Results retain the
+image decision, confidence, selected path, fallback description, and final decision.
+If a later stage fails, completed stages remain available. `recognition_scored`
+counts usable fallback descriptions only: a direct decision has no description
+and is not scored for caption recognition. `scored` counts cases with a final
+CLEF decision. `image_only` and `caption_fallbacks` report path usage.
 Use each count as its corresponding accuracy denominator. Result rows record VLM and decision errors
 separately; later cases continue and the final summary includes the failure.
 Recognition regexes are offline diagnostics only and never authorize progress.

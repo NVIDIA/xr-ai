@@ -110,9 +110,12 @@ When visible placement and a subsequent functional or motion check are distinct
 required outcomes, keep them as separate checks. Block the unsupported outcome
 without also disabling the independently verifiable placement.
 
-For each visual step, write two distinct instructions:
+Every visual step uses the same runtime policy: CLEF judges the image first.
+A selected yes or no with confidence strictly above 0.80 is used directly;
+otherwise Cosmos describes that same frame and CLEF judges the caption alone.
+Write both instructions for every step, even if the image check seems easy:
 
-- `trigger.arguments.question` (1–500 characters) asks Cosmos for evidence.
+- `trigger.arguments.question` (1–500 characters) is the required Cosmos fallback question.
   Direct attention to the relevant region or objects and ask for concrete
   descriptions: counts, attachment points, contact, orientation, printed labels,
   measurements and units. Ask it to identify hidden or ambiguous details.
@@ -123,7 +126,7 @@ For each visual step, write two distinct instructions:
   Do not ask for YES/NO, ready/not-ready, or a completion verdict. The tool
   does not receive the guide's condition or voice prompt.
 - `evidence.condition` states every fact needed for completion. CLEF judges
-  this condition against the written Cosmos observation. Include required
+  this condition against the image first, or the written Cosmos observation on fallback. Include required
   counts, locations, orientation, and distinctions such as attached versus
   held nearby. Avoid conditions that require hidden facts or a motion history.
 
@@ -134,7 +137,7 @@ supported alternative must not accidentally require an optional object from
 another alternative.
 Evaluate descriptions missing each required fact as well as complete descriptions.
 Visual steps do not use `evidence.pattern` or an observation
-`agent`. A clear CLEF decision can still repeat a Cosmos perception error;
+`agent`. A confident image decision can be wrong, and fallback can repeat a Cosmos perception error;
 evaluate both stages, not just whether a completion message appeared.
 
 ## Write, validate, and review

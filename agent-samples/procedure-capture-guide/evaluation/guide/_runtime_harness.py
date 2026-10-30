@@ -155,6 +155,7 @@ class EvaluationContext:
     speech: Speech
     events: list[dict]
     visual_results: list[dict]
+    verification_results: list[dict]
     log: Callable[..., None]
     wait_until: Callable[..., Awaitable[None]]
     say: Callable[[str], Awaitable[TurnResult]]
@@ -205,7 +206,8 @@ async def run_evaluation(
     async def logged_decide(state, questions, **kwargs):
         origin, turn_id = call_origin()
         result = await decide(state, questions, **kwargs)
-        log("decision", origin=origin, turn_id=turn_id, state=state, answers={
+        log("decision", origin=origin, turn_id=turn_id, input_kind="image" if kwargs.get("images") else "caption",
+            state=state, answers={
             name: {"choice": answer.choice, "confidence": answer.confidence}
             for name, answer in result.answers.items()
         })
@@ -242,12 +244,12 @@ async def run_evaluation(
                 model_origin.reset(token)
 
     camera, images = Camera(), ImageRegistry()
-    image_sources = {}
+    selected_source: ContextVar[tuple[asyncio.Task, str] | None] = ContextVar("selected_source", default=None)
 
     class Frames(CurrentFrameTool):
         async def execute(self, request):
             result = await super().execute(request)
-            image_sources[result.image.uri] = camera.sources[result.sequence]
+            selected_source.set((asyncio.current_task(), camera.sources[result.sequence]))
             log("selected_frame", image=camera.sources[result.sequence], sequence=result.sequence,
                 timestamp_us=result.timestamp_us)
             return result
@@ -258,7 +260,9 @@ async def run_evaluation(
 
     class Vision(ImageQueryTool):
         async def execute(self, request):
-            path = image_sources[request.image.uri]
+            owner, path = selected_source.get()
+            if owner is not asyncio.current_task():
+                raise RuntimeError("caption does not belong to this task's selected frame")
             before = time.monotonic()
             result = await super().execute(request)
             item = {"image": path, "question": request.query, "answer": result.text,
@@ -276,6 +280,29 @@ async def run_evaluation(
         vision_timeout_s=settings.guide.vision_timeout_s,
         decision_timeout_s=settings.guide.decision_timeout_s,
     ))
+    verification_results = []
+    verify = agent._backend._verify_visual
+
+    async def traced_verify(session, step, revision, observation):
+        before = time.monotonic()
+        trace = await verify(session, step, revision, observation)
+        if trace is not None:
+            owner, path = selected_source.get()
+            if owner is not asyncio.current_task():
+                raise RuntimeError("verification does not belong to this task's selected frame")
+            item = {
+                "image": path, "step": step.id, "frame": observation.frame.model_dump(),
+                "condition": step.evidence.condition, "source": trace.source,
+                "available": trace.answer is not None,
+                "accepted": trace.answer.choice == "yes" if trace.answer else None,
+                "answer": trace.caption.text if trace.caption else None,
+                "latency_s": time.monotonic() - before,
+            }
+            verification_results.append(item)
+            log("verification", **item)
+        return trace
+
+    agent._backend._verify_visual = traced_verify
     tick = agent._backend._tick
 
     async def traced_tick(session):
@@ -332,7 +359,8 @@ async def run_evaluation(
         log("guidance_snapshot", context=snapshot.context)
         return snapshot.context
 
-    context = EvaluationContext(camera, speech, events, visual_results, log, wait_until, say, quiet, guidance)
+    context = EvaluationContext(camera, speech, events, visual_results, verification_results,
+                                log, wait_until, say, quiet, guidance)
     subscription = f"guide-eval-{time.time_ns()}"
     nemo_relay.subscribers.register(subscription, relay_event)
     try:

@@ -121,19 +121,23 @@ test environment, not evidence that a guide's condition is wrong.
    to someone performing it afresh, not merely whether the recording passes.
    Identify consequential assumptions and questions needing human confirmation;
    ordinary organization and wording do not require individual confirmation.
-2. Read the recorded frame selection, actual Cosmos descriptions, and CLEF
-   `decision` events (condition, observation, choice, and confidence). Compare
+2. Read the recorded frame selection and CLEF `decision` events, including
+   input kind, condition, choice, and confidence. For image confidence at or
+   below 0.80, also inspect the Cosmos description and caption-only decision.
+   Above 0.80, no caption is requested. Compare
    incomplete, in-progress, completed, and available incorrect states against
    the exact questions. Inspect their source frames when necessary. Do not
    replace a response with what you believe the model should have said.
    Separate perception errors from decision errors: correct reasoning cannot
-   recover a fact Cosmos confidently misreports. Confidence is diagnostic,
-   not a substitute for inspecting the evidence or an extra acceptance cutoff.
+   recover a fact Cosmos confidently misreports. Confidence selects the runtime
+   path; it is not proof of correctness. Do not add another cutoff to the final
+   caption decision or describe an absent caption as a captioning failure.
    Inspect the source frames that first caused each completion, including
    absent or in-progress states. An increased completion count can conceal a
    false positive; compare the actual depicted result, not just the final frame
    or the model's confident wording. For a stalled step, identify which required
-   fact is absent from the description and whether the question asked for it.
+   fact is missing from the image decision or fallback description. A caption
+   question edit affects only fallback; inspect the condition for a direct-image failure.
    Identify false positives, supported completions missed, occlusion, and
    missing negative coverage. Do not weaken requirements to fit a bad demo.
 3. Read executed tool requests and results, guidance state snapshots,
@@ -175,8 +179,9 @@ and untested steps, and trace paths. Separate observed execution from your
 interpretation. List all simulated inputs and excluded layers (STT, TTS,
 browser, hub IPC, and LiveKit); this is not a full audiovisual end-to-end test.
 
-For each failure, return the selected frame IDs, question, Cosmos response,
-condition, CLEF choice, and the supported edit or concrete reason no edit can
+For each failure, return the selected frame IDs, question, condition, both
+CLEF choices and confidence scores when available, and the Cosmos response
+when fallback ran, and the supported edit or concrete reason no edit can
 help. Separate question presentation from unresolved task requirements. Do not
 infer that human clarification is required just because the verifier said no.
 

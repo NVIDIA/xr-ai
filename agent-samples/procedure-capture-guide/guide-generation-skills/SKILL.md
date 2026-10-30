@@ -62,7 +62,10 @@ Separate guide-correctable defects from model perception, recording coverage,
 runtime limitations, and unavailable infrastructure.
 
 For each stalled or newly completed visual step, compare its selected source
-images, actual Cosmos description, required condition facts, and CLEF decision.
+images, required condition facts, and CLEF image decision and confidence. When
+fallback runs, also inspect its Cosmos description and caption-only CLEF decision.
+A high-confidence image decision has no Cosmos description; changing only the
+caption question cannot change that path.
 Record the mismatch and a supported correction, or the evidence ruling one out.
 Repeated negative answers or a timeout alone do not establish an unfixable
 perception problem or an ambiguous requirement. A focused question using visible

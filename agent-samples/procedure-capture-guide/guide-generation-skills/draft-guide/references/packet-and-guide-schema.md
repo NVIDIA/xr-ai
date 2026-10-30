@@ -108,8 +108,15 @@ and completion messages; do not copy the worked example's wording.
 
 For `current_view`, ask Cosmos for a focused description of the relevant region,
 objects, contacts, labels, and hidden details. State the completion requirements
-in `evidence.condition`. CLEF receives that condition and the description, not
-the image, conversation history, or a suggested answer. Only yes counts toward
+in `evidence.condition`. CLEF first receives the condition and one selected
+image. Use its chosen yes or no only when confidence is strictly above 0.80.
+Otherwise the runtime asks Cosmos the required `trigger.arguments.question`
+about the same frame, then sends CLEF only that description and the condition.
+The final caption decision has no additional confidence cutoff. Neither path
+receives conversation history or a suggested answer. The caption question must
+focus on the relevant object or part and its required details even when direct
+image judgment is likely to succeed. This policy is uniform; there are no
+per-step model or threshold settings in this schema. Only the final yes counts toward
 `consecutive`. Repeated frames do not count twice, and failures break the streak.
 Do not use `pattern` or `agent` on visual steps. Unavailable or uncertain evidence
 must not be treated as success, but both models can still misinterpret a scene.
