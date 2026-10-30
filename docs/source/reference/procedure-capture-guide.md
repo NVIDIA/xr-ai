@@ -64,6 +64,12 @@ updating the checkout. If you changed ports in a GPU profile, pass the same
 
 ## Output destination
 
+By default, each capture's frames and captions are saved inside the sample, at
+`agent-samples/procedure-capture-guide/artifacts/sessions/<session-id>/`
+(`frames/` for the JPEG snapshots, `captions.jsonl` for the captions). The
+`~/.local/share/xr-ai/captures/` directory is not used for these; it holds only
+the opt-in [session recordings](#session-recording).
+
 Choose an output root at launch without editing configuration:
 
 ```bash
@@ -102,7 +108,8 @@ and then starts rendering while the recorder remains running.
 
 `yaml/media_capture.yaml` selects `session_mode: participant` and the `demo`
 profile. It saves recordings under
-`~/.local/share/xr-ai/captures/procedure-capture-guide/`, retaining raw media and
+`~/.local/share/xr-ai/captures/procedure-capture-guide/` (not the capture
+packets in `artifacts/sessions/`), retaining raw media and
 rendering a captioned MP4 after disconnect. This option requires an NVIDIA GPU with NVENC support
 and `ffmpeg` on `PATH`. Refer to {doc}`../components/server-runtime` for the shared
 recorder's output and encoding contract.

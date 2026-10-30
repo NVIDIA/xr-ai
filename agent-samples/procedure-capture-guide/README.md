@@ -67,7 +67,12 @@ these commands to record another task without reconnecting. The worker announces
 and finalization. On connection, the worker explains these commands once.
 Other speech while idle does not trigger a reply.
 
-To choose where packets are saved, launch with `uv run main.py --mode capture --output-root PATH`.
+Each capture is saved inside this sample at
+`artifacts/sessions/<session-id>/` (Git-ignored): `frames/` holds the JPEG
+snapshots, and `captions.jsonl`, `transcript.jsonl`, `summary.md`, and
+`packet.json` sit beside it. To choose another location, launch with
+`uv run main.py --mode capture --output-root PATH`; packets then go under
+`PATH/sessions/<session-id>/`.
 
 To test guide mode with the included chamomile tea example:
 
@@ -90,7 +95,10 @@ Refer to the [guide reference](https://nvidia.github.io/xr-ai/latest/reference/p
 for verification and step-advance controls. Capture mode and guide mode run separately.
 
 To also record the whole participant session in either mode, independently of
-spoken capture or guide commands, use:
+spoken capture or guide commands, use the opt-in flag below. These video
+recordings are separate from the capture packets above and are saved under
+`~/.local/share/xr-ai/captures/procedure-capture-guide/`; without the flag,
+nothing is written there.
 
 ```bash
 uv run main.py --mode capture --session-recording
