@@ -205,8 +205,11 @@ def parse_workflow(content: bytes | str) -> Workflow:
     """Validate one captured guide snapshot without rereading its source file."""
     root = _mapping(yaml.load(content, Loader=_GuideLoader) or {}, "workflow")
     _only(root, _ROOT_KEYS, "workflow")
-    if root.get("schema_version") != 1:
-        raise ValueError("schema_version must be 1")
+    if type(root.get("schema_version")) is not int or root["schema_version"] != 2:
+        raise ValueError(
+            "schema_version must be 2; migrate visual steps to evidence.condition "
+            "and remove visual evidence.pattern and observation agent blocks"
+        )
     task = _mapping(root.get("task"), "task")
     _only(task, _TASK_KEYS, "task")
     fields = _fields(_mapping(root.get("state"), "state"))

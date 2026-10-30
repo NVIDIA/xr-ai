@@ -89,7 +89,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
         ))
         guide.bind_runtime(runtime)
         probes["llm"] = llm.health
-        probes["CLEF"] = decisions.health
+        probes["clef"] = decisions.health
         voice_options = {
             "participant_joined_topic": PARTICIPANT_JOINED_TOPIC,
             "participant_left_topic": PARTICIPANT_LEFT_TOPIC,

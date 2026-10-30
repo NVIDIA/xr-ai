@@ -71,7 +71,7 @@ def document():
             "messages": {"enter": f"Do {name}.", "complete": f"{name} complete. Say next.", "skip": "Skipped."},
         }
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "task": {"id": "align_parts", "name": "Align Parts", "version": 1, "status": "approved",
                  "start_step": "base", "foreground_prompt": "Guide alignment.",
                  "complete_message": "Alignment complete."},
@@ -1764,15 +1764,22 @@ def test_hash_and_approval_use_same_snapshot_during_edit(tmp_path, document, mon
 
 async def test_guide_app_composition_starts_and_cleans_up(tmp_path, document, monkeypatch):
     from procedure_capture_guide_worker import app
+    from procedure_capture_guide_worker.guide.config import load_guide_config
 
     write_guide(tmp_path, document)
+    settings = tmp_path / "guide-config.yaml"
+    settings.write_text("decision_timeout_s: 3.25\n")
     config = WorkerConfig(
         mode="guide", models_config=_SAMPLE / "yaml/models.json",
-        voice_gate_yaml=_SAMPLE / "yaml/voice_gate.yaml", guide=GuideConfig(tmp_path / "test.guide.yaml"),
+        voice_gate_yaml=_SAMPLE / "yaml/voice_gate.yaml",
+        guide=load_guide_config(settings, guide_path=str(tmp_path / "test.guide.yaml")),
     )
     llm = Mock(health=AsyncMock(return_value=True), close=AsyncMock())
-    for name in ("make_llm", "make_vlm", "make_stt", "make_tts", "make_decision"):
+    for name in ("make_llm", "make_vlm", "make_stt", "make_tts"):
         monkeypatch.setattr(app, name, lambda *_args: llm)
+    decisions = stub_decisions()
+    factory = Mock(return_value=decisions)
+    monkeypatch.setattr(app, "make_decision", factory)
     async def receive():
         await asyncio.Future()
     endpoint = Mock(run=receive, wait_until_running=AsyncMock())
@@ -1790,14 +1797,22 @@ async def test_guide_app_composition_starts_and_cleans_up(tmp_path, document, mo
     class Voice(Agent):
         def __init__(self, **kwargs):
             super().__init__()
-            assert set(kwargs["probes"]) == {"llm", "vlm", "stt", "tts", "CLEF"}
+            assert set(kwargs["probes"]) == {"llm", "vlm", "stt", "tts", "clef"}
+            assert kwargs["probes"]["clef"] is decisions.health
+            self.decision_probe = kwargs["probes"]["clef"]
             assert not kwargs["voice_gate"].magic_phrases
             assert not kwargs["voice_gate"].stop_commands_enabled
             assert callable(kwargs["combiner"])
 
         async def run(self, runtime):
+            assert await self.decision_probe()
             await runtime.publish(PARTICIPANT_JOINED_TOPIC, ParticipantJoined(), participant_id="alice")
             assert agents[0]._backend._sessions["alice"].step_id == "base"
+            backend = agents[0]._backend
+            await control(backend, "restart")
+            backend._trigger = AsyncMock(return_value=observation("YES", 1))
+            await backend._tick(backend._sessions["alice"])
+            assert decisions.decide.call_args.kwargs["timeout"] == 3.25
             # Simulate worker shutdown while the participant is still connected.
 
     monkeypatch.setattr(app, "GuideAgent", guide)
@@ -1806,6 +1821,9 @@ async def test_guide_app_composition_starts_and_cleans_up(tmp_path, document, mo
     assert not agents[0]._backend._sessions and not agents[0]._connected
     capture.assert_not_called()
     endpoint.close.assert_called_once()
+    factory.assert_called_once_with(app.load_models_config(config.models_config), "decision")
+    decisions.health.assert_awaited_once()
+    decisions.close.assert_awaited_once()
 
 
 async def test_actual_runtime_delivers_guide_and_release(document):
@@ -2006,6 +2024,8 @@ async def test_transition_withdraws_notice_queued_during_foreground_turn(documen
 
 @pytest.mark.parametrize("failure", ["no", "timeout", "error", "invalid", "cancel", "missing", "empty"])
 async def test_clef_failure_breaks_consecutive_confirmation(engine, failure):
+    from loguru import logger
+
     backend = engine._backend
     session = backend._sessions["alice"]
     backend._trigger = AsyncMock(side_effect=[observation("YES", i) for i in range(1, 5)])
@@ -2034,13 +2054,22 @@ async def test_clef_failure_breaks_consecutive_confirmation(engine, failure):
             asyncio.CancelledError() if failure == "cancel" else RuntimeError("down")
         )
     session.next_tick = 0
-    if failure in {"no", "empty"}:
-        await backend._tick(session)
+    records = []
+    sink = logger.add(lambda message: records.append(message.record), level="WARNING")
+    try:
+        if failure == "cancel":
+            with pytest.raises(asyncio.CancelledError):
+                await backend._tick(session)
+        else:
+            await asyncio.wait_for(backend._tick(session), 1)
+    finally:
+        logger.remove(sink)
+    if failure in {"timeout", "error", "invalid", "missing"}:
+        assert len(records) == 1
+        assert "Guide decision unavailable" in records[0]["message"]
+        assert records[0]["exception"] is None
     else:
-        error = {"timeout": TimeoutError, "error": RuntimeError, "invalid": ValueError,
-                 "missing": KeyError, "cancel": asyncio.CancelledError}[failure]
-        with pytest.raises(error):
-            await backend._tick(session)
+        assert not records
     assert session.evidence_hits == 0 and not session.state["base"]
     backend._decisions = stub_decisions()
     for hits in (1, 2):
@@ -2086,8 +2115,14 @@ async def test_clef_receives_condition_and_description_not_chat_or_images(engine
     question = call.args[1]["condition_met"]
     assert set(question.criteria) == {"yes", "no"}
     assert "images" not in call.kwargs
-    assert call.kwargs["timeout"] == 15
     engine._llm.chat.assert_not_called()
+
+
+@pytest.mark.parametrize("version", [None, 1, True, 2.0, "2", 3])
+def test_guide_schema_version_requires_explicit_migration(document, version):
+    document["schema_version"] = version
+    with pytest.raises(ValueError, match="schema_version must be 2; migrate visual steps"):
+        selected(document)
 
 
 @pytest.mark.parametrize("bad", [{}, {"pattern": "YES"}, {"condition": "Visible.", "pattern": "YES"}])

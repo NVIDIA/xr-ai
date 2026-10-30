@@ -69,7 +69,7 @@ Do not fabricate speech for silent recordings.
 
 ## Executable YAML
 
-Exactly four root fields: `schema_version: 1`, `task`, `state`, `steps`. Unknown
+Exactly four root fields: `schema_version: 2`, `task`, `state`, `steps`. Unknown
 structural fields are rejected. Use block mappings and quote prose; commas in
 unquoted flow mappings (`{...}`) can silently create unintended fields.
 

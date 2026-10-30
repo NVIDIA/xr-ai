@@ -524,6 +524,8 @@ tea sample's workflow YAML:
   the value and temperature unit, but no CURRENT/ACTUAL label or immersed probe;
   TARGET/SET and unlabeled readings also qualify. This checks displayed text,
   not whether the displayed setting measures the water's actual temperature.
+  If an explicitly measured water temperature is also visible, it must match
+  100 C or 212 F; a target cannot override a conflicting measured reading.
   Guide does not expose the tea sample's typed temperature tools.
 - Immersion detection does not start the timer. Say **next** promptly after
   immersion is confirmed to enter the timer step. The runtime then measures a
@@ -707,6 +709,25 @@ using descriptive Cosmos evidence and the shipped guide's CLEF condition.
 | Isolated visual cases | Configured Cosmos descriptions and CLEF decisions for the shipped guide | Conversation, consecutive-frame enforcement, or task completion |
 | Multi-turn guide scenario | Actual guide agent, frame tools, local LLM, VLM, and CLEF, controls, announcements, and the five-minute timer | Microphone, STT, network camera transport, or audible TTS |
 
+The sample-wide `evaluation/guide/decision_cases.yaml` contains 24 fixed
+condition/description pairs for the shared CLEF policy: counts, orientation,
+contact, incomplete labels, optional evidence, measurement provenance, and
+unsupported history. These conditions are independent of the tea recipe;
+measurement cases explicitly require a measured value. Run them after changing
+`guide_condition.txt` or decision request construction:
+
+```bash
+uv run --project worker python evaluation/guide/evaluate_conditions.py \
+  --repeats 3 --output artifacts/guide-decisions
+```
+
+This calls the configured CLEF service through production verification code,
+without Cosmos, camera transport, or speech. Expected outcomes remain outside
+the model request. Failed requests are counted as unavailable, never as correct
+negative judgments. Every attempt and a final summary are saved with source
+hashes. CPU tests check evaluator behavior; live-model correctness requires this
+explicit run and the visual cases below.
+
 From the sample directory, generate images for inspection without model calls:
 
 ```bash
@@ -781,7 +802,7 @@ every level, including overrides introduced through YAML merges, instead of
 silently replacing earlier requirements. Invalid guides cannot be used in guide mode,
 even when their `task.status` is `approved`.
 
-- `schema_version` must be `1`.
+- `schema_version` must be `2`.
 - `task` declares `id`, `name`, positive `version`, `status` (`draft` or
   `approved`), `start_step`, `foreground_prompt`, and
   `complete_message`.

@@ -39,7 +39,7 @@
 # inventing the identity or refusing to draft the demonstrated action.
 # Missing saved images do not make an explicitly instructed outward tab
 # direction unknown. Keep the normal live checks and note the capture gap.
-schema_version: 1
+schema_version: 2
 task:
   id: arrange_workpiece
   name: "Arrange Workpiece"

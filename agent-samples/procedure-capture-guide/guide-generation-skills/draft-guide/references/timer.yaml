@@ -12,7 +12,7 @@
 # Missing authoring images belong in review notes, not an automatic review blocker.
 # Read the blocked example only if the prerequisite or duration is unresolved;
 # an exact instructed wait with a clear placement uses this normal setup.
-schema_version: 1
+schema_version: 2
 task:
   id: pause_after_placement
   name: "Pause After Placement"

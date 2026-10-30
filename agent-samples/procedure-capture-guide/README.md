@@ -113,7 +113,7 @@ uv run --project model-servers procedure_capture_guide_model_servers --stop
 |---|---|
 | `yaml/worker.yaml` | Shared frame and speech detection settings; capture configuration path |
 | `yaml/capture-agent-config.yaml` | Task output directory, sampling rate, and caption interval |
-| `yaml/guide-agent-config.yaml` | Visual verification timeout |
+| `yaml/guide-agent-config.yaml` | Visual query and CLEF decision timeouts |
 | `yaml/media_capture.yaml` | Opt-in session recording output and rendering profile |
 | `yaml/models.json` | Client adapters and endpoints for batch STT, LLM, VLM, CLEF, and acknowledgement TTS |
 | `model-servers/yaml/<gpu-profile>.yaml` | Local model-server GPU placement and workload budgets |

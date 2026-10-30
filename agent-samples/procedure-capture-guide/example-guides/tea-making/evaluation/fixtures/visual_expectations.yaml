@@ -27,7 +27,7 @@ cases:
   - {scene: unlabeled100, step: heat_water, answer: '.*100\s*(?:°\s*)?(?:C|℃).*', accept: true}
   - {scene: unlabeled212, step: heat_water, answer: '.*212\s*(?:°\s*)?(?:F|℉).*', accept: true}
   - {scene: missing_unit, step: heat_water, answer: .*100.*, accept: false}
-  - {scene: mixed94, step: heat_water, answer: ".*\\b100(?:\\.0+)?\\s*(?:\xB0\\s*)?(?:C|\u2103).*", accept: true}
+  - {scene: mixed94, step: heat_water, answer: '(?=.*\btarget\b.*100\s*(?:°\s*)?C)(?=.*\bcurrent\b.*94\s*(?:°\s*)?C).*', accept: false}
   - {scene: empty, step: start_steeping, answer: .*(empty|no water|no liquid|dry).*, accept: false}
   - {scene: dry_bag, step: start_steeping, answer: .*(dry|empty|no water|no liquid).*, accept: false}
   - {scene: water, step: start_steeping, answer: .*(water|liquid).*, accept: false}

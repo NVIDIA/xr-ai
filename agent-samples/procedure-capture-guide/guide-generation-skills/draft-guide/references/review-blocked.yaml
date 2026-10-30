@@ -11,7 +11,7 @@
 # Continue drafting other sufficiently understood actions; do not guess this identity.
 # Do NOT copy this gate just because a source image is missing: when the
 # required adapter identity and result are clear, use the normal visual example.
-schema_version: 1
+schema_version: 2
 task:
   id: fit_adapter
   name: "Fit Adapter"

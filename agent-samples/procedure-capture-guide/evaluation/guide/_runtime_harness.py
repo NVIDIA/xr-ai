@@ -192,10 +192,20 @@ async def run_evaluation(
     llm, vlm = xr_ai_models.make_llm(models, "llm"), xr_ai_models.make_vlm(models, "vlm")
     decisions = xr_ai_models.make_decision(models, "decision")
     decide = decisions.decide
+    model_origin: ContextVar[tuple[str, int | None, asyncio.Task | None]] = ContextVar(
+        "model_origin", default=("unscoped", None, None),
+    )
+
+    def call_origin():
+        origin, turn_id, owner = model_origin.get()
+        # Child tasks inherit context, but not ownership of a foreground turn
+        # or observation. Classify both model services at the execution boundary.
+        return (origin, turn_id) if owner is asyncio.current_task() else ("unscoped", None)
 
     async def logged_decide(state, questions, **kwargs):
+        origin, turn_id = call_origin()
         result = await decide(state, questions, **kwargs)
-        log("decision", origin="observation", state=state, answers={
+        log("decision", origin=origin, turn_id=turn_id, state=state, answers={
             name: {"choice": answer.choice, "confidence": answer.confidence}
             for name, answer in result.answers.items()
         })
@@ -203,16 +213,8 @@ async def run_evaluation(
 
     decisions.decide = logged_decide
     chat = llm.chat
-    model_origin: ContextVar[tuple[str, int | None, asyncio.Task | None]] = ContextVar(
-        "model_origin", default=("unscoped", None, None),
-    )
-
     async def logged_chat(*args, **kwargs):
-        origin, turn_id, owner = model_origin.get()
-        # Runtime deliveries and background tasks inherit context variables.
-        # Inheritance alone does not make their model calls part of this turn.
-        if owner is not asyncio.current_task():
-            origin, turn_id = "unscoped", None
+        origin, turn_id = call_origin()
         result = await chat(*args, **kwargs)
         log("model", origin=origin, turn_id=turn_id, text=result.content, calls=[
             {"name": call.name, "arguments": call.arguments} for call in result.tool_calls or ()
@@ -274,6 +276,16 @@ async def run_evaluation(
         vision_timeout_s=settings.guide.vision_timeout_s,
         decision_timeout_s=settings.guide.decision_timeout_s,
     ))
+    tick = agent._backend._tick
+
+    async def traced_tick(session):
+        token = model_origin.set(("observation", None, asyncio.current_task()))
+        try:
+            return await tick(session)
+        finally:
+            model_origin.reset(token)
+
+    agent._backend._tick = traced_tick
     speech = runtime.register("speech", Speech(log))
     agent.bind_runtime(runtime)
     playback_start = asyncio.Event()

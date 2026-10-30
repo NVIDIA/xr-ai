@@ -27,6 +27,9 @@ actions:
   - {action: say, text: 'Could I continue?', expect: not complete, tools: [workflow__advance], arguments: [{skip: false}]}
   - {action: image, scene: current100f}
   - {action: observe, case: current100f}
+  - {action: image, scene: mixed94}
+  - {action: observe, case: mixed94}
+  - {action: say, text: Next, expect: not complete, tools: [workflow__advance], arguments: [{skip: false}]}
   - {action: say, text: 'What is my status?', expect: 'current step: Verify the brewing temperature\.$', tools: [workflow__status]}
   - {action: image, scene: unlabeled100}
   - {action: wait_speech, expect: The display shows the brewing target temperature}

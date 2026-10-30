@@ -578,12 +578,19 @@ class _Guide:
             session.evidence_hits = 0
         if not isinstance(observation.value, str) or not observation.value.strip():
             return
-        async with asyncio.timeout(self._decision_timeout_s):
-            matched = await condition_met(
-                self._decisions, condition=step.evidence.condition, observation=observation.value,
-                frame=observation.frame.model_dump(), step_id=step.id, revision=revision,
-                timeout_s=self._decision_timeout_s,
-            )
+        try:
+            async with asyncio.timeout(self._decision_timeout_s):
+                matched = await condition_met(
+                    self._decisions, condition=step.evidence.condition, observation=observation.value,
+                    frame=observation.frame.model_dump(), step_id=step.id, revision=revision,
+                    timeout_s=self._decision_timeout_s,
+                )
+        except Exception as exc:  # noqa: BLE001 — An unavailable decision cannot authorize progress.
+            # Keep the total deadline and streak reset; cancellation must reach
+            # the monitor owner instead of becoming an ordinary failed check.
+            logger.warning("Guide decision unavailable pid={!r} step={} revision={}: {}: {}",
+                           session.participant_id, step.id, revision, type(exc).__name__, exc)
+            return
         async with session.lock:
             if not self._current(session, step, revision):
                 return

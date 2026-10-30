@@ -25,6 +25,38 @@ _TEST_DATA = Path(__file__).resolve().parent
 _TEA_EVAL = _SAMPLE / "example-guides/tea-making/evaluation"
 
 
+@pytest.mark.asyncio
+async def test_decision_policy_evaluator_retains_failures_and_excludes_oracles(tmp_path, monkeypatch):
+    monkeypatch.syspath_prepend(str(_SAMPLE / "worker"))
+    path = _SAMPLE / "evaluation/guide/evaluate_conditions.py"
+    spec = importlib.util.spec_from_file_location("procedure_condition_eval", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    cases = yaml.safe_load(module._CASES.read_text())["cases"]
+    assert len(cases) == 24 and len({case["id"] for case in cases}) == 24
+    assert all(type(case["expected"]) is bool for case in cases)
+    fixture = tmp_path / "cases.yaml"
+    cases = cases[:4]
+    fixture.write_text(yaml.safe_dump({"cases": cases}))
+    decisions = Mock(health=AsyncMock(), close=AsyncMock(), decide=AsyncMock(side_effect=[
+        clef_response("yes"), httpx.ConnectError("unavailable"), clef_response("no"), clef_response("no"),
+    ]))
+    monkeypatch.setattr(module, "make_decision", lambda *_: decisions)
+    output = tmp_path / "result"
+    result = await module.evaluate(fixture, _SAMPLE / "yaml/models.json", output, repeats=1)
+    assert result["attempts"] == 4 and result["correct"] == 2 and result["unavailable"] == 1
+    assert result["false_rejects"] == 1 and not result["passed"]
+    rows = [json.loads(line) for line in (output / "results.jsonl").read_text().splitlines()]
+    assert rows[1]["accepted"] is None and rows[1]["correct"] is None
+    assert rows[1]["error"]["type"] == "ConnectError"
+    assert rows[1]["observation"] == cases[1]["observation"]
+    assert json.loads((output / "result.json").read_text()) == result
+    assert (output / "provenance.json").is_file()
+    for call, case in zip(decisions.decide.call_args_list, cases):
+        assert call.args[0] == {"condition": case["condition"], "current_observation": case["observation"]}
+    decisions.close.assert_awaited_once()
+
+
 @pytest.mark.parametrize("runner,other_runner", [
     ("example-guides/tea-making/evaluation/run_scenario.py",
      "guide-generation-skills"),

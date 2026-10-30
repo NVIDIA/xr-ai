@@ -1,46 +1,24 @@
 {
   "models": {
     "decision": {
-      "adapter": {
-        "category": "decision",
-        "kind": "systemone",
-        "model_name": "Cloudflare/clef-flash"
-      },
-      "endpoint": {
-        "base_url": "http://localhost:8120"
-      }
+      "adapter": {"category": "decision", "kind": "systemone", "model_name": "Cloudflare/clef-flash"},
+      "endpoint": {"base_url": "http://localhost:8120"}
     },
     "llm": {
-      "adapter": {
-        "preset": "nemotron_omni"
-      },
-      "endpoint": {
-        "base_url": "http://localhost:8108"
-      }
+      "adapter": {"preset": "nemotron_omni"},
+      "endpoint": {"base_url": "http://localhost:8108"}
     },
     "stt": {
-      "adapter": {
-        "preset": "parakeet_stt"
-      },
-      "endpoint": {
-        "base_url": "http://localhost:8103"
-      }
+      "adapter": {"preset": "parakeet_stt"},
+      "endpoint": {"base_url": "http://localhost:8103"}
     },
     "vlm": {
-      "adapter": {
-        "preset": "cosmos3_nano_reasoner"
-      },
-      "endpoint": {
-        "base_url": "http://localhost:8100"
-      }
+      "adapter": {"preset": "cosmos3_nano_reasoner"},
+      "endpoint": {"base_url": "http://localhost:8100"}
     },
     "tts": {
-      "adapter": {
-        "preset": "pocket_tts"
-      },
-      "endpoint": {
-        "base_url": "http://localhost:8105"
-      }
+      "adapter": {"preset": "pocket_tts"},
+      "endpoint": {"base_url": "http://localhost:8105"}
     }
   }
 }

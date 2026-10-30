@@ -223,6 +223,8 @@ async def test_evaluation_attributes_overlapping_model_calls_to_their_origin(
 
     async def decide(*args, **kwargs):
         nonlocal observations
+        if "attribution_probe" in args[0]:
+            return clef_response()
         observations += 1
         observed.set()
         return clef_response("no" if observations == 1 else "yes")
@@ -237,6 +239,10 @@ async def test_evaluation_attributes_overlapping_model_calls_to_their_origin(
     async def overlapping_route(self, text, participant_id):
         response = await route(self, text, participant_id)
         if text == "Start guide":
+            # Decision requests must be attributed by their actual owner, not
+            # always labeled as background merely because they use CLEF.
+            await self._backend._decisions.decide({"attribution_probe": "foreground"}, {})
+            await asyncio.create_task(self._backend._decisions.decide({"attribution_probe": "child"}, {}))
             async with asyncio.timeout(5):
                 await observed.wait()
             # Another component's task can inherit the foreground context without
@@ -291,6 +297,13 @@ async def test_evaluation_attributes_overlapping_model_calls_to_their_origin(
                   if event["kind"] == "decision" and event["origin"] == "observation"]
     assert background and all(event.get("turn_id") is None for event in background)
     assert background[0]["answers"]["condition_met"]["choice"] == "no"
+    foreground_decision = next(event for event in events
+                               if event.get("state", {}).get("attribution_probe") == "foreground")
+    assert foreground_decision["origin"] == "foreground"
+    assert foreground_decision["turn_id"] == start["turn_id"]
+    child_decision = next(event for event in events
+                         if event.get("state", {}).get("attribution_probe") == "child")
+    assert child_decision["origin"] == "unscoped" and child_decision["turn_id"] is None
     auxiliary = next(event for event in events if event.get("text") == "Auxiliary output.")
     assert auxiliary["origin"] == "unscoped" and auxiliary["turn_id"] is None
     turns = [event for event in events if event["kind"] == "user"]

@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Minimal procedure guide for visual-evidence and elapsed-timer regressions.
-schema_version: 1
+schema_version: 2
 task:
   id: indicator_check
   name: Indicator Check

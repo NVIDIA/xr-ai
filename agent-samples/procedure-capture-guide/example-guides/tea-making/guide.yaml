@@ -3,22 +3,24 @@
 
 # Brewing reference: ../../../tea-making-sample/rag-documents/tea-brewing.md
 # Chamomile uses 100 C / 212 F water and a 5–7 minute steep; choose five minutes.
-schema_version: 1
+schema_version: 2
 task:
   id: tea_making
   name: Tea Making
-  version: 6
+  version: 7
   status: approved
   start_step: identify
   foreground_prompt: >-
     Guide brewing chamomile tea. Accept any tea packet or box with the word
     chamomile visibly printed on it, regardless of brand or blend. This recipe
-    follows the tea sample's brewing reference: boiling water, verified here by
-    a visible temperature reading of 100 C or 212 F, and a five-minute steep selected
+    follows the tea sample's brewing reference: boiling water and a five-minute steep selected
     from its 5–7 minute range. Do not silently change the recipe. If the package
     instructions require different brewing settings, or local boiling temperature
     cannot reach this display target, stop and adapt the guide rather than
-    bypass verification.
+    bypass verification. The camera checks a displayed 100 C or 212 F reading;
+    a target or unlabeled display does not prove the water has reached that
+    temperature. Follow the appliance's heating instructions. A conflicting
+    current water-temperature reading prevents visual confirmation.
     Use a stable heat-safe vessel and follow appliance instructions. Keep hands
     clear of hot water and steam; never ask the user to tilt a hot vessel for
     the camera. Visual judgments do not guarantee safety. No retrieval or
@@ -99,24 +101,31 @@ steps:
           Focus on the temperature display. Copy the visible numbers and their
           temperature units exactly, pairing each value with its unit. Include
           labels when present and report unreadable or missing digits or units.
+          Describe every temperature reading when several are shown, distinguishing
+          measured water temperature from a target or setpoint when labeled.
           Do not convert units or infer a reading from steam, lights, or expected
           settings. Describe the display rather than judging brewing readiness.
       result_field: text
     evidence:
       condition: >-
-        The display visibly contains at least one complete number-and-unit pair:
-        100 C (100 degrees Celsius) or 212 F (212 degrees Fahrenheit).
-        Both the number and its temperature unit must be explicitly readable;
-        100 alone without a unit is insufficient. Any label or absent label is
-        accepted, including TARGET or SET, and no probe is required. Other
-        displayed readings do not invalidate a qualifying pair. The desired
-        temperature mentioned without a matching visible reading is insufficient.
+        If a measured water temperature is identified (CURRENT, ACTUAL, or a
+        water thermometer), that measured value must be 100 C or 212 F. Ignore
+        target and setpoint values in this case: a different measured value
+        means the condition is not met even if the target is 100 C or 212 F.
+        Only when no measured water temperature is identified, accept a visible
+        display reading of 100 C or 212 F with any label or absent label,
+        including TARGET or SET; no probe is required. In either case both
+        the complete number and its temperature unit must be readable in the
+        observation. A missing unit or a desired temperature without a visible
+        reading does not establish the condition.
       consecutive: 2
       commit: {water_at_target: true}
     voice:
       prompt: >-
         Ask for boiling water and a safely visible temperature display of 100 C
-        or 212 F. Use current_view to read it. No CURRENT or ACTUAL label or
+        or 212 F. Use current_view to read it. Reject a conflicting measured
+        water-temperature reading even if the target is 100 C or 212 F.
+        No CURRENT or ACTUAL label or
         thermometer probe is required; the check accepts any visible display
         reading with the qualifying value and unit. Do not infer the reading
         from steam or an elapsed-time estimate. If the user skips this check,
