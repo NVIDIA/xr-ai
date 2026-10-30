@@ -126,6 +126,13 @@ an actionable notice and continues **without prompting**.
 `require_credentials(...)` runs the same steps but exits non-zero when the
 token is absent. Local model-stack launchers require `HF_TOKEN`.
 
+`require_credentials("HF_TOKEN")` also asks the Hub whether the resolved token
+is valid and exits with an explanatory error if the Hub answers HTTP 401. An
+invalid token otherwise fails silently: downloads proceed unauthenticated and
+only the Hub warns about it. Because the environment takes priority, a stale
+exported `HF_TOKEN` shadows a valid saved token. If the Hub is unreachable or
+answers anything other than 401, the check is skipped.
+
 ## Managing saved tokens
 
 ```bash
