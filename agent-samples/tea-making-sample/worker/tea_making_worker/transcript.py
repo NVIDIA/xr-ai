@@ -15,12 +15,12 @@ import nemo_relay
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from xr_ai_interaction import ParticipantLeft
-from xr_ai_models import ChatMessage, ChatResponse, LLMService, ToolDef
+from xr_ai_models import ChatMessage, LLMService
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeClosedError, RuntimeContext, subscribe
 from xr_ai_tools import Tool, ToolSet
-from xr_ai_tools.tool_calling import run_tool_loop
 from xr_ai_voice import VOICE_TRANSCRIPT_TOPIC, VoiceTranscript
 
+from ._capture import _attempt
 from .events import (
     BACKGROUND_FACT_TOPIC,
     PARTICIPANT_CLEANUP_COMPLETE_TOPIC,
@@ -216,9 +216,7 @@ class TranscriptAgent(Agent):
             context=nemo_relay.fork_asyncio_context(),
         )
         self._tasks[participant_id] = task
-        task.add_done_callback(
-            lambda completed, pid=participant_id: self._discard(pid, completed)
-        )
+        task.add_done_callback(lambda completed, pid=participant_id: self._discard(pid, completed))
         return TranscriptState(
             active=True,
             message="Transcript recording started.",
@@ -245,11 +243,7 @@ class TranscriptAgent(Agent):
         active = task is not None and not task.done()
         return TranscriptState(
             active=active,
-            message=(
-                "Transcript recording is running."
-                if active
-                else "Transcript recording is stopped."
-            ),
+            message=("Transcript recording is running." if active else "Transcript recording is stopped."),
         )
 
     async def _summary_loop(self, participant_id: str) -> None:
@@ -259,6 +253,10 @@ class TranscriptAgent(Agent):
                 await self._summarize(participant_id)
 
     async def _summarize(self, participant_id: str) -> None:
+        async with _attempt(participant_id, "transcript"):
+            await self._summarize_recorded(participant_id)
+
+    async def _summarize_recorded(self, participant_id: str) -> None:
         state = self._states.get(participant_id)
         if state is None:
             return
@@ -271,9 +269,7 @@ class TranscriptAgent(Agent):
         except asyncio.CancelledError:
             raise
         except Exception as exc:
-            logger.opt(exception=True).warning(
-                "transcript summary failed pid={!r}", participant_id
-            )
+            logger.opt(exception=True).warning("transcript summary failed pid={!r}", participant_id)
             await self._publish_record(
                 participant_id,
                 TranscriptRecord(
@@ -287,9 +283,7 @@ class TranscriptAgent(Agent):
 
         async with state.lock:
             if tuple(state.turns[: len(turns)]) != turns:
-                logger.warning(
-                    "transcript prefix changed before commit pid={!r}", participant_id
-                )
+                logger.warning("transcript prefix changed before commit pid={!r}", participant_id)
                 return
             del state.turns[: len(turns)]
         now_us = time.time_ns() // 1_000
@@ -308,52 +302,16 @@ class TranscriptAgent(Agent):
         self,
         turns: tuple[str, ...],
     ) -> TranscriptSummary:
-        async def commit(request: TranscriptSummary) -> TranscriptSummary:
-            return request
-
-        tools = ToolSet(
-            (
-                Tool(
-                    "transcript__commit_summary",
-                    "Commit one concise summary of the supplied utterances.",
-                    TranscriptSummary,
-                    TranscriptSummary,
-                    commit,
-                    return_direct=True,
-                ),
-            )
-        )
-
-        async def call_model(
-            messages: tuple[ChatMessage, ...],
-            definitions: tuple[ToolDef, ...],
-        ) -> ChatResponse:
-            return await self._llm.chat(
-                messages,
-                tools=definitions,
-                max_tokens=384,
-                temperature=0.0,
-                enable_thinking=False,
-            )
-
-        result = await run_tool_loop(
+        result = await self._llm.chat(
             (
                 ChatMessage(role="system", content=self._summary_prompt),
-                ChatMessage(
-                    role="user",
-                    content=json.dumps(
-                        {"utterances": turns},
-                        ensure_ascii=False,
-                        separators=(",", ":"),
-                    ),
-                ),
+                ChatMessage(role="user", content=json.dumps({"utterances": turns}, ensure_ascii=False)),
             ),
-            tools,
-            call_model,
-            max_iterations=3,
-            max_tool_calls=2,
+            max_tokens=256,
+            temperature=0.0,
+            enable_thinking=False,
         )
-        return TranscriptSummary.model_validate_json(result.content)
+        return TranscriptSummary(summary=result.content)
 
     async def _publish_record(
         self,

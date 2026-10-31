@@ -29,6 +29,55 @@ commands remain available. Use {doc}`conversation-example` as the starting
 point for new voice-and-vision applications. Its routed conversation and
 visual-question behavior differs from Simple VLM; migrating application code
 requires reviewing that composition rather than only renaming the launcher.
+### Tea guidance uses focused routing and declared observations
+
+The tea sample requires a Clef decision endpoint in addition to its existing
+Omni, speech, TTS, and embedding services. The sample-owned model launcher now
+includes Clef. Qualify its additional GPU memory within the selected profile's
+existing budgets before launching the updated stack.
+
+Custom tea workflows replace `agent.prompt` and `agent.tools` observation blocks
+with typed `observation` policies. Add scoped decisions under `task.foreground`
+and read-only conversation tools under `voice.tools`. Replace any prototype
+`voice.choices` or answer/check action split with one informational answer action.
+Declare cheap live source projections under each step's `context`; the timer
+example uses `clock__timer` with state-bound start and duration arguments.
+Extracted unit-bearing fields
+return a value and unit; code normalizes them before updating scalar state.
+Refer to {doc}`tea-making-sample` for the schema and ownership rules.
+
+Tea guidance is one focused top-level destination. Side requests can be answered
+by other existing destinations without ending guidance. Explicit reset releases
+focus. Language-model generation no longer receives workflow state-write tools,
+and simultaneous voice updates are joined rather than rewritten by a model.
+Dialogue persists across runs. Finishing/resetting/restarting closes the outgoing
+run manager after a historical handoff; a new run has fresh execution state and
+evidence. Completed native workflow state now returns to initial values after
+the final state is recorded.
+
+### Tea progression and target verification
+
+The tea sample now defaults to `task.advancement: automatic`. Confirmed steps
+advance immediately and announce the next instruction; use `manual` to retain
+the explicit-next interaction. Completion messages no longer contain a baked-in
+next request; `task.manual_advance_message` supplies that reminder in manual mode.
+
+The heating step now verifies the resolved brewing target rather than a fixed
+heating-underway threshold. The progress field is `temperature_ready`, replacing
+`heating_started`. Update custom workflow references and state fixtures. Two
+unit-bearing frame readings must reach or exceed the target. Live visual evidence clears on each step transition. Completed-step observations
+remain in run history and historical handoffs.
+
+### Tea SOP run bundles retain inference images
+
+Tea worker launches now write separate bundles under `artifacts/runs/<run>/`,
+including configuration snapshots and structured SOP attempts grouped by YAML
+step ID. Consumed inference images are recorded by default; set
+`capture.enabled: false` in the worker YAML to disable structured attempts and
+image storage. Existing participant JSONL files and the supplemental Relay log
+move inside each run directory. Previous artifacts are preserved.
+The separate `--session-recording` option still controls continuous audio/video
+capture. Refer to {doc}`tea-making-sample` for the bundle format and retention.
 
 ### vLLM 0.31 security update
 

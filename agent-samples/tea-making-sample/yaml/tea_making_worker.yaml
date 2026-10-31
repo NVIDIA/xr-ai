@@ -14,8 +14,13 @@ voice_gate_yaml: voice_gate.yaml
 rag_endpoint: tcp://127.0.0.1:8340
 artifacts_dir: ../artifacts
 
+# Save a separate SOP run bundle: YAML snapshots, exact inference images,
+# step attempts, model decisions, and before/after state. Local files only.
+capture:
+  enabled: true
+
 web_events_host: 127.0.0.1
-web_events_port: 8092
+web_events_port: 8093
 web_events_max_events: 5000
 
 frame_max_age_s: 3.0
@@ -27,6 +32,12 @@ transcript_summary_interval_s: 120.0
 video_log_interval_s: 2.0
 background_history_size: 50
 
+# Managed context budget: half dialogue; the rest is divided between historical
+# handoffs and the active run's execution, evidence, and event channels.
+# Each run hands off historical context and closes independently of dialogue.
+context_budget_bytes: 12000
+compaction_input_budget_bytes: 12000
+
 change_watch_default_instruction: >-
   important changes involving people, objects, actions, or possible hazards
 
@@ -34,3 +45,17 @@ silero_threshold: 0.3
 silence_duration: 1.2
 min_speech: 0.15
 idle_timeout_secs: 0
+
+# Choice-only semantic gates. These inspect Omni captions, never camera pixels.
+change_watch_decision:
+  instructions: Judge whether the current description proves a new transition relevant to watch_for.
+  criteria:
+    accepted: A newly visible relevant transition is established by current versus previous descriptions.
+    rejected: No relevant new transition; continued presence, rewording, viewpoint, or lighting only.
+    unknown: The descriptions do not establish whether a new relevant transition occurred.
+video_delta_decision:
+  instructions: Compare current with recent previous descriptions for a material visible transition.
+  criteria:
+    accepted: Current proves a material transition absent from the recent descriptions.
+    rejected: The same scene is restated, with only wording, viewpoint, crop, lighting, gaze, or minor pose differences.
+    unknown: The descriptions are too uncertain or incomplete to establish a transition.

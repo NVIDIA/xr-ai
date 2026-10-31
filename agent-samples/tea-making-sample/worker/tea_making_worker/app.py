@@ -13,14 +13,17 @@ from pathlib import Path
 import nemo_relay
 from loguru import logger
 from xr_ai_logging import setup_logging
-from xr_ai_models import load_models_config, make_llm, make_tts, make_vlm
+from xr_ai_models import load_models_config, make_decision, make_llm, make_tts, make_vlm
 from xr_ai_runtime import AgentRuntime
+from xr_ai_tools import ToolSet
 from xr_ai_tools.rag import RAGTools
 from xr_ai_tools.vision import ImageQueryTool
-from xr_ai_voice import HubVoiceTransport, VadConfig, VoiceAgent, llm_update_combiner
+from xr_ai_voice import HubVoiceTransport, VadConfig, VoiceAgent
 from xr_ai_voicegate import load_voice_gate_config
 from xr_ai_web_events import WebEventsAgent
 
+from ._capture import _RecordedDecisions, _RecordedLanguage, _RecordedVision, _SOPCapture
+from ._sop_agent import _SOPAgent
 from .background_context import BackgroundContextAgent
 from .change_watch import ChangeWatchAgent
 from .config import WorkerConfig
@@ -31,19 +34,16 @@ from .events import (
     USER_QUERY_TOPIC,
 )
 from .file_output import FileOutputAgent
-from .foreground import ForegroundAgent
-from .guidance_voice import GuidanceVoiceAgent
 from .images import ParticipantImageAgent
 from .spec import load_workflow
 from .transcript import TranscriptAgent
 from .video_log import VideoLogAgent
 from .web_events import TeaWebEventsAgent
-from .workflow import GuidanceAgent
 
 _CLIENT_TEXT_TOPIC = "agent.response"
 _CURRENT_VIEW_PROMPT = (
-    Path(__file__).resolve().parent / "prompts" / "current_view.txt"
-).read_text(encoding="utf-8").strip()
+    (Path(__file__).resolve().parent / "prompts" / "current_view.txt").read_text(encoding="utf-8").strip()
+)
 
 
 @asynccontextmanager
@@ -106,6 +106,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
     models = load_models_config(config.models_config)
     voice_gate = load_voice_gate_config(config.voice_gate_yaml)
     llm = make_llm(models, "llm")
+    decisions = make_decision(models, "decision")
     vlm = make_vlm(models, "vlm")
     tts = make_tts(models, "tts")
     rag = RAGTools(config.rag_endpoint)
@@ -120,9 +121,9 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
             silero_threshold=config.silero_threshold,
         ),
         voice_gate=voice_gate,
-        probes={"rag": rag.health},
+        probes={"rag": rag.health, "clef": decisions.health},
         ready_file=ready_file,
-        closeables=(llm, vlm, rag),
+        closeables=(llm, vlm, decisions, rag),
         text_topic=_CLIENT_TEXT_TOPIC,
         idle_timeout_secs=config.idle_timeout_secs,
         transport=transport,
@@ -130,125 +131,124 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
         participant_left_topic=PARTICIPANT_LEFT_TOPIC,
         interrupted_topic=INTERRUPTED_TOPIC,
         interrupt_on_supersede=True,
-        combiner=llm_update_combiner(llm),
     )
 
-    runtime = AgentRuntime()
-    web_events = runtime.register(
-        "web-events",
-        WebEventsAgent(
-            host=config.web_events_host,
-            port=config.web_events_port,
-            max_events=config.web_events_max_events,
-            title="Tea-making agent events",
-        ),
-    )
-    runtime.register("web-event-adapter", TeaWebEventsAgent())
-    files = runtime.register(
-        "file-output",
-        FileOutputAgent(
-            config.artifacts_dir,
-            history_size=config.background_history_size,
-        ),
-    )
-    images = runtime.register(
-        "images",
-        ParticipantImageAgent(
-            endpoint=transport.endpoint,
-            frame_max_age_s=config.frame_max_age_s,
-            frame_timeout_s=config.frame_timeout_s,
-        ),
-    )
-    background_context = runtime.register(
-        "background-context",
-        BackgroundContextAgent(capacity=config.background_history_size),
-    )
-    guidance = runtime.register(
-        "guidance",
-        GuidanceAgent(
-            workflow=load_workflow(config.workflow_config),
-            llm=llm,
-            current_frame=images.get_current_frame,
-            image_query=ImageQueryTool(
-                images=images.images,
-                vlm=vlm,
-                system_prompt=_CURRENT_VIEW_PROMPT,
+    workflow = load_workflow(config.workflow_config)
+    capture = _SOPCapture(config.artifacts_dir, enabled=config.capture_enabled)
+    await capture.start(config, workflow)
+    llm = _RecordedLanguage(llm)
+    decisions = _RecordedDecisions(decisions)
+    vlm = _RecordedVision(vlm)
+    async with capture.activate():
+        runtime = AgentRuntime()
+        web_events = runtime.register(
+            "web-events",
+            WebEventsAgent(
+                host=config.web_events_host,
+                port=config.web_events_port,
+                max_events=config.web_events_max_events,
+                title="Tea-making agent events",
             ),
-            rag=rag,
-            vlm_timeout_s=config.vlm_timeout_s,
-        ),
-    )
-    change_watch = runtime.register(
-        "change-watch",
-        ChangeWatchAgent(
-            images=images,
-            vlm=vlm,
-            llm=llm,
-            caption_prompt=config.change_watch_caption_prompt,
-            event_prompt=config.change_watch_event_prompt,
-            default_instruction=config.change_watch_default_instruction,
-            interval_s=config.change_watch_interval_s,
-        ),
-    )
-    transcript = runtime.register(
-        "transcript",
-        TranscriptAgent(
-            llm=llm,
-            summary_prompt=config.transcript_summary_prompt,
-            summary_interval_s=config.transcript_summary_interval_s,
-        ),
-    )
-    video_log = runtime.register(
-        "video-log",
-        VideoLogAgent(
-            images=images,
-            vlm=vlm,
-            llm=llm,
-            caption_prompt=config.video_caption_prompt,
-            delta_prompt=config.video_delta_prompt,
-            interval_s=config.video_log_interval_s,
-            history_size=5,
-        ),
-    )
-    foreground = runtime.register(
-        "foreground",
-        ForegroundAgent(
-            llm=llm,
-            images=images,
-            vlm=vlm,
-            rag=rag,
-            guidance=guidance,
-            background_context=background_context,
-            change_watch=change_watch,
-            transcript=transcript,
-            video_log=video_log,
-            prompt=config.foreground_prompt,
-            vlm_timeout_s=config.vlm_timeout_s,
-        ),
-    )
-    runtime.register("guidance-voice", GuidanceVoiceAgent())
-    runtime.register("voice", voice)
+        )
+        runtime.register("web-event-adapter", TeaWebEventsAgent())
+        files = runtime.register(
+            "file-output",
+            FileOutputAgent(
+                capture.directory,
+                history_size=config.background_history_size,
+            ),
+        )
+        images = runtime.register(
+            "images",
+            ParticipantImageAgent(
+                endpoint=transport.endpoint,
+                frame_max_age_s=config.frame_max_age_s,
+                frame_timeout_s=config.frame_timeout_s,
+            ),
+        )
+        background_context = runtime.register(
+            "background-context",
+            BackgroundContextAgent(capacity=config.background_history_size),
+        )
+        change_watch = runtime.register(
+            "change-watch",
+            ChangeWatchAgent(
+                images=images,
+                vlm=vlm,
+                llm=llm,
+                decisions=decisions,
+                decision=config.change_watch_decision,
+                caption_prompt=config.change_watch_caption_prompt,
+                event_prompt=config.change_watch_event_prompt,
+                default_instruction=config.change_watch_default_instruction,
+                interval_s=config.change_watch_interval_s,
+            ),
+        )
+        transcript = runtime.register(
+            "transcript",
+            TranscriptAgent(
+                llm=llm,
+                summary_prompt=config.transcript_summary_prompt,
+                summary_interval_s=config.transcript_summary_interval_s,
+            ),
+        )
+        video_log = runtime.register(
+            "video-log",
+            VideoLogAgent(
+                images=images,
+                vlm=vlm,
+                llm=llm,
+                decisions=decisions,
+                decision=config.video_delta_decision,
+                caption_prompt=config.video_caption_prompt,
+                delta_prompt=config.video_delta_prompt,
+                interval_s=config.video_log_interval_s,
+                history_size=5,
+            ),
+        )
+        sop = runtime.register(
+            "sop",
+            _SOPAgent(
+                llm=llm,
+                decisions=decisions,
+                images=images,
+                vlm=vlm,
+                rag=rag,
+                workflow=workflow,
+                image_query=ImageQueryTool(images=images.images, vlm=vlm, system_prompt=_CURRENT_VIEW_PROMPT),
+                context_budget_bytes=config.context_budget_bytes,
+                compaction_input_budget_bytes=config.compaction_input_budget_bytes,
+                application_tools=lambda participant_id: ToolSet(
+                    tool
+                    for provider in (background_context, change_watch, transcript, video_log)
+                    for _, tool in provider.participant_tools(participant_id).items()
+                ),
+                prompt=config.foreground_prompt,
+                vlm_timeout_s=config.vlm_timeout_s,
+            ),
+        )
+        runtime.register("voice", voice)
 
-    logger.info("file outputs → {}", config.artifacts_dir)
-    logger.info("tea-making starting with Omni for language and vision")
-    async with _relay_event_log(config.artifacts_dir):
-        async with web_events:
-            logger.info("live events → {}", web_events.url)
-            async with runtime:
-                guidance.bind_runtime(runtime)
-                change_watch.bind_runtime(runtime)
-                transcript.bind_runtime(runtime)
-                video_log.bind_runtime(runtime)
-                try:
-                    await voice.run(runtime)
-                finally:
-                    await foreground.stop()
-                    await guidance.stop()
-                    await change_watch.stop()
-                    await transcript.stop()
-                    await video_log.stop()
-                    await images.stop()
-                    await files.stop()
+        logger.info("SOP run bundle → {}", capture.directory)
+        logger.info("tea-making starting with Omni for language and vision")
+        async with _relay_event_log(capture.directory):
+            async with web_events:
+                logger.info("live events → {}", web_events.url)
+                async with runtime:
+                    sop.bind_runtime(runtime)
+                    change_watch.bind_runtime(runtime)
+                    transcript.bind_runtime(runtime)
+                    video_log.bind_runtime(runtime)
+                    try:
+                        await voice.run(runtime)
+                    finally:
+                        await sop.stop()
+                        await change_watch.stop()
+                        await transcript.stop()
+                        await video_log.stop()
+                        await images.stop()
+                        await files.stop()
+
     logger.info("tea-making stopped")
 
 

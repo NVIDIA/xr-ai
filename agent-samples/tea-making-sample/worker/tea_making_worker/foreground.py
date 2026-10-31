@@ -7,13 +7,16 @@ from __future__ import annotations
 
 import asyncio
 import json
-import re
+import time
+from collections.abc import Callable
 from contextlib import suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import nemo_relay
 from loguru import logger
+from pydantic import ValidationError
+from xr_ai_conversation import ContextManager
 from xr_ai_hub import FrameUnavailable
 from xr_ai_interaction import (
     Interrupted,
@@ -21,21 +24,26 @@ from xr_ai_interaction import (
     ResponseOutputs,
     UserQuery,
 )
-from xr_ai_models import ChatMessage, ChatResponse, LLMService, ToolDef, VLMService
+from xr_ai_models import ChatMessage, DecisionService, LLMService, VLMService
+from xr_ai_routing import AgentTurn
 from xr_ai_runtime import Agent, RuntimeClosedError, RuntimeContext, subscribe
 from xr_ai_tools import Tool, ToolSet
 from xr_ai_tools.current_frame import CurrentFrameRequest
 from xr_ai_tools.rag import RAGTools
-from xr_ai_tools.tool_calling import ToolLoopIterationLimitError, run_tool_loop
+from xr_ai_tools.tool_calling import run_tool_loop
 from xr_ai_tools.vision import (
     ImageQueryRequest,
     ImageQueryResult,
+    ImageQueryTool,
     StreamingImageQueryTool,
 )
 from xr_ai_voice import VOICE_OUTPUT_TOPIC
 
-from .background_context import BackgroundContextAgent
-from .change_watch import ChangeWatchAgent
+from ._capture import _attempt, _event, _frame
+from ._conversation_context import _CompactionLanguage, _context_owner
+from ._destinations import _make_router
+from ._foreground_policy import _Action
+from ._visual_step import _VisualValidationStep
 from .events import (
     FOREGROUND_RECORD_TOPIC,
     INTERRUPTED_TOPIC,
@@ -46,75 +54,34 @@ from .events import (
     ParticipantCleanupComplete,
 )
 from .images import ParticipantImageAgent
-from .spec import Workflow
-from .transcript import TranscriptAgent
-from .video_log import VideoLogAgent
 from .workflow import GuidanceAgent
-from .workflow_tools import CurrentViewRequest, rag_lookup_tool
+from .workflow_tools import CurrentViewRequest, participant_current_view_tool, rag_lookup_tool
 
-_MAX_TOOL_ROUNDS = 4
 _PROMPTS = Path(__file__).resolve().parent / "prompts"
-_IDLE_PROMPT = (_PROMPTS / "foreground_idle.txt").read_text(encoding="utf-8").strip()
-_CURRENT_VIEW_PROMPT = (_PROMPTS / "current_view.txt").read_text(
-    encoding="utf-8"
-).strip()
-_WORKFLOW_CONTROLS = frozenset(
-    {"workflow__advance", "workflow__reset", "workflow__restart", "workflow__status"}
-)
-_TEA_PROMPT = (
-    "Workflow controls change guide state. Call one only when the user's main "
-    "intent directly requests that change now; otherwise answer without a control. "
-    "Questions about how, whether, or what would happen are informational; only "
-    "'can/could/would you' followed by an action asks you to act. Never act on "
-    "negated, quoted, hypothetical, reported, deliberative, or unrelated wording. "
-    "For example, 'please stop the guide' acts, while 'how do I stop?', 'someone "
-    "said stop', and discussion of the word stop do not. "
-    "Next or continue advances with skip false; skip advances with skip true. Exit, "
-    "stop, reset, or cancel the guide resets it. Restart restarts it. Status reports "
-    "status. The tool, not you, decides whether an authorized change is ready."
-)
+_CURRENT_VIEW_PROMPT = (_PROMPTS / "current_view.txt").read_text(encoding="utf-8").strip()
 _VOICE_PROMPT = (
-    "Answer in at most two short sentences. Use a tool for requested live "
-    "visual or timer facts; if unavailable, say so. Never infer unseen facts."
-)
-_ACTIVE_POLICY = (
-    "You are the active tea guide. The guide remains active until reset, even "
-    "when the current step is complete. Answer tea-making questions from the "
-    "guide position and state. "
-    "Never answer an unrelated request, even when you know the answer; briefly "
-    "decline it without a tool. For instructions or an "
-    "overview, summarize the guide order with known "
-    "brewing values; do not perform a live check. A procedural, current, next, "
-    "or previous-step question is not a live-fact request. Call a step tool only "
-    "for a requested live fact that tool can obtain; never substitute another "
-    "tool. For a direct guide command, call the exposed workflow tool."
+    "Answer in at most two short sentences. Use the supplied fresh result for "
+    "live visual or timer facts; if unavailable, say so. Never infer unseen facts."
 )
 _HUMAN_PROMPT = (
     "Use natural spoken language. Rewrite tool/state abbreviations, symbols, "
     "units, and machine notation in words; preserve meaning."
 )
-_TEA_MANAGEMENT_TOOLS = (
-    "workflow__advance",
-    "workflow__reset",
-    "workflow__restart",
-    "workflow__status",
-)
 
 
-@dataclass(frozen=True, slots=True)
-class _FocusedAgent:
-    """One immutable model-facing agent built from a workflow step."""
-
-    name: str
-    system_prompt: str
-    tool_names: tuple[str, ...]
+@dataclass(slots=True)
+class _RoutedOutput:
+    ctx: RuntimeContext | None
+    timestamp_us: int | None
+    text: list[str] = field(default_factory=list)
+    calls: list[str] = field(default_factory=list)
+    spoken: bool = False
 
 
 @dataclass(frozen=True, slots=True)
 class _PreparedTurn:
-    agent: _FocusedAgent
+    system_prompt: str
     user_message: str
-    tools: ToolSet
     route: str
 
 
@@ -125,16 +92,15 @@ class ForegroundAgent(Agent):
         self,
         *,
         llm: LLMService,
+        decisions: DecisionService,
         images: ParticipantImageAgent,
         vlm: VLMService,
         rag: RAGTools,
         guidance: GuidanceAgent,
-        background_context: BackgroundContextAgent,
-        change_watch: ChangeWatchAgent,
-        transcript: TranscriptAgent,
-        video_log: VideoLogAgent,
+        application_tools: Callable[[str], ToolSet],
         prompt: str,
         vlm_timeout_s: float = 15.0,
+        context: ContextManager | None = None,
     ) -> None:
         if vlm_timeout_s <= 0:
             raise ValueError("vlm_timeout_s must be positive")
@@ -144,23 +110,32 @@ class ForegroundAgent(Agent):
             system_prompt=_CURRENT_VIEW_PROMPT,
         )
         super().__init__((self._vision,))
+        self._vlm = vlm
         self._llm = llm
+        self._context = context or ContextManager(_CompactionLanguage(llm))
+        self._owns_context = context is None
+        self._decisions = decisions
         self._images = images
         self._rag = rag
         self._guidance = guidance
-        self._background_context = background_context
-        self._change_watch = change_watch
-        self._transcript = transcript
-        self._video_log = video_log
+        self._background_tools = application_tools
         self._prompt = prompt.strip()
-        self._root_agent = _FocusedAgent(
-            name="foreground_root",
-            system_prompt=self._with_route_policy(_IDLE_PROMPT),
-            tool_names=(),
-        )
-        self._tea_agents = _build_tea_agents(guidance.workflow)
+        if guidance.workflow.foreground is None:
+            raise ValueError("foreground routing requires task.foreground in workflow YAML")
+        self._policy = guidance.workflow.foreground
         self._vlm_timeout_s = vlm_timeout_s
         self._tasks: dict[str, asyncio.Task[None]] = {}
+        self._outputs: dict[str, _RoutedOutput] = {}
+        self._router = _make_router(
+            guidance,
+            decisions,
+            self._policy,
+            self._workflow_tools,
+            self._application_tools,
+            self._execute_routed,
+            self._stale_routed,
+            self._router_output,
+        )
 
     @subscribe(USER_QUERY_TOPIC)
     async def answer(self, query: UserQuery, ctx: RuntimeContext) -> None:
@@ -172,9 +147,7 @@ class ForegroundAgent(Agent):
             context=nemo_relay.fork_asyncio_context(),
         )
         self._tasks[participant_id] = task
-        task.add_done_callback(
-            lambda completed, pid=participant_id: self._discard(pid, completed)
-        )
+        task.add_done_callback(lambda completed, pid=participant_id: self._discard(pid, completed))
 
     @subscribe(PARTICIPANT_LEFT_TOPIC)
     async def participant_left(
@@ -182,7 +155,11 @@ class ForegroundAgent(Agent):
         _event: ParticipantLeft,
         ctx: RuntimeContext,
     ) -> None:
-        await self._cancel(self._participant(ctx))
+        participant_id = self._participant(ctx)
+        await self._cancel(participant_id)
+        await self._router.participant_left(participant_id)
+        if self._owns_context:
+            await self._context.clear(participant_id)
         await ctx.publish(
             PARTICIPANT_CLEANUP_COMPLETE_TOPIC,
             ParticipantCleanupComplete(
@@ -199,7 +176,9 @@ class ForegroundAgent(Agent):
     ) -> None:
         participant_id = ctx.metadata.participant_id
         if participant_id is None:
-            await self.stop()
+            for participant in tuple(self._tasks):
+                await self._cancel(participant)
+            await self._router.interrupt()
         else:
             await self._cancel(participant_id)
 
@@ -212,9 +191,40 @@ class ForegroundAgent(Agent):
             task.cancel()
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
+        await self._router.stop()
+        if self._owns_context:
+            await self._context.close()
 
     async def _run_turn(self, query: UserQuery, ctx: RuntimeContext) -> None:
         participant_id = self._participant(ctx)
+
+        def snapshot():
+            session = self._guidance.store.find(participant_id)
+            return (
+                {
+                    "state": dict(session.state),
+                    "step_id": session.step_id,
+                    "revision": session.revision,
+                    "run_id": session.run_id,
+                    "evidence_hits": session.evidence_hits,
+                    "active": session.active,
+                }
+                if session
+                else {}
+            )
+
+        session = self._guidance.store.find(participant_id)
+        async with _attempt(
+            participant_id,
+            "foreground",
+            step_id=session.step_id if session else None,
+            snapshot=snapshot,
+            request_id=ctx.metadata.message_id,
+        ):
+            await self._record_turn(query, ctx, participant_id)
+
+    async def _record_turn(self, query, ctx, participant_id):
+        await _event("query.received", text=query.text, timestamp_us=query.timestamp_us)
         with nemo_relay.use_scope_stack(nemo_relay.create_scope_stack()):
             try:
                 response, tools, spoken = await self._answer(
@@ -226,17 +236,13 @@ class ForegroundAgent(Agent):
             except asyncio.CancelledError:
                 raise
             except Exception:
-                logger.opt(exception=True).error(
-                    "tea foreground query failed pid={!r}", participant_id
-                )
+                logger.opt(exception=True).error("tea foreground query failed pid={!r}", participant_id)
                 response = "I couldn't complete that request. Please try again."
                 tools = []
                 spoken = False
             try:
                 if not spoken:
-                    outputs = ResponseOutputs(
-                        ctx, VOICE_OUTPUT_TOPIC, closed_errors=(RuntimeClosedError,)
-                    )
+                    outputs = ResponseOutputs(ctx, VOICE_OUTPUT_TOPIC, closed_errors=(RuntimeClosedError,))
                     async with outputs.reply(
                         participant_id,
                         request_id=ctx.metadata.message_id,
@@ -245,6 +251,8 @@ class ForegroundAgent(Agent):
                         await reply.send(response)
             except RuntimeClosedError:
                 return
+            self._remember_exchange(participant_id, query.text, response, ctx.metadata.message_id)
+            await _event("answer.produced", response=response, tools=tools)
             try:
                 await ctx.publish(
                     FOREGROUND_RECORD_TOPIC,
@@ -258,75 +266,243 @@ class ForegroundAgent(Agent):
             except RuntimeClosedError:
                 return
             except Exception:
-                logger.opt(exception=True).error(
-                    "tea foreground record failed pid={!r}", participant_id
-                )
+                logger.opt(exception=True).error("tea foreground record failed pid={!r}", participant_id)
 
-    async def _answer(
+    def _workflow_tools(self, participant_id: str) -> ToolSet:
+        active = self._guidance.active_tools(participant_id)
+        return active if active is not None else self._guidance.root_tools(participant_id)
+
+    def _application_tools(self, participant_id: str) -> ToolSet:
+        output = self._outputs.get(participant_id)
+        return self._root_tools(
+            participant_id,
+            ctx=output.ctx if output else None,
+            timestamp_us=output.timestamp_us if output else None,
+        )
+
+    async def _router_output(self, turn: AgentTurn, _route: str, text: str) -> None:
+        self._outputs[turn.participant_id].text.append(text)
+
+    async def _stale_routed(self, turn, started) -> None:
+        await started()
+        self._outputs[turn.participant_id].text.append(self._policy.stale_message)
+
+    async def _action_request(self, tool, arguments):
+        try:
+            return tool.request_model.model_validate(arguments)
+        except ValidationError as exc:
+            errors = exc.errors()
+            if len(errors) != 1 or errors[0]["type"] != "string_too_long" or len(errors[0]["loc"]) != 1:
+                raise
+            error = errors[0]
+            field = error["loc"][0]
+            response = await self._llm.chat(
+                (
+                    ChatMessage(role="system", content=self._policy.argument_prompt),
+                    ChatMessage(
+                        role="user", content=_json(text=arguments[field], max_characters=error["ctx"]["max_length"])
+                    ),
+                ),
+                max_tokens=512,
+                temperature=0.0,
+                enable_thinking=False,
+            )
+            if response.tool_calls:
+                raise ValueError("argument generation cannot choose a tool") from exc
+            return tool.request_model.model_validate({**arguments, field: response.content.strip()})
+
+    async def _execute_routed(self, turn, action, started, *, workflow=False) -> str:
+        await self._execute_action(turn, action, started, workflow=workflow)
+        return " ".join(self._outputs[turn.participant_id].text).strip()
+
+    async def _execute_action(self, turn, action: _Action, started, *, workflow: bool = False) -> None:
+        output = self._outputs[turn.participant_id]
+        observation = None
+        if action.tool is not None:
+            tools = (
+                self._workflow_tools(turn.participant_id) if workflow else self._application_tools(turn.participant_id)
+            )
+            tool = tools.get(action.tool)
+            if tool is None:
+                await self._stale_routed(turn, started)
+                return
+            session = self._guidance.store.find(turn.participant_id)
+            state = dict(session.state) if session is not None else {}
+            arguments = _bind_arguments(action.arguments, turn.query, state)
+            request = await self._action_request(tool, arguments)
+            if action.observation is not None:
+                tool = participant_current_view_tool(
+                    turn.participant_id,
+                    self._images.get_current_frame,
+                    ImageQueryTool(
+                        images=self._images.images,
+                        vlm=self._vlm,
+                        system_prompt=action.observation.extraction_question(_CURRENT_VIEW_PROMPT),
+                    ),
+                    timeout_s=self._vlm_timeout_s,
+                )
+            await started()
+            await _event("tool.started", name=action.tool, arguments=request.model_dump(mode="json"))
+            result = await tool.execute(request)
+            await _event("tool.finished", name=action.tool, result=result)
+            output.calls.append(action.tool)
+            if action.observation is not None:
+                if not result.available:
+                    output.text.append(result.text)
+                    return
+                try:
+                    validator = _VisualValidationStep(
+                        question=request.question, policy=action.observation,
+                        observer=self._guidance._image_query, decisions=self._decisions, llm=self._llm,
+                        tools=tools, timeout_s=self._vlm_timeout_s,
+                    )
+                    fact = await validator.evaluate(result.text, expected=state)
+                except ValueError:
+                    logger.opt(exception=True).warning("structured current-view fact unavailable")
+                    output.text.append(self._policy.unavailable_message)
+                    return
+                await _event(
+                    "observation.judged", evidence=fact.evidence, values=fact.values, native_result=fact.result
+                )
+                if fact.evidence == "unknown":
+                    output.text.append(self._policy.unavailable_message)
+                    return
+                observation = fact.result if fact.result is not None else fact.values
+                if action.observation.evaluation is not None:
+                    output.calls.append(action.observation.evaluation.function)
+            elif action.generate:
+                observation = result.model_dump(mode="json")
+            else:
+                text = getattr(result, "message", None) or getattr(result, "text", None)
+                if text is None:
+                    raise ValueError("direct action requires a human-readable tool result")
+                output.text.append(text)
+                output.spoken = bool(action.tool == "current_view" and tool.return_direct and output.ctx is not None)
+                return
+        text, calls, spoken = await self._generate_answer(
+            turn.query,
+            turn.participant_id,
+            output.ctx,
+            timestamp_us=turn.timestamp_us,
+            observation=observation,
+            workflow_context=workflow,
+        )
+        await started()
+        output.text.append(text)
+        output.calls.extend(calls)
+        output.spoken = output.spoken or spoken
+
+    async def _answer(self, query, participant_id, ctx=None, *, timestamp_us=None):
+        output = _RoutedOutput(ctx, timestamp_us)
+        self._outputs[participant_id] = output
+        try:
+            await self._router.handle(
+                AgentTurn(
+                    participant_id,
+                    ctx.metadata.message_id if ctx else f"local:{id(output)}",
+                    query,
+                    timestamp_us=timestamp_us,
+                )
+            )
+            text = " ".join(output.text).strip()
+            if ctx is None:
+                self._remember_exchange(participant_id, query, text, None)
+            return text, output.calls, output.spoken
+        finally:
+            if self._outputs.get(participant_id) is output:
+                self._outputs.pop(participant_id, None)
+
+    def _remember_exchange(self, participant_id, query, response, exchange_id) -> None:
+        with _context_owner(participant_id):
+            self._context.record_exchange(
+                participant_id, query, response,
+                timestamp_us=time.time_ns() // 1_000, exchange_id=exchange_id,
+            )
+
+    async def _generate_answer(
         self,
         query: str,
         participant_id: str,
         ctx: RuntimeContext | None = None,
         *,
         timestamp_us: int | None = None,
+        observation: object = None,
+        workflow_context: bool = False,
     ) -> tuple[str, list[str], bool]:
-        turn = self._prepare_turn(
-            participant_id,
-            query=query,
-            ctx=ctx,
-            timestamp_us=timestamp_us,
-        )
-
-        round_index = 0
-
-        async def call_model(
-            messages: tuple[ChatMessage, ...],
-            definitions: tuple[ToolDef, ...],
-        ) -> ChatResponse:
-            nonlocal round_index
-            round_index += 1
-            response = await self._llm.chat(
-                messages,
-                tools=definitions,
-                max_tokens=512,
-                temperature=0.0,
-                enable_thinking=False,
+        await self._refresh_conversation_context(participant_id)
+        if workflow_context:
+            turn = self._prepare_turn(participant_id, query=query, ctx=ctx, timestamp_us=timestamp_us)
+        else:
+            turn = _PreparedTurn(
+                self._with_route_policy(self._policy.conversation_prompt), _json(request=query), "conversation"
             )
-            logger.info(
-                "tea foreground route pid={!r} route={} agent={} round={} tools={}",
-                participant_id,
-                turn.route,
-                turn.agent.name,
-                round_index,
-                [call.name for call in response.tool_calls or ()],
-            )
-            return response
-
-        try:
-            result = await run_tool_loop(
-                (
-                    ChatMessage(role="system", content=turn.agent.system_prompt),
-                    ChatMessage(role="user", content=turn.user_message),
+        session = self._guidance.store.find(participant_id)
+        messages = (
+            ChatMessage(role="system", content=turn.system_prompt),
+            *self._history_messages(participant_id),
+            ChatMessage(
+                role="user",
+                content=_json(
+                    request=query,
+                    execution={
+                        "active": bool(session and session.active), "run_id": session.run_id if session else None,
+                    },
+                    state=json.loads(turn.user_message).get("state", {}),
+                    **({"observation": observation} if observation is not None else {}),
+                    capabilities=None
+                    if workflow_context
+                    else {
+                        "workflow": self._policy.workflow_description,
+                        **{name: item.description for name, item in self._policy.destinations.items()},
+                    },
                 ),
-                turn.tools,
-                call_model,
-                max_iterations=_MAX_TOOL_ROUNDS,
-            )
-        except ToolLoopIterationLimitError as exc:
-            return (
-                "I couldn't finish that request within the tool limit.",
-                [record.call.name for record in exc.tool_calls],
-                False,
-            )
-        fallback = "Done." if result.return_direct else "I don't have an answer."
-        calls = [record.call.name for record in result.tool_calls]
-        return (
-            result.content.strip() or fallback,
-            calls,
-            result.return_direct
-            and bool(result.tool_calls)
-            and result.tool_calls[-1].call.name == "current_view",
+            ),
         )
+        tools = self._question_tools(participant_id) if workflow_context else ToolSet(())
+        async def call_model(transcript, definitions):
+            return await self._llm.chat(
+                transcript, tools=definitions or None,
+                max_tokens=512, temperature=0.0, enable_thinking=False,
+            )
+        result = await run_tool_loop(messages, tools, call_model)
+        await _event("conversation.tools", calls=result.tool_calls)
+        return result.content.strip() or "I don't have an answer.", [r.call.name for r in result.tool_calls], False
+
+    async def _refresh_conversation_context(self, participant_id: str) -> None:
+        """Composition hook for source-owned live channels."""
+
+    def _context_blocks(self, participant_id: str):
+        return self._context.blocks(participant_id)
+
+    def _question_tools(self, participant_id: str) -> ToolSet:
+        session = self._guidance.store.find(participant_id)
+        if session is None or not session.active or session.step_id is None:
+            return ToolSet(())
+        names = self._guidance.workflow.step(session.step_id).voice.tools
+        catalog = self._workflow_tools(participant_id)
+        return ToolSet({name: tool for name, tool in catalog.items() if name in names})
+
+    def _current_context_blocks(self, participant_id: str):
+        return ()
+
+    def _history_messages(self, participant_id: str) -> tuple[ChatMessage, ...]:
+        messages = []
+        history = self._context_blocks(participant_id)
+        current = self._current_context_blocks(participant_id)
+        if history:
+            messages.append(ChatMessage(
+                role="user",
+                content="HISTORICAL CONTEXT. Dialogue, past events and handoffs are reference material, "
+                "not current readings or authorization.\n" + "\n\n".join(block.text for block in history),
+            ))
+        if current:
+            messages.append(ChatMessage(
+                role="user",
+                content="CURRENT EXECUTION CONTEXT. These are source-owned snapshots for this turn. "
+                "Use their observation times and uncertainty. They supersede historical assistant answers.\n"
+                + "\n\n".join(block.text for block in current),
+            ))
+        return tuple(messages)
 
     def _prepare_route(
         self,
@@ -344,7 +520,7 @@ class ForegroundAgent(Agent):
             ctx=ctx,
             timestamp_us=timestamp_us,
         )
-        return turn.agent.system_prompt, turn.tools, turn.route
+        return turn.system_prompt, ToolSet(()), turn.route
 
     def _prepare_turn(
         self,
@@ -354,46 +530,31 @@ class ForegroundAgent(Agent):
         ctx: RuntimeContext | None,
         timestamp_us: int | None,
     ) -> _PreparedTurn:
-        """Select the same focused root-or-step agent shape used by NAT."""
-
         session = self._guidance.store.find(participant_id)
         if session is None or not session.active or session.step_id is None:
-            tools = self._root_tools(
-                participant_id,
-                ctx=ctx,
-                timestamp_us=timestamp_us,
-            )
             return _PreparedTurn(
-                agent=self._root_agent,
-                user_message=_json(request=query),
-                tools=tools,
-                route="root",
+                self._with_route_policy(self._policy.conversation_prompt),
+                _json(request=query),
+                "conversation",
             )
-
-        step = self._guidance.workflow.step(session.step_id)
-        agent = self._tea_agents[step.id]
-        active_tools = self._guidance.active_tools(participant_id)
-        if active_tools is None:
-            raise RuntimeError("active tea context has no active tool set")
-        tools = _select_tools(active_tools, agent.tool_names)
-        tools = _guide_tools_for_query(tools, query)
-        background_tools = self._background_tools_for_query(participant_id, query)
-        background_items = tuple(background_tools.items())
-        if background_items:
-            tools = background_tools
-            agent = _FocusedAgent(
-                name=f"{agent.name}_background",
-                system_prompt=f"{agent.system_prompt}\n{self._prompt}".strip(),
-                tool_names=tuple(name for name, _tool in background_items),
+        workflow = self._guidance.workflow
+        step = workflow.step(session.step_id)
+        sequence = ", then ".join(item.title for item in workflow.steps.values())
+        next_title = workflow.step(step.next_step).title if step.next_step else "finish the guide"
+        system = "\n".join(
+            (
+                _VOICE_PROMPT,
+                workflow.foreground_prompt,
+                f"Guide order: {sequence}. Current step: {step.title}. Next: {next_title}.",
+                step.voice.prompt,
+                self._policy.active_prompt,
+                _HUMAN_PROMPT,
             )
+        )
         return _PreparedTurn(
-            agent=agent,
-            user_message=_json(
-                request=query,
-                state=self._guidance.workflow.project(step, session.state),
-            ),
-            tools=tools,
-            route="tea",
+            system,
+            _json(request=query, state=workflow.project(step, session.state)),
+            "workflow",
         )
 
     def _with_route_policy(self, route_prompt: str) -> str:
@@ -413,7 +574,6 @@ class ForegroundAgent(Agent):
         )
         return _merge_tool_sets(
             ToolSet((current_view, rag_lookup_tool(self._rag))),
-            self._guidance.root_tools(participant_id),
             self._background_tools(participant_id),
         )
 
@@ -436,8 +596,7 @@ class ForegroundAgent(Agent):
 
         return Tool(
             "current_view",
-            "Inspect the participant's camera only when answering requires "
-            "evidence from the visible present scene.",
+            "Inspect the participant's camera only when answering requires evidence from the visible present scene.",
             CurrentViewRequest,
             ImageQueryResult,
             inspect,
@@ -454,9 +613,7 @@ class ForegroundAgent(Agent):
         timestamp_us: int | None,
     ) -> ImageQueryResult:
         chunks: list[str] = []
-        outputs = ResponseOutputs(
-            ctx, VOICE_OUTPUT_TOPIC, closed_errors=(RuntimeClosedError,)
-        )
+        outputs = ResponseOutputs(ctx, VOICE_OUTPUT_TOPIC, closed_errors=(RuntimeClosedError,))
         async with outputs.reply(
             participant_id,
             request_id=ctx.metadata.message_id,
@@ -472,9 +629,8 @@ class ForegroundAgent(Agent):
                         unavailable = str(exc)
                         await reply.send(unavailable)
                         return ImageQueryResult(text=unavailable, available=False)
-                    stream = self._vision.stream(
-                        ImageQueryRequest(image=frame.image, query=query)
-                    )
+                    await _frame(frame)
+                    stream = self._vision.stream(ImageQueryRequest(image=frame.image, query=query))
                     try:
                         async for chunk in stream:
                             if not chunks and not chunk.text.strip():
@@ -487,71 +643,15 @@ class ForegroundAgent(Agent):
                             await close()
                     if not chunks:
                         unavailable = (
-                            "Unable to inspect the current frame because the vision "
-                            "model returned no description."
+                            "Unable to inspect the current frame because the vision model returned no description."
                         )
                         await reply.send(unavailable)
                         return ImageQueryResult(text=unavailable, available=False)
                 return ImageQueryResult(text="".join(chunks))
             except TimeoutError:
-                unavailable = (
-                    "Unable to inspect the current frame before the vision timeout."
-                )
+                unavailable = "Unable to inspect the current frame before the vision timeout."
                 await reply.send(unavailable)
                 return ImageQueryResult(text=unavailable, available=False)
-
-    def _background_tools(self, participant_id: str) -> ToolSet:
-        return _merge_tool_sets(
-            self._background_context.participant_tools(participant_id),
-            self._change_watch.participant_tools(participant_id),
-            self._transcript.participant_tools(participant_id),
-            self._video_log.participant_tools(participant_id),
-        )
-
-    def _background_tools_for_query(
-        self,
-        participant_id: str,
-        query: str,
-    ) -> ToolSet:
-        """Expose background tools only to an explicit background request."""
-
-        text = " ".join(query.casefold().split())
-        explicit_background = re.search(
-            r"\b(?:background|change watch|change watcher|visual observer|"
-            r"video log|activity log|transcript)\b",
-            text,
-        )
-        timer_request = re.search(
-            r"\b(?:timer|steeping|seconds?|minutes?)\b|\btea\s+ready\b",
-            text,
-        )
-        if timer_request is not None and explicit_background is None:
-            return ToolSet(())
-        history = re.search(
-            r"\b(?:background|monitor|watcher|transcript|video log|activity log)\b"
-            r".*\b(?:report\w*|notic\w*|observ\w*|history|recent|earlier|past|"
-            r"chang\w*|happen\w*)\b",
-            text,
-        )
-        if history is not None:
-            return self._background_context.participant_tools(participant_id)
-
-        catalogs: list[ToolSet] = []
-        if re.search(
-            r"\b(?:monitor|monitoring|visual changes?|change watch)\b|"
-            r"\bbackground\b.*\bwatch(?:ing)?\b|"
-            r"\bwatch(?:ing)?\b.*\bbackground\b",
-            text,
-        ):
-            catalogs.append(self._change_watch.participant_tools(participant_id))
-        if re.search(r"\b(?:transcript|conversation recording)\b", text):
-            catalogs.append(self._transcript.participant_tools(participant_id))
-        if re.search(r"\b(?:video log|visual activity log|activity recording)\b", text):
-            catalogs.append(self._video_log.participant_tools(participant_id))
-        if not catalogs:
-            return ToolSet(())
-        catalogs.append(self._background_context.participant_tools(participant_id))
-        return _merge_tool_sets(*catalogs)
 
     async def _cancel(self, participant_id: str) -> None:
         task = self._tasks.pop(participant_id, None)
@@ -567,9 +667,7 @@ class ForegroundAgent(Agent):
             return
         with suppress(asyncio.CancelledError):
             if error := task.exception():
-                logger.error(
-                    "tea foreground stopped pid={!r}: {!r}", participant_id, error
-                )
+                logger.error("tea foreground stopped pid={!r}: {!r}", participant_id, error)
 
     @staticmethod
     def _participant(ctx: RuntimeContext) -> str:
@@ -589,63 +687,16 @@ def _merge_tool_sets(*catalogs: ToolSet) -> ToolSet:
     return ToolSet(tools)
 
 
-def _build_tea_agents(workflow: Workflow) -> dict[str, _FocusedAgent]:
-    """Build one focused foreground agent for every declarative step."""
-
-    agents: dict[str, _FocusedAgent] = {}
-    sequence = ", then ".join(step.title for step in workflow.steps.values())
-    for step in workflow.steps.values():
-        next_title = (
-            workflow.step(step.next_step).title
-            if step.next_step is not None
-            else "finish the guide"
-        )
-        agents[step.id] = _FocusedAgent(
-            name=f"foreground_tea_{step.id}",
-            system_prompt=(
-                f"{_TEA_PROMPT}\n{_VOICE_PROMPT}\n"
-                f"{workflow.foreground_prompt} Guide order: {sequence}. "
-                f"Current step: {step.title}. Next: {next_title}.\n"
-                f"{step.voice.prompt}\n{_ACTIVE_POLICY}\n{_HUMAN_PROMPT}"
-            ).strip(),
-            tool_names=(*_TEA_MANAGEMENT_TOOLS, *step.voice.tools),
-        )
-    return agents
-
-
-def _select_tools(tools: ToolSet, names: tuple[str, ...]) -> ToolSet:
-    selected: dict[str, Tool] = {}
-    for name in names:
-        tool = tools.get(name)
-        if tool is None:
-            raise RuntimeError(f"focused agent requires unavailable tool {name!r}")
-        selected[name] = tool
-    return ToolSet(selected)
-
-
-def _guide_tools_for_query(tools: ToolSet, query: str) -> ToolSet:
-    """Keep procedural guide questions free of irrelevant live tools."""
-
-    text = " ".join(query.casefold().strip(" .!?").split())
-    procedural = re.fullmatch(
-        r"(?:what are .{0,30}instructions?|"
-        r"give me (?:a |some )?(?:quick )?(?:details|overview|summary)"
-        r"(?: of (?:the )?(?:tea(?:-making)? )?(?:guide|process|procedure))?|"
-        r"what (?:is|was|comes after|came before) (?:the )?"
-        r"(?:current |next |previous )?(?:tea )?(?:step|this step)|"
-        r"what (?:should|do) i do(?: now| at (?:this|the|current) step)?|"
-        r"should i continue .{1,40}|"
-        r"where should i begin|what(?:'s| is) next|"
-        r"if i say .{1,40}, will you .{1,40}|"
-        r"remind me what i am doing right now|"
-        r"what did we do immediately before this)",
-        text,
-    )
-    if procedural is None:
-        return tools
-    return ToolSet(
-        tool for name, tool in tools.items() if name in _WORKFLOW_CONTROLS
-    )
+def _bind_arguments(value: object, query: str, state: dict[str, object]) -> object:
+    if isinstance(value, dict):
+        return {key: _bind_arguments(item, query, state) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_bind_arguments(item, query, state) for item in value]
+    if value == "$request":
+        return query
+    if isinstance(value, str) and value.startswith("$state."):
+        return state[value.removeprefix("$state.")]
+    return value
 
 
 def _json(**value: object) -> str:

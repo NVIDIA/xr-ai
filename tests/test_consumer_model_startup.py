@@ -14,7 +14,7 @@ from xr_ai_voicegate import VoiceGateConfig
 @pytest.mark.parametrize("sample, package, expected_probes", [
     ("simple-vlm-example", "simple_vlm_example_worker", {"vlm"}),
     ("lab-instrument-monitoring", "lab_instrument_monitoring_worker", set()),
-    ("tea-making-sample", "tea_making_worker", {"rag"}),
+    ("tea-making-sample", "tea_making_worker", {"rag", "clef"}),
     ("xr-render-demo", "xr_render_demo_worker", {"llm"}),
 ])
 async def test_sample_does_not_register_model_health_probes(
@@ -31,6 +31,9 @@ async def test_sample_does_not_register_model_health_probes(
     for factory in ("make_llm", "make_vlm", "make_stt", "make_tts"):
         if hasattr(app, factory):
             monkeypatch.setattr(app, factory, lambda *_args: service)
+    decision = SimpleNamespace(health=AsyncMock(return_value=True))
+    if hasattr(app, "make_decision"):
+        monkeypatch.setattr(app, "make_decision", lambda *_args: decision)
     monkeypatch.setattr(app, "setup_logging", Mock())
     monkeypatch.setattr(app, "load_models_config", Mock(return_value=object()))
     monkeypatch.setattr(app, "load_voice_gate_config", Mock(return_value=VoiceGateConfig()))
@@ -78,6 +81,7 @@ async def test_sample_does_not_register_model_health_probes(
         assert await probes["llm"]() is False
     if sample == "tea-making-sample":
         rag.health.assert_awaited_once()
+        decision.health.assert_awaited_once()
 
 
 @pytest.mark.parametrize("sample, package, preset", [

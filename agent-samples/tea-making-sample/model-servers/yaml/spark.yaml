@@ -19,3 +19,6 @@ embedding:
   # NGC 26.09 had incompatible FlashAttention kernels on GB10 SM121/driver 580.
   # Retain Triton pending NGC 26.10 preview qualification on this profile.
   attention_backend: TRITON_ATTN
+
+# Clef is required for bounded text judgments; Omni retains all visual work.
+clef: {}

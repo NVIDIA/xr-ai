@@ -1,0 +1,16 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+change_watch_decision:
+  instructions: Judge whether the current description proves a new transition relevant to watch_for.
+  criteria:
+    accepted: A newly visible relevant transition is established by current versus previous descriptions.
+    rejected: No relevant new transition; continued presence, rewording, viewpoint, or lighting only.
+    unknown: The descriptions do not establish whether a new relevant transition occurred.
+video_delta_decision:
+  instructions: Compare current with recent previous descriptions for a material visible transition.
+  criteria:
+    accepted: Current proves a material transition absent from the recent descriptions.
+    rejected: The same scene is restated, with only wording, viewpoint, crop, lighting, gaze, or
+      minor pose differences.
+    unknown: The descriptions are too uncertain or incomplete to establish a transition.

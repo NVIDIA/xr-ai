@@ -18,13 +18,13 @@ from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from xr_ai_hub import FrameUnavailable
 from xr_ai_interaction import ParticipantLeft
-from xr_ai_models import ChatMessage, ChatResponse, LLMService, ToolDef, VLMService
+from xr_ai_models import ChatMessage, DecisionQuestion, DecisionService, LLMService, VLMService
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeClosedError, RuntimeContext, subscribe
 from xr_ai_tools import Tool, ToolSet
 from xr_ai_tools.current_frame import CurrentFrameRequest
-from xr_ai_tools.tool_calling import run_tool_loop
 from xr_ai_tools.vision import ImageQueryRequest, ImageQueryTool
 
+from ._capture import _attempt, _frame
 from .events import (
     BACKGROUND_FACT_TOPIC,
     CHANGE_WATCH_RECORD_TOPIC,
@@ -91,6 +91,8 @@ class ChangeWatchAgent(Agent):
         images: ParticipantImageAgent,
         vlm: VLMService,
         llm: LLMService,
+        decisions: DecisionService,
+        decision: DecisionQuestion,
         caption_prompt: str,
         event_prompt: str,
         default_instruction: str,
@@ -107,6 +109,8 @@ class ChangeWatchAgent(Agent):
         self._images = images
         self._query_image = ImageQueryTool(images=images.images, vlm=vlm)
         self._llm = llm
+        self._decisions = decisions
+        self._decision = decision
         self._caption_prompt = caption_prompt.strip()
         self._event_prompt = event_prompt.strip()
         self._default_instruction = default_instruction.strip().rstrip(".!? ")
@@ -227,9 +231,7 @@ class ChangeWatchAgent(Agent):
             context=nemo_relay.fork_asyncio_context(),
         )
         self._tasks[participant_id] = task
-        task.add_done_callback(
-            lambda completed, pid=participant_id: self._discard(pid, completed)
-        )
+        task.add_done_callback(lambda completed, pid=participant_id: self._discard(pid, completed))
         return ChangeWatchState(
             active=True,
             instruction=focus,
@@ -282,22 +284,22 @@ class ChangeWatchAgent(Agent):
                 await asyncio.sleep(self._interval_s)
 
     async def _observe(self, participant_id: str) -> None:
+        async with _attempt(participant_id, "watch"):
+            await self._observe_recorded(participant_id)
+
+    async def _observe_recorded(self, participant_id: str) -> None:
         state = self._states.get(participant_id)
         if state is None or state.lock.locked():
             return
         async with state.lock:
             now_us = time.time_ns() // 1_000
             try:
-                frame = await self._images.get_current_frame.execute(
-                    CurrentFrameRequest(participant_id=participant_id)
-                )
+                frame = await self._images.get_current_frame.execute(CurrentFrameRequest(participant_id=participant_id))
+                await _frame(frame)
                 caption_result = await self._query_image.execute(
                     ImageQueryRequest(
                         image=frame.image,
-                        query=(
-                            f"{self._caption_prompt}\n"
-                            f"Focus: {state.instruction}"
-                        ),
+                        query=(f"{self._caption_prompt}\nFocus: {state.instruction}"),
                     )
                 )
             except asyncio.CancelledError:
@@ -314,9 +316,7 @@ class ChangeWatchAgent(Agent):
                 )
                 return
             except Exception as exc:
-                logger.opt(exception=True).warning(
-                    "change watch vision failed pid={!r}", participant_id
-                )
+                logger.opt(exception=True).warning("change watch vision failed pid={!r}", participant_id)
                 await self._publish_error(participant_id, state, now_us, str(exc))
                 return
 
@@ -365,9 +365,7 @@ class ChangeWatchAgent(Agent):
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
-                logger.opt(exception=True).warning(
-                    "change watch decision failed pid={!r}", participant_id
-                )
+                logger.opt(exception=True).warning("change watch decision failed pid={!r}", participant_id)
                 await self._publish_error(
                     participant_id,
                     state,
@@ -389,59 +387,24 @@ class ChangeWatchAgent(Agent):
             if decision.important:
                 await self._publish_fact(participant_id, now_us, decision.summary)
 
-    async def _decide(
-        self,
-        state: _WatchState,
-        caption: str,
-    ) -> ChangeDecision:
-        async def commit(request: ChangeDecision) -> ChangeDecision:
-            return request
-
-        tools = ToolSet(
-            (
-                Tool(
-                    "change_watch__commit",
-                    "Commit whether the current visual change is important.",
-                    ChangeDecision,
-                    ChangeDecision,
-                    commit,
-                    return_direct=True,
-                ),
-            )
-        )
-        payload = json.dumps(
-            {
-                "watch_for": state.instruction,
-                "previous": list(state.captions),
-                "current": caption,
-            },
-            ensure_ascii=False,
-            separators=(",", ":"),
-        )
-
-        async def call_model(
-            messages: tuple[ChatMessage, ...],
-            definitions: tuple[ToolDef, ...],
-        ) -> ChatResponse:
-            return await self._llm.chat(
-                messages,
-                tools=definitions,
-                max_tokens=384,
-                temperature=0.0,
-                enable_thinking=False,
-            )
-
-        result = await run_tool_loop(
+    async def _decide(self, state: _WatchState, caption: str) -> ChangeDecision:
+        payload = {"watch_for": state.instruction, "previous": list(state.captions), "current": caption}
+        response = await self._decisions.decide(payload, {"change": self._decision})
+        choice = response.answers["change"].choice
+        if choice not in self._decision.criteria:
+            raise ValueError("invalid change choice")
+        if choice != "accepted":
+            return ChangeDecision(important=False)
+        response = await self._llm.chat(
             (
                 ChatMessage(role="system", content=self._event_prompt),
-                ChatMessage(role="user", content=payload),
+                ChatMessage(role="user", content=json.dumps(payload, ensure_ascii=False)),
             ),
-            tools,
-            call_model,
-            max_iterations=3,
-            max_tool_calls=2,
+            max_tokens=128,
+            temperature=0.0,
+            enable_thinking=False,
         )
-        return ChangeDecision.model_validate_json(result.content)
+        return ChangeDecision(important=True, summary=response.content)
 
     async def _publish_error(
         self,
@@ -521,9 +484,7 @@ class ChangeWatchAgent(Agent):
             return
         with suppress(asyncio.CancelledError):
             if error := task.exception():
-                logger.error(
-                    "change watch stopped pid={!r}: {!r}", participant_id, error
-                )
+                logger.error("change watch stopped pid={!r}: {!r}", participant_id, error)
 
     def _running_runtime(self) -> AgentRuntime:
         if self._stopped:

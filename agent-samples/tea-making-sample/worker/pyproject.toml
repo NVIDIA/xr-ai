@@ -12,6 +12,8 @@ requires-python = ">=3.11,<3.15"
 dependencies = [
     "nemo-relay>=0.10.0,<0.11",
     "xr-ai-agent-runtime",
+    "xr-ai-routing",
+    "xr-ai-conversation",
     "xr-ai-hub-client",
     "xr-ai-interaction",
     "xr-ai-logging",
@@ -26,6 +28,8 @@ dependencies = [
 ]
 
 [tool.uv.sources]
+xr-ai-conversation = { path = "../../../agent-sdk/xr-ai-conversation", editable = true }
+xr-ai-routing = { path = "../../../agent-sdk/xr-ai-routing", editable = true }
 xr-ai-agent-runtime = { path = "../../../agent-sdk/xr-ai-runtime", editable = true }
 xr-ai-hub-client = { path = "../../../agent-sdk/xr-ai-hub", editable = true }
 xr-ai-logging = { path = "../../../utils/xr-ai-logging", editable = true }

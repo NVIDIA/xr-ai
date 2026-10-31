@@ -10,6 +10,9 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from xr_ai_models import DecisionQuestion
+
+from ._observations import _ObservationPolicy
 
 _PACKAGE = Path(__file__).resolve().parent
 
@@ -22,6 +25,8 @@ class WorkerConfig:
     artifacts_dir: Path
     rag_endpoint: str
     foreground_prompt: str
+    change_watch_decision: DecisionQuestion
+    video_delta_decision: DecisionQuestion
     change_watch_caption_prompt: str
     change_watch_event_prompt: str
     transcript_summary_prompt: str
@@ -42,6 +47,9 @@ class WorkerConfig:
     web_events_host: str
     web_events_port: int
     web_events_max_events: int
+    capture_enabled: bool = True
+    context_budget_bytes: int = 12000
+    compaction_input_budget_bytes: int = 12000
 
 
 def _resolve(config_path: Path | None, raw: str) -> Path:
@@ -66,11 +74,7 @@ def _prompt(data: dict[str, Any], config_path: Path | None, name: str) -> str:
     if inline is not None:
         return str(inline).strip()
     configured = data.get(f"{name}_file")
-    path = (
-        _resolve(config_path, str(configured))
-        if configured is not None
-        else _PACKAGE / "prompts" / f"{name}.txt"
-    )
+    path = _resolve(config_path, str(configured)) if configured is not None else _PACKAGE / "prompts" / f"{name}.txt"
     return path.read_text(encoding="utf-8").strip()
 
 
@@ -79,6 +83,17 @@ def _positive(data: dict[str, Any], name: str, default: float) -> float:
     if value <= 0:
         raise ValueError(f"{name} must be positive")
     return value
+
+
+def _decision(data: dict[str, Any], name: str) -> DecisionQuestion:
+    raw = data.get(name)
+    if raw is None:
+        defaults = yaml.safe_load((_PACKAGE / "prompts" / "decisions.yaml").read_text(encoding="utf-8"))
+        raw = defaults[name]
+    if not isinstance(raw, dict):
+        raise ValueError(f"{name} requires instructions and choice criteria in worker YAML")
+    policy = _ObservationPolicy.model_validate({"kind": "choice", "updates": {}, **raw})
+    return DecisionQuestion(policy.instructions, policy.criteria)
 
 
 def load_config(path: Path | None) -> WorkerConfig:
@@ -98,6 +113,13 @@ def load_config(path: Path | None) -> WorkerConfig:
     web_events_max_events = int(data.get("web_events_max_events", 5_000))
     if web_events_max_events <= 0:
         raise ValueError("web_events_max_events must be positive")
+    capture = data.get("capture", {})
+    if (
+        not isinstance(capture, dict)
+        or set(capture) - {"enabled"}
+        or not isinstance(capture.get("enabled", True), bool)
+    ):
+        raise ValueError("capture requires an enabled boolean")
     return WorkerConfig(
         models_config=_resolve(path, str(data.get("models_config", "models.local.json"))),
         workflow_config=_resolve(path, str(data.get("workflow_config", "workflow.yaml"))),
@@ -105,6 +127,8 @@ def load_config(path: Path | None) -> WorkerConfig:
         artifacts_dir=_resolve(path, str(data.get("artifacts_dir", "../artifacts"))),
         rag_endpoint=str(data.get("rag_endpoint", "tcp://127.0.0.1:8340")),
         foreground_prompt=_prompt(data, path, "foreground_prompt"),
+        change_watch_decision=_decision(data, "change_watch_decision"),
+        video_delta_decision=_decision(data, "video_delta_decision"),
         change_watch_caption_prompt=_prompt(data, path, "change_watch_caption_prompt"),
         change_watch_event_prompt=_prompt(data, path, "change_watch_event_prompt"),
         transcript_summary_prompt=_prompt(data, path, "transcript_summary_prompt"),
@@ -130,6 +154,9 @@ def load_config(path: Path | None) -> WorkerConfig:
         web_events_host=web_events_host,
         web_events_port=web_events_port,
         web_events_max_events=web_events_max_events,
+        capture_enabled=capture.get("enabled", True),
+        context_budget_bytes=int(_positive(data, "context_budget_bytes", 12000)),
+        compaction_input_budget_bytes=int(_positive(data, "compaction_input_budget_bytes", 12000)),
     )
 
 

@@ -1,0 +1,144 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Held-out wording for the focused-agent contract. Freeze before qualification.
+- name: new-start
+  query: Walk me through brewing a cup of tea.
+  expected_tool: workflow__start
+  expected_workflow_scope: true
+- name: new-advance
+  query: Please move ahead one instruction.
+  expected_tool: workflow__advance
+  expected_skip: false
+  route: active
+  step: fill_water
+- name: new-skip
+  query: Omit just this instruction and keep going.
+  expected_tool: workflow__advance
+  expected_skip: true
+  route: active
+  step: heat_water
+- name: new-stop
+  query: End our brewing walkthrough here.
+  expected_tool: workflow__reset
+  route: active
+  step: start_steeping
+- name: new-restart
+  query: Begin the brewing instructions again from the beginning.
+  expected_tool: workflow__restart
+  route: active
+  step: fill_water
+- name: new-quoted-control
+  query: The phrase "restart the guide" is just an example I am quoting.
+  expected_tool: null
+  route: active
+  step: fill_water
+- name: new-reported-control
+  query: My colleague suggested abandoning the walkthrough.
+  expected_tool: null
+  route: active
+  step: heat_water
+- name: new-capability-question
+  query: Could this procedure be started again?
+  expected_tool: null
+  route: active
+  step: fill_water
+- name: new-polite-command
+  query: Could you begin the instructions again?
+  expected_tool: workflow__restart
+  route: active
+  step: fill_water
+- name: new-background-target
+  query: Keep the guide running; stop the visual journal.
+  expected_tool: video_log__stop
+  route: active
+  step: heat_water
+- name: new-current-instruction
+  query: Describe the instruction I am following, without checking the camera.
+  expected_tool: null
+  expected_workflow_scope: true
+  route: active
+  step: fill_water
+- name: new-water-check
+  query: Can you see any liquid inside this pot?
+  expected_tool: current_view
+  expected_workflow_scope: true
+  route: active
+  step: fill_water
+- name: new-known-target
+  query: What temperature am I aiming for?
+  expected_tool: null
+  expected_workflow_scope: true
+  route: active
+  step: heat_water
+- name: new-display-reading
+  query: Read the number on the display.
+  expected_tool: current_view
+  expected_workflow_scope: true
+  route: active
+  step: heat_water
+- name: new-verify-reading
+  query: Has the visible reading reached our target?
+  expected_tool: current_view
+  expected_workflow_scope: true
+  route: active
+  step: heat_water
+- name: new-steeping-instructions
+  query: Should the bag be below the water surface?
+  expected_tool: null
+  expected_workflow_scope: true
+  route: active
+  step: start_steeping
+- name: new-timer
+  query: How much brewing time remains?
+  expected_tool: null
+  expected_context_operation: active_operation
+  expected_workflow_scope: true
+  route: active
+  step: steep_timer
+- name: new-previous-instruction
+  query: Explain the previous instruction.
+  expected_tool: null
+  expected_workflow_scope: true
+  route: active
+  step: steep_timer
+- name: new-side-conversation
+  query: What is seven plus eight?
+  expected_tool: null
+  expected_workflow_scope: false
+  expected_response_pattern: (?i)(?:15|fifteen)
+  route: active
+  step: fill_water
+- name: new-side-camera
+  query: What does the blue sign behind me say?
+  expected_tool: current_view
+  expected_workflow_scope: true
+  route: active
+  step: steep_timer
+- name: new-transcript-start
+  query: Start recording this discussion.
+  expected_tool: transcript__start
+  expected_workflow_scope: false
+  route: active
+  step: fill_water
+- name: new-journal-history
+  query: Tell me what the visual journal observed earlier.
+  expected_tool: application_context__query
+  expected_workflow_scope: false
+  route: active
+  step: fill_water
+- name: new-watch-stop
+  query: Turn off the spill watcher, please.
+  expected_tool: change_watch__stop
+  expected_workflow_scope: false
+  route: active
+  step: heat_water
+- name: new-negated-guide-stop
+  query: Do not end the guide. Tell me where we are.
+  expected_tool: null
+  accepted_tools:
+  - []
+  - - workflow__status
+  expected_workflow_scope: true
+  route: active
+  step: fill_water

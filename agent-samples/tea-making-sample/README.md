@@ -10,12 +10,16 @@ guide answers questions and applies explicit workflow controls, while
 independent background agents can record transcripts, watch for visual
 changes, and produce periodic video observations.
 
-The workflow keeps state transitions deterministic: the VLM describes the
-current view, the observation LLM judges whether that description satisfies the
-current step, and guarded commits count any required confirmations. Only an
-explicit user command advances the procedure. The sample launches its
-application services and reuses STT, Pocket TTS, Nemotron-3 Nano Omni, and
-embedding endpoints from the sample's local model stack.
+The focused SOP agent owns execution, managed dialogue context and compaction,
+using YAML-owned Clef control choices and native state commits. Active runs have
+separate context channels and hand off historical context when they close.
+Omni supplies all visual descriptions and typed package readings; code owns
+confirmations, arithmetic, timers, and advancement. Progression is automatic by
+default; set `task.advancement: manual` in `yaml/workflow.yaml` to require next. The sample reuses
+speaker STT, Pocket TTS, Omni, Clef, and embedding endpoints from its local
+model stack. Refer to the
+[sample architecture](https://nvidia.github.io/xr-ai/latest/reference/tea-making-sample.html)
+for focus, observation, and model-memory qualification.
 
 ## Configure
 
@@ -89,8 +93,9 @@ development certificate on first use, allow microphone and camera access, and
 connect. Say “Hey agent, let's start
 talking,” then speak commands without a wake phrase. Say “Hey agent, let's stop
 talking” to close the conversation. The optional event viewer is available at
-`http://127.0.0.1:8092` by default, and durable output is written below
-`artifacts/`.
+`http://127.0.0.1:8093` with the checked-in worker configuration. Each launch
+writes an SOP bundle below `artifacts/runs/`, including consumed inference images
+and step records. See [SOP run capture](https://nvidia.github.io/xr-ai/main/reference/tea-making-sample.html#sop-run-capture).
 
 The local models remain running after the sample stops. From this directory,
 stop them with `uv run --project model-servers tea_making_sample_model_servers --stop`.

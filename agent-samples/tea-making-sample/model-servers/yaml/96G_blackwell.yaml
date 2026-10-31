@@ -14,3 +14,6 @@ omni:
   kv_cache_memory_bytes: 2147483648
 embedding:
   gpu_memory_utilization: 0.08
+
+# Clef is required for bounded text judgments; Omni retains all visual work.
+clef: {}

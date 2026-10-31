@@ -12,7 +12,9 @@ import re
 import time
 from dataclasses import dataclass, field
 from typing import Any
+from uuid import uuid4
 
+from ._visual_step import _confirmation_hits
 from .spec import StateField, Step, Workflow
 
 _TOKEN = re.compile(r"{{\s*([a-z][a-z0-9_-]*)\s*(?:\|\s*([a-z][a-z0-9_-]*))?\s*}}")
@@ -26,6 +28,8 @@ class WorkflowEvent:
     step_id: str | None
     message: str
     state: dict[str, Any]
+    run_id: str | None = None
+    evidence: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -34,10 +38,13 @@ class WorkflowSession:
 
     participant_id: str
     state: dict[str, Any]
+    run_id: str | None = None
+    evidence: dict[str, Any] = field(default_factory=dict)
     active: bool = False
     step_id: str | None = None
     revision: int = 0
     next_tick: float = 0.0
+    observed_frame: tuple[str, str, int, int] | None = None
     evidence_hits: int = 0
     notices: list[str] = field(default_factory=list)
     events: list[WorkflowEvent] = field(default_factory=list)
@@ -46,7 +53,7 @@ class WorkflowSession:
 
 @dataclass(frozen=True, slots=True)
 class CommitResult:
-    """Deterministic result of one model-requested state commit."""
+    """Deterministic result of one guarded observation commit."""
 
     accepted: bool
     complete: bool
@@ -118,14 +125,20 @@ class WorkflowStore:
     def reset(self, session: WorkflowSession) -> str:
         """Clear progress and release foreground ownership."""
 
+        if session.run_id is not None:
+            self._event(session, "workflow.run_closed", "reset")
+        session.run_id = None
         session.state = self.workflow.initial_state()
         session.active = False
         session.step_id = None
         session.evidence_hits = 0
+        session.observed_frame = None
         session.notices.clear()
         session.revision += 1
         message = f"{self.workflow.name} guidance reset."
         self._event(session, "workflow.reset", message)
+        session.run_id = None
+        session.evidence.clear()
         return message
 
     def status(self, session: WorkflowSession) -> str:
@@ -194,10 +207,7 @@ class WorkflowStore:
                 else json.dumps(observation, separators=(",", ":"))
             )
             matched = re.fullmatch(step.evidence.pattern, value.strip()) is not None
-        if matched is True:
-            session.evidence_hits += 1
-        elif matched is False:
-            session.evidence_hits = 0
+        session.evidence_hits = _confirmation_hits(session.evidence_hits, matched)
         outcome = "unknown" if matched is None else str(matched).lower()
         self._event(
             session,
@@ -206,19 +216,6 @@ class WorkflowStore:
                 f"matched={outcome} consecutive={session.evidence_hits}/{step.evidence.consecutive}"
             ),
         )
-
-    def _completion_proposed(
-        self,
-        session: WorkflowSession,
-        updates: dict[str, Any],
-    ) -> bool:
-        """Return whether a valid model proposal completes the active step."""
-
-        step = self.active_step(session)
-        if self._invalid_commit_patch(session, step, updates):
-            return False
-        candidate = {**session.state, **updates}
-        return step.is_complete(candidate)
 
     def commit(
         self,
@@ -258,6 +255,10 @@ class WorkflowStore:
         notice = (
             self._render_state(step.complete_message, candidate) if complete else ""
         )
+        if complete and self.workflow.advancement == "automatic":
+            # Rendering the next instruction can fail on a bad YAML binding.
+            # Validate it before committing readiness, so the step remains retryable.
+            self._transition_message(step.next_step, candidate)
         session.state.update(copy.deepcopy(changes))
         session.revision += 1
         notification = message.strip() if not complete else ""
@@ -265,9 +266,14 @@ class WorkflowStore:
             session.notices.append(notification)
         self._event(session, "step.commit", notification)
         if complete:
+            self._event(session, "step.ready", notice)
+            if self.workflow.advancement == "automatic":
+                transition = self.advance(session, skip=False)
+                notice = " ".join(text for text in (notice, transition) if text)
+            else:
+                notice = " ".join(text for text in (notice, self.workflow.manual_advance_message) if text)
             if notice:
                 session.notices.append(notice)
-            self._event(session, "step.ready", notice)
         return CommitResult(True, complete, "state committed", session.revision)
 
     def drain_notices(self, session: WorkflowSession) -> tuple[str, ...]:
@@ -295,6 +301,10 @@ class WorkflowStore:
         self._event(session, event, message)
 
     def _restart(self, session: WorkflowSession, *, event: str) -> str:
+        if session.run_id is not None:
+            self._event(session, "workflow.run_closed", "restarted")
+        session.run_id = uuid4().hex
+        session.evidence.clear()
         state = self.workflow.initial_state()
         message = self._render_state(
             self.workflow.step(self.workflow.start_step).enter_message,
@@ -306,6 +316,7 @@ class WorkflowStore:
         session.next_tick = 0.0
         session.notices.clear()
         session.evidence_hits = 0
+        session.observed_frame = None
         session.revision += 1
         self._event(session, "step.enter", message)
         self._event(session, event, message)
@@ -321,10 +332,18 @@ class WorkflowStore:
             session.active = False
             session.step_id = None
             self._event(session, "workflow.complete", message)
+            session.state = self.workflow.initial_state()
+            session.run_id = None
+            session.evidence.clear()
+            session.evidence_hits = 0
+            session.observed_frame = None
+            session.next_tick = 0.0
             return
+        session.evidence.clear()
         session.step_id = next_step
         session.next_tick = 0.0
         session.evidence_hits = 0
+        session.observed_frame = None
         self._event(session, "step.enter", message)
 
     def _transition_message(
@@ -386,6 +405,11 @@ class WorkflowStore:
                 step_id=session.step_id,
                 message=message,
                 state=copy.deepcopy(session.state),
+                run_id=session.run_id,
+                evidence=(
+                    copy.deepcopy(session.evidence)
+                    if event in {"step.ready", "workflow.complete", "workflow.run_closed"} else {}
+                ),
             )
         )
 

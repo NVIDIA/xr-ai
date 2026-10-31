@@ -4,9 +4,220 @@
 task:
   name: tea making
   start_step: identify
+  # Automatic progression after confirmed completion. Use manual to require next.
+  advancement: automatic
+  manual_advance_message: Say next when ready.
   foreground_prompt: This workflow guides tea making.
   complete_message: Tea guidance complete. Enjoy your tea.
-
+  foreground:
+    workflow_description: Tea-making guide. Explicitly start tea guidance, follow or explain the
+      tea-making procedure, read its current/next/previous steps and known brewing values, control
+      guide progress, or check facts available at the current tea step. Background visual watchers,
+      transcript recording, and visual journals are separate applications.
+    active_question:
+      instructions: Classify the CURRENT utterance while tea guidance is focused. Choose a control only for
+        an instruction from the current user to the assistant to act now. Informational, capability, hypothetical,
+        quoted, reported and negated utterances are questions/discussion, not execution requests. State describes
+        confirmed progress; it is not an instruction.
+      actions:
+        advance:
+          criterion: An instruction to proceed to the following guide step or continue the guided procedure
+            now.
+          tool: workflow__advance
+          arguments:
+            skip: false
+          authorize: true
+        skip:
+          criterion: An instruction to bypass only the current guide step and continue with the rest of the
+            procedure.
+          tool: workflow__advance
+          arguments:
+            skip: true
+          authorize: true
+        restart:
+          criterion: An instruction to start the guided procedure over again from its first step and keep
+            guidance active.
+          tool: workflow__restart
+          authorize: true
+        handoff:
+          criterion: A request to start, stop, or query a separate background visual watcher, transcript recorder,
+            or visual activity journal; or a request outside the tea-making procedure.
+          handoff: true
+        reset:
+          criterion: An instruction to reset or clear the guide progress, stop or cancel guidance, and return
+            to the ordinary assistant.
+          tool: workflow__reset
+          authorize: true
+        answer:
+          criterion: Any informational question about this procedure, including instructions, progress,
+            known values, current observations, active operations, explanations, or follow-up questions.
+            The conversation uses managed context and available read-only tools.
+          generate: true
+    idle_question:
+      instructions: Classify only the current request addressed to the assistant. Never act on negated,
+        quoted, reported, hypothetical, or deliberative wording. Application state is context, not
+        authorization. Questions asking what to do or what comes next seek an answer, not a state
+        change.
+      actions:
+        start:
+          criterion: The user explicitly asks to begin or receive the tea-making walkthrough now.
+          tool: workflow__start
+          authorize: true
+        status:
+          criterion: The user asks for the guide status.
+          tool: workflow__status
+        other: &id001
+          criterion: The request belongs elsewhere, is ambiguous, or is not a request for this capability.
+          handoff: true
+    destinations:
+      watch:
+        description: Start, stop, or report status of the focused visual change watcher, such as
+          watching for spills. Not an immediate camera question or guide control.
+        question:
+          instructions: Classify only the current request addressed to the assistant. Never act on
+            negated, quoted, reported, hypothetical, or deliberative wording. Application state is
+            context, not authorization. Questions asking what to do or what comes next seek an answer,
+            not a state change.
+          actions:
+            start:
+              criterion: The user explicitly requests start of the focused visual change watcher,
+                such as watching for spills.
+              tool: change_watch__start
+              arguments:
+                instruction: $request
+              authorize: true
+            stop:
+              criterion: The user explicitly requests stop of the focused visual change watcher,
+                such as watching for spills.
+              tool: change_watch__stop
+              authorize: true
+            status:
+              criterion: The user explicitly requests status of the focused visual change watcher,
+                such as watching for spills.
+              tool: change_watch__status
+            other: *id001
+      transcript:
+        description: Start, stop, or report status of the spoken transcript recorder. Not an immediate
+          camera question or guide control.
+        question:
+          instructions: Classify only the current request addressed to the assistant. Never act on
+            negated, quoted, reported, hypothetical, or deliberative wording. Application state is
+            context, not authorization. Questions asking what to do or what comes next seek an answer,
+            not a state change.
+          actions:
+            start:
+              criterion: The user explicitly requests start of the spoken transcript recorder.
+              tool: transcript__start
+              authorize: true
+            stop:
+              criterion: The user explicitly requests stop of the spoken transcript recorder.
+              tool: transcript__stop
+              authorize: true
+            status:
+              criterion: The user explicitly requests status of the spoken transcript recorder.
+              tool: transcript__status
+            other: *id001
+      journal:
+        description: Start, stop, or report status of the general periodic visual activity journal.
+          Not an immediate camera question or guide control.
+        question:
+          instructions: Classify only the current request addressed to the assistant. Never act on
+            negated, quoted, reported, hypothetical, or deliberative wording. Application state is
+            context, not authorization. Questions asking what to do or what comes next seek an answer,
+            not a state change.
+          actions:
+            start:
+              criterion: The user explicitly requests start of the general periodic visual activity
+                journal.
+              tool: video_log__start
+              authorize: true
+            stop:
+              criterion: The user explicitly requests stop of the general periodic visual activity
+                journal.
+              tool: video_log__stop
+              authorize: true
+            status:
+              criterion: The user explicitly requests status of the general periodic visual activity
+                journal.
+              tool: video_log__status
+            other: *id001
+      observation:
+        description: 'Immediate questions about what the participant currently sees: visible objects,
+          readable text, appearance, or surroundings.'
+        question:
+          instructions: Classify only the current request addressed to the assistant. Never act on
+            negated, quoted, reported, hypothetical, or deliberative wording. Application state is
+            context, not authorization. Questions asking what to do or what comes next seek an answer,
+            not a state change.
+          actions:
+            read:
+              criterion: Inspect the current camera.
+              tool: current_view
+              arguments:
+                question: $request
+      reference:
+        description: Questions about tea varieties, brewing temperatures, steeping duration, and
+          hot-water handling from the local tea reference documents.
+        question:
+          instructions: Classify only the current request addressed to the assistant. Never act on
+            negated, quoted, reported, hypothetical, or deliberative wording. Application state is
+            context, not authorization. Questions asking what to do or what comes next seek an answer,
+            not a state change.
+          actions:
+            read:
+              criterion: Retrieve brewing reference facts.
+              generate: true
+              tool: rag_lookup
+              arguments:
+                query: $request
+                top_k: 2
+      history:
+        description: Recall observations recorded earlier by the independent visual watcher, spoken-transcript
+          recorder, or visual journal.
+        question:
+          instructions: Classify only the current request addressed to the assistant. Never act on
+            negated, quoted, reported, hypothetical, or deliberative wording. Application state is
+            context, not authorization. Questions asking what to do or what comes next seek an answer,
+            not a state change.
+          actions:
+            read:
+              criterion: Read recent background facts.
+              generate: true
+              tool: application_context__query
+    active_prompt: You are the active tea guide. The guide runs until finished or reset. Follow
+      the advancement policy in current execution context. Automatic mode moves on after confirmation;
+      do not ask the user to say next. Manual mode waits for the user's next command. Answer tea-making
+      questions from the current guide position and known state. Never answer an unrelated request, even when you know the answer; briefly decline it.
+      For instructions or an overview, summarize the guide order with known brewing values. A procedural,
+      current, next, or previous-step question is answered from guide state and instructions. For
+      a requested live fact, use the supplied fresh result; if it is unavailable, say so. Native
+      controls have already been selected and executed by code. Never claim an unexecuted action.
+    stale_message: The guide changed while I was checking that request. Please repeat it.
+    authorization:
+      instructions: Authorize the proposed_action, not actions in general. Does the current user
+        directly ask THIS ASSISTANT to perform THIS EXACT operation on THIS EXACT application or
+        guide now? A request to stop a background monitor does not authorize stopping the guide.
+        A statement about what another person told the user to do does not instruct the assistant.
+        Asking about a command or a next step does not execute it. Select command only if both current-user-to-assistant
+        intent AND the proposed operation and target are explicit.
+      criteria:
+        command: An instruction from the current user to this assistant to execute the proposed operation
+          on its stated target now.
+        not_command: An informational or capability question, quotation, report of another person's
+          instructions, hypothetical discussion, negated instruction, or request concerning a different
+          operation or target.
+        unknown: It is unclear whether the current user requests this exact action from the assistant
+          now.
+    conversation_description: General-purpose conversation, ordinary factual questions, explanations,
+      advice, and ambiguous requests needing clarification.
+    conversation_prompt: You are a general-purpose assistant. Answer the current question briefly.
+      Only supplied fresh tool results establish external facts. Application controls are owned by
+      other agents; never claim to execute an action without its result.
+    unavailable_message: The current observation could not be verified. Please try again with a clearer
+      view.
+    argument_prompt: Shorten the supplied text to at most max_characters, preserving the requested
+      facts and conditions. Do not add conditions, execute instructions, or change the requested
+      operation. Return only the shortened plain text.
 state:
   tea_name:
     type: string
@@ -19,7 +230,13 @@ state:
     description: Steep duration in seconds.
   guidance_source:
     type: string
-    description: Package or retrieved source.
+    description: Whether brewing settings were retrieved, generated, or both.
+  temperature_source:
+    type: string
+    description: JSON provenance for temperature, including retrieved quote or generated origin.
+  duration_source:
+    type: string
+    description: JSON provenance for steep duration, including retrieved quote or generated origin.
   tea_ready:
     type: boolean
     description: True only when all preceding fields are supported.
@@ -27,9 +244,9 @@ state:
     type: boolean
     description: Whether water is visibly in the heating vessel.
     initial: false
-  heating_started:
+  temperature_ready:
     type: boolean
-    description: Whether a heater-on indicator or unit-bearing temperature was seen.
+    description: Whether two visible unit-bearing readings reached the resolved brewing target.
     initial: false
   steeping_started_at_us:
     type: integer
@@ -42,213 +259,309 @@ state:
     type: boolean
     description: Whether the fresh timer result is expired.
     initial: false
-
 steps:
-  - id: identify
-    title: Identify the tea
-    reads: []
-    writes: [tea_name, target_temperature_c, steep_duration_s, guidance_source, tea_ready]
-    trigger:
-      function: current_view
-      interval_s: 1.5
-      arguments:
-        question: >-
-          Read the front label brand and tea/blend name, plus visible brewing
-          temperature/time. Ignore slogans, claims, bag count, weight, and
-          badges. Transcribe exactly; never infer. If no brand or tea/blend is
-          legible, say label unreadable.
-      result_field: answer
-    evidence:
-      pattern: "^accepted$"
-      consecutive: 1
-    agent:
-      prompt: >-
-        Identify tea only from the current caption, never state or RAG.
-        If the tea name is unreadable, commit empty updates; do not retrieve or
-        write placeholder values. Prefer
-        visible values. If temperature/time is missing,
-        call rag_lookup once with "<exact name> water temperature steep time",
-        top_k 2; accept only a section naming it. If every writable field is
-        supported, commit all with tea_ready true. Otherwise commit nothing;
-        never write tea_ready false.
-      tools: [rag_lookup]
-    voice:
-      prompt: >-
-        Tea identity comes only from state tea_name or current_view, never RAG.
-        tea_ready means the tea instructions were identified, not that the
-        drink has been prepared.
-        If the exact name is unknown, inspect the current frame. Retrieve only
-        missing temperature or duration after the exact name is known. Never
-        replace package values. Answer only what was asked.
-      tools: [current_view, rag_lookup]
-    complete_when: {tea_ready: true}
-    next: fill_water
-    state_on_skip:
-      tea_name: generic tea
-      target_temperature_c: 93
-      steep_duration_s: 180
-      guidance_source: generic fallback
+- id: identify
+  title: Identify the tea
+  reads: []
+  writes:
+  - tea_name
+  - target_temperature_c
+  - steep_duration_s
+  - guidance_source
+  - temperature_source
+  - duration_source
+  - tea_ready
+  trigger:
+    function: current_view
+    interval_s: 1.5
+    arguments:
+      question: Read only the visibly legible tea brand and product or tea type. Do not identify
+        tea from packaging color, artwork, a cup, or familiarity. If no tea label is legible, return null.
+    result_field: answer
+  evidence:
+    pattern: ^accepted$
+    consecutive: 1
+  voice:
+    prompt: Use established identity and settings. Brewing settings come from retrieved guidance or
+      generated recommendations; use their recorded provenance and never claim they were read on the
+      package. tea_ready means brewing settings are resolved, not that the drink is prepared.
+    tools:
+    - current_view
+    - rag_lookup
+  complete_when:
+    tea_ready: true
+  next: fill_water
+  state_on_skip:
+    tea_name: generic tea
+    target_temperature_c: 93
+    steep_duration_s: 180
+    guidance_source: generic fallback
+    tea_ready: true
+  messages:
+    enter: Hold the tea package or tag in view so I can read it.
+    complete: The brewing settings are ready.
+    skip: I will use generic tea defaults.
+  observation:
+    kind: extract
+    instructions: Return only tea_name from legible label text. Include the tea type if printed.
+      Return null if no tea name or type is legible. Do not infer identity or brewing settings.
+    visual_fields:
+    - tea_name
+    retain:
+    - tea_name
+    fields:
+      tea_name:
+        type: string
+        description: Visible brand and exact tea or blend name. Use JSON null when unavailable.
+        unavailable_values:
+        - "null"
+        - "unknown"
+        - "unreadable"
+        - "not visible"
+        - "none"
+        - "N/A"
+      target_temperature_c:
+        type: number
+        minimum: 1
+        description: Brewing temperature recommendation with its Celsius or Fahrenheit unit.
+        units:
+          celsius:
+            scale: 1
+          fahrenheit:
+            offset: -32
+            scale: 0.5555555555555556
+      steep_duration_s:
+        type: integer
+        minimum: 1
+        description: Brewing duration recommendation with its seconds or minutes unit.
+        units:
+          seconds:
+            scale: 1
+          minutes:
+            scale: 60
+    lookup:
+      identity_field: tea_name
+      query: '{tea_name} water temperature steep time'
+      fields:
+      - target_temperature_c
+      - steep_duration_s
+      instructions: Extract brewing temperature and duration supported by passages relevant to the
+        identified tea. Prefer an exact product match; otherwise a passage for its explicitly identified
+        tea type may supply settings. Never substitute a different tea type or invent a range midpoint.
+        If a passage gives a range without a recommended value, leave that field unavailable.
+      fallback_instructions: Recommend conventional brewing settings for the explicitly identified tea
+        type, only for requested missing fields. Return null if the identity does not establish a tea
+        type. Never invent the identity. Return one recommended temperature and duration, with units.
+      source_fields:
+        target_temperature_c: temperature_source
+        steep_duration_s: duration_source
+      updates:
+        guidance_source: resolved settings; see per-field provenance
+    updates:
+      tea_name: $observation.tea_name
+      target_temperature_c: $observation.target_temperature_c
+      steep_duration_s: $observation.steep_duration_s
+      guidance_source: retrieved
       tea_ready: true
-    messages:
-      enter: Hold the tea package or tag in view so I can read it.
-      complete: I found the tea instructions. Say next when ready.
-      skip: I will use generic tea defaults.
-
-  - id: fill_water
-    title: Fill the heating vessel
-    reads: [tea_name, target_temperature_c, steep_duration_s]
-    writes: [water_filled]
-    trigger:
-      function: current_view
-      interval_s: 2
+- id: fill_water
+  title: Fill the heating vessel
+  reads:
+  - tea_name
+  - target_temperature_c
+  - steep_duration_s
+  writes:
+  - water_filled
+  trigger:
+    function: current_view
+    interval_s: 2
+    arguments:
+      question: Describe the visible interior and contents of the kettle or pot. State whether water
+        is visible inside and what supports that reading. If the contents are unclear, say so. Never
+        infer.
+    result_field: answer
+  evidence:
+    pattern: ^accepted$
+    consecutive: 2
+  voice:
+    prompt: Use known water_filled or supplied fresh visual evidence. A user report is not visual
+      confirmation. Without a visible interior and concrete water cues, say it is not yet visually
+      confirmed.
+    tools:
+    - current_view
+  complete_when:
+    water_filled: true
+  next: heat_water
+  state_on_skip:
+    water_filled: true
+  messages:
+    enter: Fill a kettle or pot with fresh water and keep it in view.
+    complete: The vessel has water.
+    skip: I will assume the vessel is filled.
+  observation:
+    kind: choice
+    structured: true
+    instructions: Judge only the fresh visual description. Do not assume a filled vessel from its
+      presence, prior state, or a user report.
+    criteria:
+      accepted: The description clearly shows water inside the kettle or pot, supported by visible
+        interior water cues.
+      rejected: The visible interior is clearly empty or dry.
+      unknown: Interior or water contents are obscured, ambiguous, not visible, or unsupported.
+    updates:
+      water_filled: true
+- id: heat_water
+  title: Heat the water
+  reads:
+  - tea_name
+  - target_temperature_c
+  - steep_duration_s
+  writes:
+  - temperature_ready
+  trigger:
+    function: current_view
+    interval_s: 2
+    arguments:
+      question: Read the current kettle or thermometer temperature and its explicit Celsius or Fahrenheit
+        unit. Distinguish the CURRENT measured reading from a target setting.
+    result_field: answer
+  evidence:
+    pattern: ^accepted$
+    consecutive: 2
+  voice:
+    prompt: Explain the target from known state. Repeat the exact current number and unit from supplied
+      fresh evidence. For hot-enough questions report the native verification result; never calculate
+      or infer readiness yourself. If a reading or unit is unavailable, say so.
+    tools:
+    - current_view
+    - temperature__verify
+  complete_when:
+    temperature_ready: true
+  next: start_steeping
+  state_on_skip:
+    temperature_ready: true
+  messages:
+    enter: Heat the water to {{ target_temperature_c | temperature_c }}.
+    complete: The water has reached the brewing temperature.
+    skip: I will assume the water has reached the brewing target.
+  observation:
+    kind: extract
+    instructions: Extract only the CURRENT numeric temperature and its explicit unit. Ignore printed
+      target or setpoint numbers. If the unit or current-versus-target role is unclear, return null
+      for both fields.
+    fields:
+      reading:
+        type: number
+        description: Exact current temperature reading, not a target.
+      unit:
+        type: string
+        choices:
+        - celsius
+        - fahrenheit
+        description: Explicit visible temperature unit.
+    evaluation:
+      function: temperature__verify
       arguments:
-        question: >-
-          Describe the visible interior and contents of the kettle or pot.
-          State whether water is visible inside and what supports that reading.
-          If the contents are unclear, say so. Never infer.
-      result_field: answer
-    evidence:
-      pattern: "^accepted$"
-      consecutive: 2
-    agent:
-      prompt: >-
-        Judge the fresh caption semantically without requiring particular
-        words. Set water_filled true when it reasonably shows water inside the
-        vessel. Otherwise commit empty updates and message.
-      tools: []
-    voice:
-      prompt: >-
-        Give instructions or verify with current_view. A user report is not
-        visual confirmation. Confirm filled only from state water_filled or a
-        current view showing the vessel interior and concrete water cues;
-        otherwise say it is not yet visually confirmed.
-      tools: [current_view]
-    complete_when: {water_filled: true}
-    next: heat_water
-    state_on_skip: {water_filled: true}
-    messages:
-      enter: Fill a kettle or pot with fresh water and keep it in view.
-      complete: The vessel has water. Say next when ready.
-      skip: I will assume the vessel is filled.
-
-  - id: heat_water
-    title: Heat the water
-    reads: [tea_name, target_temperature_c, steep_duration_s]
-    writes: [heating_started]
-    trigger:
-      function: current_view
-      interval_s: 2
-      arguments:
-        question: >-
-          Describe the visible kettle or thermometer display and transcribe its
-          current numeric reading and unit. If either is unclear, say so. Do not
-          confuse a printed target temperature with the current reading.
-      result_field: answer
-    evidence:
-      pattern: "^accepted$"
-      consecutive: 2
-    agent:
-      prompt: >-
-        This step detects that heating is underway; it does not wait for the tea
-        target temperature. Ignore target_temperature_c when deciding this
-        step. For every fresh current reading with an explicit Celsius or
-        Fahrenheit unit, first call temperature__threshold with that exact
-        reading and a threshold_c of 50. If its above result is true, commit
-        heating_started true. If above is false, commit empty updates and
-        message with rejected evidence. For a target value, ambiguous unit,
-        missing reading, or unclear current-versus-target value, do not call the
-        tool; commit empty updates and message with unknown evidence so it does
-        not erase a prior confirmed reading.
-      tools: [temperature__threshold]
-    voice:
-      prompt: >-
-        Explain target from state. For a reading, call current_view and
-        repeat the visible number and unit; do not verify. For hot-enough
-        checks, call current_view, then temperature__verify only with an exact
-        number and Celsius or Fahrenheit unit. Report result. If missing,
-        say the reading is unavailable.
-      tools: [current_view, temperature__verify]
-    complete_when: {heating_started: true}
-    next: start_steeping
-    state_on_skip: {heating_started: true}
-    messages:
-      enter: Heat the water to {{ target_temperature_c | temperature_c }}.
-      complete: Heating is underway. Wait for the water to reach the target temperature.
-      skip: I will assume heating has started.
-
-  - id: start_steeping
-    title: Start steeping
-    reads: [tea_name, target_temperature_c, steep_duration_s]
-    writes: [steeping_started_at_us, steeping_started]
-    trigger:
-      function: current_view
-      interval_s: 2
-      arguments:
-        question: >-
-          Look for two separately visible facts in one vessel: a water surface
-          or level; and a tea bag, infuser, or leaves entering or immersed in
-          that water. If either water or tea-water contact is not visible, say
-          it is unconfirmed. Note hazards.
-      result_field: answer
-    evidence:
-      pattern: "^accepted$"
-      consecutive: 2
-    agent:
-      prompt: >-
-        Judge when steeping starts, not when it finishes. Treat unconfirmed,
-        unknown, unclear, or missing visual evidence as a hard stop: do not call
-        clock__now, and commit empty updates and message with unknown evidence.
-        Only when the fresh caption explicitly confirms both visible liquid and
-        tea visibly contacting that liquid inside the same vessel, first call
-        clock__now. Nearby, above, or outside the liquid does not count. Then
-        commit exactly its epoch_us as steeping_started_at_us with
-        steeping_started true. For any other caption, do not infer contact from
-        context or prior state; commit empty updates and message. Never invent or
-        replace a start time.
-      tools: [clock__now]
-    voice:
-      prompt: >-
-        Give instructions or verify with current_view. A report or tea item in
-        a vessel is not confirmation. Require both visible water and visible
-        tea-water contact. The observation loop, not this answer, starts the
-        timer.
-      tools: [current_view]
-    complete_when: {steeping_started: true}
-    next: steep_timer
-    complete_on_skip: true
-    state_on_skip: {steeping_started: true}
-    messages:
-      enter: Put the tea in the water; I will start the timer when I see it immersed.
-      complete: Steeping timer started. Say next to monitor it.
-      skip: Steeping detection and the timer were skipped.
-
-  - id: steep_timer
-    title: Wait for steeping
-    reads:
-      [tea_name, target_temperature_c, steeping_started_at_us, steep_duration_s]
-    writes: [steeping_complete]
-    trigger:
+        reading: $observation.reading
+        unit: $observation.unit
+      match:
+        ready: true
+    updates:
+      temperature_ready: true
+- id: start_steeping
+  title: Start steeping
+  reads:
+  - tea_name
+  - target_temperature_c
+  - steep_duration_s
+  writes:
+  - steeping_started_at_us
+  - steeping_started
+  trigger:
+    function: current_view
+    interval_s: 2
+    arguments:
+      question: Describe whether the tea bag, infuser, or leaves visibly contact water inside
+        the same vessel. Describe the physical relationship, not just the presence of tea and water.
+        If the water or contact is obscured, explicitly say the relationship is unconfirmed.
+    result_field: answer
+  evidence:
+    pattern: ^accepted$
+    consecutive: 2
+  context:
+    active_operation:
       function: clock__timer
-      interval_s: 1
       arguments:
         started_at_us: $state.steeping_started_at_us
         duration_s: $state.steep_duration_s
-    agent:
-      prompt: >-
-        Copy the fresh clock__timer expired boolean: set steeping_complete true
-        only when expired is true. While false, commit empty updates/message.
-        Never infer from elapsed text, wall time, or prior state.
-      tools: []
-    voice:
-      prompt: >-
-        Call clock__timer for every timer or completion question. Report only
-        its fresh remaining time or completion; never calculate from state,
-        prior answers, or wall-clock time.
-      tools: [clock__timer]
-    complete_when: {steeping_complete: true}
-    next: null
-    state_on_skip: {steeping_complete: true}
-    messages:
-      enter: Steep for {{ steep_duration_s | duration }}.
-      complete: Steeping is complete. Remove the tea, then say next to finish.
-      skip: Timer skipped; remove the tea when it tastes right.
+  voice:
+    prompt: Use known state or supplied fresh visual evidence. Require visible water and tea-water
+      contact in the same vessel for confirmation. The observation loop alone starts the timer; this
+      answer never starts it.
+    tools:
+    - current_view
+  complete_when:
+    steeping_started: true
+  next: steep_timer
+  complete_on_skip: true
+  state_on_skip:
+    steeping_started: true
+  messages:
+    enter: Put the tea in the water; I will start the timer when I see it immersed.
+    complete: Steeping timer started.
+    skip: Steeping detection and the timer were skipped.
+  observation:
+    kind: choice
+    structured: true
+    instructions: Does this observation explicitly establish that tea contacts or is immersed in
+      water inside the vessel? Judge the relationship from this observation only. Separate mentions
+      of tea and water do not establish contact. Unanswerable or missing evidence is unknown.
+    criteria:
+      accepted: Visible liquid surface or level AND a tea bag, infuser, or leaves visibly contacting
+        that liquid in the same vessel.
+      rejected: A clear view shows tea separate from the water, outside or above it, or no water
+        in the visible vessel.
+      unknown: Water visibility or tea-water contact is unclear, unconfirmed, occluded, or missing.
+    updates:
+      steeping_started_at_us: $clock.now_us
+      steeping_started: true
+- id: steep_timer
+  title: Wait for steeping
+  reads:
+  - tea_name
+  - target_temperature_c
+  - steeping_started_at_us
+  - steep_duration_s
+  writes:
+  - steeping_complete
+  trigger:
+    function: clock__timer
+    interval_s: 1
+    arguments:
+      started_at_us: $state.steeping_started_at_us
+      duration_s: $state.steep_duration_s
+  context:
+    active_operation:
+      function: clock__timer
+      arguments:
+        started_at_us: $state.steeping_started_at_us
+        duration_s: $state.steep_duration_s
+  voice:
+    prompt: Explain the current execution context and procedure naturally. Active-operation values
+      are sampled for this turn. Historical dialogue describes previous answers and is not a current reading.
+    tools:
+    - current_view
+  complete_when:
+    steeping_complete: true
+  next: null
+  state_on_skip:
+    steeping_complete: true
+  messages:
+    enter: Steep for {{ steep_duration_s | duration }}.
+    complete: Steeping is complete. Remove the tea.
+    skip: Timer skipped; remove the tea when it tastes right.
+  observation:
+    kind: result
+    match:
+      expired: true
+    updates:
+      steeping_complete: true

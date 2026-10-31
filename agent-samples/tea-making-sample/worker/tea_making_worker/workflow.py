@@ -6,8 +6,10 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 import time
+from collections.abc import Awaitable, Callable
 from contextlib import suppress
 from pathlib import Path
 from typing import Any
@@ -16,7 +18,7 @@ import nemo_relay
 from loguru import logger
 from pydantic import BaseModel
 from xr_ai_interaction import ParticipantJoined, ParticipantLeft
-from xr_ai_models import ChatMessage, LLMService, ToolDef
+from xr_ai_models import DecisionService, LLMService
 from xr_ai_runtime import (
     Agent,
     AgentRuntime,
@@ -25,11 +27,13 @@ from xr_ai_runtime import (
     subscribe,
 )
 from xr_ai_tools import Tool, ToolSet
-from xr_ai_tools.current_frame import CurrentFrameTool
+from xr_ai_tools.current_frame import CurrentFrameRequest, CurrentFrameTool
 from xr_ai_tools.rag import RAGTools
-from xr_ai_tools.tool_calling import ToolLoopError, run_tool_loop
 from xr_ai_tools.vision import ImageQueryTool
 
+from ._capture import _attempt, _event
+from ._observations import _decode_values, _resolve
+from ._visual_step import _VisualValidationStep
 from .events import (
     GUIDANCE_NOTICE_TOPIC,
     GUIDANCE_RECORD_TOPIC,
@@ -42,16 +46,14 @@ from .events import (
 )
 from .spec import Step, Workflow
 from .workflow_state import (
+    WorkflowEvent,
     WorkflowSession,
     WorkflowStore,
     monotonic_now,
 )
 from .workflow_tools import (
     _NAMED_TOOL_NAMES,
-    CommitRequest,
-    CurrentViewRequest,
     TimerRequest,
-    WorkflowCommitResult,
     clock_now_tool,
     clock_timer_tool,
     named_tool_set,
@@ -59,14 +61,12 @@ from .workflow_tools import (
     rag_lookup_tool,
     temperature_threshold_tool,
     temperature_verify_tool,
-    workflow_commit_tool,
     workflow_management_tools,
     workflow_start_tool,
     workflow_status_tool,
 )
 
 _PROMPTS = Path(__file__).resolve().parent / "prompts"
-_OBSERVATION_PROMPT = _PROMPTS / "guidance_observation.txt"
 _VOICE_PROMPT = _PROMPTS / "guidance_voice.txt"
 _POLL_INTERVAL_S = 0.25
 
@@ -75,10 +75,7 @@ class _TriggerResult(BaseModel):
     available: bool
     value: Any = None
     detail: str = ""
-
-
-class _StaleObservation(RuntimeError):
-    """Stop an observation turn after its workflow revision changes."""
+    frame_key: tuple[str, str, int, int] | None = None
 
 
 class GuidanceAgent(Agent):
@@ -89,38 +86,40 @@ class GuidanceAgent(Agent):
         *,
         workflow: Workflow,
         llm: LLMService,
+        decisions: DecisionService,
         current_frame: CurrentFrameTool,
         image_query: ImageQueryTool,
         rag: RAGTools,
         vlm_timeout_s: float = 15.0,
+        record_event: Callable[[WorkflowSession, WorkflowEvent], Awaitable[None]] | None = None,
     ) -> None:
         if vlm_timeout_s <= 0:
             raise ValueError("vlm_timeout_s must be positive")
         super().__init__()
+        self._record_event = record_event
         self.workflow = workflow
         self.store = WorkflowStore(workflow)
         self._llm = llm
+        self._decisions = decisions
         self._current_frame = current_frame
         self._image_query = image_query
         self._rag = rag
         self._vlm_timeout_s = vlm_timeout_s
-        self._observation_prompt = _OBSERVATION_PROMPT.read_text(
-            encoding="utf-8"
-        ).strip()
         self._voice_prompt = _VOICE_PROMPT.read_text(encoding="utf-8").strip()
         self._runtime: AgentRuntime | None = None
         self._connected: set[str] = set()
         self._tasks: dict[str, asyncio.Task[None]] = {}
         self._publish_locks: dict[str, asyncio.Lock] = {}
         for step in workflow.steps.values():
-            unknown = (
-                set(step.agent.tools) | set(step.voice.tools)
-            ) - _NAMED_TOOL_NAMES
+            names = set(step.voice.tools)
+            if step.observation.evaluation is not None:
+                names.add(step.observation.evaluation.function)
+            if step.observation.lookup is not None:
+                names.add("rag_lookup")
+            names.update(projection.function for projection in step.context.values())
+            unknown = names - _NAMED_TOOL_NAMES
             if unknown:
-                raise ValueError(
-                    f"workflow step {step.id!r} references unknown tools: "
-                    f"{sorted(unknown)}"
-                )
+                raise ValueError(f"workflow step {step.id!r} references unknown tools: {sorted(unknown)}")
 
     def bind_runtime(self, runtime: AgentRuntime) -> None:
         """Bind runtime publication before participant work starts."""
@@ -162,6 +161,46 @@ class GuidanceAgent(Agent):
         }
         tools.update(dict(quick.items()))
         return ToolSet(tools)
+
+    async def context_snapshot(self, participant_id: str) -> dict[str, Any]:
+        """Sample native sources for any question, without invoking perception."""
+        while True:
+            session = self.store.find(participant_id)
+            if session is None:
+                return {"active": False, "run_id": None}
+            async with session.lock:
+                run_id, revision, step_id = session.run_id, session.revision, session.step_id
+                state = copy.deepcopy(session.state)
+                evidence = {step_id: copy.deepcopy(session.evidence[step_id])} if step_id in session.evidence else {}
+                active = session.active
+            step = self.workflow.step(step_id) if active and step_id is not None else None
+            operations = {}
+            if step is not None:
+                tools = self._named_tools(session, tuple(value.function for value in step.context.values()))
+                for name, projection in step.context.items():
+                    tool = tools.get(projection.function)
+                    try:
+                        arguments = _resolve(projection.arguments, state, {})
+                    except KeyError:
+                        operations[name] = {"available": False, "reason": "Required state is not established."}
+                        continue
+                    request = tool.request_model.model_validate(arguments)
+                    result = await tool.execute(request)
+                    operations[name] = {"available": True, **result.model_dump(mode="json")}
+            async with session.lock:
+                if self.store.find(participant_id) is not session:
+                    continue
+                if (session.run_id, session.revision, session.step_id) != (run_id, revision, step_id):
+                    continue
+                return {
+                    "run_id": run_id, "revision": revision, "active": active,
+                    "step": {"id": step.id, "title": step.title} if step else None,
+                    "state": state, "operations": operations,
+                    "sampled_at_us": _timestamp_us(), "evidence": evidence,
+                    "confirmation_hits": session.evidence_hits,
+                    "step_complete": step.is_complete(state) if step else False,
+                    "advancement": self.workflow.advancement,
+                }
 
     def active_context(self, participant_id: str) -> str | None:
         """Return current-step policy and sparse state without conversation history."""
@@ -260,6 +299,22 @@ class GuidanceAgent(Agent):
             temperature_verify=temperature_verify_tool(session),
         )
 
+    def _visual_step(self, session: WorkflowSession, step: Step) -> _VisualValidationStep:
+        names = []
+        if step.observation.evaluation is not None:
+            names.append(step.observation.evaluation.function)
+        if step.observation.lookup is not None:
+            names.append("rag_lookup")
+        return _VisualValidationStep(
+            question=str(step.trigger.arguments.get("question", "")),
+            policy=step.observation,
+            observer=self._image_query,
+            decisions=self._decisions,
+            llm=self._llm,
+            tools=self._named_tools(session, tuple(names)),
+            timeout_s=self._vlm_timeout_s,
+        )
+
     def _start_monitor(self, participant_id: str) -> None:
         existing = self._tasks.get(participant_id)
         if existing is not None and not existing.done():
@@ -326,47 +381,65 @@ class GuidanceAgent(Agent):
 
     async def _tick(self, session: WorkflowSession) -> None:
         async with session.lock:
-            if (
-                not session.active
-                or session.step_id is None
-                or self.store.step_complete(session)
-            ):
+            if not session.active or session.step_id is None or self.store.step_complete(session):
                 return
             now = monotonic_now()
             if session.next_tick > now:
                 return
             step = self.workflow.step(session.step_id)
             revision = session.revision
+            run_id = session.run_id
             state = dict(session.state)
             session.next_tick = now + step.trigger.interval_s
-        trigger = await self._trigger(
-            session.participant_id,
-            step,
-            state,
-        )
-        next_state: dict[str, Any] | None = None
-        async with session.lock:
-            if not self._current(session, step, revision):
-                return
-            if not trigger.available:
-                self.store.record(
-                    session,
-                    "trigger.unavailable",
-                    trigger.detail,
+
+        def snapshot():
+            return {
+                "state": dict(session.state),
+                "revision": session.revision,
+                "run_id": session.run_id,
+                "step_id": session.step_id,
+                "evidence_hits": session.evidence_hits,
+                "active": session.active,
+                "current_session": self.store.find(session.participant_id) is session,
+            }
+
+        async with _attempt(session.participant_id, "observer", step_id=step.id, snapshot=snapshot):
+            trigger = await self._trigger(session.participant_id, step, state)
+            await _event("trigger.finished", **trigger.model_dump(mode="json"))
+
+            next_state: dict[str, Any] | None = None
+            async with session.lock:
+                if not self._current(session, step, revision):
+                    return
+                if trigger.frame_key is not None and trigger.frame_key == session.observed_frame:
+                    return
+                if not trigger.available:
+                    session.evidence[step.id] = {
+                        "available": False, "detail": trigger.detail,
+                        "observed_at_us": trigger.frame_key[3] if trigger.frame_key else _timestamp_us(),
+                        "frame_key": trigger.frame_key,
+                    }
+                    self.store.record(
+                        session,
+                        "trigger.unavailable",
+                        trigger.detail,
+                    )
+                else:
+                    next_state = dict(session.state)
+            if trigger.available:
+                if next_state is None:
+                    raise AssertionError("model observation requires current state")
+                processed = await self._observe(
+                    session, step, trigger.value, next_state, revision, frame_key=trigger.frame_key
                 )
-            else:
-                next_state = dict(session.state)
-        if trigger.available:
-            if next_state is None:
-                raise AssertionError("model observation requires current state")
-            await self._observe(
-                session,
-                step,
-                trigger.value,
-                next_state,
-                revision,
-            )
-        await self._flush(session)
+                if processed and trigger.frame_key is not None:
+                    async with session.lock:
+                        if (
+                            self.store.find(session.participant_id) is session
+                            and session.run_id == run_id and session.step_id == step.id
+                        ):
+                            session.observed_frame = trigger.frame_key
+            await self._flush(session)
 
     async def _trigger(
         self,
@@ -374,25 +447,25 @@ class GuidanceAgent(Agent):
         step: Step,
         state: dict[str, Any],
     ) -> _TriggerResult:
-        arguments = _resolve(step.trigger.arguments, state)
+        arguments = _resolve(step.trigger.arguments, state, {})
         if step.trigger.function == "current_view":
-            tool = participant_current_view_tool(
-                participant_id,
-                self._current_frame,
-                self._image_query,
-                timeout_s=self._vlm_timeout_s,
+            # Keep visual inference on Omni. Choice-only decisions consume its description.
+            async with asyncio.timeout(self._vlm_timeout_s):
+                frame = await self._current_frame.execute(CurrentFrameRequest(participant_id=participant_id))
+                key = (step.id, frame.track_id, frame.sequence, frame.timestamp_us)
+                session = self.store.find(participant_id)
+                if session is not None and session.observed_frame == key:
+                    return _TriggerResult(available=False, frame_key=key, detail="frame already observed")
+                description = await self._visual_step(session, step).observe(frame)
+            if description is None:
+                return _TriggerResult(available=False, frame_key=key, detail="Visual evidence is unavailable")
+            return _TriggerResult(
+                available=True,
+                value=description,
+                frame_key=(step.id, frame.track_id, frame.sequence, frame.timestamp_us),
             )
-            result = await tool.execute(CurrentViewRequest.model_validate(arguments))
-            if not result.available:
-                return _TriggerResult(
-                    available=False,
-                    detail=result.text,
-                )
-            return _TriggerResult(available=True, value=result.text)
         if step.trigger.function == "clock__timer":
-            result = await clock_timer_tool().execute(
-                TimerRequest.model_validate(arguments)
-            )
+            result = await clock_timer_tool().execute(TimerRequest.model_validate(arguments))
             value: Any = result.model_dump(mode="json")
             if step.trigger.result_field is not None:
                 value = value[step.trigger.result_field]
@@ -406,189 +479,93 @@ class GuidanceAgent(Agent):
         observation: Any,
         state: dict[str, Any],
         revision: int,
-    ) -> None:
-        quick = self._named_tools(session, step.agent.tools)
-        commit = self._observation_commit_tool(session, step, revision)
-        tools = ToolSet(
-            {
-                commit.name: commit,
-                **dict(quick.items()),
-            }
+        *,
+        frame_key: tuple[str, str, int, int] | None = None,
+    ) -> bool:
+        policy = step.observation
+        started = time.perf_counter()
+        # Retain configured identity facts before retrieval; later unreadable frames
+        # cannot erase them, and retrieval failure must not discard visual evidence.
+        if policy.retain:
+            decoded = _decode_values(policy, observation)
+            retained = {name: decoded[name] for name in policy.retain if name not in state and name in decoded}
+            if retained:
+                async with session.lock:
+                    if not self._current(session, step, revision):
+                        return False
+                    result = self.store.commit(session, retained, "")
+                    if not result.accepted:
+                        raise ValueError(result.message)
+                    revision = session.revision
+                    state = dict(session.state)
+        outcome = await self._visual_step(session, step).evaluate(
+            observation, expected=self.workflow.project(step, state)
         )
-        request = json.dumps(
-            {
-                "observation": observation,
-                "already_complete": False,
-                "state": self.workflow.project(step, state),
-            },
-            ensure_ascii=False,
-            separators=(",", ":"),
+        await _event(
+            "observation.judged",
+            evidence=outcome.evidence,
+            values=outcome.values,
+            native_result=outcome.result,
+            expected_revision=revision,
         )
-        system = "\n".join(
-            (
-                self._observation_prompt,
-                _state_contract(self.workflow, step),
-                step.agent.prompt,
-            )
-        )
-
-        async def call_model(
-            messages: tuple[ChatMessage, ...],
-            definitions: tuple[ToolDef, ...],
-        ):
-            response = await self._llm.chat(
-                messages,
-                tools=definitions,
-                max_tokens=512,
-                temperature=0.0,
-                enable_thinking=False,
-            )
-            async with session.lock:
-                if not self._current(session, step, revision):
-                    raise _StaleObservation
-            return response
-
-        try:
-            result = await run_tool_loop(
-                (
-                    ChatMessage(role="system", content=system),
-                    ChatMessage(role="user", content=request),
-                ),
-                tools,
-                call_model,
-                max_iterations=3,
-                max_tool_calls=3,
-            )
-        except _StaleObservation:
-            return
-        except ToolLoopError as exc:
-            async with session.lock:
-                if self._current(session, step, revision):
-                    self._reject_observation_evidence(session, step)
-                    self.store.record(
-                        session,
-                        "agent.observation_skipped",
-                        str(exc),
-                    )
-            return
-        called = tuple(record.call.name for record in result.tool_calls)
-        commit_record = next(
-            (
-                record
-                for record in result.tool_calls
-                if record.call.name == "workflow__commit"
-            ),
-            None,
-        )
+        commit = None
         async with session.lock:
-            if commit_record is None:
-                if self._current(session, step, revision):
-                    self._reject_observation_evidence(session, step)
-                    self.store.record(
-                        session,
-                        "agent.observation_skipped",
-                        "model did not call workflow__commit",
-                    )
-                return
-            commit_result = json.loads(commit_record.message.content)
-            if (
-                commit_result.get("accepted") is True
-                and session.step_id == step.id
-                and session.revision == commit_result.get("revision")
-            ):
-                self.store.record(
-                    session,
-                    "agent.observation_complete",
-                    ",".join(called),
-                )
-
-    def _observation_commit_tool(
-        self,
-        session: WorkflowSession,
-        step: Step,
-        revision: int,
-    ) -> Tool:
-        """Count model completion judgments before applying guarded state."""
-
-        if step.evidence is None:
-            return workflow_commit_tool(
-                self.store,
+            if not self._current(session, step, revision):
+                return False
+            session.evidence[step.id] = {
+                "evidence": outcome.evidence, "values": outcome.values,
+                "native_result": outcome.result, "observation": observation,
+                "observed_at_us": frame_key[3] if frame_key else _timestamp_us(),
+                "frame_key": frame_key,
+            }
+            self.store.observe(session, outcome.evidence if outcome.evidence != "unknown" else None)
+            self.store.record(
                 session,
-                expected_step_id=step.id,
-                expected_revision=revision,
+                "agent.observation_complete",
+                json.dumps(
+                    {
+                        "kind": policy.kind,
+                        "evidence": outcome.evidence,
+                        "duration_ms": round((time.perf_counter() - started) * 1000, 2),
+                    }
+                ),
             )
-
-        async def commit(request: CommitRequest) -> WorkflowCommitResult:
-            async with session.lock:
-                if session.step_id != step.id or session.revision != revision:
-                    return WorkflowCommitResult(
-                        accepted=False,
-                        complete=False,
-                        message="observation is stale",
-                        revision=session.revision,
+            if outcome.evidence == "accepted":
+                # Bind values and timestamps only after confirmation, under the revision guard.
+                if step.evidence is None or session.evidence_hits >= step.evidence.consecutive:
+                    updates = _resolve(
+                        {**policy.updates, **outcome.overrides},
+                        state,
+                        outcome.values,
+                        now_us=_timestamp_us(),
                     )
-                updates = dict(request.updates)
-                invalid = self.store._invalid_commit_patch(
-                    session,
-                    step,
-                    updates,
-                )
-                if invalid:
-                    self.store.observe(session, None)
-                else:
-                    completion_proposed = self.store._completion_proposed(
-                        session,
-                        updates,
-                    )
-                    self.store.observe(
-                        session,
-                        "accepted"
-                        if completion_proposed
-                        else (
-                            None
-                            if request.evidence == "unknown"
-                            else "rejected"
-                        ),
-                    )
-                result = self.store.commit(session, updates, request.message)
-            return WorkflowCommitResult(
-                accepted=result.accepted,
-                complete=result.complete,
-                message=result.message,
-                revision=result.revision,
-            )
+                    commit = self.store.commit(session, updates, "")
+            elif policy.lookup is not None:
+                # Preserve independently resolved fields/provenance across retries,
+                # without applying completion literals or inferring missing values.
+                partial = {
+                    name: outcome.values[binding.removeprefix("$observation.")]
+                    for name, binding in policy.updates.items()
+                    if isinstance(binding, str) and binding.startswith("$observation.")
+                    and binding.removeprefix("$observation.") in outcome.values
+                }
+                partial.update(outcome.overrides)
+                if partial:
+                    commit = self.store.commit(session, partial, "")
 
-        return Tool(
-            "workflow__commit",
-            (
-                "Commit one semantic judgment from the fresh observation. "
-                "Use empty updates when the observation does not support completion. "
-                "For empty updates, mark evidence unknown only when the observation "
-                "cannot establish the required fact; mark it rejected when the "
-                "observation clearly contradicts that fact."
-            ),
-            CommitRequest,
-            WorkflowCommitResult,
-            commit,
-            return_direct=True,
-        )
 
-    def _reject_observation_evidence(
-        self,
-        session: WorkflowSession,
-        step: Step,
-    ) -> None:
-        if step.evidence is not None:
-            self.store.observe(session, None)
+        await _event("observation.applied", commit=commit)
+        return True
 
-    @staticmethod
     def _current(
+        self,
         session: WorkflowSession,
         step: Step,
         revision: int,
     ) -> bool:
         return (
-            session.active
+            self.store.find(session.participant_id) is session
+            and session.active
             and session.step_id == step.id
             and session.revision == revision
             and not step.is_complete(session.state)
@@ -625,10 +602,13 @@ class GuidanceAgent(Agent):
                         session.participant_id,
                     )
             for event in events:
+                if self._record_event is not None:
+                    await self._record_event(session, event)
                 try:
                     await runtime.publish(
                         GUIDANCE_RECORD_TOPIC,
                         GuidanceRecord(
+                            run_id=event.run_id,
                             timestamp_us=_timestamp_us(),
                             event=event.event,
                             step_id=event.step_id,
@@ -652,32 +632,6 @@ class GuidanceAgent(Agent):
         if participant_id is None:
             raise ValueError("tea guidance requires a participant")
         return participant_id
-
-
-def _resolve(value: Any, state: dict[str, Any]) -> Any:
-    if isinstance(value, dict):
-        return {name: _resolve(item, state) for name, item in value.items()}
-    if isinstance(value, list):
-        return [_resolve(item, state) for item in value]
-    if isinstance(value, str) and value.startswith("$state."):
-        name = value.removeprefix("$state.")
-        if name not in state:
-            raise ValueError(f"trigger references missing state: {name}")
-        return state[name]
-    return value
-
-
-def _state_contract(workflow: Workflow, step: Step) -> str:
-    writes = "; ".join(
-        (
-            f"{name}:{workflow.state_fields[name].type} — {workflow.state_fields[name].description.rstrip('.')}"
-        )
-        for name in step.writes
-    )
-    completion = ", ".join(
-        f"{name}={json.dumps(value)}" for name, value in step.complete_when.items()
-    )
-    return f"Writable state: {writes}. Completion requires {completion}."
 
 
 def _timestamp_us() -> int:

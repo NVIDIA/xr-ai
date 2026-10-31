@@ -13,6 +13,9 @@ from typing import Any
 
 import yaml
 
+from ._foreground_policy import _ForegroundPolicy
+from ._observations import _ObservationPolicy
+
 _ID = re.compile(r"^[a-z][a-z0-9_-]*$")
 _TYPES = {"boolean", "integer", "number", "string"}
 _TRUE_BOOL_STRINGS = {"1", "true", "yes", "on"}
@@ -29,9 +32,7 @@ def _parse_bool(value: object, label: str) -> bool:
         if normalized in _FALSE_BOOL_STRINGS:
             return False
     accepted = sorted(_TRUE_BOOL_STRINGS | _FALSE_BOOL_STRINGS)
-    raise ValueError(
-        f"{label} must be a boolean or one of {accepted} (got {value!r})"
-    )
+    raise ValueError(f"{label} must be a boolean or one of {accepted} (got {value!r})")
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,7 +91,7 @@ class Step:
     reads: tuple[str, ...]
     writes: tuple[str, ...]
     trigger: Trigger
-    agent: AgentPolicy
+    observation: _ObservationPolicy
     voice: AgentPolicy
     evidence: Evidence | None
     complete_when: dict[str, Any]
@@ -100,6 +101,7 @@ class Step:
     enter_message: str
     complete_message: str
     skip_message: str
+    context: dict[str, Trigger]
 
     @property
     def context_fields(self) -> tuple[str, ...]:
@@ -110,9 +112,7 @@ class Step:
     def is_complete(self, state: dict[str, Any]) -> bool:
         """Evaluate the declarative completion predicate."""
 
-        return bool(self.complete_when) and all(
-            state.get(name) == value for name, value in self.complete_when.items()
-        )
+        return bool(self.complete_when) and all(state.get(name) == value for name, value in self.complete_when.items())
 
 
 @dataclass(frozen=True, slots=True)
@@ -124,7 +124,10 @@ class Workflow:
     foreground_prompt: str
     complete_message: str
     state_fields: dict[str, StateField]
+    foreground: _ForegroundPolicy | None
     steps: dict[str, Step]
+    advancement: str = "automatic"
+    manual_advance_message: str = "Say next when ready."
 
     def step(self, step_id: str) -> Step:
         """Return one validated step by identifier."""
@@ -134,20 +137,12 @@ class Workflow:
     def initial_state(self) -> dict[str, Any]:
         """Build a fresh deep-copied initial state."""
 
-        return {
-            name: copy.deepcopy(field.initial)
-            for name, field in self.state_fields.items()
-            if field.initialized
-        }
+        return {name: copy.deepcopy(field.initial) for name, field in self.state_fields.items() if field.initialized}
 
     def project(self, step: Step, state: dict[str, Any]) -> dict[str, Any]:
         """Return only state explicitly visible to the supplied step."""
 
-        return {
-            name: copy.deepcopy(state[name])
-            for name in step.context_fields
-            if name in state
-        }
+        return {name: copy.deepcopy(state[name]) for name in step.context_fields if name in state}
 
 
 def load_workflow(path: Path) -> Workflow:
@@ -157,6 +152,9 @@ def load_workflow(path: Path) -> Workflow:
     if not isinstance(raw, dict):
         raise ValueError(f"workflow must be a mapping: {path}")
     task = _mapping(raw.get("task"), "task")
+    advancement = task.get("advancement", "automatic")
+    if advancement not in ("automatic", "manual"):
+        raise ValueError("task.advancement must be automatic or manual")
     fields = _fields(_mapping(raw.get("state"), "state"))
     raw_steps = raw.get("steps")
     if not isinstance(raw_steps, list) or not raw_steps:
@@ -170,18 +168,17 @@ def load_workflow(path: Path) -> Workflow:
         raise ValueError(f"unknown start step: {start!r}")
     for step in steps:
         if step.next_step is not None and step.next_step not in by_id:
-            raise ValueError(
-                f"step {step.id!r} has unknown next step {step.next_step!r}"
-            )
+            raise ValueError(f"step {step.id!r} has unknown next step {step.next_step!r}")
     return Workflow(
         name=str(task.get("name", "guided workflow")),
         start_step=start,
         foreground_prompt=str(task.get("foreground_prompt", "")).strip(),
-        complete_message=str(
-            task.get("complete_message", "Workflow complete.")
-        ).strip(),
+        complete_message=str(task.get("complete_message", "Workflow complete.")).strip(),
         state_fields=fields,
+        foreground=(_ForegroundPolicy.model_validate(task["foreground"]) if "foreground" in task else None),
         steps=by_id,
+        advancement=advancement,
+        manual_advance_message=str(task.get("manual_advance_message", "Say next when ready.")).strip(),
     )
 
 
@@ -212,9 +209,7 @@ def _step(value: Any, fields: dict[str, StateField]) -> Step:
     if not _ID.fullmatch(step_id):
         raise ValueError(f"invalid step id: {step_id!r}")
     if "auto_advance" in raw:
-        raise ValueError(
-            f"step {step_id!r} cannot auto-advance; advancement is user-controlled"
-        )
+        raise ValueError(f"step {step_id!r}: use task.advancement instead of step.auto_advance")
     reads = _names(raw.get("reads", []), f"steps.{step_id}.reads")
     writes = _names(raw.get("writes", []), f"steps.{step_id}.writes")
     completion = _mapping(
@@ -225,13 +220,9 @@ def _step(value: Any, fields: dict[str, StateField]) -> Step:
         raw.get("state_on_skip", {}),
         f"steps.{step_id}.state_on_skip",
     )
-    unknown = (
-        set(reads) | set(writes) | completion.keys() | state_on_skip.keys()
-    ) - fields.keys()
+    unknown = (set(reads) | set(writes) | completion.keys() | state_on_skip.keys()) - fields.keys()
     if unknown:
-        raise ValueError(
-            f"step {step_id!r} references unknown state: {sorted(unknown)}"
-        )
+        raise ValueError(f"step {step_id!r} references unknown state: {sorted(unknown)}")
     _validate_state_values(
         completion,
         fields,
@@ -243,8 +234,32 @@ def _step(value: Any, fields: dict[str, StateField]) -> Step:
         f"steps.{step_id}.state_on_skip",
     )
     trigger = _mapping(raw.get("trigger"), f"steps.{step_id}.trigger")
-    agent = _mapping(raw.get("agent"), f"steps.{step_id}.agent")
+    observation = _ObservationPolicy.model_validate(raw.get("observation"))
+    patch_fields = set(observation.updates) | (set(observation.lookup.updates) if observation.lookup else set())
+    patch_fields |= set(observation.retain)
+    if observation.lookup:
+        patch_fields |= set(observation.lookup.source_fields.values())
+    if not patch_fields <= set(writes):
+        raise ValueError(f"step {step_id!r} observation updates must be writable")
+    if observation.lookup:
+        for name in observation.lookup.source_fields.values():
+            if fields[name].type != "string":
+                raise ValueError("provenance bindings require string state fields")
+    for patch in (observation.updates, observation.lookup.updates if observation.lookup else {}):
+        for name, value in patch.items():
+            if isinstance(value, str) and value.startswith("$"):
+                _validate_binding(value, set(reads) | set(writes), set(observation.fields))
+                if value == "$clock.now_us" and fields[name].type != "integer":
+                    raise ValueError("clock binding requires an integer state field")
+            elif not fields[name].accepts(value):
+                raise ValueError(f"step {step_id!r} update {name!r} has wrong type")
+    if observation.evaluation:
+        for value in observation.evaluation.arguments.values():
+            if isinstance(value, str) and value.startswith("$"):
+                _validate_binding(value, set(reads) | set(writes), set(observation.fields))
     voice = _mapping(raw.get("voice"), f"steps.{step_id}.voice")
+    if "choices" in voice:
+        raise ValueError("step voice choices are replaced by conversation tools and context projections")
     messages = _mapping(
         raw.get("messages", {}),
         f"steps.{step_id}.messages",
@@ -264,17 +279,10 @@ def _step(value: Any, fields: dict[str, StateField]) -> Step:
                 trigger.get("arguments", {}),
                 f"steps.{step_id}.trigger.arguments",
             ),
-            result_field=(
-                str(trigger["result_field"]) if trigger.get("result_field") else None
-            ),
+            result_field=(str(trigger["result_field"]) if trigger.get("result_field") else None),
         ),
-        agent=AgentPolicy(
-            prompt=str(agent.get("prompt", "")).strip(),
-            tools=_names(
-                agent.get("tools", []),
-                f"steps.{step_id}.agent.tools",
-            ),
-        ),
+        observation=observation,
+        context=_context_projections(raw.get("context", {}), set(reads) | set(writes)),
         voice=AgentPolicy(
             prompt=str(voice.get("prompt", "")).strip(),
             tools=_names(
@@ -304,14 +312,10 @@ def _evidence(value: Any, step_id: str) -> Evidence | None:
     try:
         re.compile(pattern)
     except re.error as exc:
-        raise ValueError(
-            f"step {step_id!r} has invalid evidence pattern: {exc}"
-        ) from exc
+        raise ValueError(f"step {step_id!r} has invalid evidence pattern: {exc}") from exc
     consecutive = int(raw.get("consecutive", 1))
     if not pattern or consecutive < 1:
-        raise ValueError(
-            f"step {step_id!r} evidence needs a pattern and positive consecutive count"
-        )
+        raise ValueError(f"step {step_id!r} evidence needs a pattern and positive consecutive count")
     return Evidence(pattern=pattern, consecutive=consecutive)
 
 
@@ -333,9 +337,7 @@ def _mapping(value: Any, label: str) -> dict[str, Any]:
 
 
 def _names(value: Any, label: str) -> tuple[str, ...]:
-    if not isinstance(value, list) or not all(
-        isinstance(item, str) and item for item in value
-    ):
+    if not isinstance(value, list) or not all(isinstance(item, str) and item for item in value):
         raise ValueError(f"{label} must be a list of names")
     return tuple(value)
 
@@ -349,3 +351,27 @@ __all__ = [
     "Workflow",
     "load_workflow",
 ]
+
+
+def _validate_binding(value: str, state: set[str], observed: set[str]) -> None:
+    if value == "$clock.now_us":
+        return
+    if value.startswith("$state.") and value.removeprefix("$state.") in state:
+        return
+    if value.startswith("$observation.") and value.removeprefix("$observation.") in observed:
+        return
+    raise ValueError(f"invalid observation binding: {value}")
+
+
+def _context_projections(raw: Any, state: set[str]) -> dict[str, Trigger]:
+    projections = {}
+    for name, value in _mapping(raw, "step.context").items():
+        item = _mapping(value, f"step.context.{name}")
+        if item.get("function") not in {"clock__now", "clock__timer", "temperature__threshold", "temperature__verify"}:
+            raise ValueError("context projections require native read-only tools")
+        arguments = _mapping(item.get("arguments", {}), f"step.context.{name}.arguments")
+        for binding in arguments.values():
+            if isinstance(binding, str) and binding.startswith("$"):
+                _validate_binding(binding, state, set())
+        projections[str(name)] = Trigger(str(item["function"]), 0, arguments)
+    return projections

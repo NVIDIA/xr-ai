@@ -18,13 +18,13 @@ from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from xr_ai_hub import FrameUnavailable
 from xr_ai_interaction import ParticipantLeft
-from xr_ai_models import ChatMessage, ChatResponse, LLMService, ToolDef, VLMService
+from xr_ai_models import ChatMessage, DecisionQuestion, DecisionService, LLMService, VLMService
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeClosedError, RuntimeContext, subscribe
 from xr_ai_tools import Tool, ToolSet
 from xr_ai_tools.current_frame import CurrentFrameRequest
-from xr_ai_tools.tool_calling import run_tool_loop
 from xr_ai_tools.vision import ImageQueryRequest, ImageQueryTool
 
+from ._capture import _attempt, _frame
 from .events import (
     BACKGROUND_FACT_TOPIC,
     PARTICIPANT_CLEANUP_COMPLETE_TOPIC,
@@ -90,6 +90,8 @@ class VideoLogAgent(Agent):
         images: ParticipantImageAgent,
         vlm: VLMService,
         llm: LLMService,
+        decisions: DecisionService,
+        decision: DecisionQuestion,
         caption_prompt: str,
         delta_prompt: str,
         interval_s: float,
@@ -106,6 +108,8 @@ class VideoLogAgent(Agent):
         self._images = images
         self._query_image = ImageQueryTool(images=images.images, vlm=vlm)
         self._llm = llm
+        self._decisions = decisions
+        self._decision = decision
         self._caption_prompt = caption_prompt.strip()
         self._delta_prompt = delta_prompt.strip()
         self._interval_s = interval_s
@@ -206,9 +210,7 @@ class VideoLogAgent(Agent):
                 active=True,
                 message="Video activity logging is already running.",
             )
-        self._states[participant_id] = _VideoState(
-            captions=deque(maxlen=self._history_size)
-        )
+        self._states[participant_id] = _VideoState(captions=deque(maxlen=self._history_size))
         await runtime.publish(
             VIDEO_LOG_RECORD_TOPIC,
             VideoLogRecord(
@@ -224,9 +226,7 @@ class VideoLogAgent(Agent):
             context=nemo_relay.fork_asyncio_context(),
         )
         self._tasks[participant_id] = task
-        task.add_done_callback(
-            lambda completed, pid=participant_id: self._discard(pid, completed)
-        )
+        task.add_done_callback(lambda completed, pid=participant_id: self._discard(pid, completed))
         return VideoLogState(active=True, message="Video activity logging started.")
 
     async def _stop(self, participant_id: str) -> VideoLogState:
@@ -250,11 +250,7 @@ class VideoLogAgent(Agent):
         active = task is not None and not task.done()
         return VideoLogState(
             active=active,
-            message=(
-                "Video activity logging is running."
-                if active
-                else "Video activity logging is stopped."
-            ),
+            message=("Video activity logging is running." if active else "Video activity logging is stopped."),
         )
 
     async def _run(self, participant_id: str) -> None:
@@ -264,15 +260,18 @@ class VideoLogAgent(Agent):
                 await asyncio.sleep(self._interval_s)
 
     async def _observe(self, participant_id: str) -> None:
+        async with _attempt(participant_id, "journal"):
+            await self._observe_recorded(participant_id)
+
+    async def _observe_recorded(self, participant_id: str) -> None:
         state = self._states.get(participant_id)
         if state is None or state.lock.locked():
             return
         async with state.lock:
             now_us = time.time_ns() // 1_000
             try:
-                frame = await self._images.get_current_frame.execute(
-                    CurrentFrameRequest(participant_id=participant_id)
-                )
+                frame = await self._images.get_current_frame.execute(CurrentFrameRequest(participant_id=participant_id))
+                await _frame(frame)
                 caption_result = await self._query_image.execute(
                     ImageQueryRequest(
                         image=frame.image,
@@ -292,9 +291,7 @@ class VideoLogAgent(Agent):
                 )
                 return
             except Exception as exc:
-                logger.opt(exception=True).warning(
-                    "video caption failed pid={!r}", participant_id
-                )
+                logger.opt(exception=True).warning("video caption failed pid={!r}", participant_id)
                 await self._publish_error(participant_id, now_us, str(exc))
                 return
 
@@ -325,9 +322,7 @@ class VideoLogAgent(Agent):
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
-                logger.opt(exception=True).warning(
-                    "video delta failed pid={!r}", participant_id
-                )
+                logger.opt(exception=True).warning("video delta failed pid={!r}", participant_id)
                 await self._publish_error(
                     participant_id,
                     now_us,
@@ -348,56 +343,25 @@ class VideoLogAgent(Agent):
             if not _is_no_change(delta.delta):
                 await self._publish_fact(participant_id, now_us, delta.delta)
 
-    async def _generate_delta(
-        self,
-        state: _VideoState,
-        caption: str,
-    ) -> VideoDelta:
-        async def commit(request: VideoDelta) -> VideoDelta:
-            return request
-
-        tools = ToolSet(
-            (
-                Tool(
-                    "video_log__commit",
-                    "Commit the material visible delta for the current caption.",
-                    VideoDelta,
-                    VideoDelta,
-                    commit,
-                    return_direct=True,
-                ),
-            )
-        )
+    async def _generate_delta(self, state: _VideoState, caption: str) -> VideoDelta:
         previous = list(state.captions)[-(self._history_size - 1) :]
-        payload = json.dumps(
-            {"previous": previous, "current": caption},
-            ensure_ascii=False,
-            separators=(",", ":"),
-        )
-
-        async def call_model(
-            messages: tuple[ChatMessage, ...],
-            definitions: tuple[ToolDef, ...],
-        ) -> ChatResponse:
-            return await self._llm.chat(
-                messages,
-                tools=definitions,
-                max_tokens=384,
-                temperature=0.0,
-                enable_thinking=False,
-            )
-
-        result = await run_tool_loop(
+        payload = {"previous": previous, "current": caption}
+        response = await self._decisions.decide(payload, {"change": self._decision})
+        choice = response.answers["change"].choice
+        if choice not in self._decision.criteria:
+            raise ValueError("invalid delta choice")
+        if choice != "accepted":
+            return VideoDelta(delta="No meaningful visual change.")
+        response = await self._llm.chat(
             (
                 ChatMessage(role="system", content=self._delta_prompt),
-                ChatMessage(role="user", content=payload),
+                ChatMessage(role="user", content=json.dumps(payload, ensure_ascii=False)),
             ),
-            tools,
-            call_model,
-            max_iterations=3,
-            max_tool_calls=2,
+            max_tokens=128,
+            temperature=0.0,
+            enable_thinking=False,
         )
-        return VideoDelta.model_validate_json(result.content)
+        return VideoDelta(delta=response.content)
 
     async def _publish_error(
         self,
@@ -475,9 +439,7 @@ class VideoLogAgent(Agent):
             return
         with suppress(asyncio.CancelledError):
             if error := task.exception():
-                logger.error(
-                    "video log stopped pid={!r}: {!r}", participant_id, error
-                )
+                logger.error("video log stopped pid={!r}: {!r}", participant_id, error)
 
     def _running_runtime(self) -> AgentRuntime:
         if self._stopped:

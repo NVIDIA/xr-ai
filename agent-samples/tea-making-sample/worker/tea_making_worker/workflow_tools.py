@@ -23,6 +23,7 @@ from xr_ai_tools.vision import (
     ImageQueryTool,
 )
 
+from ._capture import _frame
 from .workflow_state import WorkflowSession, WorkflowStore
 
 ChangeCallback = Callable[[], Awaitable[None]]
@@ -78,9 +79,7 @@ class TemperatureVerifyRequest(StrictRequest):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
     reading: float = Field(description="Exact observed numeric temperature.")
-    unit: Literal["celsius", "fahrenheit"] = Field(
-        description="Unit shown with the observed reading."
-    )
+    unit: Literal["celsius", "fahrenheit"] = Field(description="Unit shown with the observed reading.")
 
 
 class TemperatureVerifyResult(BaseModel):
@@ -97,9 +96,7 @@ class TemperatureThresholdRequest(StrictRequest):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
     reading: float = Field(description="Exact observed numeric temperature.")
-    unit: Literal["celsius", "fahrenheit"] = Field(
-        description="Unit shown with the observed reading."
-    )
+    unit: Literal["celsius", "fahrenheit"] = Field(description="Unit shown with the observed reading.")
     threshold_c: float = Field(description="Celsius threshold for comparison.")
 
 
@@ -117,35 +114,10 @@ class AdvanceRequest(StrictRequest):
     skip: bool = False
 
 
-class CommitRequest(StrictRequest):
-    """Atomic active-step state patch selected by an observation model."""
-
-    model_config = ConfigDict(extra="forbid", strict=True)
-
-    updates: dict[str, bool | int | float | str] = Field(default_factory=dict)
-    message: str = Field(default="", max_length=240)
-    evidence: Literal["rejected", "unknown"] = Field(
-        default="rejected",
-        description=(
-            "Outcome for a non-completing observation. Use unknown only when "
-            "the required fact cannot be determined; completion implies acceptance."
-        ),
-    )
-
-
 class WorkflowControlResult(BaseModel):
     """Natural-language result of a deterministic lifecycle operation."""
 
     message: str
-
-
-class WorkflowCommitResult(BaseModel):
-    """Model-visible outcome of one deterministic commit attempt."""
-
-    accepted: bool
-    complete: bool
-    message: str
-    revision: int
 
 
 def participant_current_view_tool(
@@ -163,9 +135,8 @@ def participant_current_view_tool(
     async def inspect(request: CurrentViewRequest) -> ImageQueryResult:
         try:
             async with asyncio.timeout(timeout_s):
-                frame = await current_frame.execute(
-                    CurrentFrameRequest(participant_id=participant_id)
-                )
+                frame = await current_frame.execute(CurrentFrameRequest(participant_id=participant_id))
+                await _frame(frame)
                 return await image_query.execute(
                     ImageQueryRequest(
                         image=frame.image,
@@ -270,11 +241,7 @@ def temperature_verify_tool(
         request: TemperatureVerifyRequest,
     ) -> TemperatureVerifyResult:
         target_c = float(session.state["target_temperature_c"])
-        reading_c = (
-            request.reading
-            if request.unit == "celsius"
-            else (request.reading - 32) * 5 / 9
-        )
+        reading_c = request.reading if request.unit == "celsius" else (request.reading - 32) * 5 / 9
         return TemperatureVerifyResult(
             reading_c=reading_c,
             target_c=target_c,
@@ -283,10 +250,7 @@ def temperature_verify_tool(
 
     return Tool(
         "temperature__verify",
-        (
-            "Compare an exact observed Celsius or Fahrenheit reading with "
-            "the active tea target."
-        ),
+        ("Compare an exact observed Celsius or Fahrenheit reading with the active tea target."),
         TemperatureVerifyRequest,
         TemperatureVerifyResult,
         verify,
@@ -302,11 +266,7 @@ def temperature_threshold_tool() -> Tool[
     async def compare(
         request: TemperatureThresholdRequest,
     ) -> TemperatureThresholdResult:
-        reading_c = (
-            request.reading
-            if request.unit == "celsius"
-            else (request.reading - 32) * 5 / 9
-        )
+        reading_c = request.reading if request.unit == "celsius" else (request.reading - 32) * 5 / 9
         return TemperatureThresholdResult(
             reading_c=reading_c,
             threshold_c=request.threshold_c,
@@ -351,10 +311,20 @@ def workflow_management_tools(
     session: WorkflowSession,
     on_change: ChangeCallback,
 ) -> tuple[Tool[Any, WorkflowControlResult], ...]:
-    """Create deterministic controls for one active participant session."""
+    """Create controls; advancement stays bound to the current run and step."""
+
+    run_id, step_id = session.run_id, session.step_id
 
     async def advance(request: AdvanceRequest) -> WorkflowControlResult:
         async with session.lock:
+            if (
+                store.find(session.participant_id) is not session
+                or session.run_id != run_id or session.step_id != step_id
+            ):
+                policy = store.workflow.foreground
+                return WorkflowControlResult(message=(
+                    policy.stale_message if policy else "The workflow changed. Please repeat the request."
+                ))
             message = store.advance(session, skip=request.skip)
         await on_change()
         return WorkflowControlResult(message=message)
@@ -424,55 +394,6 @@ def workflow_status_tool(
     )
 
 
-def workflow_commit_tool(
-    store: WorkflowStore,
-    session: WorkflowSession,
-    *,
-    expected_step_id: str | None = None,
-    expected_revision: int | None = None,
-) -> Tool[CommitRequest, WorkflowCommitResult]:
-    """Create the sole state mutation surface for observation models."""
-
-    async def commit(request: CommitRequest) -> WorkflowCommitResult:
-        async with session.lock:
-            if (
-                expected_step_id is not None
-                and (
-                    session.step_id != expected_step_id
-                    or session.revision != expected_revision
-                )
-            ):
-                return WorkflowCommitResult(
-                    accepted=False,
-                    complete=False,
-                    message="observation is stale",
-                    revision=session.revision,
-                )
-            result = store.commit(
-                session,
-                dict(request.updates),
-                request.message,
-            )
-        return WorkflowCommitResult(
-            accepted=result.accepted,
-            complete=result.complete,
-            message=result.message,
-            revision=result.revision,
-        )
-
-    return Tool(
-        "workflow__commit",
-        (
-            "Commit one atomic active-step state patch. Call exactly once, "
-            "using empty updates and message when nothing supported changed."
-        ),
-        CommitRequest,
-        WorkflowCommitResult,
-        commit,
-        return_direct=True,
-    )
-
-
 def named_tool_set(
     names: tuple[str, ...],
     *,
@@ -530,7 +451,6 @@ def _control_tool(
 
 __all__ = [
     "AdvanceRequest",
-    "CommitRequest",
     "CurrentViewRequest",
     "NowResult",
     "RAGLookupRequest",
@@ -540,7 +460,6 @@ __all__ = [
     "TemperatureVerifyResult",
     "TimerRequest",
     "TimerResult",
-    "WorkflowCommitResult",
     "WorkflowControlResult",
     "clock_now_tool",
     "clock_timer_tool",
@@ -549,7 +468,6 @@ __all__ = [
     "rag_lookup_tool",
     "temperature_threshold_tool",
     "temperature_verify_tool",
-    "workflow_commit_tool",
     "workflow_management_tools",
     "workflow_start_tool",
     "workflow_status_tool",
