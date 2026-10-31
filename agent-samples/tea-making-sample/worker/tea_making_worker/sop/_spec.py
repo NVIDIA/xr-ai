@@ -13,8 +13,8 @@ from typing import Any
 
 import yaml
 
-from ._foreground_policy import _ForegroundPolicy
-from ._observations import _ObservationPolicy
+from ..conversation._policy import ConversationPolicy
+from ..flows import ObservationPolicy
 
 _ID = re.compile(r"^[a-z][a-z0-9_-]*$")
 _TYPES = {"boolean", "integer", "number", "string"}
@@ -91,7 +91,7 @@ class Step:
     reads: tuple[str, ...]
     writes: tuple[str, ...]
     trigger: Trigger
-    observation: _ObservationPolicy
+    observation: ObservationPolicy
     voice: AgentPolicy
     evidence: Evidence | None
     complete_when: dict[str, Any]
@@ -124,7 +124,7 @@ class Workflow:
     foreground_prompt: str
     complete_message: str
     state_fields: dict[str, StateField]
-    foreground: _ForegroundPolicy | None
+    foreground: ConversationPolicy | None
     steps: dict[str, Step]
     advancement: str = "automatic"
     manual_advance_message: str = "Say next when ready."
@@ -175,7 +175,7 @@ def load_workflow(path: Path) -> Workflow:
         foreground_prompt=str(task.get("foreground_prompt", "")).strip(),
         complete_message=str(task.get("complete_message", "Workflow complete.")).strip(),
         state_fields=fields,
-        foreground=(_ForegroundPolicy.model_validate(task["foreground"]) if "foreground" in task else None),
+        foreground=(ConversationPolicy.model_validate(task["foreground"]) if "foreground" in task else None),
         steps=by_id,
         advancement=advancement,
         manual_advance_message=str(task.get("manual_advance_message", "Say next when ready.")).strip(),
@@ -234,7 +234,7 @@ def _step(value: Any, fields: dict[str, StateField]) -> Step:
         f"steps.{step_id}.state_on_skip",
     )
     trigger = _mapping(raw.get("trigger"), f"steps.{step_id}.trigger")
-    observation = _ObservationPolicy.model_validate(raw.get("observation"))
+    observation = ObservationPolicy.model_validate(raw.get("observation"))
     patch_fields = set(observation.updates) | (set(observation.lookup.updates) if observation.lookup else set())
     patch_fields |= set(observation.retain)
     if observation.lookup:

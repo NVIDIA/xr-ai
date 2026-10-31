@@ -33,8 +33,8 @@ from tea_making_worker._capture import (  # noqa: E402
     _SOPCapture,
 )
 from tea_making_worker.config import load_config  # noqa: E402
-from tea_making_worker.spec import load_workflow  # noqa: E402
-from tea_making_worker.workflow import GuidanceAgent  # noqa: E402
+from tea_making_worker.sop import load_workflow  # noqa: E402
+from tea_making_worker.sop._engine import GuidanceAgent  # noqa: E402
 
 
 def _image():
@@ -396,7 +396,7 @@ async def test_sop_capture_path_is_frozen_to_the_saved_bytes_before_dispatch(tmp
 
 @pytest.mark.asyncio
 async def test_context_compaction_records_a_separate_attempt_after_the_scheduling_turn(tmp_path):
-    from tea_making_worker._conversation_context import _CompactionLanguage, _context_owner
+    from tea_making_worker.conversation._capture import _CompactionLanguage, _context_owner
     from xr_ai_conversation import ContextManager
 
     capture, _ = await _capture(tmp_path)

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import math
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -123,7 +124,14 @@ class _Lookup(BaseModel):
     source_fields: dict[str, str] = Field(default_factory=dict)
 
 
-class _ObservationPolicy(BaseModel):
+class ObservationPolicy(BaseModel):
+    """External instructions, evidence choices and typed normalization bindings.
+
+    Parse the YAML mapping with ``model_validate``. Choice policies require all
+    three outcomes; extraction schemas and unit conversion remain code-owned.
+    Update bindings describe proposals for the caller, never state writes here.
+    """
+
     model_config = ConfigDict(extra="forbid", frozen=True)
     kind: Literal["choice", "extract", "result"]
     instructions: str = ""
@@ -138,7 +146,7 @@ class _ObservationPolicy(BaseModel):
     updates: dict[str, Any]
 
     @model_validator(mode="after")
-    def validate_policy(self) -> _ObservationPolicy:
+    def validate_policy(self) -> ObservationPolicy:
         if self.kind == "choice":
             if set(self.criteria) != {"accepted", "rejected", "unknown"}:
                 raise ValueError("choice criteria must be accepted, rejected, and unknown")
@@ -193,7 +201,9 @@ class _ObservationPolicy(BaseModel):
 
 
 @dataclass(frozen=True)
-class _Observation:
+class Observation:
+    """Evidence, normalized fields, provenance overrides and optional native result."""
+
     evidence: Literal["accepted", "rejected", "unknown"]
     values: dict[str, Any]
     overrides: dict[str, Any]
@@ -218,7 +228,7 @@ def _resolve(value: Any, state: dict[str, Any], observation: dict[str, Any], *, 
 
 
 async def _observe(
-    policy: _ObservationPolicy,
+    policy: ObservationPolicy,
     observation: Any,
     state: dict[str, Any],
     *,
@@ -226,7 +236,8 @@ async def _observe(
     llm: LLMService,
     tools: ToolSet,
     timeout_s: float,
-) -> _Observation:
+    on_event: Callable[..., Awaitable[None]] | None = None,
+) -> Observation:
     overrides: dict[str, Any] = {}
     if policy.kind == "choice":
         response = await decisions.decide(
@@ -237,7 +248,7 @@ async def _observe(
         evidence = response.answers["evidence"].choice
         if evidence not in policy.criteria:
             raise ValueError(f"invalid evidence choice: {evidence!r}")
-        return _Observation(evidence, {}, {})
+        return Observation(evidence, {}, {})
     if policy.kind == "result":
         values = observation
     else:
@@ -246,13 +257,15 @@ async def _observe(
         lookup = policy.lookup
         if lookup is not None:
             values.update({name: state[name] for name in lookup.fields if name in state})
-            from ._identity_step import _IdentityResolutionStep
+            from ._identity import IdentityResolutionStep
 
-            resolved = await _IdentityResolutionStep(policy, llm=llm, tools=tools, timeout_s=timeout_s).check(values)
+            resolved = await IdentityResolutionStep(
+                policy, llm=llm, tools=tools, timeout_s=timeout_s, on_event=on_event,
+            ).check(values)
             return resolved
 
         if set(values) != policy.fields.keys():
-            return _Observation("unknown", values, {})
+            return Observation("unknown", values, {})
     if not isinstance(values, dict):
         raise ValueError("observation result must be a mapping")
     evaluated = None
@@ -272,10 +285,10 @@ async def _observe(
             type(values.get(key)) is type(expected) and values.get(key) == expected
             for key, expected in policy.match.items()
         )
-    return _Observation("accepted" if accepted else "rejected", values, overrides, evaluated)
+    return Observation("accepted" if accepted else "rejected", values, overrides, evaluated)
 
 
-def _decode_values(policy: _ObservationPolicy, observation: Any) -> dict[str, Any]:
+def _decode_values(policy: ObservationPolicy, observation: Any) -> dict[str, Any]:
     values = json.loads(observation) if isinstance(observation, str) else observation
     allowed = set(policy.visual_fields or policy.fields)
     if not isinstance(values, dict) or set(values) - allowed:

@@ -127,7 +127,8 @@ class _SOPCapture:
                     _write_json, self.directory / "config" / "prompts" / f"{path.name}.json", {"text": path.read_text()}
                 )
         self._manifest["source_sha256"] = {
-            path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in Path(__file__).parent.glob("*.py")
+            path.relative_to(Path(__file__).parent).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in Path(__file__).parent.rglob("*.py")
         }
         self._manifest["config_sha256"] = hashes
         await self.io(_write_json, self.directory / "manifest.json", self._manifest)

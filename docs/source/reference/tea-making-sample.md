@@ -139,7 +139,7 @@ still stop audio after the full intended utterance has reached the client.
 | Agent | Owns | Does not own |
 |---|---|---|
 | `ParticipantImageAgent` | Image registry, current-frame selection, participant cleanup | VLM prompts or workflow state |
-| `_SOPAgent` | Execution engine, managed context, foreground request handling, and notice delivery | Model service or image-source lifetime |
+| `SOPAgent` | Execution engine, managed context, foreground request handling, and notice delivery | Model service or image-source lifetime |
 | `BackgroundContextAgent` | A bounded participant-local set of recent background facts | Background scheduling |
 | `ChangeWatchAgent` | Focused visual-change task and deduplication | Foreground routing |
 | `TranscriptAgent` | Opt-in transcript records and periodic summaries | Voice gating or STT transport |
@@ -152,24 +152,71 @@ The runtime delivers events but does not absorb application state or
 concurrency. Moving a task to another agent also means moving its cancellation,
 locks, and participant cleanup.
 
+## Sample-local APIs and prompt ownership
+
+Import `SOPAgent`, `Workflow`, and `load_workflow` from `tea_making_worker`.
+`SOPAgent` is the single registered agent; execution state and routing machinery
+remain implementation details in `sop/` and `conversation/`.
+
+`tea_making_worker.flows` exports `VisualValidationStep`, `VisualCheck`,
+`IdentityResolutionStep`, `ObservationPolicy`, and `Observation`. Visual validation
+accepts a question, policy, configured observer, typed services and tools. Its
+`observe`, `evaluate`, and `check` methods return evidence without owning frame
+acquisition, confirmation counts, state mutation, or storage. Identity resolution
+accepts established fields and configured retrieval/fallback policy. Optional
+identity event recording is supplied by the caller. These modules depend on typed
+model/tool APIs rather than tea configuration or the SOP execution engine.
+
+Task-specific wording remains in external `workflow.yaml`: visual questions under
+`trigger.arguments.question`, extraction or judgment instructions under
+`observation`, retrieval/fallback instructions under `observation.lookup`, and
+step dialogue under `voice.prompt`. JSON shapes, parsing, unit normalization,
+provenance verification, native transitions, and context-channel authority remain
+implementation contracts.
+
+Generic model behavior can also need tuning. Keep that tuning with its owner:
+
+| Owner | Configuration | Tunable behavior |
+|---|---|---|
+| Shared conversation | Worker `foreground_prompt` or `foreground_prompt_file` | Shared response style and grounding, applied to both general and active conversation |
+| Active workflow conversation | `task.foreground.active_prompt` | Workflow role, response detail, spoken style and length; appended to shared and step instructions |
+| Shared camera interpretation | Worker `current_view_prompt` or `current_view_prompt_file` | Camera viewpoint, visual detail and evidence description; shared by observation and immediate camera tools |
+| Focused change captions | Worker `change_watch_caption_prompt` or `_file` | Detail and focus for the user-requested watcher |
+| Change judgment and summary | Worker `change_watch_decision`; `change_watch_event_prompt` or `_file` | What counts as a relevant transition and how accepted changes are described |
+| Visual journal captions | Worker `video_caption_prompt` or `_file` | Scene detail, readable identifiers and uncertainty |
+| Journal judgment and summary | Worker `video_delta_decision`; `video_delta_prompt` or `_file` | Material-change criteria and accepted delta wording |
+| Background transcript summary | Worker `transcript_summary_prompt` or `_file` | Retained facts, attribution and summary detail |
+
+For worker text prompts, inline text takes precedence over its file option;
+otherwise the packaged prompt is used. Relative files resolve against the worker
+YAML. Decision mappings use explicit worker configuration when present, otherwise
+`prompts/decisions.yaml`. The removed `guidance_voice.txt` is replaced by the live
+workflow `active_prompt`; it no longer has a separate, unused voice-policy path.
+The default two-sentence spoken style is declared in the workflow YAML.
+
+Background transcript summaries are separate from dialogue/run compaction.
+`ContextManager` continues using its existing SDK compaction defaults; its
+recording adapter does not redefine summarization policy. Background prompts stay
+at application scope rather than being copied into each SOP step.
+
 ## Source map
 
 | File | Purpose | Typical adaptation |
 |---|---|---|
 | `app.py` | Constructs services and registers agents | Add a backend or another observer |
 | `events.py` | Typed application topics and payloads | Define domain facts, notices, or records |
-| `spec.py` | Validates the workflow YAML contract | Extend declarative workflow metadata |
-| `workflow_state.py` | Typed sparse state, evidence, transitions, rendering | Change deterministic state policy |
-| `workflow_tools.py` | Current view, RAG, clock, temperature, and native workflow controls | Add domain tools |
-| `_sop_agent.py` | Single registered SOP agent and component lifecycle | Compose a different procedure |
-| `_run_context.py` | Per-run state/evidence/event channels and historical handoff | Configure context ownership |
-| `_conversation_context.py` | Participant-scoped compaction recording | Record asynchronous context work |
-| `workflow.py` | Internal execution engine (`GuidanceAgent`), sessions and observation loop | Add another trigger or evidence source |
-| `_visual_step.py` | Reusable, read-only visual observation/evaluation | Configure semantic or numeric validation |
-| `_identity_step.py` | Identity-to-reference settings resolution with explicit fallback provenance | Configure another identification-and-lookup flow |
-| `foreground.py` | Top-level router composition, shared conversation generation and read-only tool loop | Change interactive behavior |
-| `_destinations.py` | Focused workflow admission and independent application destinations | Adapt state-scoped choices |
-| `_observations.py` | Typed extraction, choice evidence, unit normalization, and deterministic evaluation | Adapt observation policy |
+| `sop/_spec.py` | Validates the workflow YAML contract | Extend declarative workflow metadata |
+| `sop/_state.py` | Typed sparse state, evidence, transitions, rendering | Change deterministic state policy |
+| `sop/_tools.py` | Current view, RAG, clock, temperature, and native workflow controls | Add domain tools |
+| `agent.py` | Single registered SOP agent and component lifecycle | Compose a different procedure |
+| `conversation/_context.py` | Per-run state/evidence/event channels and historical handoff | Configure context ownership |
+| `conversation/_capture.py` | Participant-scoped compaction recording | Record asynchronous context work |
+| `sop/_engine.py` | Internal execution engine (`GuidanceAgent`), sessions and observation loop | Add another trigger or evidence source |
+| `flows/_visual.py` | Reusable, read-only visual observation/evaluation | Configure semantic or numeric validation |
+| `flows/_identity.py` | Identity-to-reference settings resolution with explicit fallback provenance | Configure another identification-and-lookup flow |
+| `conversation/_foreground.py` | Top-level router composition, shared conversation generation and read-only tool loop | Change interactive behavior |
+| `conversation/_routing.py` | Focused workflow admission and independent application destinations | Adapt state-scoped choices |
+| `flows/_observations.py` | Typed extraction, choice evidence, unit normalization, and deterministic evaluation | Adapt observation policy |
 | `images.py` | Shared participant image acquisition | Add another image selector |
 | `background_context.py` | Recent-fact store and query tool | Change foreground and background context policy |
 | `change_watch.py` | Focused visual observer | Build another event-oriented monitor |
@@ -178,7 +225,7 @@ locks, and participant cleanup.
 | `guidance_voice.py` | Guidance notice speech policy | Add another presentation channel |
 | `file_output.py` | Participant JSONL artifacts | Replace files with backend persistence |
 | `web_events.py` | Explicit typed event-to-view projections | Select or reshape live presentation topics |
-| `prompts/` | Shared model instructions and packaged route policies | Tune configurable prompts without duplicating them in YAML |
+| `prompts/` | Shared model instructions and packaged route policies | Tune packaged defaults through the owning YAML configuration |
 | `yaml/workflow.yaml` | Five-step procedure and evidence contract | Define a different guided task |
 | `rag-documents/` | Sample retrieval corpus | Replace with domain documents or a backend |
 
@@ -479,7 +526,7 @@ continues to contain canonical scalar values.
 
 ## Visual observation loop
 
-`_SOPAgent` owns an internal execution engine with one observation task per
+`SOPAgent` owns an internal execution engine with one observation task per
 connected participant. While a
 workflow step is active, the task:
 
@@ -517,12 +564,12 @@ confirmed workflow state persists for subsequent steps. The timer receives its
 native operation context without carrying a prior step's visual evidence into
 its live context.
 
-`_VisualValidationStep` accepts a question, parsed policy, shared services and
+`VisualValidationStep` accepts a question, parsed policy, shared services and
 tools. `check(frame, expected=...)` returns evidence and frame identity without
 mutating confirmation or workflow state. The execution engine owns cadence,
 duplicate-frame rejection, confirmation and guarded commits. Its staged
 observation/evaluation methods also support retaining identity before fallible
-settings resolution. These components remain private to the sample.
+settings resolution. These flow APIs are public within the sample; they are not SDK APIs.
 
 Unavailable frames, invalid observations, and service failures record an error
 and retry on a later tick. They do not kill the participant session. A leave
@@ -625,7 +672,7 @@ ZMQ service rather than bypassing the repository's service model.
 6. Add state and routing tests before tuning prompts.
 
 If the workflow needs a different state-machine rule, change
-`workflow_state.py`; do not encode the rule only in prose for the model.
+`sop/_state.py`; do not encode the rule only in prose for the model.
 
 ### Add a domain tool
 

@@ -14,8 +14,8 @@ from xr_ai_models import DecisionQuestion, DecisionService
 from xr_ai_routing import Admission, AgentTurn, DestinationResult, RoutingAid
 from xr_ai_tools import ToolSet
 
-from ._foreground_policy import _Action, _ActionQuestion, _ForegroundPolicy, _ToolDestinationPolicy
-from .workflow import GuidanceAgent
+from ..sop._engine import GuidanceAgent
+from ._policy import ConversationPolicy, _Action, _ActionQuestion, _ToolDestinationPolicy
 
 
 class _Execute(Protocol):
@@ -98,7 +98,7 @@ class _WorkflowDestination:
         self,
         guidance: GuidanceAgent,
         decisions: DecisionService,
-        policy: _ForegroundPolicy,
+        policy: ConversationPolicy,
         tools: Callable[[str], ToolSet],
         execute: _Execute,
         stale: Callable[[AgentTurn, Callable[[], Awaitable[None]]], Awaitable[None]],
@@ -175,7 +175,7 @@ class _ToolDestination:
         decisions: DecisionService,
         tools: Callable[[str], ToolSet],
         execute: _Execute,
-        foreground_policy: _ForegroundPolicy,
+        foreground_policy: ConversationPolicy,
     ) -> None:
         self._foreground_policy = foreground_policy
         self._name, self._policy, self._decisions = name, policy, decisions
@@ -208,7 +208,7 @@ class _ToolDestination:
 
 
 class _ConversationDestination:
-    def __init__(self, policy: _ForegroundPolicy, execute: _Execute) -> None:
+    def __init__(self, policy: ConversationPolicy, execute: _Execute) -> None:
         self._policy, self._execute = policy, execute
 
     def routing_aid(self, participant_id: str) -> RoutingAid:

@@ -23,8 +23,8 @@ from xr_ai_tools.vision import (
     ImageQueryTool,
 )
 
-from ._capture import _frame
-from .workflow_state import WorkflowSession, WorkflowStore
+from .._capture import _frame
+from ._state import WorkflowSession, WorkflowStore
 
 ChangeCallback = Callable[[], Awaitable[None]]
 _NAMED_TOOL_NAMES = frozenset(

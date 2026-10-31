@@ -34,7 +34,7 @@ _SAMPLE = _ROOT / "agent-samples" / "tea-making-sample"
 _WORKER = _SAMPLE / "worker"
 sys.path.insert(0, str(_WORKER))
 
-import tea_making_worker.foreground as foreground_module  # noqa: E402  # pyright: ignore[reportMissingImports]
+import tea_making_worker.conversation._foreground as foreground_module  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.app import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     _CLIENT_TEXT_TOPIC,
     _relay_event_log,
@@ -44,6 +44,7 @@ from tea_making_worker.background_context import (  # noqa: E402  # pyright: ign
 )
 from tea_making_worker.change_watch import ChangeWatchAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.config import load_config  # noqa: E402  # pyright: ignore[reportMissingImports]
+from tea_making_worker.conversation._foreground import ForegroundAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.events import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     BACKGROUND_FACT_TOPIC,
     CHANGE_WATCH_RECORD_TOPIC,
@@ -65,26 +66,25 @@ from tea_making_worker.events import (  # noqa: E402  # pyright: ignore[reportMi
     VideoLogRecord,
 )
 from tea_making_worker.file_output import FileOutputAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
-from tea_making_worker.foreground import ForegroundAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.images import ParticipantImageAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
-from tea_making_worker.spec import load_workflow  # noqa: E402  # pyright: ignore[reportMissingImports]
+from tea_making_worker.sop import load_workflow  # noqa: E402  # pyright: ignore[reportMissingImports]
+from tea_making_worker.sop._engine import (  # noqa: E402  # pyright: ignore[reportMissingImports]
+    GuidanceAgent,
+    _TriggerResult,
+)
+from tea_making_worker.sop._state import WorkflowStore  # noqa: E402  # pyright: ignore[reportMissingImports]
+from tea_making_worker.sop._tools import (  # noqa: E402  # pyright: ignore[reportMissingImports]
+    CurrentViewRequest,
+    TemperatureThresholdRequest,
+    participant_current_view_tool,
+    temperature_threshold_tool,
+)
 from tea_making_worker.transcript import TranscriptAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.video_log import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     VideoLogAgent,
     _is_no_change,
 )
 from tea_making_worker.web_events import TeaWebEventsAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
-from tea_making_worker.workflow import (  # noqa: E402  # pyright: ignore[reportMissingImports]
-    GuidanceAgent,
-    _TriggerResult,
-)
-from tea_making_worker.workflow_state import WorkflowStore  # noqa: E402  # pyright: ignore[reportMissingImports]
-from tea_making_worker.workflow_tools import (  # noqa: E402  # pyright: ignore[reportMissingImports]
-    CurrentViewRequest,
-    TemperatureThresholdRequest,
-    participant_current_view_tool,
-    temperature_threshold_tool,
-)
 
 
 def _manual_workflow(path):
@@ -843,7 +843,7 @@ def test_foreground_current_view_uses_first_person_system_prompt(
 
     _foreground_for_route_test("shared", step_id="identify")
 
-    assert captured == [foreground_module._CURRENT_VIEW_PROMPT]
+    assert captured == [load_config(None).current_view_prompt]
 
 
 def test_conversation_tools_do_not_offer_workflow_mutation() -> None:
@@ -998,6 +998,7 @@ async def test_active_workflow_keeps_background_stop_and_status_tools() -> None:
             for _, tool in provider.participant_tools(pid).items()
         ),
         prompt="Route.",
+        current_view_prompt=load_config(None).current_view_prompt,
     )
 
     observed_tools.update(name for name, _ in foreground._background_tools("participant-controls").items())
@@ -1702,6 +1703,7 @@ def test_default_prompts_come_from_packaged_files(tmp_path: Path) -> None:
     prompt_dir = _WORKER / "tea_making_worker/prompts"
     current_view_prompt = (prompt_dir / "current_view.txt").read_text().strip()
     assert config.foreground_prompt == (prompt_dir / "foreground_prompt.txt").read_text().strip()
+    assert config.current_view_prompt == current_view_prompt
     assert config.video_delta_prompt == (prompt_dir / "video_delta_prompt.txt").read_text().strip()
     assert "newly visible change" in config.change_watch_event_prompt
     assert "newly visible change" in config.change_watch_event_prompt
@@ -1734,7 +1736,6 @@ def test_foreground_prompt_has_route_eval_cases() -> None:
     active_prompt = "\n".join(
         (
             workflow.foreground.active_question.instructions,
-            foreground_module._VOICE_PROMPT,
             workflow.foreground.active_prompt,
             *(step.voice.prompt for step in workflow.steps.values()),
         )
@@ -1865,6 +1866,7 @@ def _foreground_for_route_test(
         guidance=guidance,
         application_tools=lambda _pid: ToolSet(()),
         prompt=prompt,
+        current_view_prompt=load_config(None).current_view_prompt,
     )
     foreground._root_tools = lambda *_args, **_kwargs: ToolSet(())
     return foreground
@@ -1963,7 +1965,7 @@ def test_foreground_route_appends_policy_to_prompt_override(tmp_path: Path) -> N
     assert idle_prompt.startswith("Explicit override\n\n")
     assert "general-purpose assistant" in idle_prompt
     assert active_turn.route == "workflow"
-    assert not active_turn.system_prompt.startswith("Explicit override")
+    assert active_turn.system_prompt.startswith("Explicit override\n")
 
 
 def _identity_guidance(responses, *, passages=None):
@@ -2296,6 +2298,7 @@ def _routed_foreground(decisions) -> ForegroundAgent:
             tool for provider in providers for _, tool in provider.participant_tools(pid).items()
         ),
         prompt=config.foreground_prompt,
+        current_view_prompt=config.current_view_prompt,
     )
 
 

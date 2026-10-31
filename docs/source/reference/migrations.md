@@ -29,6 +29,22 @@ commands remain available. Use {doc}`conversation-example` as the starting
 point for new voice-and-vision applications. Its routed conversation and
 visual-question behavior differs from Simple VLM; migrating application code
 requires reviewing that composition rather than only renaming the launcher.
+### Tea sample-local API and prompt organization
+
+Tea composition imports `SOPAgent`, `Workflow`, and `load_workflow` from
+`tea_making_worker`; reusable visual/identity flows are in
+`tea_making_worker.flows`. Execution and conversation implementation modules have
+moved under `sop/` and `conversation/`; update any prototype imports of their old
+private paths. No SDK API is introduced.
+
+The worker accepts `current_view_prompt` or `current_view_prompt_file` for a shared
+camera policy. `foreground_prompt` now applies to active guidance as well as
+general conversation. Tune active voice behavior in
+`task.foreground.active_prompt`; the unused `guidance_voice.txt` policy and
+separate hard-coded active style are removed. Existing background prompt
+configuration is unchanged. Refer to {doc}`tea-making-sample` for prompt ownership
+and precedence.
+
 ### Tea guidance uses focused routing and declared observations
 
 The tea sample requires a Clef decision endpoint in addition to its existing

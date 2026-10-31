@@ -16,17 +16,17 @@ from types import SimpleNamespace
 from typing import Any
 
 import yaml
-from tea_making_worker._destinations import _make_router
-from tea_making_worker._observations import _observe
-from tea_making_worker._sop_agent import _SOPAgent
+from tea_making_worker import SOPAgent
 from tea_making_worker.background_context import BackgroundContextAgent
 from tea_making_worker.change_watch import ChangeWatchAgent
 from tea_making_worker.config import load_config
-from tea_making_worker.foreground import ForegroundAgent, _bind_arguments
-from tea_making_worker.spec import load_workflow
+from tea_making_worker.conversation._foreground import ForegroundAgent, _bind_arguments
+from tea_making_worker.conversation._routing import _make_router
+from tea_making_worker.flows._observations import _observe
+from tea_making_worker.sop import load_workflow
+from tea_making_worker.sop._engine import GuidanceAgent
 from tea_making_worker.transcript import TranscriptAgent
 from tea_making_worker.video_log import VideoLogAgent
-from tea_making_worker.workflow import GuidanceAgent
 from xr_ai_models import ChatMessage, DecisionService, LLMService, load_models_config, make_decision, make_llm
 from xr_ai_routing import AgentTurn
 from xr_ai_tools import Tool, ToolSet
@@ -70,7 +70,7 @@ def _build_agents(llm: LLMService, decisions: DecisionService) -> tuple[Foregrou
         delta_prompt="Compare the views.",
         interval_s=2.0,
     )
-    foreground = _SOPAgent(
+    foreground = SOPAgent(
         decisions=decisions,
         llm=llm,
         images=images,
@@ -85,6 +85,7 @@ def _build_agents(llm: LLMService, decisions: DecisionService) -> tuple[Foregrou
             for _, tool in provider.participant_tools(pid).items()
         ),
         prompt=config.foreground_prompt,
+        current_view_prompt=config.current_view_prompt,
         context_budget_bytes=config.context_budget_bytes,
         compaction_input_budget_bytes=config.compaction_input_budget_bytes,
     )

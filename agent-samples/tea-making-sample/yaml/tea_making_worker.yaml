@@ -6,10 +6,13 @@ models_config: models.local.json
 workflow_config: workflow.yaml
 voice_gate_yaml: voice_gate.yaml
 
-# Choose one to replace the idle and explicit background-action instructions.
+# Shared answer instructions apply to general and active workflow conversation.
 # Active tea guidance comes from the focused step policies in workflow.yaml.
 # foreground_prompt: <inline shared foreground instructions>
 # foreground_prompt_file: ../worker/tea_making_worker/prompts/foreground_prompt.txt
+# Shared visual policy for SOP observations and immediate camera questions.
+# current_view_prompt: <inline camera viewpoint and observation instructions>
+# current_view_prompt_file: ../worker/tea_making_worker/prompts/current_view.txt
 
 rag_endpoint: tcp://127.0.0.1:8340
 artifacts_dir: ../artifacts

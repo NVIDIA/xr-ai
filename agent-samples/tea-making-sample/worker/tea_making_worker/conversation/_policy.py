@@ -9,7 +9,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from ._observations import _ObservationPolicy
+from ..flows import ObservationPolicy
 
 
 class _Action(BaseModel):
@@ -18,7 +18,7 @@ class _Action(BaseModel):
     tool: str | None = None
     arguments: dict[str, Any] = Field(default_factory=dict)
     generate: bool = False
-    observation: _ObservationPolicy | None = None
+    observation: ObservationPolicy | None = None
     handoff: bool = False
     authorize: bool = False
 
@@ -64,7 +64,9 @@ class _AuthorizationQuestion(BaseModel):
         return self
 
 
-class _ForegroundPolicy(BaseModel):
+class ConversationPolicy(BaseModel):
+    """YAML-owned focused admission, conversation wording and application routes."""
+
     model_config = ConfigDict(extra="forbid", frozen=True)
     workflow_description: str = Field(min_length=1)
     active_question: _ActionQuestion
@@ -79,7 +81,7 @@ class _ForegroundPolicy(BaseModel):
     argument_prompt: str = Field(min_length=1)
 
     @model_validator(mode="after")
-    def validate_names(self) -> _ForegroundPolicy:
+    def validate_names(self) -> ConversationPolicy:
         if set(self.destinations) & {"workflow", "conversation", "clarify"}:
             raise ValueError("application destination names cannot replace router-owned roles")
         return self

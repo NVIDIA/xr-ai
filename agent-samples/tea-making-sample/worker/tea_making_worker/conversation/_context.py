@@ -14,9 +14,9 @@ from typing import Any
 
 from xr_ai_conversation import ContextBlock, ContextManager, ConversationContextUpdate
 
-from ._capture import _event
-from ._conversation_context import _CompactionLanguage, _context_owner
-from .workflow_state import WorkflowEvent
+from .._capture import _event
+from ..sop._state import WorkflowEvent
+from ._capture import _CompactionLanguage, _context_owner
 
 _STATE = "sop.execution"
 _EVIDENCE = "sop.evidence"

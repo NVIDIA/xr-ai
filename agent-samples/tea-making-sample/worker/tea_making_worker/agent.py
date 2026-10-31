@@ -17,8 +17,9 @@ from xr_ai_tools import ToolSet
 from xr_ai_tools.rag import RAGTools
 from xr_ai_tools.vision import ImageQueryTool
 
-from ._conversation_context import _CompactionLanguage
-from ._run_context import _HANDOFF, _RunContexts
+from .conversation._capture import _CompactionLanguage
+from .conversation._context import _HANDOFF, _RunContexts
+from .conversation._foreground import ForegroundAgent
 from .events import (
     GUIDANCE_NOTICE_TOPIC,
     PARTICIPANT_JOINED_TOPIC,
@@ -26,12 +27,11 @@ from .events import (
     USER_QUERY_TOPIC,
     GuidanceNotice,
 )
-from .foreground import ForegroundAgent
 from .guidance_voice import GuidanceVoiceAgent
 from .images import ParticipantImageAgent
-from .spec import Workflow
-from .workflow import GuidanceAgent
-from .workflow_state import WorkflowEvent, WorkflowSession
+from .sop._engine import GuidanceAgent
+from .sop._spec import Workflow
+from .sop._state import WorkflowEvent, WorkflowSession
 
 _CONTEXT_EVENTS = {
     "step.enter", "step.commit", "step.ready", "workflow.reset",
@@ -39,12 +39,19 @@ _CONTEXT_EVENTS = {
 }
 
 
-class _SOPAgent(ForegroundAgent):
+class SOPAgent(ForegroundAgent):
     """Own one focused SOP and its independent execution and context lifecycles.
 
     Components remain sample-local. Register only this agent, bind its runtime,
     and stop it before closing model services. Context is historical reference;
     the execution engine's snapshot and live tools remain authoritative.
+
+    ``workflow`` comes from external YAML via ``load_workflow``. Inject shared
+    typed model services and ``image_query`` for background observations;
+    ``current_view_prompt`` supplies the same camera policy to immediate visual
+    answers. ``prompt`` is the shared answer policy; workflow and step voice
+    instructions are appended from YAML. ``application_tools`` exposes existing
+    optional background capabilities without making steps into agents.
     """
 
     def __init__(
@@ -59,6 +66,7 @@ class _SOPAgent(ForegroundAgent):
         image_query: ImageQueryTool,
         application_tools: Callable[[str], ToolSet],
         prompt: str,
+        current_view_prompt: str,
         context_budget_bytes: int = 12000,
         compaction_input_budget_bytes: int = 12000,
         vlm_timeout_s: float = 15,
@@ -78,7 +86,7 @@ class _SOPAgent(ForegroundAgent):
         super().__init__(
             llm=llm, decisions=decisions, images=images, vlm=vlm, rag=rag,
             guidance=engine, application_tools=application_tools, prompt=prompt,
-            vlm_timeout_s=vlm_timeout_s, context=context,
+            vlm_timeout_s=vlm_timeout_s, context=context, current_view_prompt=current_view_prompt,
         )
         self._run_contexts = _RunContexts(
             llm, context, budget=max(1, context_budget_bytes // 8),
@@ -176,3 +184,6 @@ class _SOPAgent(ForegroundAgent):
         for result in results:
             if isinstance(result, BaseException):
                 raise result
+
+
+__all__ = ["SOPAgent"]

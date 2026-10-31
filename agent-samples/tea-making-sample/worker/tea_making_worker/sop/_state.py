@@ -14,8 +14,7 @@ from dataclasses import dataclass, field
 from typing import Any
 from uuid import uuid4
 
-from ._visual_step import _confirmation_hits
-from .spec import StateField, Step, Workflow
+from ._spec import StateField, Step, Workflow
 
 _TOKEN = re.compile(r"{{\s*([a-z][a-z0-9_-]*)\s*(?:\|\s*([a-z][a-z0-9_-]*))?\s*}}")
 
@@ -467,3 +466,7 @@ __all__ = [
     "WorkflowStore",
     "monotonic_now",
 ]
+
+def _confirmation_hits(previous: int, matched: bool | None) -> int:
+    """Unknown preserves progress; explicit negative resets; positive adds one."""
+    return previous if matched is None else previous + 1 if matched else 0

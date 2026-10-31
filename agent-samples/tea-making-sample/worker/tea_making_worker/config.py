@@ -12,7 +12,7 @@ from typing import Any
 import yaml
 from xr_ai_models import DecisionQuestion
 
-from ._observations import _ObservationPolicy
+from .flows import ObservationPolicy
 
 _PACKAGE = Path(__file__).resolve().parent
 
@@ -25,6 +25,7 @@ class WorkerConfig:
     artifacts_dir: Path
     rag_endpoint: str
     foreground_prompt: str
+    current_view_prompt: str
     change_watch_decision: DecisionQuestion
     video_delta_decision: DecisionQuestion
     change_watch_caption_prompt: str
@@ -69,12 +70,15 @@ def _read_config(path: Path | None) -> dict[str, Any]:
     return data
 
 
-def _prompt(data: dict[str, Any], config_path: Path | None, name: str) -> str:
+def _prompt(data: dict[str, Any], config_path: Path | None, name: str, *, default_file: str | None = None) -> str:
     inline = data.get(name)
     if inline is not None:
         return str(inline).strip()
     configured = data.get(f"{name}_file")
-    path = _resolve(config_path, str(configured)) if configured is not None else _PACKAGE / "prompts" / f"{name}.txt"
+    path = (
+        _resolve(config_path, str(configured))
+        if configured is not None else _PACKAGE / "prompts" / (default_file or f"{name}.txt")
+    )
     return path.read_text(encoding="utf-8").strip()
 
 
@@ -92,7 +96,7 @@ def _decision(data: dict[str, Any], name: str) -> DecisionQuestion:
         raw = defaults[name]
     if not isinstance(raw, dict):
         raise ValueError(f"{name} requires instructions and choice criteria in worker YAML")
-    policy = _ObservationPolicy.model_validate({"kind": "choice", "updates": {}, **raw})
+    policy = ObservationPolicy.model_validate({"kind": "choice", "updates": {}, **raw})
     return DecisionQuestion(policy.instructions, policy.criteria)
 
 
@@ -127,6 +131,7 @@ def load_config(path: Path | None) -> WorkerConfig:
         artifacts_dir=_resolve(path, str(data.get("artifacts_dir", "../artifacts"))),
         rag_endpoint=str(data.get("rag_endpoint", "tcp://127.0.0.1:8340")),
         foreground_prompt=_prompt(data, path, "foreground_prompt"),
+        current_view_prompt=_prompt(data, path, "current_view_prompt", default_file="current_view.txt"),
         change_watch_decision=_decision(data, "change_watch_decision"),
         video_delta_decision=_decision(data, "video_delta_decision"),
         change_watch_caption_prompt=_prompt(data, path, "change_watch_caption_prompt"),

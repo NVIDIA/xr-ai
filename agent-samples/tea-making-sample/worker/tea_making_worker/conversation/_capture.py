@@ -8,7 +8,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from contextvars import ContextVar
 
-from ._capture import _attempt
+from .._capture import _attempt
 
 _PARTICIPANT: ContextVar[str] = ContextVar("sop_context_participant")
 

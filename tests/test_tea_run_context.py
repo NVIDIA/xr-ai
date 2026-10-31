@@ -27,7 +27,7 @@ def _text(blocks):
 
 @pytest.mark.asyncio
 async def test_each_question_gets_fresh_operation_context_without_timer_question_dispatch(monkeypatch):
-    import tea_making_worker.workflow_tools as tools
+    import tea_making_worker.sop._tools as tools
 
     sop = _sop()
     _activate_test_step(sop._guidance, "steep_timer")
@@ -120,7 +120,7 @@ async def test_reset_during_context_sampling_retries_without_installing_old_time
     original = sop._guidance._named_tools
 
     def delayed_tools(session, names):
-        from tea_making_worker.workflow_tools import TimerRequest, TimerResult
+        from tea_making_worker.sop._tools import TimerRequest, TimerResult
         from xr_ai_tools import Tool, ToolSet
 
         async def timer(_request):
@@ -146,10 +146,10 @@ async def test_reset_during_context_sampling_retries_without_installing_old_time
 
 @pytest.mark.asyncio
 async def test_generic_context_projection_uses_yaml_bindings_without_tea_state_names(tmp_path, monkeypatch):
-    import tea_making_worker.workflow_tools as tools
+    import tea_making_worker.sop._tools as tools
     import yaml
-    from tea_making_worker.spec import load_workflow
-    from tea_making_worker.workflow import GuidanceAgent
+    from tea_making_worker.sop import load_workflow
+    from tea_making_worker.sop._engine import GuidanceAgent
 
     raw = {
         "task": {"name": "Generic operation", "start_step": "wait"},
@@ -304,7 +304,7 @@ async def test_finishing_old_frame_cannot_repopulate_new_runs_duplicate_frame_ma
 
 @pytest.mark.asyncio
 async def test_live_channels_are_supplied_separately_from_past_dialogue(monkeypatch):
-    import tea_making_worker.workflow_tools as tools
+    import tea_making_worker.sop._tools as tools
 
     sop = _sop()
     _activate_test_step(sop._guidance, "steep_timer")

@@ -18,10 +18,10 @@
 "agent-samples/procedure-capture-guide/worker/procedure_capture_guide_worker/capture/capturing.py" = ["BLE001"]  # BLE001=5
 "agent-samples/simple-vlm-example/worker/simple_vlm_example_worker/app.py" = ["BLE001"]  # BLE001=1
 "agent-samples/tea-making-sample/worker/tea_making_worker/change_watch.py" = ["BLE001"]  # BLE001=2
-"agent-samples/tea-making-sample/worker/tea_making_worker/foreground.py" = ["BLE001"]  # BLE001=2
+"agent-samples/tea-making-sample/worker/tea_making_worker/conversation/_foreground.py" = ["BLE001"]  # BLE001=2
 "agent-samples/tea-making-sample/worker/tea_making_worker/transcript.py" = ["BLE001"]  # BLE001=1
 "agent-samples/tea-making-sample/worker/tea_making_worker/video_log.py" = ["BLE001"]  # BLE001=2
-"agent-samples/tea-making-sample/worker/tea_making_worker/workflow.py" = ["BLE001"]  # BLE001=3
+"agent-samples/tea-making-sample/worker/tea_making_worker/sop/_engine.py" = ["BLE001"]  # BLE001=3
 "agent-samples/xr-render-demo/eval/xr_render_demo_eval/harness.py" = ["BLE001"]  # BLE001=2
 "agent-samples/xr-render-demo/eval/xr_render_demo_eval/live_explore.py" = ["BLE001", "S110"]  # BLE001=2 S110=1
 "agent-samples/xr-render-demo/eval/xr_render_demo_eval/live_garble.py" = ["BLE001", "S110"]  # BLE001=2 S110=1

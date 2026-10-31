@@ -11,7 +11,6 @@ import time
 from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass, field
-from pathlib import Path
 
 import nemo_relay
 from loguru import logger
@@ -39,12 +38,8 @@ from xr_ai_tools.vision import (
 )
 from xr_ai_voice import VOICE_OUTPUT_TOPIC
 
-from ._capture import _attempt, _event, _frame
-from ._conversation_context import _CompactionLanguage, _context_owner
-from ._destinations import _make_router
-from ._foreground_policy import _Action
-from ._visual_step import _VisualValidationStep
-from .events import (
+from .._capture import _attempt, _event, _frame
+from ..events import (
     FOREGROUND_RECORD_TOPIC,
     INTERRUPTED_TOPIC,
     PARTICIPANT_CLEANUP_COMPLETE_TOPIC,
@@ -53,20 +48,13 @@ from .events import (
     ForegroundRecord,
     ParticipantCleanupComplete,
 )
-from .images import ParticipantImageAgent
-from .workflow import GuidanceAgent
-from .workflow_tools import CurrentViewRequest, participant_current_view_tool, rag_lookup_tool
-
-_PROMPTS = Path(__file__).resolve().parent / "prompts"
-_CURRENT_VIEW_PROMPT = (_PROMPTS / "current_view.txt").read_text(encoding="utf-8").strip()
-_VOICE_PROMPT = (
-    "Answer in at most two short sentences. Use the supplied fresh result for "
-    "live visual or timer facts; if unavailable, say so. Never infer unseen facts."
-)
-_HUMAN_PROMPT = (
-    "Use natural spoken language. Rewrite tool/state abbreviations, symbols, "
-    "units, and machine notation in words; preserve meaning."
-)
+from ..flows import VisualValidationStep
+from ..images import ParticipantImageAgent
+from ..sop._engine import GuidanceAgent
+from ..sop._tools import CurrentViewRequest, participant_current_view_tool, rag_lookup_tool
+from ._capture import _CompactionLanguage, _context_owner
+from ._policy import _Action
+from ._routing import _make_router
 
 
 @dataclass(slots=True)
@@ -99,15 +87,19 @@ class ForegroundAgent(Agent):
         guidance: GuidanceAgent,
         application_tools: Callable[[str], ToolSet],
         prompt: str,
+        current_view_prompt: str,
         vlm_timeout_s: float = 15.0,
         context: ContextManager | None = None,
     ) -> None:
         if vlm_timeout_s <= 0:
             raise ValueError("vlm_timeout_s must be positive")
+        if not current_view_prompt.strip():
+            raise ValueError("current_view_prompt must not be empty")
+        self._view_prompt = current_view_prompt.strip()
         self._vision = StreamingImageQueryTool(
             images=images.images,
             vlm=vlm,
-            system_prompt=_CURRENT_VIEW_PROMPT,
+            system_prompt=self._view_prompt,
         )
         super().__init__((self._vision,))
         self._vlm = vlm
@@ -337,7 +329,7 @@ class ForegroundAgent(Agent):
                     ImageQueryTool(
                         images=self._images.images,
                         vlm=self._vlm,
-                        system_prompt=action.observation.extraction_question(_CURRENT_VIEW_PROMPT),
+                        system_prompt=action.observation.extraction_question(self._view_prompt),
                     ),
                     timeout_s=self._vlm_timeout_s,
                 )
@@ -351,10 +343,10 @@ class ForegroundAgent(Agent):
                     output.text.append(result.text)
                     return
                 try:
-                    validator = _VisualValidationStep(
+                    validator = VisualValidationStep(
                         question=request.question, policy=action.observation,
                         observer=self._guidance._image_query, decisions=self._decisions, llm=self._llm,
-                        tools=tools, timeout_s=self._vlm_timeout_s,
+                        tools=tools, timeout_s=self._vlm_timeout_s, on_event=_event,
                     )
                     fact = await validator.evaluate(result.text, expected=state)
                 except ValueError:
@@ -543,12 +535,11 @@ class ForegroundAgent(Agent):
         next_title = workflow.step(step.next_step).title if step.next_step else "finish the guide"
         system = "\n".join(
             (
-                _VOICE_PROMPT,
+                self._prompt,
                 workflow.foreground_prompt,
                 f"Guide order: {sequence}. Current step: {step.title}. Next: {next_title}.",
                 step.voice.prompt,
                 self._policy.active_prompt,
-                _HUMAN_PROMPT,
             )
         )
         return _PreparedTurn(

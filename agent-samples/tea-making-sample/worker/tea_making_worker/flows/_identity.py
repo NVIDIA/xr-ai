@@ -6,41 +6,56 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from xr_ai_models import ChatMessage, LLMService
 from xr_ai_tools import ToolSet
 
-from ._capture import _event
-from ._observations import _Observation, _ObservationPolicy
+from ._observations import Observation, ObservationPolicy
 
 
-class _IdentityResolutionStep:
+class IdentityResolutionStep:
     """Resolve configured fields; never generate or replace an observed identity.
 
     YAML supplies visual fields, retrieval query, extraction/fallback instructions,
     value schemas and provenance bindings. The caller retains identity in its own
-    guarded state before starting this potentially fallible operation.
+    guarded state before starting this potentially fallible operation. Existing
+    typed ``tools`` must include ``rag_lookup``. ``timeout_s`` bounds each model
+    extraction; optional ``on_event(name, **payload)`` records retrieval and
+    provenance without coupling the flow to an application recorder.
     """
 
-    def __init__(self, policy: _ObservationPolicy, *, llm: LLMService, tools: ToolSet, timeout_s: float) -> None:
+    def __init__(
+        self,
+        policy: ObservationPolicy,
+        *,
+        llm: LLMService,
+        tools: ToolSet,
+        timeout_s: float,
+        on_event: Callable[..., Awaitable[None]] | None = None,
+    ) -> None:
         self.policy, self.llm, self.tools, self.timeout_s = policy, llm, tools, timeout_s
+        self._on_event = on_event
 
-    async def check(self, observed: dict[str, Any]) -> _Observation:
+    async def check(self, observed: dict[str, Any]) -> Observation:
+        """Resolve missing settings, preserving identity and per-field provenance."""
+
         policy = self.policy
         lookup = policy.lookup
         if lookup is None:
             raise ValueError("identity resolution requires lookup configuration")
         values = dict(observed)
         if lookup.identity_field not in values:
-            return _Observation("unknown", values, {})
+            return Observation("unknown", values, {})
         tool = self.tools.get("rag_lookup")
         if tool is None:
             raise ValueError("identity resolution requires rag_lookup")
         query = lookup.query.format_map(values)
         retrieved = await tool.execute(tool.request_model.model_validate({"query": query, "top_k": 2}))
         passages = [item.model_dump(mode="json") for item in retrieved.results]
-        await _event("identity.retrieved", query=query, passages=passages)
+        if self._on_event is not None:
+            await self._on_event("identity.retrieved", query=query, passages=passages)
         provenance: dict[str, dict[str, Any]] = {}
         missing = [name for name in lookup.fields if name not in values]
         if passages and missing:
@@ -96,9 +111,10 @@ class _IdentityResolutionStep:
         }
         if provenance:
             overrides.update(lookup.updates)
-        await _event("identity.resolved", values=values, provenance=provenance)
+        if self._on_event is not None:
+            await self._on_event("identity.resolved", values=values, provenance=provenance)
         complete = all(name in values for name in policy.fields)
-        return _Observation("accepted" if complete else "unknown", values, overrides)
+        return Observation("accepted" if complete else "unknown", values, overrides)
 
     def _schemas(self, names: list[str]) -> dict[str, Any]:
         return {name: self.policy.fields[name].json_schema() for name in names}

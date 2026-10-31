@@ -11,7 +11,6 @@ import json
 import time
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
-from pathlib import Path
 from typing import Any
 
 import nemo_relay
@@ -31,10 +30,8 @@ from xr_ai_tools.current_frame import CurrentFrameRequest, CurrentFrameTool
 from xr_ai_tools.rag import RAGTools
 from xr_ai_tools.vision import ImageQueryTool
 
-from ._capture import _attempt, _event
-from ._observations import _decode_values, _resolve
-from ._visual_step import _VisualValidationStep
-from .events import (
+from .._capture import _attempt, _event, _frame
+from ..events import (
     GUIDANCE_NOTICE_TOPIC,
     GUIDANCE_RECORD_TOPIC,
     PARTICIPANT_CLEANUP_COMPLETE_TOPIC,
@@ -44,14 +41,16 @@ from .events import (
     GuidanceRecord,
     ParticipantCleanupComplete,
 )
-from .spec import Step, Workflow
-from .workflow_state import (
+from ..flows import VisualValidationStep
+from ..flows._observations import _decode_values, _resolve
+from ._spec import Step, Workflow
+from ._state import (
     WorkflowEvent,
     WorkflowSession,
     WorkflowStore,
     monotonic_now,
 )
-from .workflow_tools import (
+from ._tools import (
     _NAMED_TOOL_NAMES,
     TimerRequest,
     clock_now_tool,
@@ -66,8 +65,6 @@ from .workflow_tools import (
     workflow_status_tool,
 )
 
-_PROMPTS = Path(__file__).resolve().parent / "prompts"
-_VOICE_PROMPT = _PROMPTS / "guidance_voice.txt"
 _POLL_INTERVAL_S = 0.25
 
 
@@ -105,7 +102,6 @@ class GuidanceAgent(Agent):
         self._image_query = image_query
         self._rag = rag
         self._vlm_timeout_s = vlm_timeout_s
-        self._voice_prompt = _VOICE_PROMPT.read_text(encoding="utf-8").strip()
         self._runtime: AgentRuntime | None = None
         self._connected: set[str] = set()
         self._tasks: dict[str, asyncio.Task[None]] = {}
@@ -212,7 +208,7 @@ class GuidanceAgent(Agent):
         return json.dumps(
             {
                 "workflow": self.workflow.foreground_prompt,
-                "voice_policy": self._voice_prompt,
+                "voice_policy": self.workflow.foreground.active_prompt if self.workflow.foreground else "",
                 "step": {"id": step.id, "title": step.title},
                 "instructions": step.voice.prompt,
                 "state": self.workflow.project(step, session.state),
@@ -299,13 +295,13 @@ class GuidanceAgent(Agent):
             temperature_verify=temperature_verify_tool(session),
         )
 
-    def _visual_step(self, session: WorkflowSession, step: Step) -> _VisualValidationStep:
+    def _visual_step(self, session: WorkflowSession, step: Step) -> VisualValidationStep:
         names = []
         if step.observation.evaluation is not None:
             names.append(step.observation.evaluation.function)
         if step.observation.lookup is not None:
             names.append("rag_lookup")
-        return _VisualValidationStep(
+        return VisualValidationStep(
             question=str(step.trigger.arguments.get("question", "")),
             policy=step.observation,
             observer=self._image_query,
@@ -313,6 +309,7 @@ class GuidanceAgent(Agent):
             llm=self._llm,
             tools=self._named_tools(session, tuple(names)),
             timeout_s=self._vlm_timeout_s,
+            on_event=_event,
         )
 
     def _start_monitor(self, participant_id: str) -> None:
@@ -456,6 +453,7 @@ class GuidanceAgent(Agent):
                 session = self.store.find(participant_id)
                 if session is not None and session.observed_frame == key:
                     return _TriggerResult(available=False, frame_key=key, detail="frame already observed")
+                await _frame(frame)
                 description = await self._visual_step(session, step).observe(frame)
             if description is None:
                 return _TriggerResult(available=False, frame_key=key, detail="Visual evidence is unavailable")

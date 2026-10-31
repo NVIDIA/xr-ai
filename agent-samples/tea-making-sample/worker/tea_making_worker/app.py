@@ -23,7 +23,7 @@ from xr_ai_voicegate import load_voice_gate_config
 from xr_ai_web_events import WebEventsAgent
 
 from ._capture import _RecordedDecisions, _RecordedLanguage, _RecordedVision, _SOPCapture
-from ._sop_agent import _SOPAgent
+from .agent import SOPAgent
 from .background_context import BackgroundContextAgent
 from .change_watch import ChangeWatchAgent
 from .config import WorkerConfig
@@ -35,15 +35,12 @@ from .events import (
 )
 from .file_output import FileOutputAgent
 from .images import ParticipantImageAgent
-from .spec import load_workflow
+from .sop import load_workflow
 from .transcript import TranscriptAgent
 from .video_log import VideoLogAgent
 from .web_events import TeaWebEventsAgent
 
 _CLIENT_TEXT_TOPIC = "agent.response"
-_CURRENT_VIEW_PROMPT = (
-    (Path(__file__).resolve().parent / "prompts" / "current_view.txt").read_text(encoding="utf-8").strip()
-)
 
 
 @asynccontextmanager
@@ -208,14 +205,14 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
         )
         sop = runtime.register(
             "sop",
-            _SOPAgent(
+            SOPAgent(
                 llm=llm,
                 decisions=decisions,
                 images=images,
                 vlm=vlm,
                 rag=rag,
                 workflow=workflow,
-                image_query=ImageQueryTool(images=images.images, vlm=vlm, system_prompt=_CURRENT_VIEW_PROMPT),
+                image_query=ImageQueryTool(images=images.images, vlm=vlm, system_prompt=config.current_view_prompt),
                 context_budget_bytes=config.context_budget_bytes,
                 compaction_input_budget_bytes=config.compaction_input_budget_bytes,
                 application_tools=lambda participant_id: ToolSet(
@@ -224,6 +221,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
                     for _, tool in provider.participant_tools(participant_id).items()
                 ),
                 prompt=config.foreground_prompt,
+                current_view_prompt=config.current_view_prompt,
                 vlm_timeout_s=config.vlm_timeout_s,
             ),
         )
