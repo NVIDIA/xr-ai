@@ -1,7 +1,13 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Deterministic participant-local state for guided physical workflows."""
+"""Own workflow state, confirmations and transitions without model calls.
+
+WorkflowStore is the execution authority. Callers serialize a session's mutations
+with its lock, and model-facing code must recheck revision/session identity after
+awaits. Events and spoken notices are queued here and drained by GuidanceAgent;
+conversation summaries cannot mutate this state.
+"""
 
 from __future__ import annotations
 
@@ -64,6 +70,7 @@ class WorkflowStore:
     """Own workflow sessions and enforce every state transition."""
 
     def __init__(self, workflow: Workflow) -> None:
+        """Own native sessions for one validated workflow; perform no model or runtime work."""
         self.workflow = workflow
         self._sessions: dict[str, WorkflowSession] = {}
 
@@ -300,6 +307,7 @@ class WorkflowStore:
         self._event(session, event, message)
 
     def _restart(self, session: WorkflowSession, *, event: str) -> str:
+        """Open a fresh run and initial step while queuing the prior run's closure."""
         if session.run_id is not None:
             self._event(session, "workflow.run_closed", "restarted")
         session.run_id = uuid4().hex
@@ -327,6 +335,7 @@ class WorkflowStore:
         next_step: str | None,
         message: str,
     ) -> None:
+        """Enter the next step or finish the run, clearing active visual confirmation state."""
         if next_step is None:
             session.active = False
             session.step_id = None
@@ -338,6 +347,8 @@ class WorkflowStore:
             session.observed_frame = None
             session.next_tick = 0.0
             return
+        # A completed step's facts belong in event history, not the next step's
+        # live visual evidence or consecutive-confirmation counter.
         session.evidence.clear()
         session.step_id = next_step
         session.next_tick = 0.0
@@ -350,6 +361,7 @@ class WorkflowStore:
         next_step: str | None,
         state: dict[str, Any],
     ) -> str:
+        """Render the configured transition notice from established native values."""
         text = (
             self.workflow.complete_message
             if next_step is None
@@ -358,6 +370,7 @@ class WorkflowStore:
         return self._render_state(text, state)
 
     def _invalid_patch(self, step: Step, updates: dict[str, Any]) -> str:
+        """Return a rejection reason for undeclared or incorrectly typed state updates."""
         unknown = updates.keys() - set(step.writes)
         if unknown:
             return f"fields not writable in this step: {sorted(unknown)}"
@@ -373,6 +386,7 @@ class WorkflowStore:
         step: Step,
         updates: dict[str, Any],
     ) -> str:
+        """Restrict observer commits to the active step's declared update targets."""
         invalid = self._invalid_patch(step, updates)
         if invalid:
             return invalid
@@ -383,6 +397,7 @@ class WorkflowStore:
         return f"completion requires fields: {missing}" if missing else ""
 
     def _invalid_skip_patch(self, updates: dict[str, Any]) -> str:
+        """Validate manual skip updates against declared state fields and scalar types."""
         unknown = updates.keys() - self.workflow.state_fields.keys()
         if unknown:
             return f"unknown state fields: {sorted(unknown)}"
@@ -398,6 +413,7 @@ class WorkflowStore:
         event: str,
         message: str,
     ) -> None:
+        """Queue an immutable execution snapshot for later context/capture publication."""
         session.events.append(
             WorkflowEvent(
                 event=event,
@@ -414,10 +430,12 @@ class WorkflowStore:
 
     @staticmethod
     def _render(text: str, session: WorkflowSession) -> str:
+        """Render external wording against the current native session state."""
         return WorkflowStore._render_state(text, session.state)
 
     @staticmethod
     def _render_state(text: str, state: dict[str, Any]) -> str:
+        """Substitute native values using the supported temperature and duration formatters."""
         def replace(match: re.Match[str]) -> str:
             name, formatter = match.groups()
             if name not in state:
@@ -435,6 +453,7 @@ class WorkflowStore:
 
 
 def _duration(seconds: int) -> str:
+    """Render seconds as minute/second text for configured user-facing messages."""
     minutes, remainder = divmod(seconds, 60)
     parts: list[str] = []
     if minutes:
@@ -445,11 +464,13 @@ def _duration(seconds: int) -> str:
 
 
 def _number(value: Any) -> str:
+    """Format a numeric state value without unnecessary fractional digits."""
     number = float(value)
     return str(int(number)) if number.is_integer() else f"{number:g}"
 
 
 def _valid_type(field: StateField, value: Any) -> bool:
+    """Check a state value against the supported declared scalar type."""
     return field.accepts(value)
 
 

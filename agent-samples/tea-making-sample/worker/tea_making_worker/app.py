@@ -1,7 +1,14 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Compose native tea guidance, background applications, voice, and files."""
+"""Wire the sample's services, focused SOP agent, and SDK runtime.
+
+``run_app`` is the composition entry point: create services, activate capture,
+register background capabilities, then connect the SOP destination to AgentRouter
+and voice. Model behavior comes from worker/workflow YAML, not this module.
+Shutdown reverses ownership: stop routing before closing SOP context and producers,
+then allow recording and service resources to finish.
+"""
 
 from __future__ import annotations
 
@@ -49,60 +56,73 @@ _CLIENT_TEXT_TOPIC = "agent.response"
 
 @asynccontextmanager
 async def _relay_event_log(output_dir: Path) -> AsyncIterator[Path]:
+    """Write relay events in batches and drain the writer before closing the log.
+
+    The relay subscriber may run outside the event-loop thread, so it enqueues through
+    ``call_soon_threadsafe``. The sentinel follows subscriber flush/deregistration.
+    """
     path = output_dir / "relay-events.jsonl"
     await asyncio.to_thread(path.write_text, "", encoding="utf-8")
-    pending: asyncio.Queue[str | None] = asyncio.Queue()
-    loop = asyncio.get_running_loop()
-    subscriber = "tea-making-event-log"
+    pending_events: asyncio.Queue[str | None] = asyncio.Queue()
+    event_loop = asyncio.get_running_loop()
+    subscriber_name = "tea-making-event-log"
 
     def write_event(event: nemo_relay.Event) -> None:
         if event.kind == "mark" and event.name == "llm.chunk":
             return
-        loop.call_soon_threadsafe(pending.put_nowait, f"{event.to_json()}\n")
+        event_loop.call_soon_threadsafe(pending_events.put_nowait, f"{event.to_json()}\n")
 
     async def write_events() -> None:
         while True:
-            line = await pending.get()
+            line = await pending_events.get()
             if line is None:
                 return
             lines = [line]
             while True:
                 try:
-                    queued = pending.get_nowait()
+                    queued_line = pending_events.get_nowait()
                 except asyncio.QueueEmpty:
                     break
-                if queued is None:
+                if queued_line is None:
                     await asyncio.to_thread(_append_relay_events, path, tuple(lines))
                     return
-                lines.append(queued)
+                lines.append(queued_line)
             await asyncio.to_thread(_append_relay_events, path, tuple(lines))
 
-    writer = asyncio.create_task(write_events(), name="tea-making-relay-event-log")
+    writer_task = asyncio.create_task(write_events(), name="tea-making-relay-event-log")
 
     try:
-        nemo_relay.subscribers.register(subscriber, write_event)
+        nemo_relay.subscribers.register(subscriber_name, write_event)
     except Exception:
-        pending.put_nowait(None)
-        await writer
+        pending_events.put_nowait(None)
+        await writer_task
         raise
     try:
         yield path
     finally:
         await nemo_relay.subscribers.flush_async()
-        nemo_relay.subscribers.deregister(subscriber)
+        nemo_relay.subscribers.deregister(subscriber_name)
         await asyncio.sleep(0)
-        pending.put_nowait(None)
-        await writer
+        pending_events.put_nowait(None)
+        await writer_task
 
 
 def _append_relay_events(path: Path, lines: tuple[str, ...]) -> None:
+    """Append one ordered batch on the file-writing worker thread."""
     with path.open("a", encoding="utf-8") as sink:
         sink.writelines(lines)
 
 
 async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> None:
-    """Run the native multi-agent worker until its voice session stops."""
+    """Compose and run the sample until voice stops, then drain owned resources.
 
+    Args:
+        config: Complete worker YAML configuration with resolved service/task paths.
+        ready_file: Optional launcher signal written by voice after readiness checks.
+    """
+
+    # Create services before the runtime. Voice owns closing their underlying
+    # connections; recording wrappers below delegate to these same services.
     setup_logging("worker")
     models = load_models_config(config.models_config)
     voice_gate = load_voice_gate_config(config.voice_gate_yaml)
@@ -134,6 +154,8 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
         interrupt_on_supersede=True,
     )
 
+    # Snapshot the complete effective configuration before any agent produces
+    # evidence. All later model calls inherit this capture scope.
     workflow = load_workflow(config.workflow_config)
     capture = _SOPCapture(config.artifacts_dir, enabled=config.capture_enabled)
     await capture.start(config, workflow)
@@ -207,6 +229,8 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
                 history_size=5,
             ),
         )
+        # Compose the focused SOP from existing services. Background capabilities
+        # provide participant-scoped tools; they do not own workflow transitions.
         sop = runtime.register(
             "sop",
             SOPAgent(

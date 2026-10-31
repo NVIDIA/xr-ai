@@ -1,7 +1,12 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""External semantic choices and wording; execution belongs to concrete agents."""
+"""Validate the external workflow's conversation and routing policy.
+
+The YAML supplies model instructions, bounded choices and destination descriptions.
+These models enforce the supported choice sets; they do not execute actions or
+translate arbitrary model output into state changes.
+"""
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 

@@ -1,7 +1,13 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Small adapters for the sample's existing optional application capabilities."""
+"""Adapt optional sample capabilities to the SDK destination contract.
+
+Background destinations classify and authorize their existing typed controls;
+question destinations use the shared answer path or stream the current camera
+view. AgentRouter owns admission lifecycle, cancellation and focus. These adapters
+neither supervise user-turn tasks nor interpret a generic action language.
+"""
 
 import asyncio
 import json
@@ -19,15 +25,22 @@ from ._routing import _authorized, _choose
 
 
 class _BackgroundDestination:
+    """Expose one optional background capability through bounded typed controls."""
+
     def __init__(self, sop, name, prefix):
-        self.sop, self.name, self.prefix = sop, name, prefix
+        """Bind one capability and keep only its unconsumed admission proposals."""
+        self.sop = sop
+        self.name = name
+        self.prefix = prefix
         self.policy = sop._policy.destinations[name]
         self.pending = {}
 
     def routing_aid(self, _participant):
+        """Describe the optional capability using its external destination policy."""
         return RoutingAid(self.name, self.policy.description)
 
     async def admit(self, turn, *, focused):
+        """Classify only available tools and separately authorize state-changing controls."""
         self.pending.pop(turn.participant_id, None)
         tools = self.sop._background_tools(turn.participant_id)
         criteria = {name: text for name, text in self.policy.question.criteria.items()
@@ -49,6 +62,11 @@ class _BackgroundDestination:
         return Admission("accept")
 
     async def answer(self, turn, *, started):
+        """Execute the matching admitted control and publish through SDK reply outputs.
+
+        Only the existing watcher instruction-length validation gets a model-assisted
+        shortening retry; other validation errors preserve their normal failure path.
+        """
         pending = self.pending.pop(turn.participant_id, None)
         if pending is None or pending[0] != turn.turn_id:
             return DestinationResult()
@@ -85,19 +103,26 @@ class _BackgroundDestination:
         return DestinationResult(text=await self.sop._respond(turn, started, produce))
 
     async def release(self, participant_id):
+        """Discard the capability's unconsumed admission for this participant."""
         self.pending.pop(participant_id, None)
 
 
 class _QuestionDestination:
+    """Answer informational requests without owning a workflow or turn supervisor."""
+
     def __init__(self, sop, name):
-        self.sop, self.name = sop, name
+        """Bind one question category to the shared SOP answer/context services."""
+        self.sop = sop
+        self.name = name
 
     def routing_aid(self, _participant):
+        """Describe general conversation or a configured informational destination."""
         description = (self.sop._policy.conversation_description if self.name == "conversation"
                        else self.sop._policy.destinations[self.name].description)
         return RoutingAid(self.name, description)
 
     async def admit(self, turn, *, focused):
+        """Accept questions only when their required optional history tool exists."""
         if self.name == "history" and self.sop._background_tools(turn.participant_id).get(
             "application_context__query"
         ) is None:
@@ -105,6 +130,7 @@ class _QuestionDestination:
         return Admission("accept")
 
     async def answer(self, turn, *, started):
+        """Read any requested source, then use the common answer or camera stream path."""
         async def produce(reply):
             if self.name == "observation":
                 return await self._camera(turn, reply)
@@ -130,6 +156,11 @@ class _QuestionDestination:
         return DestinationResult(text=await self.sop._respond(turn, started, produce))
 
     async def _camera(self, turn, reply):
+        """Stream the current frame directly through the SDK reply context.
+
+        Whitespace-only prefixes are skipped, but subsequent chunks retain their exact
+        text. Always close the model stream, including interruption and inference failure.
+        """
         pieces = []
         try:
             async with asyncio.timeout(self.sop._vlm_timeout_s):
@@ -154,10 +185,12 @@ class _QuestionDestination:
         return "".join(pieces).strip(), ["current_view"]
 
     async def release(self, _participant):
+        """Release router focus; informational questions retain no admission state."""
         pass
 
 
 def _destinations(sop):
+    """Compose explicit SOP, background and question destinations configured for this sample."""
     destinations = {"workflow": sop, "conversation": _QuestionDestination(sop, "conversation")}
     for name, prefix in {"watch": "change_watch", "transcript": "transcript", "journal": "video_log"}.items():
         if name in sop._policy.destinations:

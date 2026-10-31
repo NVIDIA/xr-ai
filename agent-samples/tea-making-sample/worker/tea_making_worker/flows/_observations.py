@@ -1,7 +1,13 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Sample-local observation execution; models supply evidence, never state patches."""
+"""Validate YAML observation policies and normalize model evidence.
+
+Policies select bounded semantic choices, typed extraction or native-result
+matching. Model output is evidence, never a state patch: ``_observe`` returns an
+Observation and ``_resolve`` expands caller-approved bindings. Unit conversion,
+output schemas and type checks stay code-owned; wording and criteria stay in YAML.
+"""
 
 from __future__ import annotations
 
@@ -17,18 +23,23 @@ from xr_ai_tools import ToolSet
 
 
 class _Unit(BaseModel):
+    """Declare one finite linear conversion into a field's canonical unit."""
+
     model_config = ConfigDict(extra="forbid", frozen=True)
     scale: float = 1
     offset: float = 0
 
     @model_validator(mode="after")
     def validate_scale(self) -> _Unit:
+        """Reject conversions that could yield nonfinite or inverted measurements."""
         if not math.isfinite(self.scale) or self.scale <= 0 or not math.isfinite(self.offset):
             raise ValueError("unit scale must be finite and positive; offset must be finite")
         return self
 
 
 class _Value(BaseModel):
+    """Describe one extractable field and its accepted values or observed units."""
+
     model_config = ConfigDict(extra="forbid")
     type: Literal["string", "number", "integer", "boolean"]
     description: str = Field(min_length=1)
@@ -39,6 +50,7 @@ class _Value(BaseModel):
 
     @model_validator(mode="after")
     def validate_units(self) -> _Value:
+        """Require a usable numeric unit mapping and a finite optional lower bound."""
         if self.units is not None and (self.type not in {"number", "integer"} or not self.units):
             raise ValueError("units require a numeric field and finite positive scales")
         if self.minimum is not None and not math.isfinite(self.minimum):
@@ -46,6 +58,7 @@ class _Value(BaseModel):
         return self
 
     def json_schema(self) -> dict[str, Any]:
+        """Build the code-owned nullable extraction schema for this field."""
         if self.units is not None:
             return {
                 "anyOf": [
@@ -70,6 +83,11 @@ class _Value(BaseModel):
         return schema
 
     def decode(self, value: Any) -> Any:
+        """Normalize an observed value and reject unsupported units or field values.
+
+        Configured unavailable strings become None. Numeric unit conversion runs in code;
+        the model reports its observed unit rather than computing a replacement reading.
+        """
         if isinstance(value, str) and value.strip().casefold() in {
             item.casefold() for item in self.unavailable_values
         }:
@@ -91,6 +109,7 @@ class _Value(BaseModel):
         return value
 
     def accepts(self, value: Any) -> bool:
+        """Check scalar type, finiteness, lower bound and any configured choices."""
         if self.type == "boolean":
             valid = isinstance(value, bool)
         elif self.type == "integer":
@@ -107,6 +126,8 @@ class _Value(BaseModel):
 
 
 class _Evaluation(BaseModel):
+    """Bind extracted values to one configured native tool and exact result predicate."""
+
     model_config = ConfigDict(extra="forbid")
     function: str
     arguments: dict[str, Any]
@@ -114,6 +135,8 @@ class _Evaluation(BaseModel):
 
 
 class _Lookup(BaseModel):
+    """Declare identity-based retrieval, missing-field fallback and provenance bindings."""
+
     model_config = ConfigDict(extra="forbid")
     identity_field: str
     query: str = Field(min_length=1)
@@ -147,10 +170,11 @@ class ObservationPolicy(BaseModel):
 
     @model_validator(mode="after")
     def validate_policy(self) -> ObservationPolicy:
+        """Validate choice labels, declared field references and identity-preservation rules."""
         if self.kind == "choice":
             if set(self.criteria) != {"accepted", "rejected", "unknown"}:
                 raise ValueError("choice criteria must be accepted, rejected, and unknown")
-            if not self.instructions.strip() or any(not v.strip() for v in self.criteria.values()):
+            if not self.instructions.strip() or any(not criterion.strip() for criterion in self.criteria.values()):
                 raise ValueError("choice instructions and criteria must not be blank")
         elif self.kind == "extract" and not self.fields:
             raise ValueError("extract observation needs fields")
@@ -174,6 +198,12 @@ class ObservationPolicy(BaseModel):
         return self
 
     def extraction_question(self, question: str) -> str:
+        """Combine caller wording with a code-owned evidence response contract.
+
+        The output schema constrains observable facts, not workflow state or completion.
+        Unanswerable views must remain unknown, while clearly visible negative evidence
+        can still be assessed by the later choice policy.
+        """
         if self.kind == "choice" and self.structured:
             return (
                 question + '\nReturn only JSON: {"observable": boolean, "description": string}. '
@@ -211,6 +241,12 @@ class Observation:
 
 
 def _resolve(value: Any, state: dict[str, Any], observation: dict[str, Any], *, now_us: int | None = None) -> Any:
+    """Expand configured value bindings against caller-supplied native evidence.
+
+    State and observation references are reads. The clock binding is allowed only when
+    the guarded commit caller supplies now_us, so uncertain sightings cannot start a
+    timer early.
+    """
     if isinstance(value, dict):
         return {key: _resolve(item, state, observation, now_us=now_us) for key, item in value.items()}
     if isinstance(value, list):
@@ -238,6 +274,21 @@ async def _observe(
     timeout_s: float,
     on_event: Callable[..., Awaitable[None]] | None = None,
 ) -> Observation:
+    """Evaluate a configured semantic choice, extraction or native-result predicate.
+
+    Args:
+        policy: Validated external evidence instructions and field bindings.
+        observation: Visible evidence or a configured native trigger result.
+        state: Established values exposed to this evaluation by the caller.
+        decisions: Bounded semantic-choice service.
+        llm: Language service for configured identity/settings resolution.
+        tools: Restricted native evaluator and retrieval catalog.
+        timeout_s: Timeout for model requests made by this evaluation.
+        on_event: Optional asynchronous provenance recording callback.
+
+    Returns:
+        Evidence, normalized values and proposed overrides; no execution state is written.
+    """
     overrides: dict[str, Any] = {}
     if policy.kind == "choice":
         response = await decisions.decide(
@@ -271,11 +322,13 @@ async def _observe(
     evaluated = None
     if policy.evaluation is not None:
         evaluation = policy.evaluation
-        tool = tools.get(evaluation.function)
-        if tool is None:
+        evaluation_tool = tools.get(evaluation.function)
+        if evaluation_tool is None:
             raise ValueError(f"unknown evaluation tool: {evaluation.function}")
-        result = await tool.execute(tool.request_model.model_validate(_resolve(evaluation.arguments, state, values)))
-        evaluated = result.model_dump()
+        evaluation_result = await evaluation_tool.execute(
+            evaluation_tool.request_model.model_validate(_resolve(evaluation.arguments, state, values))
+        )
+        evaluated = evaluation_result.model_dump()
         accepted = all(
             type(evaluated.get(key)) is type(expected) and evaluated.get(key) == expected
             for key, expected in evaluation.match.items()
@@ -289,9 +342,14 @@ async def _observe(
 
 
 def _decode_values(policy: ObservationPolicy, observation: Any) -> dict[str, Any]:
+    """Decode only declared visual fields, dropping explicitly unavailable values."""
     values = json.loads(observation) if isinstance(observation, str) else observation
     allowed = set(policy.visual_fields or policy.fields)
     if not isinstance(values, dict) or set(values) - allowed:
         raise ValueError("visual extraction must contain only declared visual fields")
-    decoded = {key: policy.fields[key].decode(value) for key, value in values.items() if value is not None}
-    return {key: value for key, value in decoded.items() if value is not None}
+    decoded = {
+        field_name: policy.fields[field_name].decode(value)
+        for field_name, value in values.items()
+        if value is not None
+    }
+    return {field_name: value for field_name, value in decoded.items() if value is not None}

@@ -1,7 +1,13 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Participant-bound native tools used by tea guidance."""
+"""Build typed native tools around caller-owned workflow sessions and services.
+
+Read-only tools expose current frames, retrieval, clock and temperature checks.
+Control tools delegate mutations to WorkflowStore under its session lock and flush
+queued events afterward. This module validates tool requests; it does not infer
+user intent or allow a model to construct arbitrary workflow state patches.
+"""
 
 from __future__ import annotations
 
@@ -438,6 +444,7 @@ def _control_tool(
         Awaitable[WorkflowControlResult],
     ],
 ) -> Tool[Any, WorkflowControlResult]:
+    """Expose a native handler as a direct-result tool with its configured message renderer."""
     return Tool(
         name,
         description,

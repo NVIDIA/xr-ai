@@ -1,7 +1,13 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Strict task-neutral schema for the declarative guidance workflow."""
+"""Parse external workflow YAML into typed execution and prompt policy.
+
+``load_workflow`` validates declared state, steps, tool bindings and projections
+before execution. Workflow and Step expose read-only projections for observers
+and conversation; runtime state and transitions belong to ``_state``. Task-specific
+wording remains external, while supported schema and binding rules live here.
+"""
 
 from __future__ import annotations
 
@@ -23,6 +29,7 @@ _FALSE_BOOL_STRINGS = {"0", "false", "no", "off"}
 
 
 def _parse_bool(value: object, label: str) -> bool:
+    """Normalize booleans and explicitly supported string spellings for policy switches."""
     if isinstance(value, bool):
         return value
     if isinstance(value, str):
@@ -183,6 +190,7 @@ def load_workflow(path: Path) -> Workflow:
 
 
 def _fields(raw: dict[str, Any]) -> dict[str, StateField]:
+    """Parse declared state fields and validate their defaults against supported types."""
     fields: dict[str, StateField] = {}
     for name, value in raw.items():
         if not _ID.fullmatch(str(name)):
@@ -204,6 +212,7 @@ def _fields(raw: dict[str, Any]) -> dict[str, StateField]:
 
 
 def _step(value: Any, fields: dict[str, StateField]) -> Step:
+    """Validate one external step and resolve its configured policies and state references."""
     raw = _mapping(value, "step")
     step_id = str(raw.get("id", ""))
     if not _ID.fullmatch(step_id):
@@ -305,6 +314,7 @@ def _step(value: Any, fields: dict[str, StateField]) -> Step:
 
 
 def _evidence(value: Any, step_id: str) -> Evidence | None:
+    """Parse bounded confirmation policy for a visual step."""
     if value is None:
         return None
     raw = _mapping(value, f"steps.{step_id}.evidence")
@@ -324,6 +334,7 @@ def _validate_state_values(
     fields: dict[str, StateField],
     label: str,
 ) -> None:
+    """Validate supplied values against their already-resolved state declarations."""
     for name, value in values.items():
         field = fields[name]
         if not field.accepts(value):
@@ -331,12 +342,14 @@ def _validate_state_values(
 
 
 def _mapping(value: Any, label: str) -> dict[str, Any]:
+    """Require a YAML mapping at the named configuration location."""
     if not isinstance(value, dict):
         raise ValueError(f"{label} must be a mapping")
     return dict(value)
 
 
 def _names(value: Any, label: str) -> tuple[str, ...]:
+    """Require a list of nonempty strings and preserve its configured order."""
     if not isinstance(value, list) or not all(isinstance(item, str) and item for item in value):
         raise ValueError(f"{label} must be a list of names")
     return tuple(value)
@@ -354,6 +367,7 @@ __all__ = [
 
 
 def _validate_binding(value: str, state: set[str], observed: set[str]) -> None:
+    """Validate state/observation bindings before any workflow is executed."""
     if value == "$clock.now_us":
         return
     if value.startswith("$state.") and value.removeprefix("$state.") in state:
@@ -364,6 +378,7 @@ def _validate_binding(value: str, state: set[str], observed: set[str]) -> None:
 
 
 def _context_projections(raw: Any, state: set[str]) -> dict[str, Trigger]:
+    """Validate native read-only context projections and their state bindings."""
     projections = {}
     for name, value in _mapping(raw, "step.context").items():
         item = _mapping(value, f"step.context.{name}")

@@ -1,7 +1,14 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Native agent that owns tea guidance state and observation tasks."""
+"""Schedule SOP observations and commit evidence through native state guards.
+
+GuidanceAgent adapts WorkflowStore to runtime participants, tools and notices.
+Each participant has an observation monitor; user-turn scheduling remains with
+the SDK router. A tick snapshots state under its session lock, performs model work
+outside that lock, then checks session identity, step and revision before writing.
+Reusable flows supply evidence; WorkflowStore owns transitions and confirmations.
+"""
 
 from __future__ import annotations
 
@@ -69,6 +76,8 @@ _POLL_INTERVAL_S = 0.25
 
 
 class _TriggerResult(BaseModel):
+    """Carry trigger availability and exact source-frame identity into evidence evaluation."""
+
     available: bool
     value: Any = None
     detail: str = ""
@@ -90,6 +99,7 @@ class GuidanceAgent(Agent):
         vlm_timeout_s: float = 15.0,
         record_event: Callable[[WorkflowSession, WorkflowEvent], Awaitable[None]] | None = None,
     ) -> None:
+        """Bind native workflow state, injected services and participant monitor ownership."""
         if vlm_timeout_s <= 0:
             raise ValueError("vlm_timeout_s must be positive")
         super().__init__()
@@ -228,9 +238,11 @@ class GuidanceAgent(Agent):
         _event: ParticipantJoined,
         ctx: RuntimeContext,
     ) -> None:
+        """Adapt a runtime join event to native participant initialization."""
         await self._join_participant(self._participant(ctx))
 
     async def _join_participant(self, participant_id: str) -> None:
+        """Initialize a participant once and start its independent observation monitor."""
         if participant_id in self._connected:
             return
         self._connected.add(participant_id)
@@ -246,6 +258,7 @@ class GuidanceAgent(Agent):
         _event: ParticipantLeft,
         ctx: RuntimeContext,
     ) -> None:
+        """Adapt a runtime leave event and acknowledge guidance cleanup afterward."""
         participant_id = self._participant(ctx)
         await self._leave_participant(participant_id)
         await ctx.publish(
@@ -257,6 +270,7 @@ class GuidanceAgent(Agent):
         )
 
     async def _leave_participant(self, participant_id: str) -> None:
+        """Drain the participant monitor before releasing native workflow state."""
         self._connected.discard(participant_id)
         await self._cancel_monitor(participant_id)
         session = self.store.find(participant_id)
@@ -284,6 +298,7 @@ class GuidanceAgent(Agent):
         session: WorkflowSession,
         names: tuple[str, ...],
     ) -> ToolSet:
+        """Construct only the native tools selected by the current caller's allowlist."""
         current_view = participant_current_view_tool(
             session.participant_id,
             self._current_frame,
@@ -301,6 +316,7 @@ class GuidanceAgent(Agent):
         )
 
     def _visual_step(self, session: WorkflowSession, step: Step) -> VisualValidationStep:
+        """Inject services and step policy into the reusable stateless visual flow."""
         names = []
         if step.observation.evaluation is not None:
             names.append(step.observation.evaluation.function)
@@ -318,6 +334,7 @@ class GuidanceAgent(Agent):
         )
 
     def _start_monitor(self, participant_id: str) -> None:
+        """Start at most one observation monitor for the connected participant."""
         existing = self._tasks.get(participant_id)
         if existing is not None and not existing.done():
             return
@@ -335,6 +352,7 @@ class GuidanceAgent(Agent):
         )
 
     async def _cancel_monitor(self, participant_id: str) -> None:
+        """Remove ownership, cancel and drain a participant's observation monitor."""
         task = self._tasks.pop(participant_id, None)
         if task is None:
             return
@@ -346,6 +364,7 @@ class GuidanceAgent(Agent):
         participant_id: str,
         task: asyncio.Task[None],
     ) -> None:
+        """Clear only the completed monitor still owned by this participant and log failures."""
         if self._tasks.get(participant_id) is task:
             self._tasks.pop(participant_id, None)
         if task.cancelled():
@@ -359,6 +378,7 @@ class GuidanceAgent(Agent):
                 )
 
     async def _monitor(self, participant_id: str) -> None:
+        """Poll observations while connected; record recoverable failures and preserve cancellation."""
         while participant_id in self._connected:
             session = self.store.find(participant_id)
             if session is None:
@@ -382,6 +402,12 @@ class GuidanceAgent(Agent):
             await asyncio.sleep(_POLL_INTERVAL_S)
 
     async def _tick(self, session: WorkflowSession) -> None:
+        """Run one due observation without holding the session lock across model work.
+
+        Capture the revision first, acquire/describe evidence outside the lock, then
+        recheck identity and revision before evaluation and every native commit. A repeated
+        frame cannot count as another independent confirmation.
+        """
         async with session.lock:
             if not session.active or session.step_id is None or self.store.step_complete(session):
                 return
@@ -392,6 +418,8 @@ class GuidanceAgent(Agent):
             revision = session.revision
             run_id = session.run_id
             state = dict(session.state)
+            # Reserve the next polling slot while state is locked, before the
+            # slower visual/retrieval work starts.
             session.next_tick = now + step.trigger.interval_s
 
         def snapshot():
@@ -405,6 +433,8 @@ class GuidanceAgent(Agent):
                 "current_session": self.store.find(session.participant_id) is session,
             }
 
+        # Network/model work runs outside session.lock. Any state change during
+        # that work invalidates the captured revision before a write is allowed.
         async with _attempt(session.participant_id, "observer", step_id=step.id, snapshot=snapshot):
             trigger = await self._trigger(session.participant_id, step, state)
             await _event("trigger.finished", **trigger.model_dump(mode="json"))
@@ -449,6 +479,7 @@ class GuidanceAgent(Agent):
         step: Step,
         state: dict[str, Any],
     ) -> _TriggerResult:
+        """Acquire visual evidence or a native timer reading from the configured trigger."""
         arguments = _resolve(step.trigger.arguments, state, {})
         if step.trigger.function == "current_view":
             # Keep visual inference on Omni. Choice-only decisions consume its description.
@@ -485,6 +516,12 @@ class GuidanceAgent(Agent):
         *,
         frame_key: tuple[str, str, int, int] | None = None,
     ) -> bool:
+        """Evaluate evidence, then apply only current, confirmed native updates.
+
+        Identity retention can commit independently before retrieval. Every later write
+        rechecks the revised session; incomplete retrieval may retain supported fields but
+        cannot apply completion literals. Confirmation owns timestamp binding and commit.
+        """
         policy = step.observation
         started = time.perf_counter()
         # Retain configured identity facts before retrieval; later unreadable frames
@@ -566,6 +603,7 @@ class GuidanceAgent(Agent):
         step: Step,
         revision: int,
     ) -> bool:
+        """Check native session identity, active step and revision before applying awaited work."""
         return (
             self.store.find(session.participant_id) is session
             and session.active
@@ -575,6 +613,12 @@ class GuidanceAgent(Agent):
         )
 
     async def _flush(self, session: WorkflowSession) -> None:
+        """Drain queued notices/events in participant order without holding the state lock.
+
+        The publication lock prevents concurrent flushes from reordering a participant's
+        events. Recording/context projection receives the same drained native event before
+        its runtime record is published.
+        """
         runtime = self._runtime
         if runtime is None or not runtime.running:
             return
@@ -631,6 +675,7 @@ class GuidanceAgent(Agent):
 
     @staticmethod
     def _participant(ctx: RuntimeContext) -> str:
+        """Require the runtime event's participant identity for native SOP operations."""
         participant_id = ctx.metadata.participant_id
         if participant_id is None:
             raise ValueError("tea guidance requires a participant")
@@ -638,6 +683,7 @@ class GuidanceAgent(Agent):
 
 
 def _timestamp_us() -> int:
+    """Return wall-clock microseconds for observations and emitted records."""
     return time.time_ns() // 1_000
 
 
