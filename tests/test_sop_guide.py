@@ -1510,7 +1510,7 @@ def test_scenario_cli_reports_failures_and_continues_independent_probes(tmp_path
             {"action": "image", "scene": "red"},
             {"action": "say", "text": "What is my status?", "expect": "inactive", "tools": ["workflow__status"]},
             {"action": "say", "text": "Start guide", "expect": "Show a blue indicator", "tools": ["workflow__restart"]},
-            {"action": "observe", "answers": ["NO"], "count": 2},
+            {"action": "observe", "accept": False, "count": 2},
             {"action": "say", "text": "What is my status?", "expect": "current step: Check indicator\\.$",
              "tools": ["workflow__status"]},
         ],
@@ -1522,7 +1522,7 @@ def test_scenario_cli_reports_failures_and_continues_independent_probes(tmp_path
         first_status["expect"] = "unexpected answer"
     elif failed_probe == "observe":
         observation = next(item for item in manifest["actions"] if item["action"] == "observe")
-        observation["answers"] = ["YES"]
+        observation["accept"] = True
     (tmp_path / "test_procedure_indicator_guide.yaml").write_text(yaml.safe_dump(guide))
     manifest_path = tmp_path / "scenario.yaml"
     manifest_path.write_text(yaml.safe_dump(manifest))
@@ -2281,3 +2281,12 @@ async def test_unusable_caption_cannot_confirm_a_low_confidence_yes(engine, capt
     await backend._tick(session)
     assert session.evidence_hits == 0 and not session.state["base"]
     backend._decisions.decide.assert_awaited_once()
+
+
+@pytest.fixture(autouse=True)
+def scripted_decision_images(monkeypatch):
+    # Image preparation/admission is exercised with the real adapter/server in
+    # test_procedure_decision_images; these control tests use YES/NO byte markers.
+    monkeypatch.setattr(
+        "procedure_capture_guide_worker.guide.verification._prepare_decision_image", lambda image: image,
+    )

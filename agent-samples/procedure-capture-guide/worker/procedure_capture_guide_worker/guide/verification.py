@@ -11,10 +11,14 @@ updates. The guide backend owns frame freshness, confirmations, and transitions.
 from __future__ import annotations
 
 import asyncio
+import base64
+import io
+import math
 from pathlib import Path
 
 import nemo_relay
 from loguru import logger
+from PIL import Image
 from xr_ai_models import DecisionAnswer, DecisionQuestion, DecisionService, ImageInput
 
 _INSTRUCTIONS = (Path(__file__).with_name("prompts") / "guide_condition.txt").read_text(encoding="utf-8").strip()
@@ -45,10 +49,64 @@ async def judge_image(
     """Judge one selected frame without a caption or conversation history."""
 
     state = {"condition": condition, "image_role": "The single image is the selected current camera frame."}
+    prepared = await asyncio.to_thread(_prepare_decision_image, image)
     return await _judge(
-        decisions, state=state, question=_IMAGE_QUESTION, images=(image,),
+        decisions, state=state, question=_IMAGE_QUESTION, images=(prepared,),
         frame=frame, step_id=step_id, revision=revision, timeout_s=timeout_s, source="image",
     )
+
+
+# Base64 expands this to ~683 KiB, leaving room for the condition and question
+# within CLEF's default 1 MiB request limit. Bound pixels as well: compressed
+# images can be small while exceeding the default 4096-token source-pixel budget.
+_IMAGE_MAX_BYTES = 512 * 1024
+_IMAGE_MAX_PIXELS = 2_000_000
+
+
+def _prepare_decision_image(image: ImageInput) -> bytes:
+    """Adapt camera media to CLEF without changing the selected frame identity.
+
+    Preserve small JPEG/PNG inputs; convert WebP and bound larger inputs with
+    aspect-preserving JPEG encoding. The caller retains the original for Cosmos.
+    Invalid images raise rather than triggering confidence-based fallback.
+    """
+    if isinstance(image, Path):
+        raw = image.read_bytes()
+    elif isinstance(image, str):
+        header, separator, payload = image.partition(",")
+        if not separator or header not in {
+            "data:image/jpeg;base64", "data:image/png;base64", "data:image/webp;base64",
+        }:
+            raise ValueError("guide decision image must be inline JPEG, PNG, or WebP")
+        raw = base64.b64decode(payload, validate=True)
+    elif isinstance(image, bytes):
+        raw = image
+    else:
+        raise TypeError("guide decision image must be bytes, Path, or an inline data URL")
+    with Image.open(io.BytesIO(raw), formats=["JPEG", "PNG", "WEBP"]) as source:
+        source.load()
+        if source.width * source.height <= _IMAGE_MAX_PIXELS:
+            if source.format in {"JPEG", "PNG"} and len(raw) <= _IMAGE_MAX_BYTES:
+                return raw
+            # Prefer a lossless WebP conversion when it fits the same budget.
+            if source.format == "WEBP":
+                output = io.BytesIO()
+                source.save(output, format="PNG")
+                if output.tell() <= _IMAGE_MAX_BYTES:
+                    return output.getvalue()
+        rgb = source.convert("RGB")
+        try:
+            scale = min(1.0, math.sqrt(_IMAGE_MAX_PIXELS / (rgb.width * rgb.height)))
+            while True:
+                size = (max(1, int(rgb.width * scale)), max(1, int(rgb.height * scale)))
+                with rgb.resize(size, Image.Resampling.LANCZOS) as resized:
+                    output = io.BytesIO()
+                    resized.save(output, format="JPEG", quality=90)
+                if output.tell() <= _IMAGE_MAX_BYTES:
+                    return output.getvalue()
+                scale *= min(0.9, math.sqrt(_IMAGE_MAX_BYTES / output.tell()))
+        finally:
+            rgb.close()
 
 
 async def condition_met(

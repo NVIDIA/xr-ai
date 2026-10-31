@@ -613,10 +613,13 @@ directory, or absolute) and lists ordered `actions`:
   `scenes` map names to a rectangle color, display text, or a tea scene.
   `scenes_file` loads a shared scene map relative to the manifest.
 - `observe`: wait for `count` visual results (default two) from the displayed
-  image and compare them to the allowed `answers`. Alternatively, name a `case`
-  from `visual_cases_file` (relative to the manifest) to reuse its scene, step,
-  and expected-answer regex. Recognition comparisons ignore whitespace layout
-  and case; unavailable observations never count as correct answers.
+  image and require `accept: true` or `accept: false`, regardless of whether
+  CLEF used the image or a Cosmos caption. Alternatively, name a `case` from
+  `visual_cases_file` (relative to the manifest) to check its scene, step, and
+  acceptance decision, plus its recognition regex when a caption exists.
+  Recognition comparisons ignore whitespace layout and case. Unavailable checks
+  always fail, including when `accept: false`. The obsolete `answers` field is
+  rejected before model calls because direct-image decisions have no caption.
 - `say`: send `text` as a user turn. Optional `expect` checks the delivered
   answer against a regex; `tools` and `arguments` check model tool calls.
   Status assertions use **What is my status?** and `workflow__status`.
@@ -840,16 +843,31 @@ even when their `task.status` is `approved`.
   `enter`, `complete`, and `skip`. The `next` chain must visit every step once
   and end with `null`.
 - `voice` contains the foreground prompt and permitted tools. Visual steps omit
-  `agent`: Cosmos describes the scene and CLEF judges the written evidence.
+  `agent`: CLEF judges the selected frame, with Cosmos description fallback.
   Timer steps may use an `agent` policy when they do not directly commit evidence.
   Foreground workflow controls are supplied by the runner, not the guide.
+- At the image-decision boundary, the sample preserves JPEG/PNG inputs within
+  512 KiB and two million pixels. WebP is converted to PNG when it fits;
+  larger images use quality-90 JPEG with aspect-preserving resizing to those
+  bounds. This leaves room for base64 and prompt text under CLEF's default
+  1 MiB HTTP-body limit and for text within its default source-pixel budget.
+  The participant, track, timestamp, and sequence remain those of the selected
+  frame. Cosmos fallback retains the original selected image. Reduced image
+  detail can affect small-text or fine-part recognition; evaluate such checks
+  with the prepared image path. Oversized prompt text or stricter external
+  service limits can still cause admission errors and are reported as unavailable.
 - Visual `evidence` requires a prose `condition`, positive `consecutive` count,
   and a bounded `commit` mapping for approved guides. The question asks Cosmos
   for observable facts; the condition tells CLEF which facts must all hold.
-  Do not ask Cosmos for a YES/NO or readiness token. CLEF receives the description
-  and condition, without images or conversation history, and chooses yes or no.
+  Do not ask Cosmos for a YES/NO or readiness token. CLEF first receives the
+  selected image and condition, without conversation history. Its chosen yes or
+  no is used directly only at confidence **strictly above 0.80**. Otherwise,
+  Cosmos describes the original selected image using the step's required
+  question, and CLEF judges that description and condition without the image or
+  prior decision. The caption judgment has no additional confidence threshold.
   Only yes counts toward completion. Ambiguity, missing facts, or contradictory
-  evidence should yield no. Confidence is logged, not used as another threshold.
+  evidence should yield no. Admission and inference failures are unavailable
+  evidence, not low-confidence decisions that trigger caption fallback.
   Visual steps reject `evidence.pattern` and observation `agent` policies.
 - Timer `evidence` retains its full-match `pattern` (normally `^true$` on
   `expired`), `consecutive`, and direct `commit`. No CLEF judgment measures time.

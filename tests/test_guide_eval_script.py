@@ -542,7 +542,7 @@ async def test_quiet_includes_speech_during_image_switch(runtime_evaluator, tmp_
 @pytest.mark.asyncio
 @pytest.mark.parametrize("intervening", [
     {"action": "wait_speech", "expect": "done"},
-    {"action": "observe", "answers": ["YES"]},
+    {"action": "observe", "accept": True},
     {"action": "quiet", "duration_s": 0.1},
 ])
 async def test_quiet_rejects_intervening_checks_before_model_work(runtime_evaluator, tmp_path, intervening):
@@ -590,6 +590,9 @@ def test_quiet_requires_a_say_even_after_images(runtime_evaluator):
     {"action": "quiet"}, {"action": "quiet", "duration_s": True},
     {"action": "quiet", "duration_s": float("nan")}, {"action": "quiet", "duration_s": 0},
     {"action": "observe", "case": "missing"},
+    {"action": "observe", "answers": ["YES"]},
+    {"action": "observe", "accept": "false"},
+    {"action": "observe"},
 ])
 async def test_invalid_actions_fail_before_model_work(runtime_evaluator, tmp_path, action):
     manifest = tmp_path / "invalid.yaml"
@@ -604,8 +607,9 @@ async def test_invalid_actions_fail_before_model_work(runtime_evaluator, tmp_pat
 @pytest.mark.asyncio
 @pytest.mark.parametrize("answer,expected", [(" \nno\t", True), ("YES", False)])
 @pytest.mark.parametrize("direct", [False, True])
+@pytest.mark.parametrize("shared_case", [False, True])
 async def test_runtime_observe_uses_shared_visual_case(
-    runtime_evaluator, tmp_path, monkeypatch, answer, expected, direct,
+    runtime_evaluator, tmp_path, monkeypatch, answer, expected, direct, shared_case,
 ):
     module = runtime_evaluator
     if direct:
@@ -625,7 +629,7 @@ async def test_runtime_observe_uses_shared_visual_case(
         "guide_path": "test.guide.yaml", "scenes": {"red": {"rectangle": "red"}},
         "visual_cases_file": "cases.yaml", "actions": [
             {"action": "image", "scene": "red"}, {"action": "say", "text": "Start guide"},
-            {"action": "observe", "case": "red", "count": 1},
+            {"action": "observe", **({"case": "red"} if shared_case else {"accept": False}), "count": 1},
         ],
     }))
     assert await module.evaluate(manifest, tmp_path / "output") is expected
