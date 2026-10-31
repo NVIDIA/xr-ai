@@ -24,6 +24,7 @@ class ForegroundRecord(_Event):
 
 
 class GuidanceRecord(_Event):
+    run_id: str | None = None
     timestamp_us: int = Field(ge=0)
     event: str
     step_id: str | None = None

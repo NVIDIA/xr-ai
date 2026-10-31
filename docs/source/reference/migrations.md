@@ -30,6 +30,104 @@ point for new voice-and-vision applications. Its routed conversation and
 visual-question behavior differs from Simple VLM; migrating application code
 requires reviewing that composition rather than only renaming the launcher.
 
+### Tea model instructions are inline YAML
+
+The tea worker now keeps all app-level model instructions and background decision
+policies in `yaml/tea_making_worker.yaml`. The packaged prompt directory and file
+fallbacks are removed. Copy the complete main YAML when creating a custom worker
+configuration; missing prompt text or decision mappings are rejected. Replace
+`*_prompt_file` options with the corresponding inline text value.
+
+Source/default sample startup reads the checked-in worker YAML. An installed
+worker outside the sample directory must receive `--config` pointing to that
+file or its complete custom copy. Workflow/step-specific prompts remain in the
+external `workflow.yaml`; no prompt wording or model settings changed. New run
+bundles retain the complete effective instructions in their worker/workflow
+snapshots, without separate prompt-file copies. Existing run bundles are intact.
+
+### Tea routing uses SDK-owned turn lifecycle
+
+`SOPAgent` is now the focused routing destination rather than a foreground
+supervisor containing its own router. The application configures the SDK
+`AgentRouter` runtime subscriber and initialization/cleanup hooks. Destinations
+publish SDK `ResponseOutputs` directly. Stop the router before the SOP agent.
+A small original-generation left-event adapter delegates departure to the router
+and preserves existing file/image producer acknowledgments.
+
+Under `task.foreground`, replace each `active_question.actions` and
+`idle_question.actions` mapping with `criteria`, mapping the existing labels to
+their criterion text. Do the same for watcher/transcript/journal control questions.
+Immediate camera/reference/history destinations require only their description.
+Remove execution fields such as `tool`, `arguments`, `generate`, `authorize` and
+`observation`: concrete handlers own the existing operations and bindings.
+The unused `unavailable_message` field is removed. Semantic instructions and
+criterion wording are unchanged. No SDK API is added.
+
+### Tea sample-local API and prompt organization
+
+Tea composition imports `SOPAgent`, `Workflow`, and `load_workflow` from
+`tea_making_worker`; reusable visual/identity flows are in
+`tea_making_worker.flows`. Execution and conversation implementation modules have
+moved under `sop/` and `conversation/`; update any prototype imports of their old
+private paths. No SDK API is introduced.
+
+The worker uses inline `current_view_prompt` for a shared camera policy.
+`foreground_prompt` applies to active guidance as well as general conversation. Tune active voice behavior in
+`task.foreground.active_prompt`; the unused `guidance_voice.txt` policy and
+separate hard-coded active style are removed. Background prompt policies are
+inline in the main worker YAML. Refer to {doc}`tea-making-sample` for ownership
+and loading rules.
+
+### Tea guidance uses focused routing and declared observations
+
+The tea sample requires a Clef decision endpoint in addition to its existing
+Omni, speech, TTS, and embedding services. The sample-owned model launcher now
+includes Clef. Qualify its additional GPU memory within the selected profile's
+existing budgets before launching the updated stack.
+
+Custom tea workflows replace `agent.prompt` and `agent.tools` observation blocks
+with typed `observation` policies. Add scoped decisions under `task.foreground`
+and read-only conversation tools under `voice.tools`. Replace any prototype
+`voice.choices` or answer/check action split with one informational answer action.
+Declare cheap live source projections under each step's `context`; the timer
+example uses `clock__timer` with state-bound start and duration arguments.
+Extracted unit-bearing fields
+return a value and unit; code normalizes them before updating scalar state.
+Refer to {doc}`tea-making-sample` for the schema and ownership rules.
+
+Tea guidance is one focused top-level destination. Side requests can be answered
+by other existing destinations without ending guidance. Explicit reset releases
+focus. Language-model generation no longer receives workflow state-write tools,
+and simultaneous voice updates are joined rather than rewritten by a model.
+Dialogue persists across runs. Finishing/resetting/restarting closes the outgoing
+run manager after a historical handoff; a new run has fresh execution state and
+evidence. Completed native workflow state now returns to initial values after
+the final state is recorded.
+
+### Tea progression and target verification
+
+The tea sample now defaults to `task.advancement: automatic`. Confirmed steps
+advance immediately and announce the next instruction; use `manual` to retain
+the explicit-next interaction. Completion messages no longer contain a baked-in
+next request; `task.manual_advance_message` supplies that reminder in manual mode.
+
+The heating step now verifies the resolved brewing target rather than a fixed
+heating-underway threshold. The progress field is `temperature_ready`, replacing
+`heating_started`. Update custom workflow references and state fixtures. Two
+unit-bearing frame readings must reach or exceed the target. Live visual evidence clears on each step transition. Completed-step observations
+remain in run history and historical handoffs.
+
+### Tea SOP run bundles retain inference images
+
+Tea worker launches now write separate bundles under `artifacts/runs/<run>/`,
+including configuration snapshots and structured SOP attempts grouped by YAML
+step ID. Consumed inference images are recorded by default; set
+`capture.enabled: false` in the worker YAML to disable structured attempts and
+image storage. Existing participant JSONL files and the supplemental Relay log
+move inside each run directory. Previous artifacts are preserved.
+The separate `--session-recording` option still controls continuous audio/video
+capture. Refer to {doc}`tea-making-sample` for the bundle format and retention.
+
 ### vLLM 0.31 security update
 
 The four vLLM service environments pin `vllm==0.31.0`. Their standalone YAMLs

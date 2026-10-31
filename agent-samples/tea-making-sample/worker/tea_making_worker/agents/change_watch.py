@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Opt-in broad visual captions with five-caption delta context."""
+"""Opt-in visual change monitoring with two-caption deduplication."""
 
 from __future__ import annotations
 
@@ -15,74 +15,75 @@ from typing import TYPE_CHECKING
 
 import nemo_relay
 from loguru import logger
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from xr_ai_hub import FrameUnavailable
 from xr_ai_interaction import ParticipantLeft
-from xr_ai_models import ChatMessage, ChatResponse, LLMService, ToolDef, VLMService
+from xr_ai_models import ChatMessage, DecisionQuestion, DecisionService, LLMService, VLMService
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeClosedError, RuntimeContext, subscribe
 from xr_ai_tools import Tool, ToolSet
 from xr_ai_tools.current_frame import CurrentFrameRequest
-from xr_ai_tools.tool_calling import run_tool_loop
 from xr_ai_tools.vision import ImageQueryRequest, ImageQueryTool
 
-from .events import (
+from .._capture import _attempt, _frame
+from ..events import (
     BACKGROUND_FACT_TOPIC,
+    CHANGE_WATCH_RECORD_TOPIC,
     PARTICIPANT_CLEANUP_COMPLETE_TOPIC,
     PARTICIPANT_LEFT_TOPIC,
-    VIDEO_LOG_RECORD_TOPIC,
     BackgroundFact,
+    ChangeWatchRecord,
     ParticipantCleanupComplete,
-    VideoLogRecord,
 )
 
 if TYPE_CHECKING:
     from .images import ParticipantImageAgent
 
-_NO_CHANGE = "no meaningful visual change"
-_NO_CHANGE_RESPONSES = frozenset(
-    {
-        _NO_CHANGE,
-        f"{_NO_CHANGE}s; the scene remains stable",
-        f"there was {_NO_CHANGE}",
-    }
-)
+
+class ChangeWatchStartRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    instruction: str = Field(default="", max_length=240)
 
 
-class VideoLogControlRequest(BaseModel):
+class ChangeWatchControlRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-class VideoLogState(BaseModel):
+class ChangeWatchState(BaseModel):
     active: bool
+    instruction: str = ""
     message: str = Field(min_length=1)
 
 
-class VideoDelta(BaseModel):
+class ChangeDecision(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    delta: str = Field(min_length=1, max_length=400)
+    important: bool
+    summary: str = Field(default="", max_length=300)
 
-    @field_validator("delta")
-    @classmethod
-    def strip_delta(cls, value: str) -> str:
-        delta = value.strip()
-        if not delta:
-            raise ValueError("delta must not be blank")
-        return delta
+    @model_validator(mode="after")
+    def validate_summary(self) -> ChangeDecision:
+        self.summary = self.summary.strip()
+        if self.important and not self.summary:
+            raise ValueError("important changes require a summary")
+        if not self.important:
+            self.summary = ""
+        return self
 
 
 @dataclass(slots=True)
-class _VideoState:
-    captions: deque[str]
+class _WatchState:
+    instruction: str
+    captions: deque[str] = field(default_factory=lambda: deque(maxlen=2))
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
 
-def _is_no_change(delta: str) -> bool:
-    return delta.strip().rstrip(".").casefold() in _NO_CHANGE_RESPONSES
+def _same_caption(left: str, right: str) -> bool:
+    return left.strip().casefold() == right.strip().casefold()
 
 
-class VideoLogAgent(Agent):
-    """Own participant-scoped broad visual activity logs."""
+class ChangeWatchAgent(Agent):
+    """Own participant-scoped change-watch tasks and model decisions."""
 
     def __init__(
         self,
@@ -90,79 +91,83 @@ class VideoLogAgent(Agent):
         images: ParticipantImageAgent,
         vlm: VLMService,
         llm: LLMService,
+        decisions: DecisionService,
+        decision: DecisionQuestion,
         caption_prompt: str,
-        delta_prompt: str,
+        event_prompt: str,
+        default_instruction: str,
         interval_s: float,
-        history_size: int = 5,
     ) -> None:
         if interval_s <= 0:
             raise ValueError("interval_s must be positive")
-        if history_size < 2:
-            raise ValueError("history_size must be at least two")
         if not caption_prompt.strip():
             raise ValueError("caption_prompt must not be empty")
-        if not delta_prompt.strip():
-            raise ValueError("delta_prompt must not be empty")
+        if not event_prompt.strip():
+            raise ValueError("event_prompt must not be empty")
+        if not default_instruction.strip():
+            raise ValueError("default_instruction must not be empty")
         self._images = images
         self._query_image = ImageQueryTool(images=images.images, vlm=vlm)
         self._llm = llm
+        self._decisions = decisions
+        self._decision = decision
         self._caption_prompt = caption_prompt.strip()
-        self._delta_prompt = delta_prompt.strip()
+        self._event_prompt = event_prompt.strip()
+        self._default_instruction = default_instruction.strip().rstrip(".!? ")
         self._interval_s = interval_s
-        self._history_size = history_size
         self._runtime: AgentRuntime | None = None
         self._tasks: dict[str, asyncio.Task[None]] = {}
-        self._states: dict[str, _VideoState] = {}
+        self._states: dict[str, _WatchState] = {}
         self._stopped = False
         super().__init__()
 
     def bind_runtime(self, runtime: AgentRuntime) -> None:
         if not runtime.running:
-            raise RuntimeError("video log requires a running agent runtime")
+            raise RuntimeError("change watch requires a running agent runtime")
         if self._runtime is not None:
-            raise RuntimeError("video log is already bound")
+            raise RuntimeError("change watch is already bound")
         self._runtime = runtime
 
     def participant_tools(self, participant_id: str) -> ToolSet:
-        """Return video-log controls bound to one participant."""
+        """Return lifecycle controls with participant identity bound by the caller."""
 
-        async def start(_request: VideoLogControlRequest) -> VideoLogState:
-            return await self._start(participant_id)
+        async def start(request: ChangeWatchStartRequest) -> ChangeWatchState:
+            return await self._start(participant_id, request.instruction)
 
-        async def stop(_request: VideoLogControlRequest) -> VideoLogState:
+        async def stop(_request: ChangeWatchControlRequest) -> ChangeWatchState:
             return await self._stop(participant_id)
 
-        async def status(_request: VideoLogControlRequest) -> VideoLogState:
+        async def status(_request: ChangeWatchControlRequest) -> ChangeWatchState:
             return self._status(participant_id)
 
-        def render(result: VideoLogState) -> str:
+        def render(result: ChangeWatchState) -> str:
             return result.message
 
         return ToolSet(
             (
                 Tool(
-                    "video_log__start",
-                    "Start broad visual activity logging in the background.",
-                    VideoLogControlRequest,
-                    VideoLogState,
+                    "change_watch__start",
+                    "Start visual change monitoring in the background.",
+                    ChangeWatchStartRequest,
+                    ChangeWatchState,
                     start,
                     return_direct=True,
                     render_result=render,
                 ),
                 Tool(
-                    "video_log__stop",
-                    "Stop broad visual activity logging.",
-                    VideoLogControlRequest,
-                    VideoLogState,
+                    "change_watch__stop",
+                    "Stop visual change monitoring.",
+                    ChangeWatchControlRequest,
+                    ChangeWatchState,
                     stop,
                     return_direct=True,
                     render_result=render,
                 ),
                 Tool(
-                    "video_log__status",
-                    "Report whether broad visual activity logging is running.",
-                    VideoLogControlRequest,
-                    VideoLogState,
+                    "change_watch__status",
+                    "Report whether visual change monitoring is running.",
+                    ChangeWatchControlRequest,
+                    ChangeWatchState,
                     status,
                     return_direct=True,
                     render_result=render,
@@ -181,12 +186,12 @@ class VideoLogAgent(Agent):
             PARTICIPANT_CLEANUP_COMPLETE_TOPIC,
             ParticipantCleanupComplete(
                 generation=ctx.metadata.message_id,
-                producer="video_log",
+                producer="change_watch",
             ),
         )
 
     async def stop(self) -> None:
-        """Cancel all video logging tasks before runtime shutdown."""
+        """Cancel all monitoring tasks before runtime shutdown."""
 
         self._stopped = True
         tasks = tuple(self._tasks.values())
@@ -198,63 +203,78 @@ class VideoLogAgent(Agent):
             await asyncio.gather(*tasks, return_exceptions=True)
         self._runtime = None
 
-    async def _start(self, participant_id: str) -> VideoLogState:
+    async def _start(self, participant_id: str, instruction: str) -> ChangeWatchState:
         runtime = self._running_runtime()
         task = self._tasks.get(participant_id)
         if task is not None and not task.done():
-            return VideoLogState(
+            current = self._states[participant_id].instruction
+            return ChangeWatchState(
                 active=True,
-                message="Video activity logging is already running.",
+                instruction=current,
+                message=f"Visual change monitoring is already running. Monitoring: {current}.",
             )
-        self._states[participant_id] = _VideoState(
-            captions=deque(maxlen=self._history_size)
-        )
+        focus = instruction.strip().rstrip(".!? ") or self._default_instruction
+        self._states[participant_id] = _WatchState(instruction=focus)
         await runtime.publish(
-            VIDEO_LOG_RECORD_TOPIC,
-            VideoLogRecord(
+            CHANGE_WATCH_RECORD_TOPIC,
+            ChangeWatchRecord(
                 timestamp_us=time.time_ns() // 1_000,
                 record_type="started",
+                instruction=focus,
             ),
             participant_id=participant_id,
-            source="video-log",
+            source="change-watch",
         )
         task = asyncio.create_task(
             self._run(participant_id),
-            name=f"video-log:{participant_id}",
+            name=f"change-watch:{participant_id}",
             context=nemo_relay.fork_asyncio_context(),
         )
         self._tasks[participant_id] = task
-        task.add_done_callback(
-            lambda completed, pid=participant_id: self._discard(pid, completed)
+        task.add_done_callback(lambda completed, pid=participant_id: self._discard(pid, completed))
+        return ChangeWatchState(
+            active=True,
+            instruction=focus,
+            message=f"Visual change monitoring started. Monitoring: {focus}.",
         )
-        return VideoLogState(active=True, message="Video activity logging started.")
 
-    async def _stop(self, participant_id: str) -> VideoLogState:
+    async def _stop(self, participant_id: str) -> ChangeWatchState:
+        state = self._states.get(participant_id)
+        instruction = state.instruction if state is not None else ""
         active = await self._cancel(participant_id)
         if not active:
-            return VideoLogState(
+            return ChangeWatchState(
                 active=False,
-                message="Video activity logging is not running.",
+                message="Visual change monitoring is not running.",
             )
         await self._publish_record(
             participant_id,
-            VideoLogRecord(
+            ChangeWatchRecord(
                 timestamp_us=time.time_ns() // 1_000,
                 record_type="stopped",
+                instruction=instruction,
             ),
         )
-        return VideoLogState(active=False, message="Video activity logging stopped.")
+        return ChangeWatchState(
+            active=False,
+            instruction=instruction,
+            message="Visual change monitoring stopped.",
+        )
 
-    def _status(self, participant_id: str) -> VideoLogState:
+    def _status(self, participant_id: str) -> ChangeWatchState:
         task = self._tasks.get(participant_id)
         active = task is not None and not task.done()
-        return VideoLogState(
+        state = self._states.get(participant_id)
+        instruction = state.instruction if active and state is not None else ""
+        message = (
+            f"Visual change monitoring is running. Monitoring: {instruction}."
+            if active
+            else "Visual change monitoring is stopped."
+        )
+        return ChangeWatchState(
             active=active,
-            message=(
-                "Video activity logging is running."
-                if active
-                else "Video activity logging is stopped."
-            ),
+            instruction=instruction,
+            message=message,
         )
 
     async def _run(self, participant_id: str) -> None:
@@ -264,19 +284,22 @@ class VideoLogAgent(Agent):
                 await asyncio.sleep(self._interval_s)
 
     async def _observe(self, participant_id: str) -> None:
+        async with _attempt(participant_id, "watch"):
+            await self._observe_recorded(participant_id)
+
+    async def _observe_recorded(self, participant_id: str) -> None:
         state = self._states.get(participant_id)
         if state is None or state.lock.locked():
             return
         async with state.lock:
             now_us = time.time_ns() // 1_000
             try:
-                frame = await self._images.get_current_frame.execute(
-                    CurrentFrameRequest(participant_id=participant_id)
-                )
+                frame = await self._images.get_current_frame.execute(CurrentFrameRequest(participant_id=participant_id))
+                await _frame(frame)
                 caption_result = await self._query_image.execute(
                     ImageQueryRequest(
                         image=frame.image,
-                        query=self._caption_prompt,
+                        query=(f"{self._caption_prompt}\nFocus: {state.instruction}"),
                     )
                 )
             except asyncio.CancelledError:
@@ -284,27 +307,27 @@ class VideoLogAgent(Agent):
             except FrameUnavailable as exc:
                 await self._publish_record(
                     participant_id,
-                    VideoLogRecord(
+                    ChangeWatchRecord(
                         timestamp_us=now_us,
                         record_type="unavailable",
+                        instruction=state.instruction,
                         error=str(exc),
                     ),
                 )
                 return
             except Exception as exc:
-                logger.opt(exception=True).warning(
-                    "video caption failed pid={!r}", participant_id
-                )
-                await self._publish_error(participant_id, now_us, str(exc))
+                logger.opt(exception=True).warning("change watch vision failed pid={!r}", participant_id)
+                await self._publish_error(participant_id, state, now_us, str(exc))
                 return
 
             caption = caption_result.text.strip()
             if not caption_result.available or not caption:
                 await self._publish_record(
                     participant_id,
-                    VideoLogRecord(
+                    ChangeWatchRecord(
                         timestamp_us=now_us,
                         record_type="unavailable",
+                        instruction=state.instruction,
                         error=caption or "visual caption unavailable",
                     ),
                 )
@@ -313,95 +336,80 @@ class VideoLogAgent(Agent):
                 state.captions.append(caption)
                 await self._publish_record(
                     participant_id,
-                    VideoLogRecord(
+                    ChangeWatchRecord(
                         timestamp_us=now_us,
-                        record_type="observation",
+                        record_type="baseline",
+                        instruction=state.instruction,
                         caption=caption,
                     ),
                 )
                 return
+
+            duplicate = _same_caption(state.captions[-1], caption)
+            if duplicate:
+                state.captions.append(caption)
+                await self._publish_record(
+                    participant_id,
+                    ChangeWatchRecord(
+                        timestamp_us=now_us,
+                        record_type="observation",
+                        instruction=state.instruction,
+                        caption=caption,
+                        duplicate=True,
+                    ),
+                )
+                return
+
             try:
-                delta = await self._generate_delta(state, caption)
+                decision = await self._decide(state, caption)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
-                logger.opt(exception=True).warning(
-                    "video delta failed pid={!r}", participant_id
-                )
+                logger.opt(exception=True).warning("change watch decision failed pid={!r}", participant_id)
                 await self._publish_error(
                     participant_id,
+                    state,
                     now_us,
                     str(exc),
                     caption=caption,
                 )
                 return
             state.captions.append(caption)
-            await self._publish_record(
-                participant_id,
-                VideoLogRecord(
-                    timestamp_us=now_us,
-                    record_type="observation",
-                    caption=caption,
-                    delta=delta.delta,
-                ),
+            record = ChangeWatchRecord(
+                timestamp_us=now_us,
+                record_type="observation",
+                instruction=state.instruction,
+                caption=caption,
+                important=decision.important,
+                summary=decision.summary,
             )
-            if not _is_no_change(delta.delta):
-                await self._publish_fact(participant_id, now_us, delta.delta)
+            await self._publish_record(participant_id, record)
+            if decision.important:
+                await self._publish_fact(participant_id, now_us, decision.summary)
 
-    async def _generate_delta(
-        self,
-        state: _VideoState,
-        caption: str,
-    ) -> VideoDelta:
-        async def commit(request: VideoDelta) -> VideoDelta:
-            return request
-
-        tools = ToolSet(
+    async def _decide(self, state: _WatchState, caption: str) -> ChangeDecision:
+        payload = {"watch_for": state.instruction, "previous": list(state.captions), "current": caption}
+        response = await self._decisions.decide(payload, {"change": self._decision})
+        choice = response.answers["change"].choice
+        if choice not in self._decision.criteria:
+            raise ValueError("invalid change choice")
+        if choice != "accepted":
+            return ChangeDecision(important=False)
+        response = await self._llm.chat(
             (
-                Tool(
-                    "video_log__commit",
-                    "Commit the material visible delta for the current caption.",
-                    VideoDelta,
-                    VideoDelta,
-                    commit,
-                    return_direct=True,
-                ),
-            )
-        )
-        previous = list(state.captions)[-(self._history_size - 1) :]
-        payload = json.dumps(
-            {"previous": previous, "current": caption},
-            ensure_ascii=False,
-            separators=(",", ":"),
-        )
-
-        async def call_model(
-            messages: tuple[ChatMessage, ...],
-            definitions: tuple[ToolDef, ...],
-        ) -> ChatResponse:
-            return await self._llm.chat(
-                messages,
-                tools=definitions,
-                max_tokens=384,
-                temperature=0.0,
-                enable_thinking=False,
-            )
-
-        result = await run_tool_loop(
-            (
-                ChatMessage(role="system", content=self._delta_prompt),
-                ChatMessage(role="user", content=payload),
+                ChatMessage(role="system", content=self._event_prompt),
+                ChatMessage(role="user", content=json.dumps(payload, ensure_ascii=False)),
             ),
-            tools,
-            call_model,
-            max_iterations=3,
-            max_tool_calls=2,
+            max_tokens=128,
+            temperature=0.0,
+            enable_thinking=False,
         )
-        return VideoDelta.model_validate_json(result.content)
+        return ChangeDecision(important=True, summary=response.content)
 
     async def _publish_error(
         self,
         participant_id: str,
+        state: _WatchState,
         timestamp_us: int,
         error: str,
         *,
@@ -409,9 +417,10 @@ class VideoLogAgent(Agent):
     ) -> None:
         await self._publish_record(
             participant_id,
-            VideoLogRecord(
+            ChangeWatchRecord(
                 timestamp_us=timestamp_us,
                 record_type="error",
+                instruction=state.instruction,
                 caption=caption,
                 error=error,
             ),
@@ -420,17 +429,17 @@ class VideoLogAgent(Agent):
     async def _publish_record(
         self,
         participant_id: str,
-        record: VideoLogRecord,
+        record: ChangeWatchRecord,
     ) -> None:
         runtime = self._runtime
         if runtime is None:
             return
         try:
             await runtime.publish(
-                VIDEO_LOG_RECORD_TOPIC,
+                CHANGE_WATCH_RECORD_TOPIC,
                 record,
                 participant_id=participant_id,
-                source="video-log",
+                source="change-watch",
             )
         except RuntimeClosedError:
             return
@@ -449,11 +458,11 @@ class VideoLogAgent(Agent):
                 BACKGROUND_FACT_TOPIC,
                 BackgroundFact(
                     timestamp_us=timestamp_us,
-                    application="video_log",
+                    application="change_watch",
                     text=text,
                 ),
                 participant_id=participant_id,
-                source="video-log",
+                source="change-watch",
             )
         except RuntimeClosedError:
             return
@@ -475,28 +484,27 @@ class VideoLogAgent(Agent):
             return
         with suppress(asyncio.CancelledError):
             if error := task.exception():
-                logger.error(
-                    "video log stopped pid={!r}: {!r}", participant_id, error
-                )
+                logger.error("change watch stopped pid={!r}: {!r}", participant_id, error)
 
     def _running_runtime(self) -> AgentRuntime:
         if self._stopped:
-            raise RuntimeError("video log is stopping")
+            raise RuntimeError("change watch is stopping")
         if self._runtime is None or not self._runtime.running:
-            raise RuntimeError("video log requires a running agent runtime")
+            raise RuntimeError("change watch requires a running agent runtime")
         return self._runtime
 
     @staticmethod
     def _participant(ctx: RuntimeContext) -> str:
         participant_id = ctx.metadata.participant_id
         if participant_id is None:
-            raise ValueError("video log lifecycle requires a participant")
+            raise ValueError("change watch lifecycle requires a participant")
         return participant_id
 
 
 __all__ = [
-    "VideoDelta",
-    "VideoLogAgent",
-    "VideoLogControlRequest",
-    "VideoLogState",
+    "ChangeDecision",
+    "ChangeWatchAgent",
+    "ChangeWatchControlRequest",
+    "ChangeWatchStartRequest",
+    "ChangeWatchState",
 ]

@@ -5,47 +5,54 @@
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import json
 import re
+import time
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
 import yaml
-from tea_making_worker.background_context import BackgroundContextAgent
-from tea_making_worker.change_watch import ChangeWatchAgent
+from tea_making_worker import SOPAgent
+from tea_making_worker.agents._destinations import _destinations
+from tea_making_worker.agents.background_context import BackgroundContextAgent
+from tea_making_worker.agents.change_watch import ChangeWatchAgent
+from tea_making_worker.agents.sop._engine import _WorkflowEngine
+from tea_making_worker.agents.transcript import TranscriptAgent
+from tea_making_worker.agents.video_log import VideoLogAgent
 from tea_making_worker.config import load_config
-from tea_making_worker.foreground import ForegroundAgent
-from tea_making_worker.spec import load_workflow
-from tea_making_worker.transcript import TranscriptAgent
-from tea_making_worker.video_log import VideoLogAgent
-from tea_making_worker.workflow import GuidanceAgent, _state_contract
-from tea_making_worker.workflow_tools import workflow_commit_tool
-from xr_ai_models import ChatMessage, LLMService, load_models_config, make_llm
-from xr_ai_tools import ToolSet
+from tea_making_worker.events import FOREGROUND_RECORD_TOPIC
+from tea_making_worker.flows._observations import _observe
+from tea_making_worker.sop import load_workflow
+from xr_ai_hub import FrameUnavailable
+from xr_ai_models import ChatMessage, DecisionService, LLMService, load_models_config, make_decision, make_llm
+from xr_ai_routing import AgentRouter, AgentTurn
+from xr_ai_runtime import AgentRuntime
+from xr_ai_tools import Tool, ToolSet
 from xr_ai_tools.image import ImageRegistry
-from xr_ai_tools.tool_calling import tool_definitions
+from xr_ai_tools.rag import RetrieveResult
+from xr_ai_tools.vision import ImageQueryResult
 
 _SAMPLE = Path(__file__).resolve().parents[1]
 _MIN_PASS_RATE = 0.80
 
 
-def _build_agents(llm: LLMService) -> tuple[ForegroundAgent, GuidanceAgent]:
+def _build_agents(llm: LLMService, decisions: DecisionService) -> tuple[SOPAgent, _WorkflowEngine]:
     config = load_config(_SAMPLE / "yaml" / "tea_making_worker.yaml")
+    async def unavailable_frame(_request):
+        raise FrameUnavailable("No camera image is supplied by this routing eval.")
+    async def empty_reference(_request):
+        return RetrieveResult(results=[])
     images = SimpleNamespace(
-        images=ImageRegistry(),
-        get_current_frame=SimpleNamespace(),
+        images=ImageRegistry(), get_current_frame=SimpleNamespace(execute=unavailable_frame),
     )
-    placeholder = SimpleNamespace()
-    guidance = GuidanceAgent(
-        workflow=load_workflow(_SAMPLE / "yaml" / "workflow.yaml"),
-        llm=llm,
-        current_frame=images.get_current_frame,
-        image_query=placeholder,
-        rag=placeholder,
-    )
+    placeholder = SimpleNamespace(retrieve=SimpleNamespace(execute=empty_reference))
     change_watch = ChangeWatchAgent(
+        decisions=decisions,
+        decision=config.change_watch_decision,
         images=images,
         vlm=placeholder,
         llm=llm,
@@ -59,6 +66,8 @@ def _build_agents(llm: LLMService) -> tuple[ForegroundAgent, GuidanceAgent]:
         summary_prompt="Summarize the transcript.",
     )
     video_log = VideoLogAgent(
+        decisions=decisions,
+        decision=config.video_delta_decision,
         images=images,
         vlm=placeholder,
         llm=llm,
@@ -66,23 +75,47 @@ def _build_agents(llm: LLMService) -> tuple[ForegroundAgent, GuidanceAgent]:
         delta_prompt="Compare the views.",
         interval_s=2.0,
     )
-    foreground = ForegroundAgent(
+    foreground = SOPAgent(
+        decisions=decisions,
         llm=llm,
         images=images,
         vlm=placeholder,
         rag=placeholder,
-        guidance=guidance,
-        background_context=BackgroundContextAgent(),
-        change_watch=change_watch,
-        transcript=transcript,
-        video_log=video_log,
+        # Routing cases hold each stage explicitly; automatic progression is
+        # exercised separately by the procedure integration tests.
+        workflow=replace(load_workflow(_SAMPLE / "yaml/workflow.yaml"), advancement="manual"),
+        image_query=placeholder,
+        application_tools=lambda pid: ToolSet(
+            tool for provider in (BackgroundContextAgent(), change_watch, transcript, video_log)
+            for _, tool in provider.participant_tools(pid).items()
+        ),
         prompt=config.foreground_prompt,
+        current_view_prompt=config.current_view_prompt,
+        context_budget_bytes=config.context_budget_bytes,
+        compaction_input_budget_bytes=config.compaction_input_budget_bytes,
     )
-    return foreground, guidance
+    question_tools = foreground._question_tools
+
+    def fixture_tools(participant_id):
+        tools = {}
+        for name, tool in question_tools(participant_id).items():
+            if name == "current_view":
+                async def unavailable(_request):
+                    return ImageQueryResult(text="No camera image is supplied by this routing eval.", available=False)
+                tool = Tool(name, tool.description, tool.request_model, tool.result_model, unavailable)
+            elif name == "rag_lookup":
+                async def empty_reference(_request):
+                    return RetrieveResult(results=[])
+                tool = Tool(name, tool.description, tool.request_model, tool.result_model, empty_reference)
+            tools[name] = tool
+        return ToolSet(tools)
+
+    foreground._question_tools = fixture_tools
+    return foreground, foreground._workflow_engine
 
 
 def _active_route(
-    guidance: GuidanceAgent,
+    guidance: _WorkflowEngine,
     case: dict[str, Any],
     participant_id: str,
 ) -> None:
@@ -120,164 +153,199 @@ def _normalize_response(text: str) -> str:
     return " ".join(text.split())
 
 
-def _observation_turn(
-    guidance: GuidanceAgent,
-    case: dict[str, Any],
-    participant_id: str,
-) -> tuple[tuple[ChatMessage, ...], ToolSet]:
-    session = guidance.store.get(participant_id)
-    guidance.store.start(session)
-    step = guidance.workflow.step(str(case["step"]))
-    quick = guidance._named_tools(session, step.agent.tools)
-    commit = workflow_commit_tool(
-        guidance.store,
-        session,
-        expected_step_id=step.id,
-        expected_revision=session.revision,
-    )
-    tools = ToolSet({commit.name: commit, **dict(quick.items())})
-    request = json.dumps(
-        {
-            "observation": case["observation"],
-            "already_complete": False,
-            "state": guidance.workflow.project(step, session.state),
-        },
-        ensure_ascii=False,
-        separators=(",", ":"),
-    )
-    system = "\n".join(
-        (
-            guidance._observation_prompt,
-            _state_contract(guidance.workflow, step),
-            step.agent.prompt,
+class _RecordingDecisions:
+    def __init__(self, service: DecisionService) -> None:
+        self.service = service
+        self.calls: list[dict[str, Any]] = []
+
+    async def decide(self, state, questions, **kwargs):
+        started = time.perf_counter()
+        result = await self.service.decide(state, questions, **kwargs)
+        self.calls.append(
+            {
+                "state": state,
+                "questions": {
+                    key: {"instructions": question.instructions, "criteria": dict(question.criteria)}
+                    for key, question in questions.items()
+                },
+                "choices": {key: list(question.criteria) for key, question in questions.items()},
+                "answers": {key: answer.choice for key, answer in result.answers.items()},
+                "probabilities": {key: dict(answer.probabilities) for key, answer in result.answers.items()},
+                "model": result.model,
+                "model_revision": result.raw.get("model_revision"),
+                "duration_ms": (time.perf_counter() - started) * 1000,
+            }
         )
-    )
-    return (
-        ChatMessage(role="system", content=system),
-        ChatMessage(role="user", content=request),
-    ), tools
+        return result
 
 
 async def main() -> None:
-    cases = yaml.safe_load((_SAMPLE / "eval" / "cases.yaml").read_text(encoding="utf-8"))
-    llm = make_llm(load_models_config(_SAMPLE / "yaml" / "models.local.json"), "llm")
-    foreground, guidance = _build_agents(llm)
-    passed_count = 0
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--cases", type=Path, default=_SAMPLE / "eval/cases.yaml")
+    parser.add_argument("--output", type=Path, help="Write per-case results and model-call timings as JSONL.")
+    args = parser.parse_args()
+    cases = yaml.safe_load(args.cases.read_text(encoding="utf-8"))
+    models = load_models_config(_SAMPLE / "yaml/models.local.json")
+    llm = make_llm(models, "llm")
+    decision_service = make_decision(models, "decision")
+    decisions = _RecordingDecisions(decision_service)
+    foreground, guidance = _build_agents(llm, decisions)
+    # Exercise production destinations and request assembly. External background
+    # effects are fixtures; native SOP controls and state transitions remain real.
+    captured: dict[str, dict[str, Any]] = {}
+    runtime = AgentRuntime()
+    foreground.bind_runtime(runtime)
+    publish = runtime.publish
+
+    async def record(topic, message, **kwargs):
+        if topic is FOREGROUND_RECORD_TOPIC:
+            row = captured[kwargs["participant_id"]]
+            row["content"], row["tools"] = message.response, message.tools
+        await publish(topic, message, **kwargs)
+
+    runtime.publish = record
+
+    def recorded_tools(provider, *, background=False):
+        def catalog(participant):
+            original = provider(participant)
+            if original is None:
+                return None
+            result = []
+            for name, tool in original.items():
+                async def execute(request, tool=tool, name=name):
+                    captured[participant]["arguments"] = request.model_dump(mode="json")
+                    if background and name.split("__")[-1] in {"start", "stop", "status"}:
+                        return tool.result_model(active=name.endswith("__start"), message="Fixture control completed.")
+                    return await tool.execute(request)
+                result.append(Tool(name, tool.description, tool.request_model, tool.result_model, execute,
+                                   return_direct=tool.return_direct))
+            return ToolSet(result)
+        return catalog
+
+    guidance.root_tools = recorded_tools(guidance.root_tools)
+    guidance.active_tools = recorded_tools(guidance.active_tools)
+    foreground._background_tools = recorded_tools(foreground._background_tools, background=True)
+
+    async def output(turn, _route, text):
+        captured[turn.participant_id]["content"] = text
+
+    router = AgentRouter(_destinations(
+        foreground,
+        policy=foreground._policy,
+        decisions=decisions,
+        llm=llm,
+        participant_tools=foreground._background_tools,
+        respond=foreground._respond,
+        generate_answer=foreground._generate_answer,
+        current_frame=foreground._images.get_current_frame,
+        vision=foreground.tools[0],
+        rag=foreground._rag,
+        vlm_timeout_s=foreground._vlm_timeout_s,
+    ), decisions, output=output)
+    await runtime.start()
+    rows = []
     try:
         for index, case in enumerate(cases):
             participant_id = f"tea-eval-{index}"
-            observation_case = case.get("kind") == "observation"
-            if observation_case:
-                messages, tools = _observation_turn(guidance, case, participant_id)
-            else:
-                if case.get("route", "root") == "active":
-                    _active_route(
-                        guidance,
-                        case,
-                        participant_id,
+            captured[participant_id] = {"tools": [], "content": ""}
+            errors = []
+            started = time.perf_counter()
+            decisions.calls = []
+            try:
+                if case.get("kind") == "observation":
+                    # Caption extraction fixtures do not qualify physical camera accuracy.
+                    policy = guidance.workflow.step(case["step"]).observation
+                    result = await llm.chat(
+                        (
+                            ChatMessage(
+                                role="system",
+                                content=policy.extraction_question("Extract only facts in this description."),
+                            ),
+                            ChatMessage(role="user", content=case["observation"]),
+                        ),
+                        max_tokens=256,
+                        temperature=0.0,
+                        enable_thinking=False,
                     )
-                turn = foreground._prepare_turn(
-                    participant_id,
-                    query=case["query"],
-                    ctx=None,
-                    timestamp_us=None,
-                )
-                expected_route = (
-                    "tea" if case.get("route", "root") == "active" else "root"
-                )
-                if turn.route != expected_route:
-                    raise ValueError(
-                        f"case {case['name']!r} prepared route {turn.route!r}, expected {expected_route!r}"
+                    observed = await _observe(
+                        policy, result.content, {}, decisions=decisions, llm=llm, tools=ToolSet(()), timeout_s=15.0
                     )
-                messages = (
-                    ChatMessage(role="system", content=turn.agent.system_prompt),
-                    ChatMessage(role="user", content=turn.user_message),
-                )
-                tools = turn.tools
-            response = await llm.chat(
-                messages,
-                tools=tool_definitions(tools),
-                max_tokens=512,
-                temperature=0.0,
-                enable_thinking=False,
-            )
-            calls = response.tool_calls or []
-            content = response.content or ""
-            actual_tools = [call.name for call in calls]
-            expected_tool = case["expected_tool"]
-            expected_tools = [] if expected_tool is None else [expected_tool]
-            errors: list[str] = []
-            for call in calls:
-                tool = tools.get(call.name)
-                if tool is None:
-                    errors.append(f"unknown tool {call.name!r}")
-                    continue
-                try:
-                    tool.request_model.model_validate_json(call.arguments)
-                except ValueError as exc:
-                    errors.append(f"invalid {call.name!r} arguments: {exc}")
-            expected_skip = case.get("expected_skip")
-            if expected_skip is not None and calls:
-                try:
-                    arguments = json.loads(calls[0].arguments)
-                except json.JSONDecodeError:
-                    pass
+                    if observed.evidence != "unknown":
+                        errors.append("unreadable observation was not unknown")
                 else:
-                    if arguments.get("skip") is not bool(expected_skip):
-                        errors.append(
-                            f"advance skip was {arguments.get('skip')!r}, "
-                            f"expected {bool(expected_skip)!r}"
+                    if case.get("route") == "active":
+                        setup = await router.handle(
+                            AgentTurn(participant_id, f"{index}:setup", "Start the tea-making guide now.")
                         )
-            if observation_case and calls:
-                try:
-                    arguments = json.loads(calls[0].arguments)
-                except json.JSONDecodeError:
-                    pass
-                else:
-                    if arguments.get("updates") != case.get("expected_updates"):
-                        errors.append(
-                            f"observation updates were {arguments.get('updates')!r}, "
-                            f"expected {case.get('expected_updates')!r}"
+                        if setup.disposition != "focus":
+                            raise ValueError("setup did not establish workflow focus")
+                        _active_route(guidance, case, participant_id)
+                        captured[participant_id] = {"tools": [], "content": ""}
+                    decisions.calls = []
+                    started = time.perf_counter()
+                    result = await router.handle(AgentTurn(participant_id, str(index), case["query"]))
+                    actual = captured[participant_id]
+                    actual["workflow_scope"] = result.disposition in {"focus", "release"}
+                    blocks = foreground._run_contexts.blocks(participant_id)
+                    actual["execution"] = next((
+                        json.loads(block.text.split("\n", 1)[1])
+                        for block in blocks if block.text.startswith("Source sop.execution ")
+                    ), {})
+                    expected = [] if case["expected_tool"] is None else [case["expected_tool"]]
+                    alternatives = case.get("accepted_tools", [expected])
+                    if actual["tools"] not in alternatives:
+                        errors.append(f"expected tools in {alternatives!r}")
+                    if "expected_context_operation" in case:
+                        operation = actual.get("execution", {}).get("operations", {}).get(
+                            case["expected_context_operation"]
                         )
-            normalized_content = _normalize_response(content)
-            expected_response = case.get("expected_response")
-            if expected_response is not None and normalized_content != _normalize_response(
-                str(expected_response)
-            ):
-                errors.append(f"response did not equal {expected_response!r}")
-            expected_response_pattern = case.get("expected_response_pattern")
-            if expected_response_pattern is not None and re.search(
-                str(expected_response_pattern), normalized_content
-            ) is None:
-                errors.append(
-                    f"response did not match {expected_response_pattern!r}"
-                )
-            max_response_chars = case.get("max_response_chars")
-            if max_response_chars is not None and len(normalized_content) > int(
-                max_response_chars
-            ):
-                errors.append(
-                    f"response exceeded {max_response_chars} characters: "
-                    f"{len(normalized_content)}"
-                )
-            forbidden_response = case.get("forbidden_response")
-            if forbidden_response is not None and _normalize_response(
-                str(forbidden_response)
-            ) in normalized_content:
-                errors.append(f"response contained forbidden {forbidden_response!r}")
-            passed = actual_tools == expected_tools and not errors
-            label = "PASS" if passed else "MISS"
-            print(f"{label} {case['name']}: tools={actual_tools!r} content={content!r}")
-            if passed:
-                passed_count += 1
+                        if not operation or operation.get("available") is not True:
+                            errors.append("expected live operation context is unavailable")
+                    if "expected_skip" in case and actual.get("arguments", {}).get("skip") is not case["expected_skip"]:
+                        errors.append("incorrect bound skip argument")
+                    if (
+                        "expected_workflow_scope" in case
+                        and actual.get("workflow_scope") is not case["expected_workflow_scope"]
+                    ):
+                        errors.append("incorrect destination scope")
+                    content = _normalize_response(actual["content"])
+                    if (
+                        "expected_response_pattern" in case
+                        and re.search(case["expected_response_pattern"], content) is None
+                    ):
+                        errors.append("response pattern mismatch")
+                    if "forbidden_response" in case and _normalize_response(case["forbidden_response"]) in content:
+                        errors.append("forbidden response")
+                    if "max_response_chars" in case and len(content) > case["max_response_chars"]:
+                        errors.append("response too long")
+            except Exception as exc:  # noqa: BLE001 -- record a failed case and evaluate the remaining independent scenarios.
+                errors.append(f"{type(exc).__name__}: {exc}")
+            row = {
+                "case": case["name"],
+                **captured[participant_id],
+                "passed": not errors,
+                "errors": errors,
+                "duration_ms": (time.perf_counter() - started) * 1000,
+                "decisions": list(decisions.calls),
+            }
+            rows.append(row)
+            print(f"{'PASS' if not errors else 'MISS'} {case['name']}: {row['tools']!r} {errors!r}", flush=True)
+            await router.participant_left(participant_id)
     finally:
+        await router.stop()
+        await foreground.stop()
+        await runtime.stop()
         await llm.close()
-    print(f"RESULT {passed_count}/{len(cases)} cases passed")
-    pass_rate = passed_count / len(cases)
-    if pass_rate < _MIN_PASS_RATE:
-        raise SystemExit(
-            f"overall pass rate {pass_rate:.1%} is below {_MIN_PASS_RATE:.0%}"
-        )
+        await decision_service.close()
+        if args.output:
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_text(
+                "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows), encoding="utf-8"
+            )
+    passed = sum(row["passed"] for row in rows)
+    print(f"RESULT {passed}/{len(cases)}")
+    if passed / len(cases) < _MIN_PASS_RATE:
+        raise SystemExit(f"overall pass rate is below {_MIN_PASS_RATE:.0%}")
 
 
 if __name__ == "__main__":

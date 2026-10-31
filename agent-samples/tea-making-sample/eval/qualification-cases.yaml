@@ -1,0 +1,50 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Additional held-out wording, frozen after the structured-input correction.
+- name: fresh-passive-possibility
+  query: Would it be possible for this walkthrough to begin again?
+  route: active
+  step: fill_water
+  expected_tool: null
+- name: fresh-addressed-restart
+  query: Would you start the walkthrough over now?
+  route: active
+  step: heat_water
+  expected_tool: workflow__restart
+- name: fresh-reported-skip
+  query: A coworker recommended we skip this instruction.
+  route: active
+  step: fill_water
+  expected_tool: null
+- name: fresh-quoted-exit
+  query: '"Exit the guide" is a command someone might use.'
+  route: active
+  step: heat_water
+  expected_tool: null
+- name: fresh-background-owner
+  query: Please stop the visual diary and keep tea guidance running.
+  route: active
+  step: fill_water
+  expected_tool: video_log__stop
+  expected_workflow_scope: false
+- name: fresh-advice-not-command
+  query: Would starting over be better?
+  route: active
+  step: fill_water
+  expected_tool: null
+- name: fresh-known-temperature
+  query: I need to know the water target, rather than inspect the display.
+  route: active
+  step: heat_water
+  expected_tool: null
+  expected_workflow_scope: true
+- name: fresh-current-position
+  query: Leave my progress as it is and explain our position in the procedure.
+  route: active
+  step: fill_water
+  expected_tool: null
+  accepted_tools:
+  - []
+  - - workflow__status
+  expected_workflow_scope: true
