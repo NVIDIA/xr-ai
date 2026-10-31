@@ -228,7 +228,9 @@ class GuidanceAgent(Agent):
         _event: ParticipantJoined,
         ctx: RuntimeContext,
     ) -> None:
-        participant_id = self._participant(ctx)
+        await self._join_participant(self._participant(ctx))
+
+    async def _join_participant(self, participant_id: str) -> None:
         if participant_id in self._connected:
             return
         self._connected.add(participant_id)
@@ -245,6 +247,16 @@ class GuidanceAgent(Agent):
         ctx: RuntimeContext,
     ) -> None:
         participant_id = self._participant(ctx)
+        await self._leave_participant(participant_id)
+        await ctx.publish(
+            PARTICIPANT_CLEANUP_COMPLETE_TOPIC,
+            ParticipantCleanupComplete(
+                generation=ctx.metadata.message_id,
+                producer="guidance",
+            ),
+        )
+
+    async def _leave_participant(self, participant_id: str) -> None:
         self._connected.discard(participant_id)
         await self._cancel_monitor(participant_id)
         session = self.store.find(participant_id)
@@ -254,13 +266,6 @@ class GuidanceAgent(Agent):
             await self._flush(session)
         self.store.release(participant_id)
         self._publish_locks.pop(participant_id, None)
-        await ctx.publish(
-            PARTICIPANT_CLEANUP_COMPLETE_TOPIC,
-            ParticipantCleanupComplete(
-                generation=ctx.metadata.message_id,
-                producer="guidance",
-            ),
-        )
 
     async def stop(self) -> None:
         """Cancel every participant observation task owned by this agent."""

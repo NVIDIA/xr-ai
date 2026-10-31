@@ -8,25 +8,29 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from functools import partial
 from pathlib import Path
 
 import nemo_relay
 from loguru import logger
 from xr_ai_logging import setup_logging
 from xr_ai_models import load_models_config, make_decision, make_llm, make_tts, make_vlm
+from xr_ai_routing import AgentRouter
 from xr_ai_runtime import AgentRuntime
 from xr_ai_tools import ToolSet
 from xr_ai_tools.rag import RAGTools
 from xr_ai_tools.vision import ImageQueryTool
-from xr_ai_voice import HubVoiceTransport, VadConfig, VoiceAgent
+from xr_ai_voice import VOICE_OUTPUT_TOPIC, HubVoiceTransport, VadConfig, VoiceAgent
 from xr_ai_voicegate import load_voice_gate_config
 from xr_ai_web_events import WebEventsAgent
 
-from ._capture import _RecordedDecisions, _RecordedLanguage, _RecordedVision, _SOPCapture
+from ._capture import _record_routing, _RecordedDecisions, _RecordedLanguage, _RecordedVision, _SOPCapture
 from .agent import SOPAgent
 from .background_context import BackgroundContextAgent
 from .change_watch import ChangeWatchAgent
 from .config import WorkerConfig
+from .conversation._applications import _destinations
+from .conversation._cleanup import _CleanupAcks
 from .events import (
     INTERRUPTED_TOPIC,
     PARTICIPANT_JOINED_TOPIC,
@@ -225,6 +229,17 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
                 vlm_timeout_s=config.vlm_timeout_s,
             ),
         )
+        sop.bind_runtime(runtime)
+        router = AgentRouter(
+            _destinations(sop), decisions,
+            query_topic=USER_QUERY_TOPIC, output_topic=VOICE_OUTPUT_TOPIC,
+            participant_joined_topic=PARTICIPANT_JOINED_TOPIC,
+            interrupted_topic=INTERRUPTED_TOPIC,
+            initialize_participant=sop.participant_joined, cleanup_participant=sop.participant_left,
+            set_status=partial(_record_routing, snapshot=sop._snapshot),
+        )
+        runtime.register("routing", router.runtime_subscriber())
+        runtime.register("sop-cleanup", _CleanupAcks(router))
         runtime.register("voice", voice)
 
         logger.info("SOP run bundle → {}", capture.directory)
@@ -233,13 +248,13 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
             async with web_events:
                 logger.info("live events → {}", web_events.url)
                 async with runtime:
-                    sop.bind_runtime(runtime)
                     change_watch.bind_runtime(runtime)
                     transcript.bind_runtime(runtime)
                     video_log.bind_runtime(runtime)
                     try:
                         await voice.run(runtime)
                     finally:
+                        await router.stop()
                         await sop.stop()
                         await change_watch.stop()
                         await transcript.stop()

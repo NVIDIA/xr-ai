@@ -29,6 +29,24 @@ commands remain available. Use {doc}`conversation-example` as the starting
 point for new voice-and-vision applications. Its routed conversation and
 visual-question behavior differs from Simple VLM; migrating application code
 requires reviewing that composition rather than only renaming the launcher.
+### Tea routing uses SDK-owned turn lifecycle
+
+`SOPAgent` is now the focused routing destination rather than a foreground
+supervisor containing its own router. The application configures the SDK
+`AgentRouter` runtime subscriber and initialization/cleanup hooks. Destinations
+publish SDK `ResponseOutputs` directly. Stop the router before the SOP agent.
+A small original-generation left-event adapter delegates departure to the router
+and preserves existing file/image producer acknowledgments.
+
+Under `task.foreground`, replace each `active_question.actions` and
+`idle_question.actions` mapping with `criteria`, mapping the existing labels to
+their criterion text. Do the same for watcher/transcript/journal control questions.
+Immediate camera/reference/history destinations require only their description.
+Remove execution fields such as `tool`, `arguments`, `generate`, `authorize` and
+`observation`: concrete handlers own the existing operations and bindings.
+The unused `unavailable_message` field is removed. Semantic instructions and
+criterion wording are unchanged. No SDK API is added.
+
 ### Tea sample-local API and prompt organization
 
 Tea composition imports `SOPAgent`, `Workflow`, and `load_workflow` from

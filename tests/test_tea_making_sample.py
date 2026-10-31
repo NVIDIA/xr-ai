@@ -19,7 +19,7 @@ import nemo_relay
 import pytest
 import yaml
 from xr_ai_hub import FrameUnavailable
-from xr_ai_interaction import ParticipantJoined, ParticipantLeft, ResponseOutput, UserQuery
+from xr_ai_interaction import ParticipantJoined, ParticipantLeft, ResponseOutput
 from xr_ai_models import ChatResponse, DecisionAnswer, DecisionResponse, ToolCall
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, subscribe
 from xr_ai_tools import Tool, ToolSet
@@ -34,7 +34,8 @@ _SAMPLE = _ROOT / "agent-samples" / "tea-making-sample"
 _WORKER = _SAMPLE / "worker"
 sys.path.insert(0, str(_WORKER))
 
-import tea_making_worker.conversation._foreground as foreground_module  # noqa: E402  # pyright: ignore[reportMissingImports]
+import tea_making_worker.agent as foreground_module  # noqa: E402  # pyright: ignore[reportMissingImports]
+from tea_making_worker import SOPAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.app import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     _CLIENT_TEXT_TOPIC,
     _relay_event_log,
@@ -44,7 +45,6 @@ from tea_making_worker.background_context import (  # noqa: E402  # pyright: ign
 )
 from tea_making_worker.change_watch import ChangeWatchAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.config import load_config  # noqa: E402  # pyright: ignore[reportMissingImports]
-from tea_making_worker.conversation._foreground import ForegroundAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.events import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     BACKGROUND_FACT_TOPIC,
     CHANGE_WATCH_RECORD_TOPIC,
@@ -86,6 +86,78 @@ from tea_making_worker.video_log import (  # noqa: E402  # pyright: ignore[repor
 )
 from tea_making_worker.web_events import TeaWebEventsAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
 
+
+class _SOPFixture(SOPAgent):
+    """Test fixture accepting a separately constructed execution engine."""
+
+    def __init__(self, *, guidance, **kwargs):
+        super().__init__(workflow=guidance.workflow, image_query=guidance._image_query, **kwargs)
+        self._guidance = guidance
+        guidance._record_event = self._remember_event
+        _attach_router(self)
+
+
+def _attach_router(sop):
+    from tea_making_worker.conversation._applications import _destinations
+    from xr_ai_routing import AgentRouter, AgentTurn
+
+    runtime = AgentRuntime()
+    records = []
+    control = []
+    publish = runtime.publish
+
+    async def record(topic, message, **kwargs):
+        if topic is FOREGROUND_RECORD_TOPIC:
+            records.append(message)
+        return await publish(topic, message, **kwargs)
+
+    runtime.publish = record
+
+    async def emit(_turn, _route, text):
+        control.append(text)
+
+    router = AgentRouter(_destinations(sop), sop._decisions, output=emit)
+    sop._router = router
+    original_stop = sop.stop
+    opened = False
+    sequence = 0
+
+    async def ask(query, participant_id, ctx=None, *, timestamp_us=None):
+        nonlocal opened, sequence
+        if sop._runtime is None:
+            sop.bind_runtime(runtime)
+        if sop._runtime is runtime and not runtime.running:
+            await runtime.__aenter__()
+            opened = True
+        sequence += 1
+        before = len(records)
+        result = await router.handle(AgentTurn(participant_id, f"test:{sequence}", query, timestamp_us=timestamp_us))
+        rows = records[before:]
+        return result.text or (control[-1] if control else ""), (rows[-1].tools if rows else []), False
+
+    async def stop():
+        await router.stop()
+        await original_stop()
+        if opened:
+            await runtime.__aexit__(None, None, None)
+
+    sop._answer = ask
+    sop.stop = stop
+    return sop
+
+
+async def _stream_view(owner, query, participant_id, ctx, *, timestamp_us):
+    from tea_making_worker.conversation._applications import _QuestionDestination
+    from xr_ai_interaction import ResponseOutputs
+    from xr_ai_routing import AgentTurn
+
+    outputs = ResponseOutputs(ctx, VOICE_OUTPUT_TOPIC)
+    destination = _QuestionDestination(owner, "observation")
+    async with outputs.reply(participant_id, request_id=ctx.metadata.message_id, timestamp_us=timestamp_us) as reply:
+        text, _calls = await destination._camera(
+            AgentTurn(participant_id, ctx.metadata.message_id, query, timestamp_us=timestamp_us), reply,
+        )
+    return ImageQueryResult(text=text, available=not text.startswith(("camera failed", "Unable to inspect")))
 
 def _manual_workflow(path):
     """Manual policy for tests that exercise explicit next and stable completed steps."""
@@ -817,12 +889,9 @@ def test_active_context_remains_sparse_for_legacy_callers() -> None:
 
 def test_workflow_control_authorization_is_declarative() -> None:
     workflow = _manual_workflow(_SAMPLE / "yaml/workflow.yaml")
-    for policy in (workflow.foreground.idle_question, workflow.foreground.active_question):
-        for action in policy.actions.values():
-            if action.tool in {"workflow__start", "workflow__advance", "workflow__reset", "workflow__restart"}:
-                assert action.authorize
-                assert not action.generate
-                assert action.observation is None
+    assert set(workflow.foreground.idle_question.criteria) == {"start", "status", "other"}
+    assert {"advance", "skip", "reset", "restart"} <= workflow.foreground.active_question.criteria.keys()
+    assert set(workflow.foreground.authorization.criteria) == {"command", "not_command", "unknown"}
 
 
 def test_foreground_current_view_uses_first_person_system_prompt(
@@ -986,7 +1055,7 @@ async def test_active_workflow_keeps_background_stop_and_status_tools() -> None:
         delta_prompt="Compare.",
         interval_s=2.0,
     )
-    foreground = ForegroundAgent(
+    foreground = _SOPFixture(
         decisions=SimpleNamespace(),  # type: ignore[arg-type]
         llm=llm,  # type: ignore[arg-type]
         images=images,  # type: ignore[arg-type]
@@ -1054,11 +1123,16 @@ async def test_active_current_view_preserves_structured_question() -> None:
 @pytest.mark.asyncio
 async def test_direct_view_is_streamed_without_second_generation() -> None:
     fg = _routed_foreground(_ScriptedDecisions(("destination", "observation")))
-    fg._stream_current_view = AsyncMock(return_value=ImageQueryResult(text="A cup."))
+    fg._images.get_current_frame = SimpleNamespace(execute=AsyncMock(return_value=SimpleNamespace(
+        image=fg._images.images.put(b"pixels"),
+    )))
+    async def tokens(_request):
+        yield ImageQueryChunk(text="A cup.")
+    fg._vision = SimpleNamespace(stream=tokens)
     result, calls, spoken = await fg._answer(
         "What is visible?", "reader", SimpleNamespace(metadata=SimpleNamespace(message_id="view"))
     )
-    assert (result, calls, spoken) == ("A cup.", ["current_view"], True)
+    assert (result, calls) == ("A cup.", ["current_view"])
     fg._llm.chat.assert_not_awaited()
     await fg.stop()
 
@@ -1093,11 +1167,11 @@ async def test_foreground_current_view_recovers_only_camera_unavailability(error
         published.append(message)
 
     frames = Tool("camera_failure", "Select a frame.", CurrentFrameRequest, ImageFrame, fail)
-    foreground = object.__new__(ForegroundAgent)
+    foreground = object.__new__(_SOPFixture)
     foreground._images = SimpleNamespace(get_current_frame=frames)
     foreground._vlm_timeout_s = 15
     ctx = SimpleNamespace(metadata=SimpleNamespace(message_id="turn"), publish=publish)
-    call = foreground._stream_current_view("Visible?", "alice", ctx, timestamp_us=1)
+    call = _stream_view(foreground,"Visible?", "alice", ctx, timestamp_us=1)
     if error_type is FrameUnavailable:
         result = await call
         assert not result.available and result.text == str(error)
@@ -1132,30 +1206,19 @@ async def test_streaming_current_view_uses_question_and_times_out() -> None:
     class Context:
         metadata = SimpleNamespace(message_id="view-timeout")
 
-        async def publish(self, topic, message, *, participant_id=None):
+        async def publish(self, topic, message, *, participant_id=None, **kwargs):
             assert topic is VOICE_OUTPUT_TOPIC
             published.append(message)
 
-    foreground = object.__new__(ForegroundAgent)
+    foreground = object.__new__(_SOPFixture)
     foreground._images = SimpleNamespace(get_current_frame=CurrentFrame())
     foreground._vision = Vision()
     foreground._vlm_timeout_s = 0.01
-    tool = foreground._current_view_tool(
-        "participant-timeout",
-        ctx=Context(),  # type: ignore[arg-type]
-        timestamp_us=42,
-    )
+    with pytest.raises(TimeoutError):
+        await _stream_view(foreground, "Read the display.", "participant-timeout", Context(), timestamp_us=20)
 
-    result = await tool.handler(CurrentViewRequest(question="What number is on the display?"))
-
-    assert result.available is False
-    assert "vision timeout" in result.text
-    assert observed == ["What number is on the display?"]
-    assert published[0].text == result.text
-    assert published[0].kind == "reply"
-    assert published[0].request_id == "view-timeout"
-    assert published[-1].text == ""
-    assert published[-1].final is True
+    assert observed == ["Read the display."]
+    assert published == []
 
 
 @pytest.mark.parametrize(
@@ -1190,16 +1253,16 @@ async def test_streaming_current_view_handles_leading_whitespace(
     class Context:
         metadata = SimpleNamespace(message_id="view-whitespace")
 
-        async def publish(self, topic, message, *, participant_id=None):
+        async def publish(self, topic, message, *, participant_id=None, **kwargs):
             assert topic is VOICE_OUTPUT_TOPIC
             published.append(message)
 
-    foreground = object.__new__(ForegroundAgent)
+    foreground = object.__new__(_SOPFixture)
     foreground._images = SimpleNamespace(get_current_frame=CurrentFrame())
     foreground._vision = Vision()
     foreground._vlm_timeout_s = 1.0
 
-    result = await foreground._stream_current_view(
+    result = await _stream_view(foreground,
         "What do you see?",
         "participant-whitespace",
         Context(),  # type: ignore[arg-type]
@@ -1222,12 +1285,12 @@ async def test_foreground_record_failure_does_not_suppress_speech() -> None:
             message_id="query-1",
         )
 
-        async def publish(self, topic, message, *, participant_id=None):
+        async def publish(self, topic, message, *, participant_id=None, **kwargs):
             if topic is FOREGROUND_RECORD_TOPIC:
                 raise OSError("disk full")
             published.append((topic, message))
 
-    foreground = object.__new__(ForegroundAgent)
+    foreground = object.__new__(_SOPFixture)
     foreground._guidance = SimpleNamespace(store=SimpleNamespace(find=lambda _participant: None))
     from xr_ai_conversation import ContextManager
 
@@ -1236,11 +1299,16 @@ async def test_foreground_record_failure_does_not_suppress_speech() -> None:
     async def answer(*_args, **_kwargs):
         return "Your water is ready.", ["clock__timer"], False
 
-    foreground._answer = answer
-    await foreground._run_turn(
-        UserQuery(text="Is it ready?", timestamp_us=50),
-        Context(),  # type: ignore[arg-type]
-    )
+    from xr_ai_interaction import ResponseOutputs
+    from xr_ai_routing import AgentTurn
+    foreground._responses = ResponseOutputs(Context(), VOICE_OUTPUT_TOPIC)
+    foreground._runtime = Context()
+    async def produce(reply):
+        await reply.send("Your water is ready.")
+        return "Your water is ready.", ["clock__timer"]
+    with pytest.raises(OSError, match="disk full"):
+        await foreground._respond(AgentTurn("participant-disk-full", "query-1", "Is it ready?", timestamp_us=50),
+                                  AsyncMock(), produce)
 
     assert [topic for topic, _message in published] == [VOICE_OUTPUT_TOPIC] * 2
     message = published[0][1]
@@ -1845,7 +1913,7 @@ def _foreground_for_route_test(
     prompt: str,
     *,
     step_id: str = "fill_water",
-) -> ForegroundAgent:
+) -> _SOPFixture:
     workflow = _manual_workflow(_SAMPLE / "yaml/workflow.yaml")
     guidance = GuidanceAgent(
         decisions=SimpleNamespace(),  # type: ignore[arg-type]
@@ -1857,7 +1925,7 @@ def _foreground_for_route_test(
     )
     _activate_test_step(guidance, step_id)
     images = SimpleNamespace(images=ImageRegistry(), get_current_frame=SimpleNamespace())
-    foreground = ForegroundAgent(
+    foreground = _SOPFixture(
         decisions=SimpleNamespace(),  # type: ignore[arg-type]
         llm=SimpleNamespace(),  # type: ignore[arg-type]
         images=images,  # type: ignore[arg-type]
@@ -1872,45 +1940,6 @@ def _foreground_for_route_test(
     return foreground
 
 
-@pytest.mark.parametrize(
-    ("step_id", "query", "expected_tools"),
-    [
-        ("identify", "Read the visible tea label.", {"current_view", "rag_lookup"}),
-        ("fill_water", "Check whether water is visible.", {"current_view"}),
-        (
-            "heat_water",
-            "Read the visible temperature.",
-            {"current_view", "temperature__verify"},
-        ),
-        ("start_steeping", "Check whether the tea is immersed.", {"current_view"}),
-        ("steep_timer", "Monitor the steeping timer.", {"current_view"}),
-    ],
-)
-def test_every_focused_step_selects_its_declared_live_tools(
-    step_id: str,
-    query: str,
-    expected_tools: set[str],
-) -> None:
-    config = load_config(_SAMPLE / "yaml/tea_making_worker.yaml")
-    foreground = _foreground_for_route_test(
-        config.foreground_prompt,
-        step_id=step_id,
-    )
-
-    turn = foreground._prepare_turn(
-        "active",
-        query=query,
-        ctx=None,
-        timestamp_us=None,
-    )
-
-    assert turn.route == "workflow"
-    assert {name for name, _tool in foreground._workflow_tools("active").items()} == expected_tools | {
-        "workflow__advance",
-        "workflow__reset",
-        "workflow__restart",
-        "workflow__status",
-    }
 
 
 def test_workflow_tool_typo_fails_when_guidance_is_built(tmp_path: Path) -> None:
@@ -1930,42 +1959,8 @@ def test_workflow_tool_typo_fails_when_guidance_is_built(tmp_path: Path) -> None
         )
 
 
-def test_foreground_route_appends_policy_through_constructor() -> None:
-    config = load_config(_SAMPLE / "yaml/tea_making_worker.yaml")
-    foreground = _foreground_for_route_test(config.foreground_prompt)
-
-    idle_prompt, _, idle_route = foreground._prepare_route("idle", query="Hello", ctx=None, timestamp_us=None)
-    active_turn = foreground._prepare_turn("active", query="What should I do?", ctx=None, timestamp_us=None)
-    assert idle_route == "conversation"
-    assert "general-purpose assistant" in idle_prompt
-    assert active_turn.route == "workflow"
-    assert "general-purpose assistant" not in active_turn.system_prompt
-    assert foreground._guidance.workflow.step("fill_water").voice.prompt in active_turn.system_prompt
-    assert json.loads(active_turn.user_message) == {
-        "request": "What should I do?",
-        "state": {
-            "tea_name": "generic tea",
-            "target_temperature_c": 93,
-            "steep_duration_s": 180,
-            "water_filled": False,
-        },
-    }
-    assert "current_view" in {name for name, _ in foreground._workflow_tools("active").items()}
 
 
-def test_foreground_route_appends_policy_to_prompt_override(tmp_path: Path) -> None:
-    override = tmp_path / "worker.yaml"
-    override.write_text("foreground_prompt: Explicit override\n")
-    config = load_config(override)
-    foreground = _foreground_for_route_test(config.foreground_prompt)
-
-    idle_prompt, _, idle_route = foreground._prepare_route("idle", query="Hello", ctx=None, timestamp_us=None)
-    active_turn = foreground._prepare_turn("active", query="What should I do?", ctx=None, timestamp_us=None)
-    assert idle_route == "conversation"
-    assert idle_prompt.startswith("Explicit override\n\n")
-    assert "general-purpose assistant" in idle_prompt
-    assert active_turn.route == "workflow"
-    assert active_turn.system_prompt.startswith("Explicit override\n")
 
 
 def _identity_guidance(responses, *, passages=None):
@@ -2240,7 +2235,7 @@ class _ScriptedDecisions:
         return DecisionResponse({key: answer}, "fake", {}, {})
 
 
-def _routed_foreground(decisions) -> ForegroundAgent:
+def _routed_foreground(decisions) -> _SOPFixture:
     config = load_config(_SAMPLE / "yaml/tea_making_worker.yaml")
     llm = SimpleNamespace(
         chat=AsyncMock(
@@ -2287,7 +2282,7 @@ def _routed_foreground(decisions) -> ForegroundAgent:
             interval_s=2,
         ),
     )
-    return ForegroundAgent(
+    return _SOPFixture(
         llm=llm,
         decisions=decisions,
         images=images,
@@ -2407,11 +2402,16 @@ async def test_explicit_camera_handoff_remains_available_during_timer_step() -> 
     await fg._answer("Start tea guidance.", "active")
     _activate_test_step(fg._guidance, "steep_timer")
     assert fg._question_tools("active").get("current_view") is not None
-    fg._stream_current_view = AsyncMock(return_value=ImageQueryResult(text="A blue sign."))
+    fg._images.get_current_frame = SimpleNamespace(execute=AsyncMock(return_value=SimpleNamespace(
+        image=fg._images.images.put(b"pixels"),
+    )))
+    async def tokens(_request):
+        yield ImageQueryChunk(text="A blue sign.")
+    fg._vision = SimpleNamespace(stream=tokens)
     result, calls, spoken = await fg._answer(
         "Read the sign.", "active", SimpleNamespace(metadata=SimpleNamespace(message_id="camera"))
     )
-    assert (result, calls, spoken) == ("A blue sign.", ["current_view"], True)
+    assert (result, calls) == ("A blue sign.", ["current_view"])
     assert fg._guidance.store.get("active").step_id == "steep_timer"
     await fg.stop()
 

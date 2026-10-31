@@ -4,7 +4,8 @@
 """Sample-local SOP agent and workflow-loading API.
 
 Create SOPAgent with a loaded Workflow and existing typed model/tool services.
-Register the agent once, bind its runtime, and stop it before closing services.
+Bind its runtime, register it for notices, and use it as an SDK router destination.
+Stop the router before the agent and its services.
 """
 
 from .agent import SOPAgent

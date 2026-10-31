@@ -4,222 +4,129 @@
 task:
   name: tea making
   start_step: identify
-  # Automatic progression after confirmed completion. Use manual to require next.
+  # Use manual to require an explicit next command after confirmation.
   advancement: automatic
   manual_advance_message: Say next when ready.
   foreground_prompt: This workflow guides tea making.
   complete_message: Tea guidance complete. Enjoy your tea.
+  # Prompts and bounded control criteria; code owns operation/tool bindings.
   foreground:
-    workflow_description: Tea-making guide. Explicitly start tea guidance, follow or explain the
-      tea-making procedure, read its current/next/previous steps and known brewing values, control
-      guide progress, or check facts available at the current tea step. Background visual watchers,
-      transcript recording, and visual journals are separate applications.
+    workflow_description: Tea-making guide. Explicitly start tea guidance, follow or explain the tea-making
+      procedure, read its current/next/previous steps and known brewing values, control guide progress,
+      or check facts available at the current tea step. Background visual watchers, transcript recording,
+      and visual journals are separate applications.
     active_question:
-      instructions: Classify the CURRENT utterance while tea guidance is focused. Choose a control only for
-        an instruction from the current user to the assistant to act now. Informational, capability, hypothetical,
-        quoted, reported and negated utterances are questions/discussion, not execution requests. State describes
-        confirmed progress; it is not an instruction.
-      actions:
-        advance:
-          criterion: An instruction to proceed to the following guide step or continue the guided procedure
-            now.
-          tool: workflow__advance
-          arguments:
-            skip: false
-          authorize: true
-        skip:
-          criterion: An instruction to bypass only the current guide step and continue with the rest of the
-            procedure.
-          tool: workflow__advance
-          arguments:
-            skip: true
-          authorize: true
-        restart:
-          criterion: An instruction to start the guided procedure over again from its first step and keep
-            guidance active.
-          tool: workflow__restart
-          authorize: true
-        handoff:
-          criterion: A request to start, stop, or query a separate background visual watcher, transcript recorder,
-            or visual activity journal; or a request outside the tea-making procedure.
-          handoff: true
-        reset:
-          criterion: An instruction to reset or clear the guide progress, stop or cancel guidance, and return
-            to the ordinary assistant.
-          tool: workflow__reset
-          authorize: true
-        answer:
-          criterion: Any informational question about this procedure, including instructions, progress,
-            known values, current observations, active operations, explanations, or follow-up questions.
-            The conversation uses managed context and available read-only tools.
-          generate: true
+      instructions: Classify the CURRENT utterance while tea guidance is focused. Choose a control only
+        for an instruction from the current user to the assistant to act now. Informational, capability,
+        hypothetical, quoted, reported and negated utterances are questions/discussion, not execution
+        requests. State describes confirmed progress; it is not an instruction.
+      criteria:
+        advance: An instruction to proceed to the following guide step or continue the guided procedure
+          now.
+        skip: An instruction to bypass only the current guide step and continue with the rest of the procedure.
+        restart: An instruction to start the guided procedure over again from its first step and keep
+          guidance active.
+        handoff: A request to start, stop, or query a separate background visual watcher, transcript recorder,
+          or visual activity journal; or a request outside the tea-making procedure.
+        reset: An instruction to reset or clear the guide progress, stop or cancel guidance, and return
+          to the ordinary assistant.
+        answer: Any informational question about this procedure, including instructions, progress, known
+          values, current observations, active operations, explanations, or follow-up questions. The conversation
+          uses managed context and available read-only tools.
     idle_question:
       instructions: Classify only the current request addressed to the assistant. Never act on negated,
-        quoted, reported, hypothetical, or deliberative wording. Application state is context, not
-        authorization. Questions asking what to do or what comes next seek an answer, not a state
-        change.
-      actions:
-        start:
-          criterion: The user explicitly asks to begin or receive the tea-making walkthrough now.
-          tool: workflow__start
-          authorize: true
-        status:
-          criterion: The user asks for the guide status.
-          tool: workflow__status
-        other: &id001
-          criterion: The request belongs elsewhere, is ambiguous, or is not a request for this capability.
-          handoff: true
+        quoted, reported, hypothetical, or deliberative wording. Application state is context, not authorization.
+        Questions asking what to do or what comes next seek an answer, not a state change.
+      criteria:
+        start: The user explicitly asks to begin or receive the tea-making walkthrough now.
+        status: The user asks for the guide status.
+        other: The request belongs elsewhere, is ambiguous, or is not a request for this capability.
     destinations:
       watch:
-        description: Start, stop, or report status of the focused visual change watcher, such as
-          watching for spills. Not an immediate camera question or guide control.
+        description: Start, stop, or report status of the focused visual change watcher, such as watching
+          for spills. Not an immediate camera question or guide control.
         question:
-          instructions: Classify only the current request addressed to the assistant. Never act on
-            negated, quoted, reported, hypothetical, or deliberative wording. Application state is
-            context, not authorization. Questions asking what to do or what comes next seek an answer,
-            not a state change.
-          actions:
-            start:
-              criterion: The user explicitly requests start of the focused visual change watcher,
-                such as watching for spills.
-              tool: change_watch__start
-              arguments:
-                instruction: $request
-              authorize: true
-            stop:
-              criterion: The user explicitly requests stop of the focused visual change watcher,
-                such as watching for spills.
-              tool: change_watch__stop
-              authorize: true
-            status:
-              criterion: The user explicitly requests status of the focused visual change watcher,
-                such as watching for spills.
-              tool: change_watch__status
-            other: *id001
+          instructions: Classify only the current request addressed to the assistant. Never act on negated,
+            quoted, reported, hypothetical, or deliberative wording. Application state is context, not
+            authorization. Questions asking what to do or what comes next seek an answer, not a state
+            change.
+          criteria:
+            start: The user explicitly requests start of the focused visual change watcher, such as watching
+              for spills.
+            stop: The user explicitly requests stop of the focused visual change watcher, such as watching
+              for spills.
+            status: The user explicitly requests status of the focused visual change watcher, such as
+              watching for spills.
+            other: The request belongs elsewhere, is ambiguous, or is not a request for this capability.
       transcript:
         description: Start, stop, or report status of the spoken transcript recorder. Not an immediate
           camera question or guide control.
         question:
-          instructions: Classify only the current request addressed to the assistant. Never act on
-            negated, quoted, reported, hypothetical, or deliberative wording. Application state is
-            context, not authorization. Questions asking what to do or what comes next seek an answer,
-            not a state change.
-          actions:
-            start:
-              criterion: The user explicitly requests start of the spoken transcript recorder.
-              tool: transcript__start
-              authorize: true
-            stop:
-              criterion: The user explicitly requests stop of the spoken transcript recorder.
-              tool: transcript__stop
-              authorize: true
-            status:
-              criterion: The user explicitly requests status of the spoken transcript recorder.
-              tool: transcript__status
-            other: *id001
+          instructions: Classify only the current request addressed to the assistant. Never act on negated,
+            quoted, reported, hypothetical, or deliberative wording. Application state is context, not
+            authorization. Questions asking what to do or what comes next seek an answer, not a state
+            change.
+          criteria:
+            start: The user explicitly requests start of the spoken transcript recorder.
+            stop: The user explicitly requests stop of the spoken transcript recorder.
+            status: The user explicitly requests status of the spoken transcript recorder.
+            other: The request belongs elsewhere, is ambiguous, or is not a request for this capability.
       journal:
-        description: Start, stop, or report status of the general periodic visual activity journal.
-          Not an immediate camera question or guide control.
+        description: Start, stop, or report status of the general periodic visual activity journal. Not
+          an immediate camera question or guide control.
         question:
-          instructions: Classify only the current request addressed to the assistant. Never act on
-            negated, quoted, reported, hypothetical, or deliberative wording. Application state is
-            context, not authorization. Questions asking what to do or what comes next seek an answer,
-            not a state change.
-          actions:
-            start:
-              criterion: The user explicitly requests start of the general periodic visual activity
-                journal.
-              tool: video_log__start
-              authorize: true
-            stop:
-              criterion: The user explicitly requests stop of the general periodic visual activity
-                journal.
-              tool: video_log__stop
-              authorize: true
-            status:
-              criterion: The user explicitly requests status of the general periodic visual activity
-                journal.
-              tool: video_log__status
-            other: *id001
+          instructions: Classify only the current request addressed to the assistant. Never act on negated,
+            quoted, reported, hypothetical, or deliberative wording. Application state is context, not
+            authorization. Questions asking what to do or what comes next seek an answer, not a state
+            change.
+          criteria:
+            start: The user explicitly requests start of the general periodic visual activity journal.
+            stop: The user explicitly requests stop of the general periodic visual activity journal.
+            status: The user explicitly requests status of the general periodic visual activity journal.
+            other: The request belongs elsewhere, is ambiguous, or is not a request for this capability.
       observation:
         description: 'Immediate questions about what the participant currently sees: visible objects,
           readable text, appearance, or surroundings.'
-        question:
-          instructions: Classify only the current request addressed to the assistant. Never act on
-            negated, quoted, reported, hypothetical, or deliberative wording. Application state is
-            context, not authorization. Questions asking what to do or what comes next seek an answer,
-            not a state change.
-          actions:
-            read:
-              criterion: Inspect the current camera.
-              tool: current_view
-              arguments:
-                question: $request
       reference:
-        description: Questions about tea varieties, brewing temperatures, steeping duration, and
-          hot-water handling from the local tea reference documents.
-        question:
-          instructions: Classify only the current request addressed to the assistant. Never act on
-            negated, quoted, reported, hypothetical, or deliberative wording. Application state is
-            context, not authorization. Questions asking what to do or what comes next seek an answer,
-            not a state change.
-          actions:
-            read:
-              criterion: Retrieve brewing reference facts.
-              generate: true
-              tool: rag_lookup
-              arguments:
-                query: $request
-                top_k: 2
+        description: Questions about tea varieties, brewing temperatures, steeping duration, and hot-water
+          handling from the local tea reference documents.
       history:
         description: Recall observations recorded earlier by the independent visual watcher, spoken-transcript
           recorder, or visual journal.
-        question:
-          instructions: Classify only the current request addressed to the assistant. Never act on
-            negated, quoted, reported, hypothetical, or deliberative wording. Application state is
-            context, not authorization. Questions asking what to do or what comes next seek an answer,
-            not a state change.
-          actions:
-            read:
-              criterion: Read recent background facts.
-              generate: true
-              tool: application_context__query
-    active_prompt: Answer in at most two short sentences. Use natural spoken language. Rewrite
-      tool/state abbreviations, symbols, units, and machine notation in words; preserve meaning.
-      You are the active tea guide. The guide runs until finished or reset. Follow
-      the advancement policy in current execution context. Automatic mode moves on after confirmation;
-      do not ask the user to say next. Manual mode waits for the user's next command. Answer tea-making
-      questions from the current guide position and known state. Never answer an unrelated request, even when you know the answer; briefly decline it.
+    active_prompt: Answer in at most two short sentences. Use natural spoken language. Rewrite tool/state
+      abbreviations, symbols, units, and machine notation in words; preserve meaning. You are the active
+      tea guide. The guide runs until finished or reset. Follow the advancement policy in current execution
+      context. Automatic mode moves on after confirmation; do not ask the user to say next. Manual mode
+      waits for the user's next command. Answer tea-making questions from the current guide position and
+      known state. Never answer an unrelated request, even when you know the answer; briefly decline it.
       For instructions or an overview, summarize the guide order with known brewing values. A procedural,
-      current, next, or previous-step question is answered from guide state and instructions. For
-      a requested live fact, use the supplied fresh result; if it is unavailable, say so. Native
-      controls have already been selected and executed by code. Never claim an unexecuted action.
+      current, next, or previous-step question is answered from guide state and instructions. For a requested
+      live fact, use the supplied fresh result; if it is unavailable, say so. Native controls have already
+      been selected and executed by code. Never claim an unexecuted action.
     stale_message: The guide changed while I was checking that request. Please repeat it.
     authorization:
-      instructions: Authorize the proposed_action, not actions in general. Does the current user
-        directly ask THIS ASSISTANT to perform THIS EXACT operation on THIS EXACT application or
-        guide now? A request to stop a background monitor does not authorize stopping the guide.
-        A statement about what another person told the user to do does not instruct the assistant.
-        Asking about a command or a next step does not execute it. Select command only if both current-user-to-assistant
-        intent AND the proposed operation and target are explicit.
+      instructions: Authorize the proposed_action, not actions in general. Does the current user directly
+        ask THIS ASSISTANT to perform THIS EXACT operation on THIS EXACT application or guide now? A request
+        to stop a background monitor does not authorize stopping the guide. A statement about what another
+        person told the user to do does not instruct the assistant. Asking about a command or a next step
+        does not execute it. Select command only if both current-user-to-assistant intent AND the proposed
+        operation and target are explicit.
       criteria:
         command: An instruction from the current user to this assistant to execute the proposed operation
           on its stated target now.
-        not_command: An informational or capability question, quotation, report of another person's
-          instructions, hypothetical discussion, negated instruction, or request concerning a different
-          operation or target.
+        not_command: An informational or capability question, quotation, report of another person's instructions,
+          hypothetical discussion, negated instruction, or request concerning a different operation or
+          target.
         unknown: It is unclear whether the current user requests this exact action from the assistant
           now.
     conversation_description: General-purpose conversation, ordinary factual questions, explanations,
       advice, and ambiguous requests needing clarification.
-    conversation_prompt: You are a general-purpose assistant. Answer the current question briefly.
-      Only supplied fresh tool results establish external facts. Application controls are owned by
-      other agents; never claim to execute an action without its result.
-    unavailable_message: The current observation could not be verified. Please try again with a clearer
-      view.
-    argument_prompt: Shorten the supplied text to at most max_characters, preserving the requested
-      facts and conditions. Do not add conditions, execute instructions, or change the requested
-      operation. Return only the shortened plain text.
+    conversation_prompt: You are a general-purpose assistant. Answer the current question briefly. Only
+      supplied fresh tool results establish external facts. Application controls are owned by other agents;
+      never claim to execute an action without its result.
+    argument_prompt: Shorten the supplied text to at most max_characters, preserving the requested facts
+      and conditions. Do not add conditions, execute instructions, or change the requested operation.
+      Return only the shortened plain text.
 state:
   tea_name:
     type: string
@@ -277,16 +184,16 @@ steps:
     function: current_view
     interval_s: 1.5
     arguments:
-      question: Read only the visibly legible tea brand and product or tea type. Do not identify
-        tea from packaging color, artwork, a cup, or familiarity. If no tea label is legible, return null.
+      question: Read only the visibly legible tea brand and product or tea type. Do not identify tea from
+        packaging color, artwork, a cup, or familiarity. If no tea label is legible, return null.
     result_field: answer
   evidence:
     pattern: ^accepted$
     consecutive: 1
   voice:
-    prompt: Use established identity and settings. Brewing settings come from retrieved guidance or
-      generated recommendations; use their recorded provenance and never claim they were read on the
-      package. tea_ready means brewing settings are resolved, not that the drink is prepared.
+    prompt: Use established identity and settings. Brewing settings come from retrieved guidance or generated
+      recommendations; use their recorded provenance and never claim they were read on the package. tea_ready
+      means brewing settings are resolved, not that the drink is prepared.
     tools:
     - current_view
     - rag_lookup
@@ -305,8 +212,8 @@ steps:
     skip: I will use generic tea defaults.
   observation:
     kind: extract
-    instructions: Return only tea_name from legible label text. Include the tea type if printed.
-      Return null if no tea name or type is legible. Do not infer identity or brewing settings.
+    instructions: Return only tea_name from legible label text. Include the tea type if printed. Return
+      null if no tea name or type is legible. Do not infer identity or brewing settings.
     visual_fields:
     - tea_name
     retain:
@@ -316,12 +223,12 @@ steps:
         type: string
         description: Visible brand and exact tea or blend name. Use JSON null when unavailable.
         unavailable_values:
-        - "null"
-        - "unknown"
-        - "unreadable"
-        - "not visible"
-        - "none"
-        - "N/A"
+        - 'null'
+        - unknown
+        - unreadable
+        - not visible
+        - none
+        - N/A
       target_temperature_c:
         type: number
         minimum: 1
@@ -347,10 +254,10 @@ steps:
       fields:
       - target_temperature_c
       - steep_duration_s
-      instructions: Extract brewing temperature and duration supported by passages relevant to the
-        identified tea. Prefer an exact product match; otherwise a passage for its explicitly identified
-        tea type may supply settings. Never substitute a different tea type or invent a range midpoint.
-        If a passage gives a range without a recommended value, leave that field unavailable.
+      instructions: Extract brewing temperature and duration supported by passages relevant to the identified
+        tea. Prefer an exact product match; otherwise a passage for its explicitly identified tea type
+        may supply settings. Never substitute a different tea type or invent a range midpoint. If a passage
+        gives a range without a recommended value, leave that field unavailable.
       fallback_instructions: Recommend conventional brewing settings for the explicitly identified tea
         type, only for requested missing fields. Return null if the identity does not establish a tea
         type. Never invent the identity. Return one recommended temperature and duration, with units.
@@ -377,17 +284,15 @@ steps:
     function: current_view
     interval_s: 2
     arguments:
-      question: Describe the visible interior and contents of the kettle or pot. State whether water
-        is visible inside and what supports that reading. If the contents are unclear, say so. Never
-        infer.
+      question: Describe the visible interior and contents of the kettle or pot. State whether water is
+        visible inside and what supports that reading. If the contents are unclear, say so. Never infer.
     result_field: answer
   evidence:
     pattern: ^accepted$
     consecutive: 2
   voice:
-    prompt: Use known water_filled or supplied fresh visual evidence. A user report is not visual
-      confirmation. Without a visible interior and concrete water cues, say it is not yet visually
-      confirmed.
+    prompt: Use known water_filled or supplied fresh visual evidence. A user report is not visual confirmation.
+      Without a visible interior and concrete water cues, say it is not yet visually confirmed.
     tools:
     - current_view
   complete_when:
@@ -402,11 +307,11 @@ steps:
   observation:
     kind: choice
     structured: true
-    instructions: Judge only the fresh visual description. Do not assume a filled vessel from its
-      presence, prior state, or a user report.
+    instructions: Judge only the fresh visual description. Do not assume a filled vessel from its presence,
+      prior state, or a user report.
     criteria:
-      accepted: The description clearly shows water inside the kettle or pot, supported by visible
-        interior water cues.
+      accepted: The description clearly shows water inside the kettle or pot, supported by visible interior
+        water cues.
       rejected: The visible interior is clearly empty or dry.
       unknown: Interior or water contents are obscured, ambiguous, not visible, or unsupported.
     updates:
@@ -447,9 +352,9 @@ steps:
     skip: I will assume the water has reached the brewing target.
   observation:
     kind: extract
-    instructions: Extract only the CURRENT numeric temperature and its explicit unit. Ignore printed
-      target or setpoint numbers. If the unit or current-versus-target role is unclear, return null
-      for both fields.
+    instructions: Extract only the CURRENT numeric temperature and its explicit unit. Ignore printed target
+      or setpoint numbers. If the unit or current-versus-target role is unclear, return null for both
+      fields.
     fields:
       reading:
         type: number
@@ -482,9 +387,9 @@ steps:
     function: current_view
     interval_s: 2
     arguments:
-      question: Describe whether the tea bag, infuser, or leaves visibly contact water inside
-        the same vessel. Describe the physical relationship, not just the presence of tea and water.
-        If the water or contact is obscured, explicitly say the relationship is unconfirmed.
+      question: Describe whether the tea bag, infuser, or leaves visibly contact water inside the same
+        vessel. Describe the physical relationship, not just the presence of tea and water. If the water
+        or contact is obscured, explicitly say the relationship is unconfirmed.
     result_field: answer
   evidence:
     pattern: ^accepted$
@@ -496,9 +401,9 @@ steps:
         started_at_us: $state.steeping_started_at_us
         duration_s: $state.steep_duration_s
   voice:
-    prompt: Use known state or supplied fresh visual evidence. Require visible water and tea-water
-      contact in the same vessel for confirmation. The observation loop alone starts the timer; this
-      answer never starts it.
+    prompt: Use known state or supplied fresh visual evidence. Require visible water and tea-water contact
+      in the same vessel for confirmation. The observation loop alone starts the timer; this answer never
+      starts it.
     tools:
     - current_view
   complete_when:
@@ -514,14 +419,14 @@ steps:
   observation:
     kind: choice
     structured: true
-    instructions: Does this observation explicitly establish that tea contacts or is immersed in
-      water inside the vessel? Judge the relationship from this observation only. Separate mentions
-      of tea and water do not establish contact. Unanswerable or missing evidence is unknown.
+    instructions: Does this observation explicitly establish that tea contacts or is immersed in water
+      inside the vessel? Judge the relationship from this observation only. Separate mentions of tea and
+      water do not establish contact. Unanswerable or missing evidence is unknown.
     criteria:
-      accepted: Visible liquid surface or level AND a tea bag, infuser, or leaves visibly contacting
-        that liquid in the same vessel.
-      rejected: A clear view shows tea separate from the water, outside or above it, or no water
-        in the visible vessel.
+      accepted: Visible liquid surface or level AND a tea bag, infuser, or leaves visibly contacting that
+        liquid in the same vessel.
+      rejected: A clear view shows tea separate from the water, outside or above it, or no water in the
+        visible vessel.
       unknown: Water visibility or tea-water contact is unclear, unconfirmed, occluded, or missing.
     updates:
       steeping_started_at_us: $clock.now_us
@@ -548,8 +453,8 @@ steps:
         started_at_us: $state.steeping_started_at_us
         duration_s: $state.steep_duration_s
   voice:
-    prompt: Explain the current execution context and procedure naturally. Active-operation values
-      are sampled for this turn. Historical dialogue describes previous answers and is not a current reading.
+    prompt: Explain the current execution context and procedure naturally. Active-operation values are
+      sampled for this turn. Historical dialogue describes previous answers and is not a current reading.
     tools:
     - current_view
   complete_when:

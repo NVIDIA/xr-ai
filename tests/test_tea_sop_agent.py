@@ -13,9 +13,9 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
-from xr_ai_interaction import ParticipantJoined, ParticipantLeft
+from xr_ai_interaction import ParticipantJoined, ParticipantLeft, ResponseOutput, UserQuery
 from xr_ai_models import DecisionAnswer, DecisionResponse
-from xr_ai_runtime import AgentRuntime
+from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, subscribe
 from xr_ai_tools import ToolSet
 from xr_ai_tools.current_frame import ImageFrame
 from xr_ai_tools.image import ImageRegistry
@@ -25,17 +25,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "agent-samples/tea-
 
 from tea_making_worker import SOPAgent  # noqa: E402
 from tea_making_worker.conversation._capture import _context_owner  # noqa: E402
-from tea_making_worker.events import PARTICIPANT_JOINED_TOPIC, PARTICIPANT_LEFT_TOPIC  # noqa: E402
+from tea_making_worker.events import PARTICIPANT_JOINED_TOPIC, PARTICIPANT_LEFT_TOPIC, ParticipantCleanupComplete  # noqa: E402
 from tea_making_worker.flows import (
     ObservationPolicy,  # noqa: E402
     VisualValidationStep,  # noqa: E402
 )
-from test_tea_making_sample import _activate_test_step, _routed_foreground, _ScriptedDecisions  # noqa: E402
+from test_tea_making_sample import _activate_test_step, _attach_router, _routed_foreground, _ScriptedDecisions  # noqa: E402
 
 
 def _sop(decisions=None, *, workflow=None, prompt=None, **budgets):
     foreground = _routed_foreground(decisions or SimpleNamespace())
-    return SOPAgent(
+    return _attach_router(SOPAgent(
         workflow=workflow or foreground._guidance.workflow,
         llm=foreground._llm, decisions=foreground._decisions,
         images=foreground._images, vlm=foreground._vlm, rag=foreground._rag,
@@ -43,15 +43,45 @@ def _sop(decisions=None, *, workflow=None, prompt=None, **budgets):
         application_tools=foreground._background_tools,
         prompt=foreground._prompt if prompt is None else prompt,
         current_view_prompt=foreground._view_prompt, **budgets,
+    ))
+
+
+
+def _register_sop(runtime, sop):
+    from tea_making_worker._capture import _record_routing
+    from tea_making_worker.conversation._applications import _destinations
+    from tea_making_worker.conversation._cleanup import _CleanupAcks
+    from tea_making_worker.events import INTERRUPTED_TOPIC, USER_QUERY_TOPIC
+    from xr_ai_routing import AgentRouter
+    from xr_ai_voice import VOICE_OUTPUT_TOPIC
+
+    runtime.register("sop", sop)
+    sop.bind_runtime(runtime)
+    sop._test_idle = asyncio.Event()
+
+    async def capture_status(status, participant):
+        await _record_routing(status, participant, snapshot=sop._snapshot)
+        if status == "idle":
+            sop._test_idle.set()
+
+    router = AgentRouter(
+        _destinations(sop), sop._decisions,
+        query_topic=USER_QUERY_TOPIC, output_topic=VOICE_OUTPUT_TOPIC,
+        participant_joined_topic=PARTICIPANT_JOINED_TOPIC,
+        interrupted_topic=INTERRUPTED_TOPIC,
+        initialize_participant=sop.participant_joined, cleanup_participant=sop.participant_left,
+        set_status=capture_status,
     )
+    runtime.register("routing", router.runtime_subscriber())
+    runtime.register("cleanup", _CleanupAcks(router))
+    return router
 
 
 @pytest.mark.asyncio
 async def test_one_registered_sop_agent_owns_engine_history_notices_and_cleanup():
     sop = _sop()
     runtime = AgentRuntime()
-    runtime.register("sop", sop)
-    sop.bind_runtime(runtime)
+    router = _register_sop(runtime, sop)
     async with runtime:
         await runtime.publish(PARTICIPANT_JOINED_TOPIC, ParticipantJoined(), participant_id="alice")
         session = sop._guidance.store.get("alice")
@@ -70,6 +100,7 @@ async def test_one_registered_sop_agent_owns_engine_history_notices_and_cleanup(
         await sop._remember_event(session, WorkflowEvent("step.ready", "identify", "old", {}))
         assert sop._context.blocks("alice") == ()
         assert not sop._guidance._tasks
+        await router.stop()
         await sop.stop()
 
 
@@ -198,16 +229,15 @@ async def test_departed_participant_query_cannot_recreate_context_or_execution()
 
     sop = _sop()
     runtime = AgentRuntime()
-    runtime.register("sop", sop)
-    sop.bind_runtime(runtime)
+    router = _register_sop(runtime, sop)
     async with runtime:
         await runtime.publish(PARTICIPANT_JOINED_TOPIC, ParticipantJoined(), participant_id="alice")
         await runtime.publish(PARTICIPANT_LEFT_TOPIC, ParticipantLeft(), participant_id="alice")
         await runtime.publish(USER_QUERY_TOPIC, UserQuery(text="Start again", timestamp_us=1), participant_id="alice")
         assert sop._guidance.store.find("alice") is None
         assert sop._context.blocks("alice") == ()
-        assert not sop._tasks
         sop._llm.chat.assert_not_awaited()
+        await router.stop()
         await sop.stop()
 
 
@@ -224,8 +254,7 @@ async def test_stop_waits_for_join_before_draining_its_new_monitor():
 
     sop._guidance._flush = flush
     runtime = AgentRuntime()
-    runtime.register("sop", sop)
-    sop.bind_runtime(runtime)
+    router = _register_sop(runtime, sop)
     async with runtime:
         join = asyncio.create_task(runtime.publish(
             PARTICIPANT_JOINED_TOPIC, ParticipantJoined(), participant_id="alice",
@@ -234,6 +263,7 @@ async def test_stop_waits_for_join_before_draining_its_new_monitor():
 
         async def stop():
             stopping.set()
+            await router.stop()
             await sop.stop()
 
         shutdown = asyncio.create_task(stop())
@@ -345,3 +375,191 @@ async def test_yaml_workflow_voice_and_shared_prompt_reach_live_answer_request(t
         assert "at most two short sentences" not in system
     finally:
         await sop.stop()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("operation", ["interrupt", "depart"])
+async def test_sdk_runtime_drains_cancelled_query_without_late_output_history_or_capture(tmp_path, operation):
+    from tea_making_worker._capture import _RecordedLanguage
+    from tea_making_worker.events import INTERRUPTED_TOPIC, USER_QUERY_TOPIC
+    from test_tea_sop_capture import _capture, _records
+    from xr_ai_interaction import Interrupted, UserQuery
+    from xr_ai_models import ChatResponse
+    from xr_ai_voice import VOICE_OUTPUT_TOPIC
+
+    entered, cancelled, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    decisions = _ScriptedDecisions(("destination", "workflow"), ("action", "answer"))
+    sop = _sop(decisions)
+
+    async def blocked(*_args, **_kwargs):
+        entered.set()
+        try:
+            await release.wait()
+        except asyncio.CancelledError:
+            # Even a backend which suppresses cancellation must not publish or
+            # commit its eventual response. SDK ResponseOutputs enforces this.
+            cancelled.set()
+            await release.wait()
+        return ChatResponse("Late result", None, None, "stop", {})
+
+    sop._llm = _RecordedLanguage(SimpleNamespace(chat=blocked))
+
+    class Sink(Agent):
+        def __init__(self):
+            super().__init__()
+            self.outputs = []
+
+        @subscribe(VOICE_OUTPUT_TOPIC)
+        async def receive(self, value: ResponseOutput, ctx: RuntimeContext):
+            self.outputs.append(value)
+
+    capture, _ = await _capture(tmp_path)
+    runtime = AgentRuntime()
+    router = _register_sop(runtime, sop)
+    sink = runtime.register("sink", Sink())
+    async with capture.activate():
+        async with runtime:
+            await runtime.publish(PARTICIPANT_JOINED_TOPIC, ParticipantJoined(), participant_id="active")
+            _activate_test_step(sop._guidance, "fill_water")
+            sop._guidance.store.get("active").next_tick = float("inf")
+            await runtime.publish(
+                USER_QUERY_TOPIC, UserQuery(text="What next?", timestamp_us=1), participant_id="active",
+            )
+            await asyncio.wait_for(entered.wait(), 2)
+            topic, event = ((INTERRUPTED_TOPIC, Interrupted()) if operation == "interrupt"
+                            else (PARTICIPANT_LEFT_TOPIC, ParticipantLeft()))
+            cleanup = asyncio.create_task(runtime.publish(topic, event, participant_id="active"))
+            await asyncio.wait_for(cancelled.wait(), 2)
+            assert not cleanup.done()
+            assert sink.outputs == []
+            release.set()
+            await asyncio.wait_for(cleanup, 2)
+            assert sink.outputs == []
+            assert "Late result" not in "\n".join(block.text for block in sop._context.blocks("active"))
+            if operation == "depart":
+                assert sop._guidance.store.find("active") is None
+                await runtime.publish(
+                    USER_QUERY_TOPIC, UserQuery(text="Again", timestamp_us=2), participant_id="active",
+                )
+                assert sop._guidance.store.find("active") is None
+            await router.stop()
+            await sop.stop()
+    records = [row for _entry, rows in _records(capture) for row in rows]
+    assert any(row["kind"] == "language.finished" for row in records)
+    assert not any(row["kind"] == "answer.produced" for row in records)
+    routing = [rows for entry, rows in _records(capture) if entry["channel"] == "routing"]
+    assert len(routing) == 1
+    assert routing[0][-1]["kind"] == "attempt.finished" and routing[0][-1]["status"] == "cancelled"
+
+
+@pytest.mark.asyncio
+async def test_sdk_departure_acknowledges_original_generation_once_before_rejoin():
+    from tea_making_worker.events import PARTICIPANT_CLEANUP_COMPLETE_TOPIC
+
+    class Sink(Agent):
+        def __init__(self):
+            super().__init__()
+            self.generation = None
+            self.acks = []
+
+        @subscribe(PARTICIPANT_LEFT_TOPIC)
+        async def left(self, event: ParticipantLeft, ctx: RuntimeContext):
+            self.generation = ctx.metadata.message_id
+
+        @subscribe(PARTICIPANT_CLEANUP_COMPLETE_TOPIC)
+        async def ack(self, value: ParticipantCleanupComplete, ctx: RuntimeContext):
+            self.acks.append(value)
+
+    sop = _sop()
+    runtime = AgentRuntime()
+    router = _register_sop(runtime, sop)
+    sink = runtime.register("sink", Sink())
+    entered, release = asyncio.Event(), asyncio.Event()
+    clear = sop._run_contexts.clear
+
+    async def blocked_clear(participant):
+        entered.set()
+        await release.wait()
+        await clear(participant)
+
+    sop._run_contexts.clear = blocked_clear
+    async with runtime:
+        await runtime.publish(PARTICIPANT_JOINED_TOPIC, ParticipantJoined(), participant_id="p")
+        old = sop._guidance.store.get("p")
+        departure = asyncio.create_task(runtime.publish(PARTICIPANT_LEFT_TOPIC, ParticipantLeft(), participant_id="p"))
+        await asyncio.wait_for(entered.wait(), 2)
+        rejoin = asyncio.create_task(runtime.publish(PARTICIPANT_JOINED_TOPIC, ParticipantJoined(), participant_id="p"))
+        assert not departure.done() and not rejoin.done()
+        release.set()
+        await asyncio.wait_for(asyncio.gather(departure, rejoin), 2)
+        current = sop._guidance.store.find("p")
+        assert current is not None and current is not old
+        assert "p" in sop._guidance._connected
+        assert [(ack.producer, ack.generation) for ack in sink.acks] == [
+            ("foreground", sink.generation), ("guidance", sink.generation),
+        ]
+        await router.stop()
+        await sop.stop()
+
+
+@pytest.mark.asyncio
+async def test_optional_application_adapters_decline_without_their_capability_tools():
+    from tea_making_worker.conversation._applications import _destinations
+    from xr_ai_routing import AgentTurn
+
+    sop = _sop()
+    sop._background_tools = lambda _participant: ToolSet(())
+    try:
+        routes = _destinations(sop)
+        for name in ("watch", "transcript", "journal", "history"):
+            result = await routes[name].admit(AgentTurn("p", name, "Please check"), focused=False)
+            assert result.disposition == "decline"
+    finally:
+        await sop.stop()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", [False, True])
+async def test_sdk_capture_balances_request_scope_and_retains_routing_admission_and_authorization(tmp_path, failure):
+    from tea_making_worker._capture import _RecordedDecisions, _RecordedLanguage
+    from tea_making_worker.events import USER_QUERY_TOPIC
+    from test_tea_sop_capture import _capture, _records
+
+    choices = [("destination", "workflow"), ("action", "answer" if failure else "start")]
+    if not failure:
+        choices.append(("authorization", "command"))
+    sop = _sop(_RecordedDecisions(_ScriptedDecisions(*choices)))
+    if failure:
+        sop._llm = _RecordedLanguage(SimpleNamespace(chat=AsyncMock(side_effect=RuntimeError("model failed"))))
+    runtime = AgentRuntime()
+    router = _register_sop(runtime, sop)
+    expected = []
+
+    class Requests(Agent):
+        @subscribe(USER_QUERY_TOPIC)
+        async def receive(self, message: UserQuery, ctx: RuntimeContext):
+            expected.append(ctx.metadata.message_id)
+
+    runtime.register("request-identity", Requests())
+    capture, _ = await _capture(tmp_path)
+    async with capture.activate():
+        async with runtime:
+            await runtime.publish(PARTICIPANT_JOINED_TOPIC, ParticipantJoined(), participant_id="active")
+            if failure:
+                _activate_test_step(sop._guidance, "fill_water")
+                sop._guidance.store.get("active").next_tick = float("inf")
+            await runtime.publish(USER_QUERY_TOPIC, UserQuery(text="Explain" if failure else "Start", timestamp_us=1),
+                                  participant_id="active")
+            await asyncio.wait_for(sop._test_idle.wait(), 2)
+            await router.stop()
+            await sop.stop()
+    attempts = _records(capture)
+    route = next((entry, rows) for entry, rows in attempts if entry["channel"] == "routing")
+    assert route[0]["request_id"] == expected[0]
+    assert route[1][-1]["kind"] == "attempt.finished"
+    assert route[1][-1]["status"] == ("failed" if failure else "completed")
+    calls = [row for row in route[1] if row["kind"] == "decision.started"]
+    assert [set(row["questions"]) for row in calls] == (
+        [{"destination"}, {"action"}] if failure else [{"destination"}, {"action"}, {"authorization"}]
+    )
+    assert all(row["request_id"] == expected[0] for _entry, rows in attempts for row in rows)

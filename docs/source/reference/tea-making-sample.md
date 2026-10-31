@@ -26,7 +26,7 @@ request. Code owns confirmation counts, arithmetic, timestamps, and guarded
 state commits. The language model generates answers and summaries; it receives
 no state-write tool.
 
-The registered SOP agent owns its execution engine, managed context, request
+The focused SOP destination owns its execution engine, managed context, request
 handling, and guidance notice delivery. The tea guide is one focused destination
 on its top-level `AgentRouter`, like
 the conversation sample's note-taking destination. Steps are data, not agents.
@@ -155,8 +155,10 @@ locks, and participant cleanup.
 ## Sample-local APIs and prompt ownership
 
 Import `SOPAgent`, `Workflow`, and `load_workflow` from `tea_making_worker`.
-`SOPAgent` is the single registered agent; execution state and routing machinery
-remain implementation details in `sop/` and `conversation/`.
+`SOPAgent` implements the SDK routing destination contract and subscribes to
+guidance notices. The application creates one top-level SDK `AgentRouter` and
+registers its `runtime_subscriber()`. Execution state remains in `sop/`; the
+small answer and optional-application adapters remain in `conversation/`.
 
 `tea_making_worker.flows` exports `VisualValidationStep`, `VisualCheck`,
 `IdentityResolutionStep`, `ObservationPolicy`, and `Observation`. Visual validation
@@ -208,14 +210,16 @@ at application scope rather than being copied into each SOP step.
 | `sop/_spec.py` | Validates the workflow YAML contract | Extend declarative workflow metadata |
 | `sop/_state.py` | Typed sparse state, evidence, transitions, rendering | Change deterministic state policy |
 | `sop/_tools.py` | Current view, RAG, clock, temperature, and native workflow controls | Add domain tools |
-| `agent.py` | Single registered SOP agent and component lifecycle | Compose a different procedure |
+| `agent.py` | Focused SOP destination, native control admission, common answer path and run context | Compose a different procedure |
 | `conversation/_context.py` | Per-run state/evidence/event channels and historical handoff | Configure context ownership |
 | `conversation/_capture.py` | Participant-scoped compaction recording | Record asynchronous context work |
 | `sop/_engine.py` | Internal execution engine (`GuidanceAgent`), sessions and observation loop | Add another trigger or evidence source |
 | `flows/_visual.py` | Reusable, read-only visual observation/evaluation | Configure semantic or numeric validation |
 | `flows/_identity.py` | Identity-to-reference settings resolution with explicit fallback provenance | Configure another identification-and-lookup flow |
-| `conversation/_foreground.py` | Top-level router composition, shared conversation generation and read-only tool loop | Change interactive behavior |
-| `conversation/_routing.py` | Focused workflow admission and independent application destinations | Adapt state-scoped choices |
+| `conversation/_answer.py` | Shared message assembly and SDK read-only tool loop | Change answer instructions |
+| `conversation/_applications.py` | Explicit adapters for the existing background, camera and reference capabilities | Configure application behavior |
+| `conversation/_cleanup.py` | Original-generation producer acknowledgments after SDK-owned departure | Preserve file/image cleanup ordering |
+| `conversation/_routing.py` | Bounded semantic choice and exact-operation authorization | Tune configured criteria |
 | `flows/_observations.py` | Typed extraction, choice evidence, unit normalization, and deterministic evaluation | Adapt observation policy |
 | `images.py` | Shared participant image acquisition | Add another image selector |
 | `background_context.py` | Recent-fact store and query tool | Change foreground and background context policy |
@@ -267,6 +271,14 @@ names; the original IDs remain in every record. Foreground turns belong to the
 step active when the turn starts, or to `applications` when no step is active.
 Independent watchers and journals also use `applications`. Attempt IDs remain
 unique across reconnects and procedure resets within a worker run.
+
+Routing attempts retain SDK destination selection, admission and exact-operation
+authorization decisions. The existing router processing/idle hook opens and
+closes recording inside the SDK-owned task, using its public Relay metadata for
+the original request ID. This hook does not supervise or cancel work. Routing
+and direct-answer attempts share that request ID; both retain explicit failure
+and cancellation status.
+
 
 `attempts.jsonl` is the run index: each entry contains participant, step, channel,
 request and attempt IDs, plus the relative event-file path. Attempt event files
@@ -392,7 +404,9 @@ The language model receives managed context and the read-only tools declared in
 `voice.tools`, using the standard SDK tool loop. Workflow mutation tools are
 excluded from that loop.
 
-Code binds the selected tool's arguments from YAML and known state. Mutating
+Code maps bounded control labels to the existing native operations and their
+arguments; YAML supplies semantic instructions and criteria. It does not define
+an arbitrary tool-execution language. Mutating
 controls also require a separate decision about the current user's authorization
 of that exact operation and target. The positive authorization score must exceed
 the combined negative and unknown scores; a minority positive cannot authorize
@@ -455,6 +469,18 @@ context. Participant departure drains response and observation producers before
 clearing history; shutdown also drains context compaction.
 The router owns admission, focus, cancellation, and handoff; agents own their
 application state and background tasks.
+The sample does not maintain another user-turn task registry or buffer destination
+output for later republication. Destinations use SDK `ResponseOutputs` directly;
+completed dialogue is recorded only after the reply terminator is delivered.
+Initialization and participant cleanup use the router's existing hooks.
+
+The sample's left-event adapter is deliberately separate from the router's
+runtime subscriber: it calls public `router.participant_left()` to drain owned
+work, then acknowledges the foreground and guidance producers using the original
+left event's generation. It is the sole adapter for that event, so a second
+late departure cannot reset a concurrent rejoin. The bridge retains the existing
+file/image cleanup protocol; it does not supervise turns or implement routing.
+
 
 ## Workflow contract
 
@@ -743,9 +769,10 @@ Test deterministic behavior separately from model quality:
 5. Add routing evals for prompt-controlled tool choices.
 6. Run the live pipeline to evaluate visual evidence and model prompts.
 
-The live-model eval uses the production router and admission code, with tool
-effects dry-run. Setup executes only the local native start control to establish
-actual focus; populating workflow state alone is not a focused-agent test.
+The live-model eval uses the production SDK router, destinations, native SOP
+controls and answer request assembly. External background effects and camera
+inputs are fixtures. Setup executes the native start control to establish actual
+focus; populating workflow state alone is not a focused-agent test.
 The suite checks selected capabilities, fixed skip arguments, generation scope,
 and response constraints. Caption fixtures check extraction, not physical-camera
 accuracy. The normal acceptance floor remains 80 percent; inspect every unsafe

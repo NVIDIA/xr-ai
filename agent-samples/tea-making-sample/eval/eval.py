@@ -20,15 +20,17 @@ from tea_making_worker import SOPAgent
 from tea_making_worker.background_context import BackgroundContextAgent
 from tea_making_worker.change_watch import ChangeWatchAgent
 from tea_making_worker.config import load_config
-from tea_making_worker.conversation._foreground import ForegroundAgent, _bind_arguments
-from tea_making_worker.conversation._routing import _make_router
+from tea_making_worker.conversation._applications import _destinations
+from tea_making_worker.events import FOREGROUND_RECORD_TOPIC
 from tea_making_worker.flows._observations import _observe
 from tea_making_worker.sop import load_workflow
 from tea_making_worker.sop._engine import GuidanceAgent
 from tea_making_worker.transcript import TranscriptAgent
 from tea_making_worker.video_log import VideoLogAgent
+from xr_ai_hub import FrameUnavailable
 from xr_ai_models import ChatMessage, DecisionService, LLMService, load_models_config, make_decision, make_llm
-from xr_ai_routing import AgentTurn
+from xr_ai_routing import AgentRouter, AgentTurn
+from xr_ai_runtime import AgentRuntime
 from xr_ai_tools import Tool, ToolSet
 from xr_ai_tools.image import ImageRegistry
 from xr_ai_tools.rag import RetrieveResult
@@ -38,13 +40,16 @@ _SAMPLE = Path(__file__).resolve().parents[1]
 _MIN_PASS_RATE = 0.80
 
 
-def _build_agents(llm: LLMService, decisions: DecisionService) -> tuple[ForegroundAgent, GuidanceAgent]:
+def _build_agents(llm: LLMService, decisions: DecisionService) -> tuple[SOPAgent, GuidanceAgent]:
     config = load_config(_SAMPLE / "yaml" / "tea_making_worker.yaml")
+    async def unavailable_frame(_request):
+        raise FrameUnavailable("No camera image is supplied by this routing eval.")
+    async def empty_reference(_request):
+        return RetrieveResult(results=[])
     images = SimpleNamespace(
-        images=ImageRegistry(),
-        get_current_frame=SimpleNamespace(),
+        images=ImageRegistry(), get_current_frame=SimpleNamespace(execute=unavailable_frame),
     )
-    placeholder = SimpleNamespace()
+    placeholder = SimpleNamespace(retrieve=SimpleNamespace(execute=empty_reference))
     change_watch = ChangeWatchAgent(
         decisions=decisions,
         decision=config.change_watch_decision,
@@ -185,63 +190,47 @@ async def main() -> None:
     decision_service = make_decision(models, "decision")
     decisions = _RecordingDecisions(decision_service)
     foreground, guidance = _build_agents(llm, decisions)
-    # The production admissions/router are exercised with dry-run tool effects.
-    # Only setup executes the native start tool to establish actual router focus.
-    await foreground._router.stop()
+    # Exercise production destinations and request assembly. External background
+    # effects are fixtures; native SOP controls and state transitions remain real.
     captured: dict[str, dict[str, Any]] = {}
+    runtime = AgentRuntime()
+    foreground.bind_runtime(runtime)
+    publish = runtime.publish
 
-    async def execute(turn, action, started, *, workflow=False):
-        await started()
-        row = captured[turn.participant_id]
-        row["workflow_scope"] = workflow
-        if action.tool is not None:
-            tools = (
-                foreground._workflow_tools(turn.participant_id)
-                if workflow
-                else foreground._application_tools(turn.participant_id)
-            )
-            tool = tools.get(action.tool)
-            session = guidance.store.find(turn.participant_id)
-            state = dict(session.state) if session else {}
-            arguments = _bind_arguments(action.arguments, turn.query, state)
-            request = tool.request_model.model_validate(arguments)
-            row["tools"].append(action.tool)
-            row["arguments"] = arguments
-            if turn.turn_id.endswith(":setup") and action.tool == "workflow__start":
-                await tool.execute(request)
-            elif action.tool == "workflow__status":
-                row["content"] = (await tool.execute(request)).message
-        else:
-            row["content"], calls, _ = await foreground._generate_answer(
-                turn.query,
-                turn.participant_id,
-                workflow_context=workflow,
-            )
-            row["tools"].extend(calls)
-            blocks = foreground._run_contexts.blocks(turn.participant_id)
-            row["execution"] = next((
-                json.loads(block.text.split("\n", 1)[1])
-                for block in blocks if block.text.startswith("Source sop.execution ")
-            ), {})
-        return row["content"]
+    async def record(topic, message, **kwargs):
+        if topic is FOREGROUND_RECORD_TOPIC:
+            row = captured[kwargs["participant_id"]]
+            row["content"], row["tools"] = message.response, message.tools
+        await publish(topic, message, **kwargs)
 
-    async def stale(turn, started):
-        await started()
-        captured[turn.participant_id]["content"] = guidance.workflow.foreground.stale_message
+    runtime.publish = record
+
+    def recorded_tools(provider, *, background=False):
+        def catalog(participant):
+            original = provider(participant)
+            if original is None:
+                return None
+            result = []
+            for name, tool in original.items():
+                async def execute(request, tool=tool, name=name):
+                    captured[participant]["arguments"] = request.model_dump(mode="json")
+                    if background and name.split("__")[-1] in {"start", "stop", "status"}:
+                        return tool.result_model(active=name.endswith("__start"), message="Fixture control completed.")
+                    return await tool.execute(request)
+                result.append(Tool(name, tool.description, tool.request_model, tool.result_model, execute,
+                                   return_direct=tool.return_direct))
+            return ToolSet(result)
+        return catalog
+
+    guidance.root_tools = recorded_tools(guidance.root_tools)
+    guidance.active_tools = recorded_tools(guidance.active_tools)
+    foreground._background_tools = recorded_tools(foreground._background_tools, background=True)
 
     async def output(turn, _route, text):
         captured[turn.participant_id]["content"] = text
 
-    router = _make_router(
-        guidance,
-        decisions,
-        guidance.workflow.foreground,
-        foreground._workflow_tools,
-        foreground._application_tools,
-        execute,
-        stale,
-        output,
-    )
+    router = AgentRouter(_destinations(foreground), decisions, output=output)
+    await runtime.start()
     rows = []
     try:
         for index, case in enumerate(cases):
@@ -282,8 +271,14 @@ async def main() -> None:
                         captured[participant_id] = {"tools": [], "content": ""}
                     decisions.calls = []
                     started = time.perf_counter()
-                    await router.handle(AgentTurn(participant_id, str(index), case["query"]))
+                    result = await router.handle(AgentTurn(participant_id, str(index), case["query"]))
                     actual = captured[participant_id]
+                    actual["workflow_scope"] = result.disposition in {"focus", "release"}
+                    blocks = foreground._run_contexts.blocks(participant_id)
+                    actual["execution"] = next((
+                        json.loads(block.text.split("\n", 1)[1])
+                        for block in blocks if block.text.startswith("Source sop.execution ")
+                    ), {})
                     expected = [] if case["expected_tool"] is None else [case["expected_tool"]]
                     alternatives = case.get("accepted_tools", [expected])
                     if actual["tools"] not in alternatives:
@@ -327,6 +322,7 @@ async def main() -> None:
     finally:
         await router.stop()
         await foreground.stop()
+        await runtime.stop()
         await llm.close()
         await decision_service.close()
         if args.output:

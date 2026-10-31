@@ -10,6 +10,7 @@ import base64
 import hashlib
 import json
 import re
+import sys
 import time
 from collections.abc import Callable
 from contextlib import asynccontextmanager
@@ -20,11 +21,13 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+import nemo_relay
 import yaml
 from pydantic import BaseModel
 
 _ACTIVE: ContextVar[_SOPCapture | None] = ContextVar("sop_capture", default=None)
 _ATTEMPT: ContextVar[_Attempt | None] = ContextVar("sop_attempt", default=None)
+_ROUTING_ATTEMPT: ContextVar[Any] = ContextVar("sop_routing_attempt", default=None)
 
 
 def _json(value: Any) -> Any:
@@ -245,6 +248,26 @@ async def _attempt(
                 attempt.finished = True
     finally:
         _ATTEMPT.reset(token)
+
+
+async def _record_routing(status: str, participant: str, *, snapshot: Callable[[str], dict]) -> None:
+    """Record decisions inside the SDK-owned turn, using its public Relay metadata."""
+    if status == "processing":
+        capture = _ACTIVE.get()
+        if capture is None or not capture.enabled:
+            return
+        metadata = nemo_relay.scope.get_handle().metadata or {}
+        scope = _attempt(participant, "routing", request_id=metadata["message_id"],
+                         snapshot=lambda: snapshot(participant))
+        await scope.__aenter__()
+        _ROUTING_ATTEMPT.set(scope)
+    elif status == "idle":
+        scope = _ROUTING_ATTEMPT.get()
+        if scope is not None:
+            _ROUTING_ATTEMPT.set(None)
+            # The SDK calls idle in its turn's finally block. Preserve failure
+            # and cancellation while closing recording; no task is owned here.
+            await scope.__aexit__(*sys.exc_info())
 
 
 async def _event(kind: str, **data) -> None:
