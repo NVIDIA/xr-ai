@@ -297,18 +297,17 @@ async def test_reusable_visual_check_honors_its_model_deadline_and_drains_cancel
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("source", ["inline", "file"])
-async def test_configured_camera_policy_reaches_observer_and_streaming_model_requests(tmp_path, source):
+async def test_main_yaml_camera_policy_reaches_observer_and_streaming_model_requests(tmp_path):
     from tea_making_worker.config import load_config
     from xr_ai_tools.vision import ImageQueryRequest, ImageQueryTool
 
     configured = "Describe the overhead workbench view; retain readable identifiers."
     path = tmp_path / "worker.yaml"
-    if source == "inline":
-        path.write_text("current_view_prompt: " + configured + "\n")
-    else:
-        (tmp_path / "visual.txt").write_text(configured)
-        path.write_text("current_view_prompt_file: visual.txt\n")
+    import yaml
+    from test_tea_making_sample import _SAMPLE
+    raw = yaml.safe_load((_SAMPLE / "yaml/tea_making_worker.yaml").read_text())
+    raw["current_view_prompt"] = configured
+    path.write_text(yaml.safe_dump(raw))
     config = load_config(path)
     foreground = _routed_foreground(SimpleNamespace())
     registry = foreground._images.images

@@ -1,1 +1,0 @@
-Describe only the newly visible change relevant to watch_for in one short factual sentence. Use only the current and previous descriptions. Do not add inference, commentary, tool calls, Markdown, or workflow state.

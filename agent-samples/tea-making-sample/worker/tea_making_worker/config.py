@@ -60,9 +60,9 @@ def _resolve(config_path: Path | None, raw: str) -> Path:
     return path.resolve()
 
 
-def _read_config(path: Path | None) -> dict[str, Any]:
-    if path is None or not path.exists():
-        return {}
+def _read_config(path: Path) -> dict[str, Any]:
+    if not path.is_file():
+        raise FileNotFoundError(f"Worker YAML not found: {path}; pass --config with the sample worker YAML path.")
     with path.open(encoding="utf-8") as stream:
         data = yaml.safe_load(stream) or {}
     if not isinstance(data, dict):
@@ -70,16 +70,13 @@ def _read_config(path: Path | None) -> dict[str, Any]:
     return data
 
 
-def _prompt(data: dict[str, Any], config_path: Path | None, name: str, *, default_file: str | None = None) -> str:
-    inline = data.get(name)
-    if inline is not None:
-        return str(inline).strip()
-    configured = data.get(f"{name}_file")
-    path = (
-        _resolve(config_path, str(configured))
-        if configured is not None else _PACKAGE / "prompts" / (default_file or f"{name}.txt")
-    )
-    return path.read_text(encoding="utf-8").strip()
+def _prompt(data: dict[str, Any], name: str) -> str:
+    if f"{name}_file" in data:
+        raise ValueError(f"{name}_file is no longer supported; put {name} text directly in worker YAML")
+    value = data.get(name)
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{name} must be nonblank text in worker YAML")
+    return value.strip()
 
 
 def _positive(data: dict[str, Any], name: str, default: float) -> float:
@@ -91,9 +88,6 @@ def _positive(data: dict[str, Any], name: str, default: float) -> float:
 
 def _decision(data: dict[str, Any], name: str) -> DecisionQuestion:
     raw = data.get(name)
-    if raw is None:
-        defaults = yaml.safe_load((_PACKAGE / "prompts" / "decisions.yaml").read_text(encoding="utf-8"))
-        raw = defaults[name]
     if not isinstance(raw, dict):
         raise ValueError(f"{name} requires instructions and choice criteria in worker YAML")
     policy = ObservationPolicy.model_validate({"kind": "choice", "updates": {}, **raw})
@@ -101,8 +95,19 @@ def _decision(data: dict[str, Any], name: str) -> DecisionQuestion:
 
 
 def load_config(path: Path | None) -> WorkerConfig:
-    """Load YAML and resolve every filesystem path relative to that file."""
+    """Load the selected complete worker YAML and resolve paths relative to it.
 
+    Without a path, use the source sample's checked-in YAML, or ``yaml/`` in
+    the documented sample working directory for an installed worker. A standalone
+    install without that YAML must receive ``--config``. Model wording has no
+    packaged-file or Python fallback; custom YAML owns its prompt values.
+    """
+
+    if path is None:
+        path = _PACKAGE.parents[1] / "yaml" / "tea_making_worker.yaml"
+        if not path.is_file():
+            path = Path.cwd() / "yaml" / "tea_making_worker.yaml"
+    path = path.resolve()
     data = _read_config(path)
     history_size = int(data.get("background_history_size", 50))
     if history_size <= 0:
@@ -130,21 +135,16 @@ def load_config(path: Path | None) -> WorkerConfig:
         voice_gate_yaml=_resolve(path, str(data.get("voice_gate_yaml", "voice_gate.yaml"))),
         artifacts_dir=_resolve(path, str(data.get("artifacts_dir", "../artifacts"))),
         rag_endpoint=str(data.get("rag_endpoint", "tcp://127.0.0.1:8340")),
-        foreground_prompt=_prompt(data, path, "foreground_prompt"),
-        current_view_prompt=_prompt(data, path, "current_view_prompt", default_file="current_view.txt"),
+        foreground_prompt=_prompt(data, "foreground_prompt"),
+        current_view_prompt=_prompt(data, "current_view_prompt"),
         change_watch_decision=_decision(data, "change_watch_decision"),
         video_delta_decision=_decision(data, "video_delta_decision"),
-        change_watch_caption_prompt=_prompt(data, path, "change_watch_caption_prompt"),
-        change_watch_event_prompt=_prompt(data, path, "change_watch_event_prompt"),
-        transcript_summary_prompt=_prompt(data, path, "transcript_summary_prompt"),
-        video_caption_prompt=_prompt(data, path, "video_caption_prompt"),
-        video_delta_prompt=_prompt(data, path, "video_delta_prompt"),
-        change_watch_default_instruction=str(
-            data.get(
-                "change_watch_default_instruction",
-                "important changes involving people, objects, actions, or possible hazards",
-            )
-        ),
+        change_watch_caption_prompt=_prompt(data, "change_watch_caption_prompt"),
+        change_watch_event_prompt=_prompt(data, "change_watch_event_prompt"),
+        transcript_summary_prompt=_prompt(data, "transcript_summary_prompt"),
+        video_caption_prompt=_prompt(data, "video_caption_prompt"),
+        video_delta_prompt=_prompt(data, "video_delta_prompt"),
+        change_watch_default_instruction=_prompt(data, "change_watch_default_instruction"),
         change_watch_interval_s=_positive(data, "change_watch_interval_s", 2.0),
         transcript_summary_interval_s=_positive(data, "transcript_summary_interval_s", 120.0),
         video_log_interval_s=_positive(data, "video_log_interval_s", 2.0),

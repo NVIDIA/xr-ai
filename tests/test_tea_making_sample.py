@@ -1766,39 +1766,64 @@ async def test_relay_event_log_buffers_and_excludes_stream_chunks(
     assert "turn.summary" in names
 
 
-def test_default_prompts_come_from_packaged_files(tmp_path: Path) -> None:
-    config = load_config(_SAMPLE / "yaml/tea_making_worker.yaml")
-    prompt_dir = _WORKER / "tea_making_worker/prompts"
-    current_view_prompt = (prompt_dir / "current_view.txt").read_text().strip()
-    assert config.foreground_prompt == (prompt_dir / "foreground_prompt.txt").read_text().strip()
-    assert config.current_view_prompt == current_view_prompt
-    assert config.video_delta_prompt == (prompt_dir / "video_delta_prompt.txt").read_text().strip()
-    assert "newly visible change" in config.change_watch_event_prompt
-    assert "newly visible change" in config.change_watch_event_prompt
-    assert "tool calls" in config.change_watch_event_prompt
-    assert "continued presence" in config.change_watch_decision.criteria["rejected"].lower()
-    assert "material transition" in config.video_delta_prompt
-    assert "material transition" in config.video_delta_prompt
-    assert "tool calls" in config.video_delta_prompt
-    assert "supplied new utterances" in config.transcript_summary_prompt
-    assert "user's first-person view" in current_view_prompt
-    assert "only visible evidence" in current_view_prompt
-    assert "what am I looking at" not in current_view_prompt.lower()
+def test_default_prompt_policies_come_from_main_worker_yaml(tmp_path: Path) -> None:
+    raw = yaml.safe_load((_SAMPLE / "yaml/tea_making_worker.yaml").read_text())
+    config = load_config(None)
+    names = ("foreground_prompt", "current_view_prompt", "change_watch_caption_prompt",
+             "change_watch_event_prompt", "transcript_summary_prompt", "video_caption_prompt", "video_delta_prompt")
+    for name in names:
+        assert getattr(config, name) == raw[name].strip()
+    assert config.workflow_config == _SAMPLE / "yaml/workflow.yaml"
+    assert config.models_config == _SAMPLE / "yaml/models.local.json"
+    assert config.change_watch_decision.criteria == raw["change_watch_decision"]["criteria"]
+    assert config.video_delta_decision.criteria == raw["video_delta_decision"]["criteria"]
+    assert not (_WORKER / "tea_making_worker/prompts").exists()
+    raw["foreground_prompt"] = "Explicit override"
+    path = tmp_path / "worker.yaml"
+    path.write_text(yaml.safe_dump(raw))
+    override = load_config(path)
+    assert override.foreground_prompt == "Explicit override"
+    assert override.current_view_prompt == config.current_view_prompt
 
-    override = tmp_path / "worker.yaml"
-    override.write_text("foreground_prompt: Explicit override\n")
-    assert load_config(override).foreground_prompt == "Explicit override"
 
-    matching_prompt = tmp_path / "matching-prompt.txt"
-    matching_prompt.write_text((prompt_dir / "foreground_prompt.txt").read_text())
-    override.write_text("foreground_prompt_file: matching-prompt.txt\n")
-    matching_config = load_config(override)
-    assert matching_config.foreground_prompt == config.foreground_prompt
+@pytest.mark.parametrize("name", ["foreground_prompt", "current_view_prompt", "change_watch_caption_prompt",
+                                  "change_watch_event_prompt", "transcript_summary_prompt", "video_caption_prompt",
+                                  "video_delta_prompt", "change_watch_decision", "video_delta_decision"])
+def test_selected_yaml_has_no_hidden_prompt_or_decision_fallback(tmp_path, name):
+    raw = yaml.safe_load((_SAMPLE / "yaml/tea_making_worker.yaml").read_text())
+    del raw[name]
+    path = tmp_path / "worker.yaml"
+    path.write_text(yaml.safe_dump(raw))
+    with pytest.raises(ValueError, match=name):
+        load_config(path)
+
+
+@pytest.mark.parametrize("name", ["foreground_prompt", "current_view_prompt"])
+def test_prompt_file_options_are_replaced_by_inline_yaml(tmp_path, name):
+    raw = yaml.safe_load((_SAMPLE / "yaml/tea_making_worker.yaml").read_text())
+    raw[name + "_file"] = "legacy.txt"
+    path = tmp_path / "worker.yaml"
+    path.write_text(yaml.safe_dump(raw))
+    with pytest.raises(ValueError, match=name + "_file"):
+        load_config(path)
+
+
+def test_installed_worker_default_uses_sample_yaml_or_requires_explicit_config(tmp_path, monkeypatch):
+    import tea_making_worker.config as config_module
+
+    monkeypatch.setattr(config_module, "_PACKAGE", tmp_path / "site-packages/tea_making_worker")
+    monkeypatch.chdir(_SAMPLE)
+    assert load_config(None).workflow_config == _SAMPLE / "yaml/workflow.yaml"
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(FileNotFoundError, match="--config"):
+        load_config(None)
+    explicit = load_config(_SAMPLE / "yaml/tea_making_worker.yaml")
+    assert explicit.current_view_prompt
 
 
 def test_foreground_prompt_has_route_eval_cases() -> None:
     cases = yaml.safe_load((_SAMPLE / "eval/cases.yaml").read_text())
-    common_prompt = (_WORKER / "tea_making_worker/prompts/foreground_prompt.txt").read_text()
+    common_prompt = load_config(None).foreground_prompt
     idle_prompt = _manual_workflow(_SAMPLE / "yaml/workflow.yaml").foreground.conversation_prompt
     workflow = _manual_workflow(_SAMPLE / "yaml/workflow.yaml")
     active_prompt = "\n".join(

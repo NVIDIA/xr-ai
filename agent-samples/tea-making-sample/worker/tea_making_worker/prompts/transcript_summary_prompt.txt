@@ -1,1 +1,0 @@
-Summarize only the supplied new utterances in one or two short factual sentences. Do not add unspoken facts, tool calls, or Markdown.

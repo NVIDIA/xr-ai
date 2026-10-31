@@ -180,21 +180,27 @@ Generic model behavior can also need tuning. Keep that tuning with its owner:
 
 | Owner | Configuration | Tunable behavior |
 |---|---|---|
-| Shared conversation | Worker `foreground_prompt` or `foreground_prompt_file` | Shared response style and grounding, applied to both general and active conversation |
+| Shared conversation | Worker `foreground_prompt` | Shared response style and grounding, applied to both general and active conversation |
 | Active workflow conversation | `task.foreground.active_prompt` | Workflow role, response detail, spoken style and length; appended to shared and step instructions |
-| Shared camera interpretation | Worker `current_view_prompt` or `current_view_prompt_file` | Camera viewpoint, visual detail and evidence description; shared by observation and immediate camera tools |
-| Focused change captions | Worker `change_watch_caption_prompt` or `_file` | Detail and focus for the user-requested watcher |
-| Change judgment and summary | Worker `change_watch_decision`; `change_watch_event_prompt` or `_file` | What counts as a relevant transition and how accepted changes are described |
-| Visual journal captions | Worker `video_caption_prompt` or `_file` | Scene detail, readable identifiers and uncertainty |
-| Journal judgment and summary | Worker `video_delta_decision`; `video_delta_prompt` or `_file` | Material-change criteria and accepted delta wording |
-| Background transcript summary | Worker `transcript_summary_prompt` or `_file` | Retained facts, attribution and summary detail |
+| Shared camera interpretation | Worker `current_view_prompt` | Camera viewpoint, visual detail and evidence description; shared by observation and immediate camera tools |
+| Focused change captions | Worker `change_watch_caption_prompt` | Detail and focus for the user-requested watcher |
+| Change judgment and summary | Worker `change_watch_decision`; `change_watch_event_prompt` | What counts as a relevant transition and how accepted changes are described |
+| Visual journal captions | Worker `video_caption_prompt` | Scene detail, readable identifiers and uncertainty |
+| Journal judgment and summary | Worker `video_delta_decision`; `video_delta_prompt` | Material-change criteria and accepted delta wording |
+| Background transcript summary | Worker `transcript_summary_prompt` | Retained facts, attribution and summary detail |
 
-For worker text prompts, inline text takes precedence over its file option;
-otherwise the packaged prompt is used. Relative files resolve against the worker
-YAML. Decision mappings use explicit worker configuration when present, otherwise
-`prompts/decisions.yaml`. The removed `guidance_voice.txt` is replaced by the live
-workflow `active_prompt`; it no longer has a separate, unused voice-policy path.
-The default two-sentence spoken style is declared in the workflow YAML.
+All application-level model instructions and background decision mappings are
+inline in `yaml/tea_making_worker.yaml`. There is no separate prompt directory,
+prompt-file option, or Python prompt fallback. Literal YAML blocks preserve the
+model-facing text and line breaks. Start a custom worker configuration by copying
+the complete main YAML; it must supply its prompt text and decision policies.
+
+Without `--config`, the source worker reads that checked-in YAML. An installed
+worker started from the documented sample directory reads `yaml/tea_making_worker.yaml`
+there; otherwise provide its path with `--config`. Paths resolve relative to the
+selected YAML. Workflow-specific questions, criteria, RAG/fallback instructions,
+and voice policies remain in the external `workflow.yaml` selected by
+`workflow_config`. The default spoken style is declared there as well.
 
 Background transcript summaries are separate from dialogue/run compaction.
 `ContextManager` continues using its existing SDK compaction defaults; its
@@ -229,7 +235,7 @@ at application scope rather than being copied into each SOP step.
 | `guidance_voice.py` | Guidance notice speech policy | Add another presentation channel |
 | `file_output.py` | Participant JSONL artifacts | Replace files with backend persistence |
 | `web_events.py` | Explicit typed event-to-view projections | Select or reshape live presentation topics |
-| `prompts/` | Shared model instructions and packaged route policies | Tune packaged defaults through the owning YAML configuration |
+| `yaml/tea_making_worker.yaml` | Inline app-level model instructions and background decision policies | Tune generic conversation, perception and summaries |
 | `yaml/workflow.yaml` | Five-step procedure and evidence contract | Define a different guided task |
 | `rag-documents/` | Sample retrieval corpus | Replace with domain documents or a backend |
 
@@ -255,7 +261,6 @@ runs/<run>/
     resolved_workflow.json
     models.json
     voice_gate.json
-    prompts/
   attempts.jsonl
   images/<SHA256>.jpg
   participants/<participant>/steps/<YAML step>/<channel>/<attempt>/events.jsonl
@@ -358,7 +363,7 @@ temporary worker configuration with absolute paths. Edit the files under
 
 | File | Owns |
 |---|---|
-| `yaml/tea_making_worker.yaml` | Selected subordinate configuration files, frame and model timeouts, background cadence, VAD, output directory, and event-viewer port and history |
+| `yaml/tea_making_worker.yaml` | Inline app-level prompts and decision policies, subordinate configuration paths, timeouts, background cadence, VAD, output directory, and event viewer |
 | `yaml/workflow.yaml` | Typed state, steps, triggers, evidence, tool access, transitions, and user messages |
 | `yaml/voice_gate.yaml` | Interaction mode, conversation controls and optional wake phrases |
 | `yaml/rag_service.yaml` | Document path, model configuration, cache, chunking, embedding dimensions, and score threshold |

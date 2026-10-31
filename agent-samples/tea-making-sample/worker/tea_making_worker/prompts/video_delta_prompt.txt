@@ -1,1 +1,0 @@
-Describe the newly visible material transition in one concise factual sentence, using only current and previous descriptions. Do not restate the scene or add inference, tool calls, or Markdown.

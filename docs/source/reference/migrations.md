@@ -29,6 +29,22 @@ commands remain available. Use {doc}`conversation-example` as the starting
 point for new voice-and-vision applications. Its routed conversation and
 visual-question behavior differs from Simple VLM; migrating application code
 requires reviewing that composition rather than only renaming the launcher.
+
+### Tea model instructions are inline YAML
+
+The tea worker now keeps all app-level model instructions and background decision
+policies in `yaml/tea_making_worker.yaml`. The packaged prompt directory and file
+fallbacks are removed. Copy the complete main YAML when creating a custom worker
+configuration; missing prompt text or decision mappings are rejected. Replace
+`*_prompt_file` options with the corresponding inline text value.
+
+Source/default sample startup reads the checked-in worker YAML. An installed
+worker outside the sample directory must receive `--config` pointing to that
+file or its complete custom copy. Workflow/step-specific prompts remain in the
+external `workflow.yaml`; no prompt wording or model settings changed. New run
+bundles retain the complete effective instructions in their worker/workflow
+snapshots, without separate prompt-file copies. Existing run bundles are intact.
+
 ### Tea routing uses SDK-owned turn lifecycle
 
 `SOPAgent` is now the focused routing destination rather than a foreground
@@ -55,13 +71,12 @@ Tea composition imports `SOPAgent`, `Workflow`, and `load_workflow` from
 moved under `sop/` and `conversation/`; update any prototype imports of their old
 private paths. No SDK API is introduced.
 
-The worker accepts `current_view_prompt` or `current_view_prompt_file` for a shared
-camera policy. `foreground_prompt` now applies to active guidance as well as
-general conversation. Tune active voice behavior in
+The worker uses inline `current_view_prompt` for a shared camera policy.
+`foreground_prompt` applies to active guidance as well as general conversation. Tune active voice behavior in
 `task.foreground.active_prompt`; the unused `guidance_voice.txt` policy and
-separate hard-coded active style are removed. Existing background prompt
-configuration is unchanged. Refer to {doc}`tea-making-sample` for prompt ownership
-and precedence.
+separate hard-coded active style are removed. Background prompt policies are
+inline in the main worker YAML. Refer to {doc}`tea-making-sample` for ownership
+and loading rules.
 
 ### Tea guidance uses focused routing and declared observations
 

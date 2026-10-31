@@ -72,6 +72,12 @@ def _decision(choice="accepted"):
 @pytest.mark.asyncio
 async def test_sop_capture_records_exact_images_decisions_and_confirmed_state(tmp_path):
     capture, workflow = await _capture(tmp_path)
+    snapshot = json.loads((capture.directory / "config/worker.json").read_text())
+    selected = load_config(_SAMPLE / "yaml/tea_making_worker.yaml")
+    assert snapshot["foreground_prompt"] == selected.foreground_prompt
+    assert snapshot["current_view_prompt"] == selected.current_view_prompt
+    assert snapshot["change_watch_decision"]["instructions"] == selected.change_watch_decision.instructions
+    assert not (capture.directory / "config/prompts").exists()
     data = _image()
     registry = ImageRegistry()
     reference = registry.put(data)
