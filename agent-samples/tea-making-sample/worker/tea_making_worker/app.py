@@ -32,24 +32,24 @@ from xr_ai_voicegate import load_voice_gate_config
 from xr_ai_web_events import WebEventsAgent
 
 from ._capture import _record_routing, _RecordedDecisions, _RecordedLanguage, _RecordedVision, _SOPCapture
-from .agent import SOPAgent
-from .background_context import BackgroundContextAgent
-from .change_watch import ChangeWatchAgent
+from ._cleanup import _CleanupAcks
+from .agents._destinations import _destinations
+from .agents.background_context import BackgroundContextAgent
+from .agents.change_watch import ChangeWatchAgent
+from .agents.file_output import FileOutputAgent
+from .agents.images import ParticipantImageAgent
+from .agents.sop.agent import SOPAgent
+from .agents.transcript import TranscriptAgent
+from .agents.video_log import VideoLogAgent
+from .agents.web_events import TeaWebEventsAgent
 from .config import WorkerConfig
-from .conversation._applications import _destinations
-from .conversation._cleanup import _CleanupAcks
 from .events import (
     INTERRUPTED_TOPIC,
     PARTICIPANT_JOINED_TOPIC,
     PARTICIPANT_LEFT_TOPIC,
     USER_QUERY_TOPIC,
 )
-from .file_output import FileOutputAgent
-from .images import ParticipantImageAgent
 from .sop import load_workflow
-from .transcript import TranscriptAgent
-from .video_log import VideoLogAgent
-from .web_events import TeaWebEventsAgent
 
 _CLIENT_TEXT_TOPIC = "agent.response"
 
@@ -229,6 +229,14 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
                 history_size=5,
             ),
         )
+        def application_tools(participant_id: str) -> ToolSet:
+            """Collect the existing participant-scoped tools without owning their agents."""
+            return ToolSet(
+                tool
+                for provider in (background_context, change_watch, transcript, video_log)
+                for _, tool in provider.participant_tools(participant_id).items()
+            )
+
         # Compose the focused SOP from existing services. Background capabilities
         # provide participant-scoped tools; they do not own workflow transitions.
         sop = runtime.register(
@@ -243,11 +251,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
                 image_query=ImageQueryTool(images=images.images, vlm=vlm, system_prompt=config.current_view_prompt),
                 context_budget_bytes=config.context_budget_bytes,
                 compaction_input_budget_bytes=config.compaction_input_budget_bytes,
-                application_tools=lambda participant_id: ToolSet(
-                    tool
-                    for provider in (background_context, change_watch, transcript, video_log)
-                    for _, tool in provider.participant_tools(participant_id).items()
-                ),
+                application_tools=application_tools,
                 prompt=config.foreground_prompt,
                 current_view_prompt=config.current_view_prompt,
                 vlm_timeout_s=config.vlm_timeout_s,
@@ -255,7 +259,20 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
         )
         sop.bind_runtime(runtime)
         router = AgentRouter(
-            _destinations(sop), decisions,
+            _destinations(
+                sop,
+                policy=workflow.foreground,
+                decisions=decisions,
+                llm=llm,
+                participant_tools=application_tools,
+                respond=sop._respond,
+                generate_answer=sop._generate_answer,
+                current_frame=images.get_current_frame,
+                vision=sop.tools[0],
+                rag=rag,
+                vlm_timeout_s=config.vlm_timeout_s,
+            ),
+            decisions,
             query_topic=USER_QUERY_TOPIC, output_topic=VOICE_OUTPUT_TOPIC,
             participant_joined_topic=PARTICIPANT_JOINED_TOPIC,
             interrupted_topic=INTERRUPTED_TOPIC,

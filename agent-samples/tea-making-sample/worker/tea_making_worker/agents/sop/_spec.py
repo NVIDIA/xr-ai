@@ -19,8 +19,8 @@ from typing import Any
 
 import yaml
 
-from ..conversation._policy import ConversationPolicy
-from ..flows import ObservationPolicy
+from ...conversation._policy import ConversationPolicy
+from ...flows import ObservationPolicy
 
 _ID = re.compile(r"^[a-z][a-z0-9_-]*$")
 _TYPES = {"boolean", "integer", "number", "string"}

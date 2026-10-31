@@ -32,9 +32,9 @@ from tea_making_worker._capture import (  # noqa: E402
     _RecordedVision,
     _SOPCapture,
 )
+from tea_making_worker.agents.sop._engine import _WorkflowEngine  # noqa: E402
 from tea_making_worker.config import load_config  # noqa: E402
 from tea_making_worker.sop import load_workflow  # noqa: E402
-from tea_making_worker.sop._engine import GuidanceAgent  # noqa: E402
 
 
 def _image():
@@ -99,7 +99,7 @@ async def test_sop_capture_records_exact_images_decisions_and_confirmed_state(tm
         )
     )
     decisions = SimpleNamespace(decide=AsyncMock(return_value=_decision()))
-    guidance = GuidanceAgent(
+    guidance = _WorkflowEngine(
         workflow=workflow,
         llm=SimpleNamespace(chat=AsyncMock(side_effect=AssertionError("unexpected generation"))),
         decisions=_RecordedDecisions(decisions),

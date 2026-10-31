@@ -5,7 +5,7 @@
 
 WorkflowStore is the execution authority. Callers serialize a session's mutations
 with its lock, and model-facing code must recheck revision/session identity after
-awaits. Events and spoken notices are queued here and drained by GuidanceAgent;
+awaits. Events and spoken notices are queued here and drained by _WorkflowEngine;
 conversation summaries cannot mutate this state.
 """
 

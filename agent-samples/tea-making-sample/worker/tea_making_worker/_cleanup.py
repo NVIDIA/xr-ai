@@ -12,7 +12,7 @@ generation to the sample's file/image cleanup protocol.
 from xr_ai_interaction import ParticipantLeft
 from xr_ai_runtime import Agent, RuntimeContext, subscribe
 
-from ..events import PARTICIPANT_CLEANUP_COMPLETE_TOPIC, PARTICIPANT_LEFT_TOPIC, ParticipantCleanupComplete
+from .events import PARTICIPANT_CLEANUP_COMPLETE_TOPIC, PARTICIPANT_LEFT_TOPIC, ParticipantCleanupComplete
 
 
 class _CleanupAcks(Agent):

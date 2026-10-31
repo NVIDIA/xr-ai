@@ -27,11 +27,11 @@ def _text(blocks):
 
 @pytest.mark.asyncio
 async def test_each_question_gets_fresh_operation_context_without_timer_question_dispatch(monkeypatch):
-    import tea_making_worker.sop._tools as tools
+    import tea_making_worker.agents.sop._tools as tools
 
     sop = _sop()
-    _activate_test_step(sop._guidance, "steep_timer")
-    session = sop._guidance.store.get("active")
+    _activate_test_step(sop._workflow_engine, "steep_timer")
+    session = sop._workflow_engine.store.get("active")
     session.state["steeping_started_at_us"] = 20_000_000
     try:
         cases = [(32, "How long remains?", 168), (39, "Explain that again", 161), (54, "What is going on?", 146)]
@@ -56,22 +56,22 @@ async def test_run_handoff_preserves_dialogue_and_closes_old_state(operation):
     sop.bind_runtime(runtime)
     sop._context.update = AsyncMock(wraps=sop._context.update)
     async with runtime:
-        _activate_test_step(sop._guidance, "steep_timer")
-        session = sop._guidance.store.get("active")
+        _activate_test_step(sop._workflow_engine, "steep_timer")
+        session = sop._workflow_engine.store.get("active")
         old_id = session.run_id
-        await sop._guidance._flush(session)
+        await sop._workflow_engine._flush(session)
         await sop._refresh_conversation_context("active")
         old_manager = sop._run_contexts._runs["active"].manager
         old_live = sop._run_contexts._runs["active"].live
         sop._remember_exchange("active", "Remember my preference", "I will.", "preference")
         if operation == "restart":
-            sop._guidance.store.restart(session)
+            sop._workflow_engine.store.restart(session)
         elif operation == "reset":
-            sop._guidance.store.reset(session)
+            sop._workflow_engine.store.reset(session)
         else:
-            sop._guidance.store.commit(session, {"steeping_complete": True}, "")
-            sop._guidance.store.advance(session, skip=False)
-        await sop._guidance._flush(session)
+            sop._workflow_engine.store.commit(session, {"steeping_complete": True}, "")
+            sop._workflow_engine.store.advance(session, skip=False)
+        await sop._workflow_engine._flush(session)
         assert old_manager.blocks("active") == ()
         assert old_live.blocks("active") == ()
         history = _text(sop._context.blocks("active"))
@@ -90,7 +90,7 @@ async def test_run_handoff_preserves_dialogue_and_closes_old_state(operation):
             assert "steeping_started_at_us" not in state["state"]
         else:
             assert session.run_id is None and not session.active
-            assert session.state == sop._guidance.workflow.initial_state()
+            assert session.state == sop._workflow_engine.workflow.initial_state()
             assert not sop._run_contexts.blocks("active")
         assert not sop._context.blocks("other")
         await sop.stop()
@@ -99,13 +99,13 @@ async def test_run_handoff_preserves_dialogue_and_closes_old_state(operation):
 @pytest.mark.asyncio
 async def test_reset_discards_run_observations_and_partial_results_before_next_run():
     sop = _sop()
-    _activate_test_step(sop._guidance, "fill_water")
-    session = sop._guidance.store.get("active")
+    _activate_test_step(sop._workflow_engine, "fill_water")
+    session = sop._workflow_engine.store.get("active")
     session.evidence["fill_water"] = {"evidence": "unknown", "observed_at_us": 123, "observation": "Obscured"}
     await sop._refresh_conversation_context("active")
     assert _channel(sop, "active", "sop.evidence")["observations"]["fill_water"]["evidence"] == "unknown"
-    sop._guidance.store.reset(session)
-    sop._guidance.store.start(session)
+    sop._workflow_engine.store.reset(session)
+    sop._workflow_engine.store.start(session)
     await sop._refresh_conversation_context("active")
     assert _channel(sop, "active", "sop.evidence")["observations"] == {}
     await sop.stop()
@@ -114,13 +114,13 @@ async def test_reset_discards_run_observations_and_partial_results_before_next_r
 @pytest.mark.asyncio
 async def test_reset_during_context_sampling_retries_without_installing_old_timer_result():
     sop = _sop()
-    _activate_test_step(sop._guidance, "steep_timer")
-    session = sop._guidance.store.get("active")
+    _activate_test_step(sop._workflow_engine, "steep_timer")
+    session = sop._workflow_engine.store.get("active")
     entered, release = asyncio.Event(), asyncio.Event()
-    original = sop._guidance._named_tools
+    original = sop._workflow_engine._named_tools
 
     def delayed_tools(session, names):
-        from tea_making_worker.sop._tools import TimerRequest, TimerResult
+        from tea_making_worker.agents.sop._tools import TimerRequest, TimerResult
         from xr_ai_tools import Tool, ToolSet
 
         async def timer(_request):
@@ -132,10 +132,10 @@ async def test_reset_during_context_sampling_retries_without_installing_old_time
             return ToolSet((Tool("clock__timer", "Test native projection", TimerRequest, TimerResult, timer),))
         return original(session, names)
 
-    sop._guidance._named_tools = delayed_tools
+    sop._workflow_engine._named_tools = delayed_tools
     refresh = asyncio.create_task(sop._refresh_conversation_context("active"))
     await entered.wait()
-    sop._guidance.store.restart(session)
+    sop._workflow_engine.store.restart(session)
     release.set()
     await refresh
     current = _channel(sop, "active", "sop.execution")
@@ -146,10 +146,10 @@ async def test_reset_during_context_sampling_retries_without_installing_old_time
 
 @pytest.mark.asyncio
 async def test_generic_context_projection_uses_yaml_bindings_without_tea_state_names(tmp_path, monkeypatch):
-    import tea_making_worker.sop._tools as tools
+    import tea_making_worker.agents.sop._tools as tools
     import yaml
+    from tea_making_worker.agents.sop._engine import _WorkflowEngine
     from tea_making_worker.sop import load_workflow
-    from tea_making_worker.sop._engine import GuidanceAgent
 
     raw = {
         "task": {"name": "Generic operation", "start_step": "wait"},
@@ -167,7 +167,7 @@ async def test_generic_context_projection_uses_yaml_bindings_without_tea_state_n
     }
     path = tmp_path / "workflow.yaml"
     path.write_text(yaml.safe_dump(raw))
-    engine = GuidanceAgent(workflow=load_workflow(path), llm=SimpleNamespace(), decisions=SimpleNamespace(),
+    engine = _WorkflowEngine(workflow=load_workflow(path), llm=SimpleNamespace(), decisions=SimpleNamespace(),
                            current_frame=SimpleNamespace(), image_query=SimpleNamespace(), rag=SimpleNamespace())
     engine.store.start(engine.store.get("p"))
     monkeypatch.setattr(tools.time, "time_ns", lambda: 11_000_000_000)
@@ -193,13 +193,13 @@ async def test_question_uses_new_state_when_background_confirmation_changes_revi
             return DecisionResponse({key: DecisionAnswer(choice, 1, {choice: 1})}, "fixture", {}, {})
 
     sop = _sop(Decisions())
-    _activate_test_step(sop._guidance, "heat_water")
-    session = sop._guidance.store.get("active")
+    _activate_test_step(sop._workflow_engine, "heat_water")
+    session = sop._workflow_engine.store.get("active")
     question = asyncio.create_task(sop._answer("What is happening?", "active"))
     await entered.wait()
-    sop._guidance.store.observe(session, "accepted")
-    sop._guidance.store.observe(session, "accepted")
-    assert sop._guidance.store.commit(session, {"temperature_ready": True}, "").accepted
+    sop._workflow_engine.store.observe(session, "accepted")
+    sop._workflow_engine.store.observe(session, "accepted")
+    assert sop._workflow_engine.store.commit(session, {"temperature_ready": True}, "").accepted
     release.set()
     answer, _, _ = await question
     assert answer != sop._policy.stale_message
@@ -211,10 +211,10 @@ async def test_question_uses_new_state_when_background_confirmation_changes_revi
 @pytest.mark.asyncio
 async def test_after_reset_history_is_available_but_current_execution_is_explicitly_idle():
     sop = _sop()
-    _activate_test_step(sop._guidance, "steep_timer")
+    _activate_test_step(sop._workflow_engine, "steep_timer")
     await sop._refresh_conversation_context("active")
-    session = sop._guidance.store.get("active")
-    sop._guidance.store.reset(session)
+    session = sop._workflow_engine.store.get("active")
+    sop._workflow_engine.store.reset(session)
     await sop._generate_answer("How did it go?", "active")
     messages = sop._llm.chat.await_args.args[0]
     assert json.loads(messages[-1].content)["execution"] == {"active": False, "run_id": None}
@@ -244,16 +244,16 @@ async def test_rollover_drains_old_run_compaction_and_keeps_persistent_dialogue(
 
     sop._llm.chat.side_effect = compact
     async with runtime:
-        session = sop._guidance.store.get("p")
-        sop._guidance.store.start(session)
+        session = sop._workflow_engine.store.get("p")
+        sop._workflow_engine.store.start(session)
         for _ in range(12):
-            sop._guidance.store.record(session, "step.ready", "A configured workflow update. " * 12)
-        await sop._guidance._flush(session)
+            sop._workflow_engine.store.record(session, "step.ready", "A configured workflow update. " * 12)
+        await sop._workflow_engine._flush(session)
         old = sop._run_contexts._runs["p"].manager
         await asyncio.wait_for(entered.wait(), 2)
         sop._remember_exchange("p", "Remember this", "Understood", "note")
-        sop._guidance.store.restart(session)
-        await sop._guidance._flush(session)
+        sop._workflow_engine.store.restart(session)
+        await sop._workflow_engine._flush(session)
         assert cancelled.is_set()
         assert old.blocks("p") == ()
         assert sop._run_contexts._runs["p"].identity == session.run_id
@@ -268,7 +268,7 @@ async def test_finishing_old_frame_cannot_repopulate_new_runs_duplicate_frame_ma
     from xr_ai_tools.vision import ImageQueryResult
 
     sop = _sop()
-    engine = sop._guidance
+    engine = sop._workflow_engine
     engine._decisions = _decisions("accepted")
     _activate_test_step(engine, "fill_water")
     session = engine.store.get("active")
@@ -304,11 +304,11 @@ async def test_finishing_old_frame_cannot_repopulate_new_runs_duplicate_frame_ma
 
 @pytest.mark.asyncio
 async def test_live_channels_are_supplied_separately_from_past_dialogue(monkeypatch):
-    import tea_making_worker.sop._tools as tools
+    import tea_making_worker.agents.sop._tools as tools
 
     sop = _sop()
-    _activate_test_step(sop._guidance, "steep_timer")
-    sop._guidance.store.get("active").state["steeping_started_at_us"] = 20_000_000
+    _activate_test_step(sop._workflow_engine, "steep_timer")
+    sop._workflow_engine.store.get("active").state["steeping_started_at_us"] = 20_000_000
     sop._remember_exchange("active", "Earlier question", "An old answer: 12 seconds.", "earlier")
     monkeypatch.setattr(tools.time, "time_ns", lambda: 32_000_000_000)
     await sop._generate_answer("What is happening now?", "active", workflow_context=True)

@@ -3,6 +3,6 @@
 
 """Load external workflow policies; execution and state remain engine-owned."""
 
-from ._spec import Workflow, load_workflow
+from ..agents.sop._spec import Workflow, load_workflow
 
 __all__ = ["Workflow", "load_workflow"]

@@ -14,8 +14,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "agent-samples/tea-making-sample/worker"))
 
+from tea_making_worker.agents.sop._state import WorkflowStore  # noqa: E402
 from tea_making_worker.sop import load_workflow  # noqa: E402
-from tea_making_worker.sop._state import WorkflowStore  # noqa: E402
 from test_tea_making_sample import _SAMPLE, _decisions, _identity_guidance  # noqa: E402
 
 
@@ -46,7 +46,7 @@ async def _see(engine, session, observation, sequence):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("mode", ["automatic", "manual"])
 async def test_complete_procedure_supports_auto_default_and_explicit_manual_mode(mode, monkeypatch):
-    import tea_making_worker.sop._tools as tools
+    import tea_making_worker.agents.sop._tools as tools
 
     engine = _engine(mode)
     session = engine.store.get("p")
@@ -163,7 +163,7 @@ async def test_auto_transition_clears_live_evidence_and_preserves_history_withou
     from xr_ai_runtime import AgentRuntime
 
     sop = _sop()
-    engine = sop._guidance
+    engine = sop._workflow_engine
     engine.workflow = load_workflow(_SAMPLE / "yaml/workflow.yaml")
     engine.store = WorkflowStore(engine.workflow)
     engine._decisions = _decisions("accepted", "accepted")
@@ -200,7 +200,7 @@ async def test_auto_transition_clears_live_evidence_and_preserves_history_withou
 async def test_delayed_skip_cannot_skip_the_step_entered_by_automatic_completion():
     from unittest.mock import AsyncMock
 
-    from tea_making_worker.sop._tools import AdvanceRequest, workflow_management_tools
+    from tea_making_worker.agents.sop._tools import AdvanceRequest, workflow_management_tools
 
     engine = _engine()
     session = engine.store.get("p")

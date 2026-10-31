@@ -10,7 +10,7 @@ from xr_ai_interaction import ParticipantJoined, ParticipantLeft
 from xr_ai_runtime import Agent, RuntimeContext, subscribe
 from xr_ai_web_events import WEB_EVENT_TOPIC, WebEvent
 
-from .events import (
+from ..events import (
     BACKGROUND_FACT_TOPIC,
     CHANGE_WATCH_RECORD_TOPIC,
     FOREGROUND_RECORD_TOPIC,

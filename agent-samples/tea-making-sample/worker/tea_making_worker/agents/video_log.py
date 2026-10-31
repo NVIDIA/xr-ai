@@ -24,8 +24,8 @@ from xr_ai_tools import Tool, ToolSet
 from xr_ai_tools.current_frame import CurrentFrameRequest
 from xr_ai_tools.vision import ImageQueryRequest, ImageQueryTool
 
-from ._capture import _attempt, _frame
-from .events import (
+from .._capture import _attempt, _frame
+from ..events import (
     BACKGROUND_FACT_TOPIC,
     PARTICIPANT_CLEANUP_COMPLETE_TOPIC,
     PARTICIPANT_LEFT_TOPIC,

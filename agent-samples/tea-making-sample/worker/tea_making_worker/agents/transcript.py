@@ -20,8 +20,8 @@ from xr_ai_runtime import Agent, AgentRuntime, RuntimeClosedError, RuntimeContex
 from xr_ai_tools import Tool, ToolSet
 from xr_ai_voice import VOICE_TRANSCRIPT_TOPIC, VoiceTranscript
 
-from ._capture import _attempt
-from .events import (
+from .._capture import _attempt
+from ..events import (
     BACKGROUND_FACT_TOPIC,
     PARTICIPANT_CLEANUP_COMPLETE_TOPIC,
     PARTICIPANT_LEFT_TOPIC,

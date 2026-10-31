@@ -3,7 +3,7 @@
 
 """Schedule SOP observations and commit evidence through native state guards.
 
-GuidanceAgent adapts WorkflowStore to runtime participants, tools and notices.
+The private workflow engine adapts WorkflowStore to runtime participants, tools and notices.
 Each participant has an observation monitor; user-turn scheduling remains with
 the SDK router. A tick snapshots state under its session lock, performs model work
 outside that lock, then checks session identity, step and revision before writing.
@@ -23,33 +23,25 @@ from typing import Any
 import nemo_relay
 from loguru import logger
 from pydantic import BaseModel
-from xr_ai_interaction import ParticipantJoined, ParticipantLeft
 from xr_ai_models import DecisionService, LLMService
 from xr_ai_runtime import (
-    Agent,
     AgentRuntime,
     RuntimeClosedError,
-    RuntimeContext,
-    subscribe,
 )
 from xr_ai_tools import Tool, ToolSet
 from xr_ai_tools.current_frame import CurrentFrameRequest, CurrentFrameTool
 from xr_ai_tools.rag import RAGTools
 from xr_ai_tools.vision import ImageQueryTool
 
-from .._capture import _attempt, _event, _frame
-from ..events import (
+from ..._capture import _attempt, _event, _frame
+from ...events import (
     GUIDANCE_NOTICE_TOPIC,
     GUIDANCE_RECORD_TOPIC,
-    PARTICIPANT_CLEANUP_COMPLETE_TOPIC,
-    PARTICIPANT_JOINED_TOPIC,
-    PARTICIPANT_LEFT_TOPIC,
     GuidanceNotice,
     GuidanceRecord,
-    ParticipantCleanupComplete,
 )
-from ..flows import VisualValidationStep
-from ..flows._observations import _decode_values, _resolve
+from ...flows import VisualValidationStep
+from ...flows._observations import _decode_values, _resolve
 from ._spec import Step, Workflow
 from ._state import (
     WorkflowEvent,
@@ -84,8 +76,13 @@ class _TriggerResult(BaseModel):
     frame_key: tuple[str, str, int, int] | None = None
 
 
-class GuidanceAgent(Agent):
-    """Own participant workflow state, tools, and periodic observations."""
+class _WorkflowEngine:
+    """Own native workflow execution inside SOPAgent, without runtime subscriptions.
+
+    SOPAgent delegates participant initialization/cleanup and shutdown here. This
+    helper owns observation monitors and state, while the top-level SDK router owns
+    user turns. It is deliberately not an independently registered runtime Agent.
+    """
 
     def __init__(
         self,
@@ -102,7 +99,6 @@ class GuidanceAgent(Agent):
         """Bind native workflow state, injected services and participant monitor ownership."""
         if vlm_timeout_s <= 0:
             raise ValueError("vlm_timeout_s must be positive")
-        super().__init__()
         self._record_event = record_event
         self.workflow = workflow
         self.store = WorkflowStore(workflow)
@@ -232,14 +228,6 @@ class GuidanceAgent(Agent):
 
         return self.store.status(self.store.get(participant_id))
 
-    @subscribe(PARTICIPANT_JOINED_TOPIC)
-    async def participant_joined(
-        self,
-        _event: ParticipantJoined,
-        ctx: RuntimeContext,
-    ) -> None:
-        """Adapt a runtime join event to native participant initialization."""
-        await self._join_participant(self._participant(ctx))
 
     async def _join_participant(self, participant_id: str) -> None:
         """Initialize a participant once and start its independent observation monitor."""
@@ -252,22 +240,6 @@ class GuidanceAgent(Agent):
         await self._flush(session)
         self._start_monitor(participant_id)
 
-    @subscribe(PARTICIPANT_LEFT_TOPIC)
-    async def participant_left(
-        self,
-        _event: ParticipantLeft,
-        ctx: RuntimeContext,
-    ) -> None:
-        """Adapt a runtime leave event and acknowledge guidance cleanup afterward."""
-        participant_id = self._participant(ctx)
-        await self._leave_participant(participant_id)
-        await ctx.publish(
-            PARTICIPANT_CLEANUP_COMPLETE_TOPIC,
-            ParticipantCleanupComplete(
-                generation=ctx.metadata.message_id,
-                producer="guidance",
-            ),
-        )
 
     async def _leave_participant(self, participant_id: str) -> None:
         """Drain the participant monitor before releasing native workflow state."""
@@ -673,13 +645,6 @@ class GuidanceAgent(Agent):
                         session.participant_id,
                     )
 
-    @staticmethod
-    def _participant(ctx: RuntimeContext) -> str:
-        """Require the runtime event's participant identity for native SOP operations."""
-        participant_id = ctx.metadata.participant_id
-        if participant_id is None:
-            raise ValueError("tea guidance requires a participant")
-        return participant_id
 
 
 def _timestamp_us() -> int:
@@ -687,4 +652,4 @@ def _timestamp_us() -> int:
     return time.time_ns() // 1_000
 
 
-__all__ = ["GuidanceAgent"]
+__all__ = []

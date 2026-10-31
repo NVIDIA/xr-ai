@@ -157,8 +157,22 @@ locks, and participant cleanup.
 Import `SOPAgent`, `Workflow`, and `load_workflow` from `tea_making_worker`.
 `SOPAgent` implements the SDK routing destination contract and subscribes to
 guidance notices. The application creates one top-level SDK `AgentRouter` and
-registers its `runtime_subscriber()`. Execution state remains in `sop/`; the
-small answer and optional-application adapters remain in `conversation/`.
+registers its `runtime_subscriber()`. The agent and its owned execution/state/tools
+and run-context projection live in `agents/sop/`. The existing `sop` package keeps
+the workflow-loading exports; reusable evidence flows remain independent in `flows/`.
+
+The SDK `Agent` owns tools/state and can subscribe to runtime events. Its separate
+`RoutableAgent` contract handles admission, answers and focus. `SOPAgent` fills both
+roles: it is one focused destination and receives guidance notices. Its private
+`_WorkflowEngine` is an ordinary helper, not a second runtime agent. Workflow steps
+also remain ordinary reusable flows, rather than independent agents.
+
+Existing watcher, transcript, journal, background-context and I/O runtime agents
+live under `agents/`. Small optional routed agents in `agents/_destinations.py`
+receive explicit services/tools/policy and the existing answer/output callbacks;
+they do not use the SOP as a dependency container. Shared answer, semantic-choice
+and compaction-recording helpers remain in `conversation/`. There is one top-level
+router and no additional agent hierarchy or conversation supervisor.
 
 `tea_making_worker.flows` exports `VisualValidationStep`, `VisualCheck`,
 `IdentityResolutionStep`, `ObservationPolicy`, and `Observation`. Visual validation
@@ -213,28 +227,27 @@ at application scope rather than being copied into each SOP step.
 |---|---|---|
 | `app.py` | Constructs services and registers agents | Add a backend or another observer |
 | `events.py` | Typed application topics and payloads | Define domain facts, notices, or records |
-| `sop/_spec.py` | Validates the workflow YAML contract | Extend declarative workflow metadata |
-| `sop/_state.py` | Typed sparse state, evidence, transitions, rendering | Change deterministic state policy |
-| `sop/_tools.py` | Current view, RAG, clock, temperature, and native workflow controls | Add domain tools |
-| `agent.py` | Focused SOP destination, native control admission, common answer path and run context | Compose a different procedure |
-| `conversation/_context.py` | Per-run state/evidence/event channels and historical handoff | Configure context ownership |
+| `agents/sop/_spec.py` | Validates the workflow YAML contract | Extend declarative workflow metadata |
+| `agents/sop/_state.py` | Typed sparse state, evidence, transitions, rendering | Change deterministic state policy |
+| `agents/sop/_tools.py` | Current view, RAG, clock, temperature, and native workflow controls | Add domain tools |
+| `agents/sop/agent.py` | Focused SOP destination, native control admission, common answer path and run context | Compose a different procedure |
+| `agents/sop/_context.py` | Per-run state/evidence/event channels and historical handoff | Configure context ownership |
 | `conversation/_capture.py` | Participant-scoped compaction recording | Record asynchronous context work |
-| `sop/_engine.py` | Internal execution engine (`GuidanceAgent`), sessions and observation loop | Add another trigger or evidence source |
+| `agents/sop/_engine.py` | Internal execution engine (`_WorkflowEngine`), sessions and observation loop | Add another trigger or evidence source |
 | `flows/_visual.py` | Reusable, read-only visual observation/evaluation | Configure semantic or numeric validation |
 | `flows/_identity.py` | Identity-to-reference settings resolution with explicit fallback provenance | Configure another identification-and-lookup flow |
 | `conversation/_answer.py` | Shared message assembly and SDK read-only tool loop | Change answer instructions |
-| `conversation/_applications.py` | Explicit adapters for the existing background, camera and reference capabilities | Configure application behavior |
-| `conversation/_cleanup.py` | Original-generation producer acknowledgments after SDK-owned departure | Preserve file/image cleanup ordering |
+| `agents/_destinations.py` | Explicit adapters for the existing background, camera and reference capabilities | Configure application behavior |
+| `_cleanup.py` | Original-generation producer acknowledgments after SDK-owned departure | Preserve file/image cleanup ordering |
 | `conversation/_routing.py` | Bounded semantic choice and exact-operation authorization | Tune configured criteria |
 | `flows/_observations.py` | Typed extraction, choice evidence, unit normalization, and deterministic evaluation | Adapt observation policy |
-| `images.py` | Shared participant image acquisition | Add another image selector |
-| `background_context.py` | Recent-fact store and query tool | Change foreground and background context policy |
-| `change_watch.py` | Focused visual observer | Build another event-oriented monitor |
-| `transcript.py` | Transcript recording and summarization | Forward or classify laboratory dialogue |
-| `video_log.py` | Periodic caption and delta observer | Build a visual journal |
-| `guidance_voice.py` | Guidance notice speech policy | Add another presentation channel |
-| `file_output.py` | Participant JSONL artifacts | Replace files with backend persistence |
-| `web_events.py` | Explicit typed event-to-view projections | Select or reshape live presentation topics |
+| `agents/images.py` | Shared participant image acquisition | Add another image selector |
+| `agents/background_context.py` | Recent-fact store and query tool | Change foreground and background context policy |
+| `agents/change_watch.py` | Focused visual observer | Build another event-oriented monitor |
+| `agents/transcript.py` | Transcript recording and summarization | Forward or classify laboratory dialogue |
+| `agents/video_log.py` | Periodic caption and delta observer | Build a visual journal |
+| `agents/file_output.py` | Participant JSONL artifacts | Replace files with backend persistence |
+| `agents/web_events.py` | Explicit typed event-to-view projections | Select or reshape live presentation topics |
 | `yaml/tea_making_worker.yaml` | Inline app-level model instructions and background decision policies | Tune generic conversation, perception and summaries |
 | `yaml/workflow.yaml` | Five-step procedure and evidence contract | Define a different guided task |
 | `rag-documents/` | Sample retrieval corpus | Replace with domain documents or a backend |
@@ -703,7 +716,7 @@ ZMQ service rather than bypassing the repository's service model.
 6. Add state and routing tests before tuning prompts.
 
 If the workflow needs a different state-machine rule, change
-`sop/_state.py`; do not encode the rule only in prose for the model.
+`agents/sop/_state.py`; do not encode the rule only in prose for the model.
 
 ### Add a domain tool
 

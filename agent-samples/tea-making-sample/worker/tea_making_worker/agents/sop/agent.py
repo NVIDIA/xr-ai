@@ -5,7 +5,7 @@
 
 Read ``app.run_app`` first for service wiring. The router calls ``admit`` to
 classify a turn, then ``answer`` to execute an authorized control or generate a
-read-only reply. ``sop._engine`` owns observation scheduling and native state;
+read-only reply. ``agents.sop._engine`` owns observation scheduling and native state;
 ``flows`` only returns evidence. Conversation context is a projection of that
 state, never an alternative source of workflow authority.
 
@@ -28,17 +28,16 @@ from xr_ai_tools.rag import RAGTools
 from xr_ai_tools.vision import ImageQueryTool, StreamingImageQueryTool
 from xr_ai_voice import VOICE_OUTPUT_TOPIC
 
-from ._capture import _attempt, _event
-from .conversation._answer import _answer
-from .conversation._capture import _CompactionLanguage, _context_owner
-from .conversation._context import _HANDOFF, _RunContexts
-from .conversation._routing import _authorized, _choose
-from .events import FOREGROUND_RECORD_TOPIC, GUIDANCE_NOTICE_TOPIC, ForegroundRecord, GuidanceNotice
-from .guidance_voice import GuidanceVoiceAgent
-from .images import ParticipantImageAgent
-from .sop._engine import GuidanceAgent
-from .sop._spec import Workflow
-from .sop._state import WorkflowEvent, WorkflowSession
+from ..._capture import _attempt, _event
+from ...conversation._answer import _answer
+from ...conversation._capture import _CompactionLanguage, _context_owner
+from ...conversation._routing import _authorized, _choose
+from ...events import FOREGROUND_RECORD_TOPIC, GUIDANCE_NOTICE_TOPIC, ForegroundRecord, GuidanceNotice
+from ..images import ParticipantImageAgent
+from ._context import _HANDOFF, _RunContexts
+from ._engine import _WorkflowEngine
+from ._spec import Workflow
+from ._state import WorkflowEvent, WorkflowSession
 
 _CONTEXT_EVENTS = {
     "step.enter",
@@ -128,7 +127,7 @@ class SOPAgent(Agent):
             topic_budget_bytes=max(1, context_budget_bytes // 8),
             compaction_input_budget_bytes=compaction_input_budget_bytes,
         )
-        self._guidance = GuidanceAgent(
+        self._workflow_engine = _WorkflowEngine(
             workflow=workflow,
             llm=llm,
             decisions=decisions,
@@ -145,7 +144,6 @@ class SOPAgent(Agent):
             compaction_budget=compaction_input_budget_bytes,
         )
         self._pending = {}
-        self._notice_voice = GuidanceVoiceAgent()
         self._closing = False
         self._runtime = None
 
@@ -155,24 +153,24 @@ class SOPAgent(Agent):
         self._responses = ResponseOutputs(
             runtime, VOICE_OUTPUT_TOPIC, source="sop", closed_errors=(RuntimeClosedError,),
         )
-        self._guidance.bind_runtime(runtime)
+        self._workflow_engine.bind_runtime(runtime)
 
     async def participant_joined(self, participant_id: str) -> None:
         """Initialize native participant state and its observation monitor."""
-        await self._guidance._join_participant(participant_id)
+        await self._workflow_engine._join_participant(participant_id)
 
     async def participant_left(self, participant_id: str) -> None:
         """Drain native work, then close run context and persistent dialogue."""
         self._pending.pop(participant_id, None)
         try:
-            await self._guidance._leave_participant(participant_id)
+            await self._workflow_engine._leave_participant(participant_id)
         finally:
             await self._run_contexts.clear(participant_id)
             await self._context.clear(participant_id)
 
     def routing_aid(self, participant_id: str) -> RoutingAid:
         """Describe current workflow eligibility without creating participant state."""
-        session = self._guidance.store.find(participant_id)
+        session = self._workflow_engine.store.find(participant_id)
         return RoutingAid(
             "workflow", self._policy.workflow_description,
             eligibility="active procedure" if session and session.active else "idle; explicit start required",
@@ -192,19 +190,19 @@ class SOPAgent(Agent):
             An admission decision; accepted turns retain a request-correlated proposal.
         """
         self._pending.pop(turn.participant_id, None)
-        workflow_session = self._guidance.store.get(turn.participant_id)
+        workflow_session = self._workflow_engine.store.get(turn.participant_id)
         admitted_revision = workflow_session.revision
         routing_state = {
             "active": workflow_session.active,
-            "workflow": self._guidance.workflow.name,
+            "workflow": self._workflow_engine.workflow.name,
             "destination": {"name": "workflow", "focused": focused},
         }
         admission_question = self._policy.idle_question
         if workflow_session.active and workflow_session.step_id is not None:
-            active_step = self._guidance.workflow.step(workflow_session.step_id)
+            active_step = self._workflow_engine.workflow.step(workflow_session.step_id)
             routing_state.update(
                 step={"title": active_step.title, "complete": active_step.is_complete(workflow_session.state)},
-                known=self._guidance.workflow.project(active_step, workflow_session.state),
+                known=self._workflow_engine.workflow.project(active_step, workflow_session.state),
             )
             admission_question = self._policy.active_question
         selected_action = await _choose(self._decisions, admission_question, turn, routing_state)
@@ -219,7 +217,7 @@ class SOPAgent(Agent):
                 operation=operation_name,
                 description=admission_question.criteria[selected_action],
                 arguments=operation_arguments,
-                target=self._guidance.workflow.name,
+                target=self._workflow_engine.workflow.name,
             ):
                 return Admission("decline")
         self._pending[turn.participant_id] = (turn.turn_id, workflow_session, admitted_revision, selected_action)
@@ -240,7 +238,7 @@ class SOPAgent(Agent):
         async def produce(reply):
             # Recording/output setup can await before this callback runs. Read the
             # session here, rather than trusting state captured during admission.
-            workflow_session = self._guidance.store.find(turn.participant_id)
+            workflow_session = self._workflow_engine.store.find(turn.participant_id)
             if pending_admission is None:
                 response_text, executed_tool_names = self._policy.stale_message, []
             else:
@@ -254,8 +252,8 @@ class SOPAgent(Agent):
                 elif admitted_action in _CONTROLS:
                     operation_name, operation_arguments = _CONTROLS[admitted_action]
                     available_tools = (
-                        self._guidance.active_tools(turn.participant_id)
-                        or self._guidance.root_tools(turn.participant_id)
+                        self._workflow_engine.active_tools(turn.participant_id)
+                        or self._workflow_engine.root_tools(turn.participant_id)
                     )
                     selected_tool = available_tools.get(operation_name)
                     if selected_tool is None:
@@ -276,7 +274,7 @@ class SOPAgent(Agent):
             return response_text, executed_tool_names
 
         response_text = await self._respond(turn, started, produce)
-        workflow_session = self._guidance.store.find(turn.participant_id)
+        workflow_session = self._workflow_engine.store.find(turn.participant_id)
         return DestinationResult(
             "focus" if workflow_session and workflow_session.active else "release",
             text=response_text,
@@ -288,7 +286,7 @@ class SOPAgent(Agent):
 
     def _snapshot(self, participant_id):
         """Copy native execution state for recording without projecting dialogue."""
-        workflow_session = self._guidance.store.find(participant_id)
+        workflow_session = self._workflow_engine.store.find(participant_id)
         return {
             "state": dict(workflow_session.state),
             "step_id": workflow_session.step_id,
@@ -305,7 +303,7 @@ class SOPAgent(Agent):
         records are appended after its delivery check, so interrupted output cannot become
         a completed assistant exchange.
         """
-        workflow_session = self._guidance.store.find(turn.participant_id)
+        workflow_session = self._workflow_engine.store.find(turn.participant_id)
         async with _attempt(
             turn.participant_id,
             "foreground",
@@ -352,11 +350,11 @@ class SOPAgent(Agent):
 
     def _question_tools(self, participant_id):
         """Expose only the current step's configured read-only voice tools."""
-        workflow_session = self._guidance.store.find(participant_id)
+        workflow_session = self._workflow_engine.store.find(participant_id)
         if workflow_session is None or not workflow_session.active or workflow_session.step_id is None:
             return ToolSet(())
-        allowed_tool_names = self._guidance.workflow.step(workflow_session.step_id).voice.tools
-        available_tools = self._guidance.active_tools(participant_id)
+        allowed_tool_names = self._workflow_engine.workflow.step(workflow_session.step_id).voice.tools
+        available_tools = self._workflow_engine.active_tools(participant_id)
         return ToolSet({name: tool for name, tool in available_tools.items() if name in allowed_tool_names})
 
     async def _generate_answer(self, query, participant_id, *, workflow_context=False, observation=None):
@@ -367,8 +365,8 @@ class SOPAgent(Agent):
         loop and the same separation of historical and current context.
         """
         await self._refresh_conversation_context(participant_id)
-        workflow_session = self._guidance.store.find(participant_id)
-        workflow_specification = self._guidance.workflow
+        workflow_session = self._workflow_engine.store.find(participant_id)
+        workflow_specification = self._workflow_engine.workflow
         has_active_step = (
             workflow_context
             and workflow_session is not None
@@ -416,14 +414,18 @@ class SOPAgent(Agent):
     @subscribe(GUIDANCE_NOTICE_TOPIC)
     async def notify(self, notice: GuidanceNotice, ctx: RuntimeContext) -> None:
         """Forward guidance only while the participant and this agent remain live."""
-        if not self._closing and ctx.metadata.participant_id in self._guidance._connected:
-            await self._notice_voice.notify(notice, ctx)
+        participant_id = ctx.metadata.participant_id
+        if not self._closing and participant_id in self._workflow_engine._connected:
+            # Guidance updates are not replies to an admitted query. Bind outputs
+            # to the notice's runtime context, retaining its original routing metadata.
+            outputs = ResponseOutputs(ctx, VOICE_OUTPUT_TOPIC)
+            await outputs.update(participant_id, notice.text, timestamp_us=notice.timestamp_us)
 
     async def _remember_event(self, session: WorkflowSession, event: WorkflowEvent) -> None:
         """Project relevant events only from the current native participant session."""
         if (
             self._closing
-            or self._guidance.store.find(session.participant_id) is not session
+            or self._workflow_engine.store.find(session.participant_id) is not session
             or event.event not in _CONTEXT_EVENTS
         ):
             return
@@ -437,10 +439,10 @@ class SOPAgent(Agent):
         if rejected, the loop obtains a new authoritative snapshot.
         """
         while not self._closing:
-            snapshot = await self._guidance.context_snapshot(participant_id)
+            snapshot = await self._workflow_engine.context_snapshot(participant_id)
 
             def valid():
-                current_session = self._guidance.store.find(participant_id)
+                current_session = self._workflow_engine.store.find(participant_id)
                 return (
                     not self._closing
                     and current_session is not None
@@ -448,7 +450,7 @@ class SOPAgent(Agent):
                     and current_session.revision == snapshot.get("revision")
                 )
 
-            if self._guidance.store.find(participant_id) is None:
+            if self._workflow_engine.store.find(participant_id) is None:
                 return
             if await self._run_contexts.refresh(participant_id, snapshot, valid=valid):
                 return
@@ -464,7 +466,7 @@ class SOPAgent(Agent):
     async def stop(self) -> None:
         """Close SOP resources after the caller has stopped the SDK router."""
         self._closing = True
-        await self._guidance.stop()
+        await self._workflow_engine.stop()
         await self._run_contexts.close()
         await self._context.close()
 

@@ -29,7 +29,7 @@ from xr_ai_tools.vision import (
     ImageQueryTool,
 )
 
-from .._capture import _frame
+from ..._capture import _frame
 from ._state import WorkflowSession, WorkflowStore
 
 ChangeCallback = Callable[[], Awaitable[None]]

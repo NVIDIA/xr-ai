@@ -8,7 +8,7 @@ Bind its runtime, register it for notices, and use it as an SDK router destinati
 Stop the router before the agent and its services.
 """
 
-from .agent import SOPAgent
+from .agents.sop.agent import SOPAgent
 from .sop import Workflow, load_workflow
 
 __all__ = ["SOPAgent", "Workflow", "load_workflow"]

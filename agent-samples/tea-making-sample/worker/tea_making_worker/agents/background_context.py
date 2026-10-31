@@ -15,7 +15,7 @@ from xr_ai_interaction import ParticipantJoined, ParticipantLeft
 from xr_ai_runtime import Agent, RuntimeContext, subscribe
 from xr_ai_tools import Tool, ToolSet
 
-from .events import (
+from ..events import (
     BACKGROUND_FACT_TOPIC,
     PARTICIPANT_JOINED_TOPIC,
     PARTICIPANT_LEFT_TOPIC,

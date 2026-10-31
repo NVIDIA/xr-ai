@@ -34,16 +34,35 @@ _SAMPLE = _ROOT / "agent-samples" / "tea-making-sample"
 _WORKER = _SAMPLE / "worker"
 sys.path.insert(0, str(_WORKER))
 
-import tea_making_worker.agent as foreground_module  # noqa: E402  # pyright: ignore[reportMissingImports]
+import tea_making_worker.agents.sop.agent as foreground_module  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker import SOPAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
+from tea_making_worker.agents.background_context import (  # noqa: E402  # pyright: ignore[reportMissingImports]
+    BackgroundContextAgent,
+)
+from tea_making_worker.agents.change_watch import ChangeWatchAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
+from tea_making_worker.agents.file_output import FileOutputAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
+from tea_making_worker.agents.images import ParticipantImageAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
+from tea_making_worker.agents.sop._engine import (  # noqa: E402  # pyright: ignore[reportMissingImports]
+    _TriggerResult,
+    _WorkflowEngine,
+)
+from tea_making_worker.agents.sop._state import WorkflowStore  # noqa: E402  # pyright: ignore[reportMissingImports]
+from tea_making_worker.agents.sop._tools import (  # noqa: E402  # pyright: ignore[reportMissingImports]
+    CurrentViewRequest,
+    TemperatureThresholdRequest,
+    participant_current_view_tool,
+    temperature_threshold_tool,
+)
+from tea_making_worker.agents.transcript import TranscriptAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
+from tea_making_worker.agents.video_log import (  # noqa: E402  # pyright: ignore[reportMissingImports]
+    VideoLogAgent,
+    _is_no_change,
+)
+from tea_making_worker.agents.web_events import TeaWebEventsAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.app import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     _CLIENT_TEXT_TOPIC,
     _relay_event_log,
 )
-from tea_making_worker.background_context import (  # noqa: E402  # pyright: ignore[reportMissingImports]
-    BackgroundContextAgent,
-)
-from tea_making_worker.change_watch import ChangeWatchAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.config import load_config  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.events import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     BACKGROUND_FACT_TOPIC,
@@ -65,26 +84,7 @@ from tea_making_worker.events import (  # noqa: E402  # pyright: ignore[reportMi
     TranscriptRecord,
     VideoLogRecord,
 )
-from tea_making_worker.file_output import FileOutputAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
-from tea_making_worker.images import ParticipantImageAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
 from tea_making_worker.sop import load_workflow  # noqa: E402  # pyright: ignore[reportMissingImports]
-from tea_making_worker.sop._engine import (  # noqa: E402  # pyright: ignore[reportMissingImports]
-    GuidanceAgent,
-    _TriggerResult,
-)
-from tea_making_worker.sop._state import WorkflowStore  # noqa: E402  # pyright: ignore[reportMissingImports]
-from tea_making_worker.sop._tools import (  # noqa: E402  # pyright: ignore[reportMissingImports]
-    CurrentViewRequest,
-    TemperatureThresholdRequest,
-    participant_current_view_tool,
-    temperature_threshold_tool,
-)
-from tea_making_worker.transcript import TranscriptAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
-from tea_making_worker.video_log import (  # noqa: E402  # pyright: ignore[reportMissingImports]
-    VideoLogAgent,
-    _is_no_change,
-)
-from tea_making_worker.web_events import TeaWebEventsAgent  # noqa: E402  # pyright: ignore[reportMissingImports]
 
 
 class _SOPFixture(SOPAgent):
@@ -92,13 +92,31 @@ class _SOPFixture(SOPAgent):
 
     def __init__(self, *, guidance, **kwargs):
         super().__init__(workflow=guidance.workflow, image_query=guidance._image_query, **kwargs)
-        self._guidance = guidance
+        self._workflow_engine = guidance
         guidance._record_event = self._remember_event
         _attach_router(self)
 
 
+def _test_destinations(sop):
+    """Compose the production agents with the fixture's injected services."""
+    from tea_making_worker.agents._destinations import _destinations
+
+    return _destinations(
+        sop,
+        policy=sop._policy,
+        decisions=sop._decisions,
+        llm=sop._llm,
+        participant_tools=sop._background_tools,
+        respond=sop._respond,
+        generate_answer=sop._generate_answer,
+        current_frame=sop._images.get_current_frame,
+        vision=sop._vision,
+        rag=sop._rag,
+        vlm_timeout_s=sop._vlm_timeout_s,
+    )
+
+
 def _attach_router(sop):
-    from tea_making_worker.conversation._applications import _destinations
     from xr_ai_routing import AgentRouter, AgentTurn
 
     runtime = AgentRuntime()
@@ -116,7 +134,7 @@ def _attach_router(sop):
     async def emit(_turn, _route, text):
         control.append(text)
 
-    router = AgentRouter(_destinations(sop), sop._decisions, output=emit)
+    router = AgentRouter(_test_destinations(sop), sop._decisions, output=emit)
     sop._router = router
     original_stop = sop.stop
     opened = False
@@ -147,12 +165,22 @@ def _attach_router(sop):
 
 
 async def _stream_view(owner, query, participant_id, ctx, *, timestamp_us):
-    from tea_making_worker.conversation._applications import _QuestionDestination
+    from tea_making_worker.agents._destinations import _QuestionAgent
     from xr_ai_interaction import ResponseOutputs
     from xr_ai_routing import AgentTurn
 
     outputs = ResponseOutputs(ctx, VOICE_OUTPUT_TOPIC)
-    destination = _QuestionDestination(owner, "observation")
+    destination = _QuestionAgent(
+        name="observation",
+        description="Current camera view",
+        respond=owner._respond,
+        generate_answer=owner._generate_answer,
+        participant_tools=lambda _participant: ToolSet(()),
+        current_frame=owner._images.get_current_frame,
+        vision=owner._vision,
+        rag=SimpleNamespace(),
+        vlm_timeout_s=owner._vlm_timeout_s,
+    )
     async with outputs.reply(participant_id, request_id=ctx.metadata.message_id, timestamp_us=timestamp_us) as reply:
         text, _calls = await destination._camera(
             AgentTurn(participant_id, ctx.metadata.message_id, query, timestamp_us=timestamp_us), reply,
@@ -551,7 +579,7 @@ def test_published_guide_covers_architecture_and_adaptation() -> None:
     assert "## Live inspection and durable output" in guide
     assert "## Adapting the sample" in guide
     assert "## Lifecycle invariants" in guide
-    assert "GuidanceAgent" in guide
+    assert "_WorkflowEngine" in guide
     assert "BackgroundContextAgent" in guide
     assert "TeaWebEventsAgent" in guide
 
@@ -717,8 +745,8 @@ def _commit_response(
     )
 
 
-def _guidance_for_observation(decisions: object | None = None) -> GuidanceAgent:
-    return GuidanceAgent(
+def _guidance_for_observation(decisions: object | None = None) -> _WorkflowEngine:
+    return _WorkflowEngine(
         workflow=_manual_workflow(_SAMPLE / "yaml/workflow.yaml"),
         decisions=decisions or SimpleNamespace(),  # type: ignore[arg-type]
         llm=SimpleNamespace(),  # type: ignore[arg-type]
@@ -825,7 +853,7 @@ async def test_steeping_clock_is_bound_by_code_only_after_confirmation() -> None
 
 def test_guidance_exposes_one_foreground_stack_at_a_time() -> None:
     workflow = _manual_workflow(_SAMPLE / "yaml/workflow.yaml")
-    guidance = GuidanceAgent(
+    guidance = _WorkflowEngine(
         decisions=SimpleNamespace(),  # type: ignore[arg-type]
         workflow=workflow,
         llm=SimpleNamespace(),  # type: ignore[arg-type]
@@ -862,7 +890,7 @@ def test_guidance_exposes_one_foreground_stack_at_a_time() -> None:
 
 def test_active_context_remains_sparse_for_legacy_callers() -> None:
     workflow = _manual_workflow(_SAMPLE / "yaml/workflow.yaml")
-    guidance = GuidanceAgent(
+    guidance = _WorkflowEngine(
         decisions=SimpleNamespace(),  # type: ignore[arg-type]
         workflow=workflow,
         llm=SimpleNamespace(),  # type: ignore[arg-type]
@@ -934,7 +962,7 @@ async def test_completed_step_does_not_invoke_trigger_or_model() -> None:
             calls += 1
             raise AssertionError("completed steps must not call the model")
 
-    guidance = GuidanceAgent(
+    guidance = _WorkflowEngine(
         decisions=SimpleNamespace(),  # type: ignore[arg-type]
         workflow=workflow,
         llm=Llm(),  # type: ignore[arg-type]
@@ -977,7 +1005,7 @@ async def test_slow_observation_does_not_block_reset() -> None:
             await release.wait()
             return await _decisions("accepted").decide(_state, questions)
 
-    guidance = GuidanceAgent(
+    guidance = _WorkflowEngine(
         decisions=Decisions(),  # type: ignore[arg-type]
         workflow=workflow,
         llm=SimpleNamespace(),  # type: ignore[arg-type]
@@ -1020,7 +1048,7 @@ async def test_active_workflow_keeps_background_stop_and_status_tools() -> None:
         images=ImageRegistry(),
         get_current_frame=SimpleNamespace(),
     )
-    guidance = GuidanceAgent(
+    guidance = _WorkflowEngine(
         decisions=SimpleNamespace(),  # type: ignore[arg-type]
         workflow=workflow,
         llm=llm,  # type: ignore[arg-type]
@@ -1099,7 +1127,7 @@ async def test_active_current_view_preserves_structured_question() -> None:
             observed.append(request.query)
             return ImageQueryResult(text="The display reads 85 Celsius.")
 
-    guidance = GuidanceAgent(
+    guidance = _WorkflowEngine(
         decisions=SimpleNamespace(),  # type: ignore[arg-type]
         workflow=workflow,
         llm=SimpleNamespace(),  # type: ignore[arg-type]
@@ -1123,12 +1151,12 @@ async def test_active_current_view_preserves_structured_question() -> None:
 @pytest.mark.asyncio
 async def test_direct_view_is_streamed_without_second_generation() -> None:
     fg = _routed_foreground(_ScriptedDecisions(("destination", "observation")))
-    fg._images.get_current_frame = SimpleNamespace(execute=AsyncMock(return_value=SimpleNamespace(
+    fg._images.get_current_frame.execute = AsyncMock(return_value=SimpleNamespace(
         image=fg._images.images.put(b"pixels"),
-    )))
+    ))
     async def tokens(_request):
         yield ImageQueryChunk(text="A cup.")
-    fg._vision = SimpleNamespace(stream=tokens)
+    fg._vision.stream = tokens
     result, calls, spoken = await fg._answer(
         "What is visible?", "reader", SimpleNamespace(metadata=SimpleNamespace(message_id="view"))
     )
@@ -1169,6 +1197,7 @@ async def test_foreground_current_view_recovers_only_camera_unavailability(error
     frames = Tool("camera_failure", "Select a frame.", CurrentFrameRequest, ImageFrame, fail)
     foreground = object.__new__(_SOPFixture)
     foreground._images = SimpleNamespace(get_current_frame=frames)
+    foreground._vision = SimpleNamespace()
     foreground._vlm_timeout_s = 15
     ctx = SimpleNamespace(metadata=SimpleNamespace(message_id="turn"), publish=publish)
     call = _stream_view(foreground,"Visible?", "alice", ctx, timestamp_us=1)
@@ -1291,7 +1320,7 @@ async def test_foreground_record_failure_does_not_suppress_speech() -> None:
             published.append((topic, message))
 
     foreground = object.__new__(_SOPFixture)
-    foreground._guidance = SimpleNamespace(store=SimpleNamespace(find=lambda _participant: None))
+    foreground._workflow_engine = SimpleNamespace(store=SimpleNamespace(find=lambda _participant: None))
     from xr_ai_conversation import ContextManager
 
     foreground._context = ContextManager(SimpleNamespace())
@@ -1322,7 +1351,7 @@ async def test_foreground_record_failure_does_not_suppress_speech() -> None:
 @pytest.mark.asyncio
 async def test_guidance_record_failure_does_not_suppress_notice() -> None:
     workflow = _manual_workflow(_SAMPLE / "yaml/workflow.yaml")
-    guidance = GuidanceAgent(
+    guidance = _WorkflowEngine(
         decisions=SimpleNamespace(),  # type: ignore[arg-type]
         workflow=workflow,
         llm=SimpleNamespace(),  # type: ignore[arg-type]
@@ -1915,7 +1944,7 @@ def test_foreground_prompt_has_route_eval_cases() -> None:
     assert "expected_response" not in active_visual
 
 
-def _activate_test_step(guidance: GuidanceAgent, step_id: str) -> None:
+def _activate_test_step(guidance: _WorkflowEngine, step_id: str) -> None:
     session = guidance.store.get("active")
     guidance.store.start(session)
     while session.step_id != step_id:
@@ -1940,7 +1969,7 @@ def _foreground_for_route_test(
     step_id: str = "fill_water",
 ) -> _SOPFixture:
     workflow = _manual_workflow(_SAMPLE / "yaml/workflow.yaml")
-    guidance = GuidanceAgent(
+    guidance = _WorkflowEngine(
         decisions=SimpleNamespace(),  # type: ignore[arg-type]
         workflow=workflow,
         llm=SimpleNamespace(),  # type: ignore[arg-type]
@@ -1974,7 +2003,7 @@ def test_workflow_tool_typo_fails_when_guidance_is_built(tmp_path: Path) -> None
     path.write_text(yaml.safe_dump(raw))
 
     with pytest.raises(ValueError, match="current_veiw"):
-        GuidanceAgent(
+        _WorkflowEngine(
             decisions=SimpleNamespace(),  # type: ignore[arg-type]
             workflow=_manual_workflow(path),
             llm=SimpleNamespace(),  # type: ignore[arg-type]
@@ -2183,7 +2212,7 @@ async def test_observer_is_not_bound_to_tea_steps_or_field_names(tmp_path: Path)
     }
     path = tmp_path / "inspection.yaml"
     path.write_text(yaml.safe_dump(raw))
-    guidance = GuidanceAgent(
+    guidance = _WorkflowEngine(
         workflow=_manual_workflow(path),
         decisions=_decisions("accepted"),
         llm=SimpleNamespace(),
@@ -2274,7 +2303,7 @@ def _routed_foreground(decisions) -> _SOPFixture:
         )
     )
     images = SimpleNamespace(images=ImageRegistry(), get_current_frame=SimpleNamespace())
-    guidance = GuidanceAgent(
+    guidance = _WorkflowEngine(
         workflow=_manual_workflow(config.workflow_config),
         decisions=decisions,
         llm=llm,
@@ -2336,7 +2365,7 @@ async def test_focused_workflow_hands_off_side_request_and_resumes_without_top_l
     )
     fg = _routed_foreground(decisions)
     await fg._answer("Start the guide.", "focused")
-    session = fg._guidance.store.get("focused")
+    session = fg._workflow_engine.store.get("focused")
     assert session.active and session.step_id == "identify"
     assert fg._llm.chat.await_count == 0
     await fg._answer("Stop the transcript recorder.", "focused")
@@ -2365,7 +2394,7 @@ async def test_native_skip_is_code_bound_and_stop_releases_router_focus() -> Non
     fg = _routed_foreground(decisions)
     await fg._answer("Start.", "controls")
     await fg._answer("Skip this step.", "controls")
-    session = fg._guidance.store.get("controls")
+    session = fg._workflow_engine.store.get("controls")
     assert session.step_id == "fill_water" and session.state["tea_ready"] is True
     await fg._answer("Exit the guide.", "controls")
     assert not session.active
@@ -2386,7 +2415,7 @@ async def test_rejected_command_authorization_cannot_mutate_workflow() -> None:
     )
     fg = _routed_foreground(decisions)
     await fg._answer("Start.", "authorization")
-    session = fg._guidance.store.get("authorization")
+    session = fg._workflow_engine.store.get("authorization")
     revision = session.revision
     await fg._answer("Can this walkthrough be reset?", "authorization")
     assert session.revision == revision
@@ -2410,7 +2439,7 @@ async def test_side_conversation_does_not_inherit_workflow_state_or_prompt() -> 
     messages = fg._llm.chat.call_args.args[0]
     assert fg._policy.active_prompt not in messages[0].content
     assert json.loads(messages[-1].content)["state"] == {}
-    assert fg._guidance.store.get("scope").active
+    assert fg._workflow_engine.store.get("scope").active
     await fg.stop()
 
 
@@ -2425,19 +2454,19 @@ async def test_explicit_camera_handoff_remains_available_during_timer_step() -> 
     )
     fg = _routed_foreground(decisions)
     await fg._answer("Start tea guidance.", "active")
-    _activate_test_step(fg._guidance, "steep_timer")
+    _activate_test_step(fg._workflow_engine, "steep_timer")
     assert fg._question_tools("active").get("current_view") is not None
-    fg._images.get_current_frame = SimpleNamespace(execute=AsyncMock(return_value=SimpleNamespace(
+    fg._images.get_current_frame.execute = AsyncMock(return_value=SimpleNamespace(
         image=fg._images.images.put(b"pixels"),
-    )))
+    ))
     async def tokens(_request):
         yield ImageQueryChunk(text="A blue sign.")
-    fg._vision = SimpleNamespace(stream=tokens)
+    fg._vision.stream = tokens
     result, calls, spoken = await fg._answer(
         "Read the sign.", "active", SimpleNamespace(metadata=SimpleNamespace(message_id="camera"))
     )
     assert (result, calls) == ("A blue sign.", ["current_view"])
-    assert fg._guidance.store.get("active").step_id == "steep_timer"
+    assert fg._workflow_engine.store.get("active").step_id == "steep_timer"
     await fg.stop()
 
 
@@ -2486,13 +2515,15 @@ async def test_failed_classification_can_retry_the_same_frame_without_double_cou
 @pytest.mark.asyncio
 async def test_conversation_can_inspect_and_verify_through_the_standard_tool_loop() -> None:
     fg = _routed_foreground(SimpleNamespace())
-    _activate_test_step(fg._guidance, "heat_water")
+    _activate_test_step(fg._workflow_engine, "heat_water")
     frame = ImageFrame(
         image=fg._images.images.put(b"fake pixels"), timestamp_us=10, sequence=1,
         width=10, height=10, participant_id="active",
     )
-    fg._guidance._current_frame = SimpleNamespace(execute=AsyncMock(return_value=frame))
-    fg._guidance._image_query = SimpleNamespace(execute=AsyncMock(return_value=ImageQueryResult(text="57 celsius")))
+    fg._workflow_engine._current_frame = SimpleNamespace(execute=AsyncMock(return_value=frame))
+    fg._workflow_engine._image_query = SimpleNamespace(
+        execute=AsyncMock(return_value=ImageQueryResult(text="57 celsius"))
+    )
     fg._llm.chat.side_effect = [
         ChatResponse("", None, [ToolCall(
             "view-1", "current_view", '{"question":"Read the current temperature"}'
@@ -2502,13 +2533,13 @@ async def test_conversation_can_inspect_and_verify_through_the_standard_tool_loo
         )], "tool_calls", {}),
         ChatResponse("The water is 57 degrees, below the target.", None, None, "stop", {}),
     ]
-    revision = fg._guidance.store.get("active").revision
+    revision = fg._workflow_engine.store.get("active").revision
     text, calls, _ = await fg._generate_answer("Is it hot enough?", "active", workflow_context=True)
     assert text == "The water is 57 degrees, below the target."
     assert calls == ["current_view", "temperature__verify"]
     messages = fg._llm.chat.await_args.args[0]
     assert json.loads(messages[-1].content) == {"reading_c": 57.0, "target_c": 93.0, "ready": False}
-    assert fg._guidance.store.get("active").revision == revision
+    assert fg._workflow_engine.store.get("active").revision == revision
     await fg.stop()
 
 
@@ -2524,7 +2555,7 @@ async def test_minority_command_score_cannot_authorize_mutation() -> None:
     )
     fg = _routed_foreground(decisions)
     await fg._answer("Start tea guidance.", "minority")
-    session = fg._guidance.store.get("minority")
+    session = fg._workflow_engine.store.get("minority")
     revision = session.revision
     await fg._answer("Would it be possible to start again?", "minority")
     assert session.revision == revision

@@ -17,16 +17,16 @@ from typing import Any
 
 import yaml
 from tea_making_worker import SOPAgent
-from tea_making_worker.background_context import BackgroundContextAgent
-from tea_making_worker.change_watch import ChangeWatchAgent
+from tea_making_worker.agents._destinations import _destinations
+from tea_making_worker.agents.background_context import BackgroundContextAgent
+from tea_making_worker.agents.change_watch import ChangeWatchAgent
+from tea_making_worker.agents.sop._engine import _WorkflowEngine
+from tea_making_worker.agents.transcript import TranscriptAgent
+from tea_making_worker.agents.video_log import VideoLogAgent
 from tea_making_worker.config import load_config
-from tea_making_worker.conversation._applications import _destinations
 from tea_making_worker.events import FOREGROUND_RECORD_TOPIC
 from tea_making_worker.flows._observations import _observe
 from tea_making_worker.sop import load_workflow
-from tea_making_worker.sop._engine import GuidanceAgent
-from tea_making_worker.transcript import TranscriptAgent
-from tea_making_worker.video_log import VideoLogAgent
 from xr_ai_hub import FrameUnavailable
 from xr_ai_models import ChatMessage, DecisionService, LLMService, load_models_config, make_decision, make_llm
 from xr_ai_routing import AgentRouter, AgentTurn
@@ -40,7 +40,7 @@ _SAMPLE = Path(__file__).resolve().parents[1]
 _MIN_PASS_RATE = 0.80
 
 
-def _build_agents(llm: LLMService, decisions: DecisionService) -> tuple[SOPAgent, GuidanceAgent]:
+def _build_agents(llm: LLMService, decisions: DecisionService) -> tuple[SOPAgent, _WorkflowEngine]:
     config = load_config(_SAMPLE / "yaml" / "tea_making_worker.yaml")
     async def unavailable_frame(_request):
         raise FrameUnavailable("No camera image is supplied by this routing eval.")
@@ -111,11 +111,11 @@ def _build_agents(llm: LLMService, decisions: DecisionService) -> tuple[SOPAgent
         return ToolSet(tools)
 
     foreground._question_tools = fixture_tools
-    return foreground, foreground._guidance
+    return foreground, foreground._workflow_engine
 
 
 def _active_route(
-    guidance: GuidanceAgent,
+    guidance: _WorkflowEngine,
     case: dict[str, Any],
     participant_id: str,
 ) -> None:
@@ -229,7 +229,19 @@ async def main() -> None:
     async def output(turn, _route, text):
         captured[turn.participant_id]["content"] = text
 
-    router = AgentRouter(_destinations(foreground), decisions, output=output)
+    router = AgentRouter(_destinations(
+        foreground,
+        policy=foreground._policy,
+        decisions=decisions,
+        llm=llm,
+        participant_tools=foreground._background_tools,
+        respond=foreground._respond,
+        generate_answer=foreground._generate_answer,
+        current_frame=foreground._images.get_current_frame,
+        vision=foreground.tools[0],
+        rag=foreground._rag,
+        vlm_timeout_s=foreground._vlm_timeout_s,
+    ), decisions, output=output)
     await runtime.start()
     rows = []
     try:

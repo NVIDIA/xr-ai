@@ -30,13 +30,19 @@ from tea_making_worker.flows import (
     ObservationPolicy,  # noqa: E402
     VisualValidationStep,  # noqa: E402
 )
-from test_tea_making_sample import _activate_test_step, _attach_router, _routed_foreground, _ScriptedDecisions  # noqa: E402
+from test_tea_making_sample import (
+    _activate_test_step,
+    _attach_router,
+    _routed_foreground,
+    _ScriptedDecisions,
+    _test_destinations,
+)  # noqa: E402
 
 
 def _sop(decisions=None, *, workflow=None, prompt=None, **budgets):
     foreground = _routed_foreground(decisions or SimpleNamespace())
     return _attach_router(SOPAgent(
-        workflow=workflow or foreground._guidance.workflow,
+        workflow=workflow or foreground._workflow_engine.workflow,
         llm=foreground._llm, decisions=foreground._decisions,
         images=foreground._images, vlm=foreground._vlm, rag=foreground._rag,
         image_query=SimpleNamespace(),
@@ -49,8 +55,7 @@ def _sop(decisions=None, *, workflow=None, prompt=None, **budgets):
 
 def _register_sop(runtime, sop):
     from tea_making_worker._capture import _record_routing
-    from tea_making_worker.conversation._applications import _destinations
-    from tea_making_worker.conversation._cleanup import _CleanupAcks
+    from tea_making_worker._cleanup import _CleanupAcks
     from tea_making_worker.events import INTERRUPTED_TOPIC, USER_QUERY_TOPIC
     from xr_ai_routing import AgentRouter
     from xr_ai_voice import VOICE_OUTPUT_TOPIC
@@ -65,7 +70,7 @@ def _register_sop(runtime, sop):
             sop._test_idle.set()
 
     router = AgentRouter(
-        _destinations(sop), sop._decisions,
+        _test_destinations(sop), sop._decisions,
         query_topic=USER_QUERY_TOPIC, output_topic=VOICE_OUTPUT_TOPIC,
         participant_joined_topic=PARTICIPANT_JOINED_TOPIC,
         interrupted_topic=INTERRUPTED_TOPIC,
@@ -84,22 +89,22 @@ async def test_one_registered_sop_agent_owns_engine_history_notices_and_cleanup(
     router = _register_sop(runtime, sop)
     async with runtime:
         await runtime.publish(PARTICIPANT_JOINED_TOPIC, ParticipantJoined(), participant_id="alice")
-        session = sop._guidance.store.get("alice")
-        sop._guidance.store.start(session)
-        await sop._guidance._flush(session)
+        session = sop._workflow_engine.store.get("alice")
+        sop._workflow_engine.store.start(session)
+        await sop._workflow_engine._flush(session)
         text = "\n".join(block.text for block in sop._context_blocks("alice"))
         assert "step.enter" in text and "identify" in text
         assert sop._context.blocks("bob") == ()
         sop._context.record_exchange("alice", "What next?", "Show the package.", timestamp_us=1, exchange_id="one")
         assert "Show the package" in "\n".join(block.text for block in sop._context.blocks("alice"))
         await runtime.publish(PARTICIPANT_LEFT_TOPIC, ParticipantLeft(), participant_id="alice")
-        assert sop._guidance.store.find("alice") is None
+        assert sop._workflow_engine.store.find("alice") is None
         assert sop._context.blocks("alice") == ()
         # An already-produced old event must not repopulate a departed session.
-        from tea_making_worker.sop._state import WorkflowEvent
+        from tea_making_worker.agents.sop._state import WorkflowEvent
         await sop._remember_event(session, WorkflowEvent("step.ready", "identify", "old", {}))
         assert sop._context.blocks("alice") == ()
-        assert not sop._guidance._tasks
+        assert not sop._workflow_engine._tasks
         await router.stop()
         await sop.stop()
 
@@ -108,17 +113,17 @@ async def test_one_registered_sop_agent_owns_engine_history_notices_and_cleanup(
 async def test_completed_dialogue_reaches_generation_and_choice_without_owning_state():
     decisions = _ScriptedDecisions(("action", "answer"), ("action", "answer"))
     sop = _sop(decisions)
-    _activate_test_step(sop._guidance, "fill_water")
+    _activate_test_step(sop._workflow_engine, "fill_water")
     # Establish focus via normal router admission, then ask a referential follow-up.
     decisions.choices.appendleft(("destination", "workflow"))
-    before = dict(sop._guidance.store.get("active").state)
+    before = dict(sop._workflow_engine.store.get("active").state)
     try:
         await sop._answer("What should I do?", "active")
         await sop._answer("Explain that again", "active")
         messages = sop._llm.chat.await_args.args[0]
         assert "What should I do?" in messages[1].content
         assert json.loads(messages[-1].content)["state"]["water_filled"] is False
-        assert sop._guidance.store.get("active").state == before
+        assert sop._workflow_engine.store.get("active").state == before
         assert any(state.get("history") for state, _questions in decisions.calls)
     finally:
         await sop.stop()
@@ -143,8 +148,8 @@ async def test_context_compaction_does_not_block_engine_and_is_drained_at_stop()
                 "active", "question " * 20, "answer " * 20, timestamp_us=index, exchange_id=index
             )
     await asyncio.wait_for(entered.wait(), 2)
-    session = sop._guidance.store.get("active")
-    sop._guidance.store.start(session)
+    session = sop._workflow_engine.store.get("active")
+    sop._workflow_engine.store.start(session)
     assert session.active and session.step_id == "identify"
     await sop.stop()
     assert cancelled.is_set()
@@ -199,8 +204,8 @@ async def test_unobservable_visual_step_is_unknown_without_a_clef_call():
 @pytest.mark.asyncio
 async def test_replaced_session_cannot_receive_an_inflight_observation():
     sop = _sop()
-    _activate_test_step(sop._guidance, "fill_water")
-    old = sop._guidance.store.get("active")
+    _activate_test_step(sop._workflow_engine, "fill_water")
+    old = sop._workflow_engine.store.get("active")
     entered, release = asyncio.Event(), asyncio.Event()
 
     async def decide(*_args, **_kwargs):
@@ -208,14 +213,14 @@ async def test_replaced_session_cannot_receive_an_inflight_observation():
         await release.wait()
         return DecisionResponse({"evidence": DecisionAnswer("accepted", 1, {"accepted": 1})}, "fake", {}, {})
 
-    sop._guidance._decisions = SimpleNamespace(decide=decide)
-    task = asyncio.create_task(sop._guidance._observe(
-        old, sop._guidance.workflow.step("fill_water"), "Water visible", dict(old.state), old.revision,
+    sop._workflow_engine._decisions = SimpleNamespace(decide=decide)
+    task = asyncio.create_task(sop._workflow_engine._observe(
+        old, sop._workflow_engine.workflow.step("fill_water"), "Water visible", dict(old.state), old.revision,
     ))
     await entered.wait()
-    sop._guidance.store.release("active")
-    _activate_test_step(sop._guidance, "fill_water")
-    current = sop._guidance.store.get("active")
+    sop._workflow_engine.store.release("active")
+    _activate_test_step(sop._workflow_engine, "fill_water")
+    current = sop._workflow_engine.store.get("active")
     release.set()
     assert await task is False
     assert current.evidence_hits == old.evidence_hits == 0
@@ -234,7 +239,7 @@ async def test_departed_participant_query_cannot_recreate_context_or_execution()
         await runtime.publish(PARTICIPANT_JOINED_TOPIC, ParticipantJoined(), participant_id="alice")
         await runtime.publish(PARTICIPANT_LEFT_TOPIC, ParticipantLeft(), participant_id="alice")
         await runtime.publish(USER_QUERY_TOPIC, UserQuery(text="Start again", timestamp_us=1), participant_id="alice")
-        assert sop._guidance.store.find("alice") is None
+        assert sop._workflow_engine.store.find("alice") is None
         assert sop._context.blocks("alice") == ()
         sop._llm.chat.assert_not_awaited()
         await router.stop()
@@ -245,14 +250,14 @@ async def test_departed_participant_query_cannot_recreate_context_or_execution()
 async def test_stop_waits_for_join_before_draining_its_new_monitor():
     sop = _sop()
     entered, release, stopping = asyncio.Event(), asyncio.Event(), asyncio.Event()
-    original_flush = sop._guidance._flush
+    original_flush = sop._workflow_engine._flush
 
     async def flush(session):
         entered.set()
         await release.wait()
         await original_flush(session)
 
-    sop._guidance._flush = flush
+    sop._workflow_engine._flush = flush
     runtime = AgentRuntime()
     router = _register_sop(runtime, sop)
     async with runtime:
@@ -272,8 +277,8 @@ async def test_stop_waits_for_join_before_draining_its_new_monitor():
         release.set()
         await join
         await shutdown
-        assert not sop._guidance._tasks
-        assert not sop._guidance._connected
+        assert not sop._workflow_engine._tasks
+        assert not sop._workflow_engine._connected
         assert sop._context.blocks("alice") == ()
 
 
@@ -329,7 +334,7 @@ async def test_main_yaml_camera_policy_reaches_observer_and_streaming_model_requ
     )
     foreground._images.get_current_frame = SimpleNamespace(execute=AsyncMock(return_value=frame))
     sop = SOPAgent(
-        workflow=foreground._guidance.workflow,
+        workflow=foreground._workflow_engine.workflow,
         llm=foreground._llm, decisions=foreground._decisions,
         images=foreground._images, vlm=vlm, rag=foreground._rag,
         image_query=ImageQueryTool(images=registry, vlm=vlm, system_prompt=config.current_view_prompt),
@@ -337,9 +342,9 @@ async def test_main_yaml_camera_policy_reaches_observer_and_streaming_model_requ
         prompt=config.foreground_prompt, current_view_prompt=config.current_view_prompt,
     )
     try:
-        _activate_test_step(sop._guidance, "fill_water")
-        session = sop._guidance.store.get("active")
-        await sop._guidance._trigger("active", sop._guidance.workflow.step("fill_water"), session.state)
+        _activate_test_step(sop._workflow_engine, "fill_water")
+        session = sop._workflow_engine.store.get("active")
+        await sop._workflow_engine._trigger("active", sop._workflow_engine.workflow.step("fill_water"), session.state)
         assert vlm.ask_images.await_args.kwargs["system_prompt"] == configured
         chunks = [part.text async for part in sop._vision.stream(ImageQueryRequest(image=frame.image, query="Read it"))]
         assert chunks == ["Visible workbench."] and received == [configured]
@@ -365,12 +370,12 @@ async def test_yaml_workflow_voice_and_shared_prompt_reach_live_answer_request(t
         content="Ready.", reasoning="", tool_calls=[], finish_reason="stop", raw={},
     )))
     try:
-        _activate_test_step(sop._guidance, "fill_water")
+        _activate_test_step(sop._workflow_engine, "fill_water")
         await sop._generate_answer("What should I do?", "active", workflow_context=True)
         system = sop._llm.chat.await_args.args[0][0].content
         assert system.startswith(sop._prompt)
         assert custom in system
-        assert sop._guidance.workflow.step("fill_water").voice.prompt in system
+        assert sop._workflow_engine.workflow.step("fill_water").voice.prompt in system
         assert "at most two short sentences" not in system
     finally:
         await sop.stop()
@@ -419,8 +424,8 @@ async def test_sdk_runtime_drains_cancelled_query_without_late_output_history_or
     async with capture.activate():
         async with runtime:
             await runtime.publish(PARTICIPANT_JOINED_TOPIC, ParticipantJoined(), participant_id="active")
-            _activate_test_step(sop._guidance, "fill_water")
-            sop._guidance.store.get("active").next_tick = float("inf")
+            _activate_test_step(sop._workflow_engine, "fill_water")
+            sop._workflow_engine.store.get("active").next_tick = float("inf")
             await runtime.publish(
                 USER_QUERY_TOPIC, UserQuery(text="What next?", timestamp_us=1), participant_id="active",
             )
@@ -436,11 +441,11 @@ async def test_sdk_runtime_drains_cancelled_query_without_late_output_history_or
             assert sink.outputs == []
             assert "Late result" not in "\n".join(block.text for block in sop._context.blocks("active"))
             if operation == "depart":
-                assert sop._guidance.store.find("active") is None
+                assert sop._workflow_engine.store.find("active") is None
                 await runtime.publish(
                     USER_QUERY_TOPIC, UserQuery(text="Again", timestamp_us=2), participant_id="active",
                 )
-                assert sop._guidance.store.find("active") is None
+                assert sop._workflow_engine.store.find("active") is None
             await router.stop()
             await sop.stop()
     records = [row for _entry, rows in _records(capture) for row in rows]
@@ -484,16 +489,16 @@ async def test_sdk_departure_acknowledges_original_generation_once_before_rejoin
     sop._run_contexts.clear = blocked_clear
     async with runtime:
         await runtime.publish(PARTICIPANT_JOINED_TOPIC, ParticipantJoined(), participant_id="p")
-        old = sop._guidance.store.get("p")
+        old = sop._workflow_engine.store.get("p")
         departure = asyncio.create_task(runtime.publish(PARTICIPANT_LEFT_TOPIC, ParticipantLeft(), participant_id="p"))
         await asyncio.wait_for(entered.wait(), 2)
         rejoin = asyncio.create_task(runtime.publish(PARTICIPANT_JOINED_TOPIC, ParticipantJoined(), participant_id="p"))
         assert not departure.done() and not rejoin.done()
         release.set()
         await asyncio.wait_for(asyncio.gather(departure, rejoin), 2)
-        current = sop._guidance.store.find("p")
+        current = sop._workflow_engine.store.find("p")
         assert current is not None and current is not old
-        assert "p" in sop._guidance._connected
+        assert "p" in sop._workflow_engine._connected
         assert [(ack.producer, ack.generation) for ack in sink.acks] == [
             ("foreground", sink.generation), ("guidance", sink.generation),
         ]
@@ -503,13 +508,12 @@ async def test_sdk_departure_acknowledges_original_generation_once_before_rejoin
 
 @pytest.mark.asyncio
 async def test_optional_application_adapters_decline_without_their_capability_tools():
-    from tea_making_worker.conversation._applications import _destinations
     from xr_ai_routing import AgentTurn
 
     sop = _sop()
     sop._background_tools = lambda _participant: ToolSet(())
     try:
-        routes = _destinations(sop)
+        routes = _test_destinations(sop)
         for name in ("watch", "transcript", "journal", "history"):
             result = await routes[name].admit(AgentTurn("p", name, "Please check"), focused=False)
             assert result.disposition == "decline"
@@ -545,8 +549,8 @@ async def test_sdk_capture_balances_request_scope_and_retains_routing_admission_
         async with runtime:
             await runtime.publish(PARTICIPANT_JOINED_TOPIC, ParticipantJoined(), participant_id="active")
             if failure:
-                _activate_test_step(sop._guidance, "fill_water")
-                sop._guidance.store.get("active").next_tick = float("inf")
+                _activate_test_step(sop._workflow_engine, "fill_water")
+                sop._workflow_engine.store.get("active").next_tick = float("inf")
             await runtime.publish(USER_QUERY_TOPIC, UserQuery(text="Explain" if failure else "Start", timestamp_us=1),
                                   participant_id="active")
             await asyncio.wait_for(sop._test_idle.wait(), 2)
@@ -562,3 +566,41 @@ async def test_sdk_capture_balances_request_scope_and_retains_routing_admission_
         [{"destination"}, {"action"}] if failure else [{"destination"}, {"action"}, {"authorization"}]
     )
     assert all(row["request_id"] == expected[0] for _entry, rows in attempts for row in rows)
+
+
+@pytest.mark.asyncio
+async def test_sop_notice_delivery_preserves_update_metadata_and_ignores_departed_participants():
+    """One SOP subscriber delivers notices without a second registered voice agent."""
+    from tea_making_worker.events import GUIDANCE_NOTICE_TOPIC, GuidanceNotice
+    from xr_ai_voice import VOICE_OUTPUT_TOPIC
+
+    delivered_updates = []
+
+    class NoticeSink(Agent):
+        @subscribe(VOICE_OUTPUT_TOPIC)
+        async def receive(self, message: ResponseOutput, ctx: RuntimeContext) -> None:
+            delivered_updates.append((ctx.metadata.participant_id, message))
+
+    sop = _sop()
+    runtime = AgentRuntime()
+    router = _register_sop(runtime, sop)
+    runtime.register("notice-sink", NoticeSink())
+    async with runtime:
+        try:
+            await runtime.publish(PARTICIPANT_JOINED_TOPIC, ParticipantJoined(), participant_id="alice")
+            notice = GuidanceNotice(timestamp_us=1234, text="A configured workflow notice.")
+            await runtime.publish(GUIDANCE_NOTICE_TOPIC, notice, participant_id="bob")
+            assert delivered_updates == []
+            await runtime.publish(GUIDANCE_NOTICE_TOPIC, notice, participant_id="alice")
+            assert len(delivered_updates) == 1
+            participant_id, output = delivered_updates[0]
+            assert participant_id == "alice"
+            assert output.kind == "update"
+            assert output.text == notice.text
+            assert output.timestamp_us == notice.timestamp_us
+            await runtime.publish(PARTICIPANT_LEFT_TOPIC, ParticipantLeft(), participant_id="alice")
+            await runtime.publish(GUIDANCE_NOTICE_TOPIC, notice, participant_id="alice")
+            assert len(delivered_updates) == 1
+        finally:
+            await router.stop()
+            await sop.stop()
