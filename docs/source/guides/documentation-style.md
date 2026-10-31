@@ -6,7 +6,8 @@
 # Documentation style
 
 This reference is the authoritative house style for customer-facing Markdown
-and reStructuredText. Match the surrounding document and keep edits scoped.
+and reStructuredText contributed to NVIDIA/xr-ai. Match the surrounding document
+and keep edits scoped.
 When maintainers adopt a repository-wide convention, update this reference in
 the same change. Document scoped exceptions in the affected content.
 
@@ -40,9 +41,10 @@ Introduce documentation links with **Refer to** or **refer to**, not "See" or
 "see." Prefer MyST `{doc}` links in Markdown and `:doc:` or `:ref:` roles in
 reStructuredText. Use a descriptive Markdown link when the target is source
 code or an external resource, and link directly to the authoritative target
-rather than through a thin redirect page. Treat published URL fragments as
-stable. When rewording a heading, preserve its previous fragment with an
-explicit compatibility anchor.
+rather than through a thin redirect page. Treat URL fragments shipped in a
+published release as stable. When rewording such a heading, preserve its
+previous fragment with an explicit compatibility anchor. Headings first added
+since the latest release need no compatibility anchor or redirect.
 
 ## Migration guides
 
@@ -71,6 +73,17 @@ Use direct word order and specific self-reference nouns such as "This sample,"
 Keep article usage consistent within a procedure. Hyphenate compound adjectives
 when they precede a noun.
 
+Keep each explanation in one canonical location across `docs/source/`, READMEs,
+and YAML comments; link to it from other pages.
+Field-level guidance belongs beside the configuration and is rendered in the
+generated reference.
+
+## Factual accuracy
+
+For both repository and consumer work, check claims in docs, comments, and
+docstrings against the implementation, including configuration conditions,
+failure and shutdown paths, and retention limits.
+
 ## Requirement strength
 
 Use **must** for requirements, an imperative for instructions, and explicit
@@ -83,3 +96,7 @@ Use a colon to introduce an explanation or list. Use the document's established
 em-dash style for an aside; do not use a narrative `--`. Keep code markup out
 of headings when it makes the table of contents or navigation harder to scan.
 In reStructuredText, make title underlines span the full title.
+
+Match the file's existing line wrapping. In a hard-wrapped file, rewrap each
+edited paragraph to its surrounding width, avoiding stub lines and mixed
+wrapping. Use straight quotation marks and apostrophes in new prose.

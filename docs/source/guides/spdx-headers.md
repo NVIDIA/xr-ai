@@ -5,10 +5,10 @@
 
 # SPDX license headers
 
-The hard rule lives in `AGENTS.md`: every new repository source file gets the
-SPDX header at the top. Application-owned files under the top-level `apps/`
-directory are outside this policy. This file documents comment-style choices
-and edge cases.
+New repository source files require the SPDX header at the top, as specified
+in {doc}`contributing-and-conventions`. Application-owned files under the
+top-level `apps/` directory are outside this policy. This file documents
+comment-style choices and edge cases.
 
 ## The header
 
@@ -45,7 +45,9 @@ and files that aren't ours to license: `LICENSE`, `*.json`, `*.resolved`,
 Gradle `*.lockfile`, binary assets (e.g. `*.gif`), `.gitkeep` markers,
 Xcode-managed files (`*.pbxproj`, `*.xcworkspacedata`), and third-party Gradle
 wrapper files (`gradlew`, `gradlew.bat`,
-`gradle/wrapper/gradle-wrapper.properties`).
+`gradle/wrapper/gradle-wrapper.properties`). The checker skips all `.txt` files
+except `requirements.txt`, which retains its `#` header. Omit headers in LLM
+prompt `.txt` files because they would become prompt content.
 
 ## Enforcement
 
