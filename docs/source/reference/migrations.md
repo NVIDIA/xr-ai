@@ -47,6 +47,37 @@ must include the fixes for CVE-2026-114050 and CVE-2026-114055 independently of
 the host Python environment. Refer to {doc}`/components/ai-services` for runtime
 selection and container replacement.
 
+### Procedure scenario observation checks use decisions
+
+In procedure-guide scenario manifests, replace `observe.answers` with boolean
+`observe.accept` (for example, `action: observe, accept: false`), or select a
+shared visual `case`. High-confidence image decisions do not generate captions;
+checks now assert the final decision independently of the inference path.
+Unavailable observations fail both positive and negative expectations.
+
+### Procedure guides separate visual evidence from decisions
+
+Guide documents now require `schema_version: 2`; version 1 is rejected with a
+migration diagnostic. Capture packets remain at schema version 1.
+
+For each `current_view` step, replace `evidence.pattern` with an explicit prose
+`evidence.condition` and remove its observation `agent` block. Rewrite the
+trigger question to request descriptive visual facts, including the relevant
+region, count, orientation, contact, or labeled measurement. CLEF first judges
+the image and uses its selected answer only above 80% confidence. Otherwise
+Cosmos supplies those facts and CLEF judges that description. Retain the
+step's `consecutive`, typed `commit`, and `complete_when` requirements. Approved
+visual steps require a commit; unresolved draft steps must remain drafts.
+Timer steps keep their elapsed-time evidence patterns and runtime-owned clocks.
+After migrating the steps, set the guide's `schema_version` to `2`.
+
+Restart the sample's model-server launcher to include CLEF on port 8120 and use
+the updated `yaml/models.json` decision entry. The CLEF endpoint must support
+image input; text-only endpoints cannot serve the image-first policy.
+Guide mode waits for CLEF;
+capture mode is unchanged. Re-evaluate existing guides after this migration,
+since regex matching of a visual answer no longer determines completion.
+
 ### Interaction messages move to xr-ai-interaction
 
 Code that imports `UserQuery`, `VoiceOutput`, `VoiceParticipantJoined`,

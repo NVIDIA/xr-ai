@@ -106,12 +106,39 @@ Ordinary ordered placement instructions can use visible end states. A current
 view cannot prove a required past motion sequence. Comparing authoring images
 does not give the guide runtime a sequence tool. A plainly narrated orientation is a known
 requirement, not an unknown one merely because its saved image is unavailable.
+When visible placement and a subsequent functional or motion check are distinct
+required outcomes, keep them as separate checks. Block the unsupported outcome
+without also disabling the independently verifiable placement.
 
-For each normal visual check, put every required object, count, attachment,
-target, and direction in the actual question (1–500 characters); the tool does
-not receive the voice prompt. Held nearby is not attached. Request exactly
-`ready`, `not ready`, or `unclear`; only `^ready$` after two consecutive matches
-commits. Prefer direct `evidence.commit`; uncertainty and failure never complete.
+Every visual step uses the same runtime policy: CLEF judges the image first.
+A selected yes or no with confidence strictly above 0.80 is used directly;
+otherwise Cosmos describes that same frame and CLEF judges the caption alone.
+Write both instructions for every step, even if the image check seems easy:
+
+- `trigger.arguments.question` (1–500 characters) is the required Cosmos fallback question.
+  Direct attention to the relevant region or objects and ask for concrete
+  descriptions: counts, attachment points, contact, orientation, printed labels,
+  measurements and units. Ask it to identify hidden or ambiguous details.
+  Identify candidate parts using source-grounded appearance and landmarks,
+  without asserting that they are present or attached in the current view.
+  Ask what is visible and allow absence or uncertainty; a question must not
+  supply a completed scene for Cosmos to repeat.
+  Do not ask for YES/NO, ready/not-ready, or a completion verdict. The tool
+  does not receive the guide's condition or voice prompt.
+- `evidence.condition` states every fact needed for completion. CLEF judges
+  this condition against the image first, or the written Cosmos observation on fallback. Include required
+  counts, locations, orientation, and distinctions such as attached versus
+  held nearby. Avoid conditions that require hidden facts or a motion history.
+
+Use `consecutive: 2` and a typed `evidence.commit` completing the step's own
+boolean. Only CLEF's yes counts; negative, missing, failed, or cancelled decisions
+break the sequence. State mandatory facts and alternatives explicitly: a
+supported alternative must not accidentally require an optional object from
+another alternative.
+Evaluate descriptions missing each required fact as well as complete descriptions.
+Visual steps do not use `evidence.pattern` or an observation
+`agent`. A confident image decision can be wrong, and fallback can repeat a Cosmos perception error;
+evaluate both stages, not just whether a completion message appeared.
 
 ## Write, validate, and review
 

@@ -26,14 +26,16 @@ import nemo_relay
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field
 from xr_ai_hub import FrameUnavailable
+from xr_ai_models import DecisionService
 from xr_ai_tools import Tool, ToolSet
 from xr_ai_tools.current_frame import CurrentFrameRequest, CurrentFrameTool
 from xr_ai_tools.tool_calling import ToolLoopError
 from xr_ai_tools.types import EmptyRequest, StrictRequest
-from xr_ai_tools.vision import ImageQueryRequest, ImageQueryResult, ImageQueryTool
+from xr_ai_tools.vision import ImageQueryResult, ImageQueryTool
 
 from ._workflow_spec import Step, Workflow, _CurrentViewRequest, _TimerRequest, _TimerResult
 from .guides import SelectedGuide
+from .visual_check import VisualCheckTrace, caption_image, verify_image
 
 _POLL_INTERVAL_S = 0.25
 
@@ -160,6 +162,7 @@ class _Guide:
         self,
         *,
         guide: SelectedGuide,
+        decisions: DecisionService,
         current_frame: CurrentFrameTool,
         image_query: ImageQueryTool,
         vision_timeout_s: float,
@@ -167,12 +170,17 @@ class _Guide:
         announce: Callable[[str, str], Awaitable[None]],
         invalidate: Callable[[str], Awaitable[None]],
         connected: Callable[[str], bool],
+        decision_timeout_s: float = 15.0,
     ) -> None:
         if not guide.workflow.runnable:
             raise ValueError("guide mode requires an approved guide")
         if not math.isfinite(vision_timeout_s) or vision_timeout_s <= 0:
             raise ValueError("vision_timeout_s must be finite and positive")
+        if not math.isfinite(decision_timeout_s) or decision_timeout_s <= 0:
+            raise ValueError("decision_timeout_s must be finite and positive")
         self._guide = guide
+        self._decisions = decisions
+        self._decision_timeout_s = decision_timeout_s
         self._current_frame = current_frame
         self._image_query = image_query
         self._vision_timeout_s = vision_timeout_s
@@ -533,6 +541,13 @@ class _Guide:
                 if previous is not None and position <= previous:
                     return
                 session.observed_frames[key] = position
+        if step.trigger.function == "current_view":
+            await self._verify_visual(session, step, revision, observation)
+            await self._publish_notices(session)
+            return
+        async with session.lock:
+            if not self._current(session, step, revision):
+                return
             evidence = step.evidence
             if evidence is not None:
                 value = observation.value if isinstance(observation.value, str) else json.dumps(
@@ -548,6 +563,42 @@ class _Guide:
         if run_model:
             await self._observation_turn(session, step, revision, state, observation)
         await self._publish_notices(session)
+
+    async def _verify_visual(
+        self, session: _Session, step: Step, revision: int, observation: _Observation,
+    ) -> VisualCheckTrace | None:
+        assert step.evidence is not None and step.evidence.condition is not None
+        assert observation.frame is not None
+        async with session.lock:
+            if not self._current(session, step, revision):
+                return
+            previous_hits = session.evidence_hits
+            # An unavailable, invalid, failed, or cancelled decision breaks the
+            # streak. Only a valid result for this revision can restore it.
+            session.evidence_hits = 0
+        trace = VisualCheckTrace()
+        try:
+            question = _CurrentViewRequest.model_validate(self._resolve(step.trigger.arguments, session.state)).question
+            result = await verify_image(
+                self._decisions, self._image_query, images=self._current_frame.images,
+                image=observation.value, condition=step.evidence.condition, question=question,
+                frame=observation.frame.model_dump(), step_id=step.id, revision=revision,
+                decision_timeout_s=self._decision_timeout_s, vision_timeout_s=self._vision_timeout_s, trace=trace,
+            )
+            matched = result.choice == "yes"
+        except Exception as exc:  # noqa: BLE001 — An unavailable decision cannot authorize progress.
+            # Keep per-stage deadlines and the streak reset; cancellation must reach
+            # the monitor owner instead of becoming an ordinary failed check.
+            logger.warning("Guide decision unavailable pid={!r} step={} revision={}: {}: {}",
+                           session.participant_id, step.id, revision, type(exc).__name__, exc)
+            return trace
+        async with session.lock:
+            if not self._current(session, step, revision):
+                return trace
+            session.evidence_hits = previous_hits + 1 if matched else 0
+            if step.evidence.commit and session.evidence_hits >= step.evidence.consecutive:
+                self._commit(session, step, step.evidence.commit, "")
+        return trace
 
     async def _observation_turn(
         self,
@@ -650,11 +701,20 @@ class _Guide:
 
     async def _trigger(self, session: _Session, step: Step, state: dict[str, Any]) -> _Observation:
         if step.trigger.function == "current_view":
-            arguments = self._resolve(step.trigger.arguments, state)
-            result = await self._current_view_tool(session.participant_id).execute(
-                _CurrentViewRequest.model_validate(arguments)
-            )
-            return _Observation(result.available, result.text, result.frame)
+            try:
+                async with asyncio.timeout(self._vision_timeout_s):
+                    frame = await self._current_frame.execute(
+                        CurrentFrameRequest(participant_id=session.participant_id)
+                    )
+                # Pin the selected input before inference. Both decision paths
+                # must inspect this frame, even when the camera keeps streaming.
+                image = self._current_frame.images.resolve(frame.image)
+                return _Observation(True, image, _FrameIdentity(
+                    participant_id=frame.participant_id, track_id=frame.track_id,
+                    timestamp_us=frame.timestamp_us, sequence=frame.sequence,
+                ))
+            except (FrameUnavailable, TimeoutError) as exc:
+                return _Observation(False, str(exc))
         if step.trigger.function == "clock__timer":
             if session.timer is None:
                 return _Observation(False, session.timer_error)
@@ -678,8 +738,10 @@ class _Guide:
             try:
                 async with asyncio.timeout(self._vision_timeout_s):
                     frame = await self._current_frame.execute(CurrentFrameRequest(participant_id=participant_id))
-                    result = await self._image_query.execute(
-                        ImageQueryRequest(image=frame.image, query=request.question),
+                    result = await caption_image(
+                        self._image_query, images=self._current_frame.images,
+                        image=self._current_frame.images.resolve(frame.image), question=request.question,
+                        timeout_s=self._vision_timeout_s, owner=participant_id,
                     )
                     return _ViewResult(
                         **result.model_dump(),

@@ -15,29 +15,33 @@ import argparse
 import asyncio
 import hashlib
 import json
-import re
 import time
+from dataclasses import asdict
 from pathlib import Path
 
+import httpx
 import yaml
 from _scene_rendering import load_scenes, render_scene
 from _visual_expectations import matches_answer, visual_cases
 from procedure_capture_guide_worker.guide.guides import load_guide
-from xr_ai_models import load_models_config, make_vlm
+from procedure_capture_guide_worker.guide.visual_check import VisualCheckTrace, verify_image
+from xr_ai_models import load_models_config, make_decision, make_vlm
 from xr_ai_tools.image import ImageRegistry
-from xr_ai_tools.vision import ImageQueryRequest, ImageQueryTool
+from xr_ai_tools.vision import ImageQueryTool
 
 _SAMPLE = Path(__file__).resolve().parents[3]
 _PROMPT = _SAMPLE / "worker/procedure_capture_guide_worker/guide/prompts/guide_vision.txt"
 
 
-def score(case: dict, evidence_pattern: str, text: str, available: bool) -> dict:
-    if not available:
+def score(case: dict, accepted: bool | None, text: str | None, available: bool) -> dict:
+    if not available or accepted is None:
         # An unavailable model is not a correct rejection of a negative fixture.
-        return {"recognition": None, "gate_correct": None, "accepted": None, "status": "unavailable"}
-    accepted = re.fullmatch(evidence_pattern, text.strip()) is not None
+        return {
+            "recognition": matches_answer(case["answer"], text) if available and text is not None else None,
+            "gate_correct": None, "accepted": None, "status": "unavailable",
+        }
     return {
-        "recognition": matches_answer(case["answer"], text),
+        "recognition": matches_answer(case["answer"], text) if text is not None else None,
         "gate_correct": accepted == case["accept"],
         "accepted": accepted,
         "status": "scored",
@@ -50,12 +54,13 @@ def summarize(rows: list[dict]) -> dict:
         "attempts": len(rows),
         "scored": len(scored),
         "unavailable": len(rows) - len(scored),
-        "recognition_correct": sum(row["recognition"] is True for row in scored),
+        "recognition_scored": sum(row.get("recognition") is not None for row in rows),
+        "recognition_correct": sum(row.get("recognition") is True for row in rows),
         "gate_correct": sum(row["gate_correct"] is True for row in scored),
         "false_accepts": sum(row["accepted"] is True and not row["expected_accept"] for row in scored),
         "false_rejects": sum(row["accepted"] is False and row["expected_accept"] for row in scored),
         "passed": bool(rows) and len(scored) == len(rows)
-        and all(row["recognition"] and row["gate_correct"] for row in scored),
+        and all(row["recognition"] is not False and row["gate_correct"] for row in scored),
     }
 
 
@@ -71,7 +76,9 @@ def prepare(manifest_path: Path, output: Path) -> tuple:
         if case["scene"] not in scenes:
             raise ValueError("case scene must name a safe, defined scene")
     sources = [manifest_path, Path(__file__), Path(__file__).with_name("_scene_rendering.py"),
-               Path(__file__).with_name("_visual_expectations.py"), _PROMPT, guide.path]
+               Path(__file__).with_name("_visual_expectations.py"), _PROMPT, guide.path,
+               _PROMPT.with_name("guide_condition.txt"), _PROMPT.with_name("guide_image_condition.txt"),
+               _PROMPT.parent.parent / "verification.py", _PROMPT.parent.parent / "visual_check.py"]
     if manifest.get("scenes_file") is not None:
         sources.append(manifest_path.parent / manifest["scenes_file"])
     source_hashes = {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in sources}
@@ -99,7 +106,9 @@ async def evaluate(manifest_path: Path, output: Path, models_path: Path, repeats
     if repeats < 1 or timeout_s <= 0:
         raise ValueError("repeats and timeout must be positive")
     cases, guide = prepare(manifest_path, output)
-    vlm = make_vlm(load_models_config(models_path), "vlm")
+    models = load_models_config(models_path)
+    vlm = make_vlm(models, "vlm")
+    decisions = make_decision(models, "decision")
     images = ImageRegistry()
     tool = ImageQueryTool(images=images, vlm=vlm, system_prompt=_PROMPT.read_text())
     rows = []
@@ -110,21 +119,39 @@ async def evaluate(manifest_path: Path, output: Path, models_path: Path, repeats
                 step = guide.workflow.steps[case["step"]]
                 question = step.trigger.arguments["question"]
                 # Opaque references keep fixture names and expected answers out of model inputs.
-                reference = images.put((output / f'{case["scene"]}.png').read_bytes())
+                image = (output / f'{case["scene"]}.png').read_bytes()
                 before = time.monotonic()
+                trace = VisualCheckTrace()
+                accepted = None
+                error = None
                 try:
-                    async with asyncio.timeout(timeout_s):
-                        result = await tool.execute(ImageQueryRequest(image=reference, query=question))
-                    text, available = result.text, result.available
-                except TimeoutError:
-                    text, available = "Visual request timed out", False
+                    decision = await verify_image(
+                        decisions, tool, images=images, image=image,
+                        condition=step.evidence.condition, question=question,
+                        frame={"scene": case["scene"], "trial": trial + 1},
+                        step_id=step.id, revision=trial,
+                        decision_timeout_s=timeout_s, vision_timeout_s=timeout_s, trace=trace,
+                    )
+                    accepted = decision.choice == "yes"
+                except (TimeoutError, ValueError, KeyError, RuntimeError, httpx.HTTPError) as exc:
+                    error = {"type": type(exc).__name__, "message": str(exc)}
+                text = trace.caption.text if trace.caption is not None else None
+                available = trace.caption.available if trace.caption is not None else accepted is not None
+                caption_failed = trace.source == "caption" and (
+                    trace.caption is None or not trace.caption.available or not trace.caption.text.strip()
+                )
                 row = {
                     "scene": case["scene"], "step": case["step"], "trial": trial + 1,
                     "question": question, "answer": text, "available": available,
+                    "vlm_error": error if caption_failed else None,
+                    "decision_error": error if not caption_failed else None,
+                    "source": trace.source,
+                    "image_decision": asdict(trace.image_answer) if trace.image_answer is not None else None,
+                    "final_decision": asdict(trace.answer) if trace.answer is not None else None,
                     "expected_answer": case["answer"], "expected_accept": case["accept"],
-                    "evidence_pattern": step.evidence.pattern,
+                    "condition": step.evidence.condition,
                     "latency_s": time.monotonic() - before,
-                    **score(case, step.evidence.pattern, text, available),
+                    **score(case, accepted, text, available),
                 }
                 rows.append(row)
                 with (output / "results.jsonl").open("a") as stream:
@@ -133,6 +160,7 @@ async def evaluate(manifest_path: Path, output: Path, models_path: Path, repeats
                 images.clear()
     finally:
         await vlm.close()
+        await decisions.close()
         images.clear()
     result = {
         **summarize(rows),
@@ -141,7 +169,9 @@ async def evaluate(manifest_path: Path, output: Path, models_path: Path, repeats
         "guide_sha256": guide.sha256,
         "models_config_sha256": hashlib.sha256(models_path.read_bytes()).hexdigest(),
         "elapsed_s": time.monotonic() - started,
-        "coverage": "Real configured VLM, production prompt and selected guide; isolated single-frame evidence gates.",
+        "coverage": "Production image-first CLEF with Cosmos caption fallback; isolated single-frame verification.",
+        "image_only": sum(row["source"] == "image" and row["status"] == "scored" for row in rows),
+        "caption_fallbacks": sum(row["source"] == "caption" for row in rows),
         "not_scored": ["consecutive-frame enforcement", "conversation", "transitions", "timer", "STT", "TTS"],
     }
     (output / "result.json").write_text(json.dumps(result, indent=2) + "\n")

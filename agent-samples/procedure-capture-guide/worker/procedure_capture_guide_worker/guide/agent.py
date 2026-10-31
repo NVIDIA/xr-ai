@@ -18,7 +18,7 @@ from pathlib import Path
 import nemo_relay
 from loguru import logger
 from xr_ai_interaction import Interrupted, ParticipantJoined, ParticipantLeft, ResponseOutputs, UserQuery
-from xr_ai_models import ChatMessage, ChatResponse, LLMService, ToolDef
+from xr_ai_models import ChatMessage, ChatResponse, DecisionService, LLMService, ToolDef
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeClosedError, RuntimeContext, subscribe
 from xr_ai_tools import ToolSet
 from xr_ai_tools.current_frame import CurrentFrameTool
@@ -51,9 +51,11 @@ class GuideAgent(Agent):
         *,
         guide: SelectedGuide,
         llm: LLMService,
+        decisions: DecisionService,
         current_frame: CurrentFrameTool,
         image_query: ImageQueryTool,
         vision_timeout_s: float,
+        decision_timeout_s: float = 15.0,
     ) -> None:
         super().__init__()
         self._llm = llm
@@ -63,8 +65,9 @@ class GuideAgent(Agent):
         self._turns: dict[str, asyncio.Task[None]] = {}
         self._stopping = False
         self._backend = _Guide(
-            guide=guide, current_frame=current_frame, image_query=image_query,
+            guide=guide, decisions=decisions, current_frame=current_frame, image_query=image_query,
             vision_timeout_s=vision_timeout_s, run_model=self._tool_loop,
+            decision_timeout_s=decision_timeout_s,
             announce=self._announce, invalidate=self._withdraw,
             connected=lambda pid: pid in self._connected,
         )

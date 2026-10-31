@@ -3,6 +3,7 @@
 
 """Test synthetic guide fixtures and evaluation scoring without GPU services."""
 
+import asyncio
 import importlib.util
 import json
 import re
@@ -12,14 +13,48 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
+import httpx
 import pytest
 import yaml
+from _procedure_guide_helpers import clef_response, stub_decisions
 from PIL import Image
 from xr_ai_models import ChatResponse, ToolCall
 
 _SAMPLE = Path(__file__).resolve().parents[1] / "agent-samples/procedure-capture-guide"
 _TEST_DATA = Path(__file__).resolve().parent
 _TEA_EVAL = _SAMPLE / "example-guides/tea-making/evaluation"
+
+
+@pytest.mark.asyncio
+async def test_decision_policy_evaluator_retains_failures_and_excludes_oracles(tmp_path, monkeypatch):
+    monkeypatch.syspath_prepend(str(_SAMPLE / "worker"))
+    path = _SAMPLE / "evaluation/guide/evaluate_conditions.py"
+    spec = importlib.util.spec_from_file_location("procedure_condition_eval", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    cases = yaml.safe_load(module._CASES.read_text())["cases"]
+    assert len(cases) == 24 and len({case["id"] for case in cases}) == 24
+    assert all(type(case["expected"]) is bool for case in cases)
+    fixture = tmp_path / "cases.yaml"
+    cases = cases[:4]
+    fixture.write_text(yaml.safe_dump({"cases": cases}))
+    decisions = Mock(health=AsyncMock(), close=AsyncMock(), decide=AsyncMock(side_effect=[
+        clef_response("yes"), httpx.ConnectError("unavailable"), clef_response("no"), clef_response("no"),
+    ]))
+    monkeypatch.setattr(module, "make_decision", lambda *_: decisions)
+    output = tmp_path / "result"
+    result = await module.evaluate(fixture, _SAMPLE / "yaml/models.json", output, repeats=1)
+    assert result["attempts"] == 4 and result["correct"] == 2 and result["unavailable"] == 1
+    assert result["false_rejects"] == 1 and not result["passed"]
+    rows = [json.loads(line) for line in (output / "results.jsonl").read_text().splitlines()]
+    assert rows[1]["accepted"] is None and rows[1]["correct"] is None
+    assert rows[1]["error"]["type"] == "ConnectError"
+    assert rows[1]["observation"] == cases[1]["observation"]
+    assert json.loads((output / "result.json").read_text()) == result
+    assert (output / "provenance.json").is_file()
+    for call, case in zip(decisions.decide.call_args_list, cases):
+        assert call.args[0] == {"condition": case["condition"], "current_observation": case["observation"]}
+    decisions.close.assert_awaited_once()
 
 
 @pytest.mark.parametrize("runner,other_runner", [
@@ -61,12 +96,13 @@ def evaluator(monkeypatch):
     spec = importlib.util.spec_from_file_location("visual_eval", _TEA_EVAL / "evaluate_visual_checks.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    monkeypatch.setattr(module, "make_decision", lambda *_: stub_decisions())
     return module
 
 
 def test_scenes_are_reproducible_and_distinct(evaluator, tmp_path):
     cases, guide = evaluator.prepare(_TEA_EVAL / "fixtures/visual_expectations.yaml", tmp_path / "images")
-    assert len(cases) == 25
+    assert len(cases) == 27
     assert guide.path == _SAMPLE / "example-guides/tea-making/guide.yaml"
     assert guide.workflow.steps["steep_timer"].trigger.arguments["duration_s"] == 300
     scenes = yaml.safe_load((_TEA_EVAL / "fixtures/image_scenes.yaml").read_text())
@@ -74,7 +110,7 @@ def test_scenes_are_reproducible_and_distinct(evaluator, tmp_path):
         if scene["kind"] == "packet":
             assert set(scene) <= {"kind", "blend", "color", "covered"}
     identification = guide.workflow.steps["identify"]
-    assert identification.evidence.pattern == r"(?i)^YES$"
+    assert identification.evidence.pattern is None and identification.evidence.condition
     pixels = set()
     for case in cases:
         rendered = evaluator.render_scene(scenes[case["scene"]])
@@ -101,7 +137,7 @@ def test_visual_entry_point_renders_tea_manifest_without_models(tmp_path, monkey
     )
     assert result.returncode == 0, result.stdout + result.stderr
     provenance = json.loads((output / "provenance.json").read_text())
-    assert len(provenance["images"]) == 25
+    assert len(provenance["images"]) == 27
     assert str(_SAMPLE / "example-guides/tea-making/guide.yaml") in provenance["source_sha256"]
     assert str(_TEA_EVAL / "_scene_rendering.py") in provenance["source_sha256"]
     assert str(_TEA_EVAL / "_visual_expectations.py") in provenance["source_sha256"]
@@ -115,7 +151,7 @@ def test_visual_entry_point_renders_tea_manifest_without_models(tmp_path, monkey
 ])
 def test_negative_cases_separate_recognition_and_gate(evaluator, text, available, recognition, gate):
     case = {"answer": r"TARGET\s*\|\s*100 C", "accept": False}
-    row = evaluator.score(case, r"CURRENT\s*\|\s*100 C", text, available)
+    row = evaluator.score(case, text == "CURRENT | 100 C", text, available)
     assert row["recognition"] is recognition
     assert row["gate_correct"] is gate
 
@@ -124,7 +160,7 @@ def test_empty_and_unavailable_runs_cannot_pass(evaluator):
     assert not evaluator.summarize([])["passed"]
     assert evaluator.summarize([{"status": "unavailable"}]) == {
         "attempts": 1, "scored": 0, "unavailable": 1,
-        "recognition_correct": 0, "gate_correct": 0,
+        "recognition_scored": 0, "recognition_correct": 0, "gate_correct": 0,
         "false_accepts": 0, "false_rejects": 0, "passed": False,
     }
 
@@ -143,14 +179,23 @@ async def test_visual_evaluator_uses_guide_question_not_answer(evaluator, tmp_pa
     fake_vlm = SimpleNamespace(close=AsyncMock())
     monkeypatch.setattr(evaluator, "make_vlm", lambda *_args: fake_vlm)
     manifest = yaml.safe_load((_TEA_EVAL / "fixtures/visual_expectations.yaml").read_text())
-    scenes = evaluator.load_scenes(_TEA_EVAL / "fixtures/visual_expectations.yaml", manifest)
-    canonical = []
-    for case in manifest["cases"]:
-        if case["step"] == "heat_water" and case["answer"] != "UNKNOWN":
-            reading = scenes[case["scene"]]["readings"][-1]
-            canonical.append(f'{reading["label"]} | {reading["value"]}')
-        else:
-            canonical.append(case["answer"])
+    manifest["cases"] = [
+        {"scene": "chamomile", "step": "identify", "answer": ".*chamomile.*", "accept": True},
+        {"scene": "green", "step": "identify", "answer": ".*green.*", "accept": False},
+    ]
+    manifest["guide_path"] = str(_SAMPLE / "example-guides/tea-making/guide.yaml")
+    manifest["scenes_file"] = str(_TEA_EVAL / "fixtures/image_scenes.yaml")
+    manifest_path = tmp_path / "manifest.yaml"
+    manifest_path.write_text(yaml.safe_dump(manifest))
+    canonical = ["The packet reads chamomile.", "The packet reads green tea."]
+    decisions = stub_decisions()
+    async def decide(state, questions, **kwargs):
+        assert state["condition"] and "condition_met" in questions
+        if kwargs.get("images"):
+            return clef_response("no", 0.8)
+        return clef_response("yes" if "chamomile" in state["current_observation"] else "no")
+    decisions.decide.side_effect = decide
+    monkeypatch.setattr(evaluator, "make_decision", lambda *_: decisions)
 
     class FakeTool:
         def __init__(self, *, images, vlm, system_prompt):
@@ -167,20 +212,21 @@ async def test_visual_evaluator_uses_guide_question_not_answer(evaluator, tmp_pa
 
     monkeypatch.setattr(evaluator, "ImageQueryTool", FakeTool)
     output = tmp_path / "visual"
-    summary = await evaluator.evaluate(_TEA_EVAL / "fixtures/visual_expectations.yaml", output,
+    summary = await evaluator.evaluate(manifest_path, output,
                                       _SAMPLE / "yaml/models.json", 2, 1)
-    assert summary["attempts"] == 50
-    assert summary["false_rejects"] == (0 if correct else 10)
-    assert summary["gate_correct"] == (50 if correct else 40)
+    assert summary["attempts"] == 4
+    assert summary["false_rejects"] == (0 if correct else 2)
+    assert summary["gate_correct"] == (4 if correct else 2)
     assert summary["passed"] is correct
     if correct:
-        assert summary["recognition_correct"] == 50
+        assert summary["recognition_correct"] == 4
         assert all(step["passed"] for step in summary["by_step"].values())
     rows = [json.loads(line) for line in (output / "results.jsonl").read_text().splitlines()]
     guide = evaluator.load_guide(_SAMPLE / "example-guides/tea-making/guide.yaml")
     for row, request in zip(rows, requests, strict=True):
         assert request.query == guide.workflow.steps[row["step"]].trigger.arguments["question"]
     fake_vlm.close.assert_awaited_once()
+
 
 
 @pytest.mark.asyncio
@@ -200,10 +246,70 @@ async def test_timeout_is_not_a_correct_negative(evaluator, tmp_path, monkeypatc
         _TEA_EVAL / "fixtures/visual_expectations.yaml", tmp_path / "timeouts",
         _SAMPLE / "yaml/models.json", 1, 1,
     )
-    assert summary["unavailable"] == 25
+    assert summary["unavailable"] == 27
     assert summary["scored"] == summary["gate_correct"] == 0
     assert not summary["passed"]
     fake_vlm.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("error_type", [httpx.ConnectError, TimeoutError, ValueError, RuntimeError])
+async def test_decision_failure_preserves_visual_evidence_and_finishes_run(
+    evaluator, tmp_path, monkeypatch, error_type,
+):
+    manifest = yaml.safe_load((_TEA_EVAL / "fixtures/visual_expectations.yaml").read_text())
+    manifest["cases"] = [
+        {"scene": "chamomile", "step": "identify", "answer": ".*chamomile.*", "accept": True},
+        {"scene": "green", "step": "identify", "answer": ".*green.*", "accept": False},
+    ]
+    manifest["guide_path"] = str(_SAMPLE / "example-guides/tea-making/guide.yaml")
+    manifest["scenes_file"] = str(_TEA_EVAL / "fixtures/image_scenes.yaml")
+    path = tmp_path / "manifest.yaml"
+    path.write_text(yaml.safe_dump(manifest))
+    vlm = SimpleNamespace(close=AsyncMock())
+    decisions = stub_decisions()
+    decisions.decide.side_effect = [clef_response("yes", 0.8), error_type("decision failed"),
+                                    clef_response("no", 0.8), clef_response("no")]
+    monkeypatch.setattr(evaluator, "make_vlm", lambda *_: vlm)
+    monkeypatch.setattr(evaluator, "make_decision", lambda *_: decisions)
+    descriptions = ["The packet reads chamomile.", "The packet reads green tea."]
+    tool = SimpleNamespace(execute=AsyncMock(side_effect=[
+        SimpleNamespace(text=text, available=True) for text in descriptions
+    ]))
+    monkeypatch.setattr(evaluator, "ImageQueryTool", lambda **_: tool)
+    output = tmp_path / "results"
+    summary = await evaluator.evaluate(path, output, _SAMPLE / "yaml/models.json", 1, 1)
+    rows = [json.loads(line) for line in (output / "results.jsonl").read_text().splitlines()]
+    assert [row["answer"] for row in rows] == descriptions
+    assert rows[0]["available"] and rows[0]["recognition"]
+    assert rows[0]["accepted"] is rows[0]["gate_correct"] is None
+    assert rows[0]["status"] == "unavailable"
+    assert rows[0]["decision_error"] == {"type": error_type.__name__, "message": "decision failed"}
+    assert rows[0]["vlm_error"] is None
+    assert rows[1]["decision_error"] is None
+    assert rows[1]["status"] == "scored" and rows[1]["gate_correct"]
+    assert summary["attempts"] == 2 and summary["scored"] == summary["unavailable"] == 1
+    assert summary["recognition_scored"] == summary["recognition_correct"] == 2
+    assert not summary["passed"]
+    assert json.loads((output / "result.json").read_text()) == summary
+    vlm.close.assert_awaited_once()
+    decisions.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_visual_evaluation_cancellation_propagates_and_closes_models(evaluator, tmp_path, monkeypatch):
+    vlm = SimpleNamespace(close=AsyncMock())
+    decisions = stub_decisions()
+    decisions.decide.side_effect = asyncio.CancelledError()
+    monkeypatch.setattr(evaluator, "make_vlm", lambda *_: vlm)
+    monkeypatch.setattr(evaluator, "make_decision", lambda *_: decisions)
+    tool = SimpleNamespace(execute=AsyncMock(return_value=SimpleNamespace(text="Visible packet", available=True)))
+    monkeypatch.setattr(evaluator, "ImageQueryTool", lambda **_: tool)
+    with pytest.raises(asyncio.CancelledError):
+        await evaluator.evaluate(_TEA_EVAL / "fixtures/visual_expectations.yaml", tmp_path / "cancelled",
+                                 _SAMPLE / "yaml/models.json", 1, 1)
+    vlm.close.assert_awaited_once()
+    decisions.close.assert_awaited_once()
 
 
 @pytest.mark.parametrize("filename", ["scenarios/step_verification.yaml", "scenarios/full_run.yaml"])
@@ -298,34 +404,23 @@ def test_inline_scene_manifest_preserves_provenance(evaluator, tmp_path):
     provenance = json.loads((tmp_path / "output/provenance.json").read_text())
     assert provenance["scenes"] == manifest["scenes"]
     assert str(path) in provenance["source_sha256"]
-    assert len(cases) == len(provenance["images"]) == 25
+    assert len(cases) == len(provenance["images"]) == 27
 
 
-@pytest.mark.parametrize("scene,text,recognition,accepted", [
-    ("current100", "CURRENT | 100.0 C", True, True),
-    ("current100", "CURRENT | 100℃", True, True),
-    ("actual212", "ACTUAL | 212.00℉", True, True),
-    ("current100", "CURRENT\n|\t100 C", True, True),
-    ("current100", "CURRENT | 100.1 C", False, False),
-    ("current100", "TARGET | 100 C", False, False),
-    ("target100", "CURRENT | 100 C", False, True),
-    ("chamomile", "NO CHAMOMILE", False, False),
-    ("chamomile", "YES\n", True, True),
-])
-def test_recognition_and_runtime_gate_have_distinct_contracts(evaluator, scene, text, recognition, accepted):
-    manifest = yaml.safe_load((_TEA_EVAL / "fixtures/visual_expectations.yaml").read_text())
-    case = evaluator.visual_cases(manifest)[scene]
-    guide = evaluator.load_guide(_TEA_EVAL / "fixtures" / manifest["guide_path"])
-    pattern = guide.workflow.steps[case["step"]].evidence.pattern
-    row = evaluator.score(case, pattern, text, True)
-    assert row["recognition"] is recognition
+@pytest.mark.parametrize("accepted", [False, True])
+def test_recognition_and_clef_decision_are_scored_independently(evaluator, accepted):
+    case = {"answer": ".*chamomile.*", "accept": True}
+    row = evaluator.score(case, accepted, "The packet reads chamomile.", True)
+    assert row["recognition"]
     assert row["accepted"] is accepted
-    assert row["gate_correct"] is (accepted == case["accept"])
+    assert row["gate_correct"] is accepted
+
+
 
 
 def test_recognition_normalization_does_not_relax_evidence_gate(evaluator):
     case = {"answer": "BREAKFAST BLACK", "accept": True}
-    row = evaluator.score(case, "^BREAKFAST BLACK$", "BREAKFAST\nBLACK", True)
+    row = evaluator.score(case, False, "BREAKFAST\nBLACK", True)
     assert row["recognition"]
     assert not row["accepted"]
 
@@ -347,6 +442,7 @@ def runtime_evaluator(evaluator, monkeypatch):
     llm = Mock(chat=AsyncMock(side_effect=chat), close=AsyncMock())
     vlm = Mock(ask_images=AsyncMock(return_value=SimpleNamespace(content="NO")), close=AsyncMock())
     monkeypatch.setattr(module.runtime.xr_ai_models, "make_llm", Mock(return_value=llm))
+    monkeypatch.setattr(module.runtime.xr_ai_models, "make_decision", lambda *_: stub_decisions())
     monkeypatch.setattr(module.runtime.xr_ai_models, "make_vlm", Mock(return_value=vlm))
     return module
 
@@ -446,7 +542,7 @@ async def test_quiet_includes_speech_during_image_switch(runtime_evaluator, tmp_
 @pytest.mark.asyncio
 @pytest.mark.parametrize("intervening", [
     {"action": "wait_speech", "expect": "done"},
-    {"action": "observe", "answers": ["YES"]},
+    {"action": "observe", "accept": True},
     {"action": "quiet", "duration_s": 0.1},
 ])
 async def test_quiet_rejects_intervening_checks_before_model_work(runtime_evaluator, tmp_path, intervening):
@@ -494,6 +590,9 @@ def test_quiet_requires_a_say_even_after_images(runtime_evaluator):
     {"action": "quiet"}, {"action": "quiet", "duration_s": True},
     {"action": "quiet", "duration_s": float("nan")}, {"action": "quiet", "duration_s": 0},
     {"action": "observe", "case": "missing"},
+    {"action": "observe", "answers": ["YES"]},
+    {"action": "observe", "accept": "false"},
+    {"action": "observe"},
 ])
 async def test_invalid_actions_fail_before_model_work(runtime_evaluator, tmp_path, action):
     manifest = tmp_path / "invalid.yaml"
@@ -507,8 +606,17 @@ async def test_invalid_actions_fail_before_model_work(runtime_evaluator, tmp_pat
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("answer,expected", [(" \nno\t", True), ("YES", False)])
-async def test_runtime_observe_uses_shared_visual_case(runtime_evaluator, tmp_path, answer, expected):
+@pytest.mark.parametrize("direct", [False, True])
+@pytest.mark.parametrize("shared_case", [False, True])
+async def test_runtime_observe_uses_shared_visual_case(
+    runtime_evaluator, tmp_path, monkeypatch, answer, expected, direct, shared_case,
+):
     module = runtime_evaluator
+    if direct:
+        decisions = stub_decisions()
+        decisions.decide.side_effect = None
+        decisions.decide.return_value = clef_response("no" if expected else "yes", 0.95)
+        monkeypatch.setattr(module.runtime.xr_ai_models, "make_decision", lambda *_: decisions)
     module.runtime.xr_ai_models.make_vlm.return_value.ask_images.return_value = SimpleNamespace(content=answer)
     guide = yaml.safe_load((_TEST_DATA / "test_procedure_indicator_guide.yaml").read_text())
     guide["steps"] = guide["steps"][:1]
@@ -521,8 +629,10 @@ async def test_runtime_observe_uses_shared_visual_case(runtime_evaluator, tmp_pa
         "guide_path": "test.guide.yaml", "scenes": {"red": {"rectangle": "red"}},
         "visual_cases_file": "cases.yaml", "actions": [
             {"action": "image", "scene": "red"}, {"action": "say", "text": "Start guide"},
-            {"action": "observe", "case": "red", "count": 1},
+            {"action": "observe", **({"case": "red"} if shared_case else {"accept": False}), "count": 1},
         ],
     }))
     assert await module.evaluate(manifest, tmp_path / "output") is expected
     assert json.loads((tmp_path / "output/visual_cases.json").read_text()) == {"red": cases["cases"][0]}
+    if direct:
+        module.runtime.xr_ai_models.make_vlm.return_value.ask_images.assert_not_awaited()

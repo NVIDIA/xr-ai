@@ -16,3 +16,6 @@ vlm:
   kv_cache_memory_bytes: 1610612736
   max_num_seqs: 4
   spark_uma: true
+
+# CLEF uses the shared service defaults on GPU 0.
+clef: {}

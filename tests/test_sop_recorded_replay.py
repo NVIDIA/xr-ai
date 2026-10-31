@@ -22,6 +22,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 import yaml
+from _procedure_guide_helpers import clef_response, stub_decisions
 from PIL import Image
 
 _SAMPLE = Path(__file__).resolve().parents[1] / "agent-samples/procedure-capture-guide"
@@ -52,6 +53,39 @@ def make_packet(directory, count=16, color="blue"):
     packet = directory / "packet.json"
     packet.write_text(json.dumps({"status": "complete", "files": {"frame_index": "frames/index.jsonl"}}))
     return packet
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("state", ["empty", "stale", "fresh"])
+async def test_recorded_camera_does_not_fabricate_on_demand_frames(packets, tmp_path, state):
+    from _runtime_harness import Camera
+    from xr_ai_hub import FrameUnavailable
+    from xr_ai_tools.current_frame import CurrentFrameRequest, CurrentFrameTool
+    from xr_ai_tools.image import ImageRegistry
+
+    camera = Camera()
+    images = ImageRegistry()
+    tool = CurrentFrameTool(endpoint=camera, images=images, frame_timeout_s=0.1)
+    if state != "empty":
+        camera.path = tmp_path / "frame.png"
+        Image.new("RGB", (32, 24), "blue").save(camera.path)
+        await camera.publish(timestamp_us=1 if state == "stale" else None)
+    original_frame, original_sequence, original_sources = camera.frame, camera.sequence, dict(camera.sources)
+    request = CurrentFrameRequest(participant_id="guide-eval")
+    try:
+        async with asyncio.timeout(1):
+            if state == "fresh":
+                frame = await tool._get_current_frame(request)
+                assert (frame.sequence, frame.timestamp_us) == (original_frame.seq, original_frame.pts_us)
+            else:
+                with pytest.raises(FrameUnavailable, match="client could not provide a picture"):
+                    await tool._get_current_frame(request)
+        assert camera.frame is original_frame
+        assert camera.sequence == original_sequence
+        assert camera.sources == original_sources
+    finally:
+        tool._captures.close()
+        images.clear()
 
 
 @pytest.mark.parametrize("case", ["empty", "out_of_order", "duplicate", "escape", "index_escape"])
@@ -91,7 +125,7 @@ def runtime_models(monkeypatch):
                             "tool_calls", {})
 
     async def vision(images, query, **kwargs):
-        assert len(images) == 1 and "rectangle blue" in query
+        assert len(images) == 1 and "rectangle" in query
         with Image.open(io.BytesIO(images[0])) as source:
             red, _green, blue = source.convert("RGB").getpixel((320, 240))
         return SimpleNamespace(content="YES" if blue > red else "NO")
@@ -99,6 +133,7 @@ def runtime_models(monkeypatch):
     llm = Mock(chat=AsyncMock(side_effect=chat), close=AsyncMock())
     vlm = Mock(ask_images=AsyncMock(side_effect=vision), close=AsyncMock())
     monkeypatch.setattr(xr_ai_models, "make_llm", lambda *_: llm)
+    monkeypatch.setattr(xr_ai_models, "make_decision", lambda *_: stub_decisions())
     monkeypatch.setattr(xr_ai_models, "make_vlm", lambda *_: vlm)
     return llm, vlm
 
@@ -180,28 +215,34 @@ async def test_evaluation_attributes_overlapping_model_calls_to_their_origin(
         payload = json.loads(messages[1].content)
         if payload.get("request") == "auxiliary":
             return ChatResponse("Auxiliary output.", None, None, "stop", {})
-        if "request" not in payload:
-            observations += 1
-            # First exercise the real observation commit tool without completing
-            # the step; completion follows after the start response is delivered.
-            updates = {} if observations == 1 else {"visible": True}
-            observed.set()
-            return ChatResponse("", None, [ToolCall(
-                id=f"observation-{observations}", name="workflow__commit",
-                arguments=json.dumps({"updates": updates}),
-            )], "tool_calls", {})
         response = await foreground_chat(messages, **kwargs)
         if wrong_foreground_call and payload["request"] == "Next":
             # A genuine wrong foreground call must still fail routing assertions.
             response.tool_calls[0] = ToolCall(id="wrong", name="workflow__status", arguments="{}")
         return response
 
+    async def decide(*args, **kwargs):
+        nonlocal observations
+        if "attribution_probe" in args[0]:
+            return clef_response()
+        observations += 1
+        observed.set()
+        return clef_response("no" if observations == 1 else "yes")
+
+    decisions = stub_decisions()
+    decisions.decide.side_effect = decide
+    import xr_ai_models
+    monkeypatch.setattr(xr_ai_models, "make_decision", lambda *_: decisions)
     llm.chat.side_effect = chat
     route = GuideAgent._route
 
     async def overlapping_route(self, text, participant_id):
         response = await route(self, text, participant_id)
         if text == "Start guide":
+            # Decision requests must be attributed by their actual owner, not
+            # always labeled as background merely because they use CLEF.
+            await self._backend._decisions.decide({"attribution_probe": "foreground"}, {})
+            await asyncio.create_task(self._backend._decisions.decide({"attribution_probe": "child"}, {}))
             async with asyncio.timeout(5):
                 await observed.wait()
             # Another component's task can inherit the foreground context without
@@ -218,9 +259,7 @@ async def test_evaluation_attributes_overlapping_model_calls_to_their_origin(
     guide["steps"] = guide["steps"][:1]
     step = guide["steps"][0]
     step["next"] = None
-    step["evidence"].pop("commit")
     step["evidence"]["consecutive"] = 1
-    step["agent"] = {"prompt": "Commit visible only for a blue indicator.", "tools": []}
     guide_path = tmp_path / "guide.yaml"
     guide_path.write_text(yaml.safe_dump(guide))
     output = tmp_path / "result"
@@ -255,9 +294,16 @@ async def test_evaluation_attributes_overlapping_model_calls_to_their_origin(
     delivered = next(index for index, event in enumerate(events)
                      if event["kind"] == "speech" and event["timestamp_us"] == start["timestamp_us"])
     background = [event for event in events[:delivered]
-                  if event["kind"] == "model" and event["origin"] == "observation"]
-    assert background and all(event["turn_id"] is None for event in background)
-    assert background[0]["calls"][0]["name"] == "workflow__commit"
+                  if event["kind"] == "decision" and event["origin"] == "observation"]
+    assert background and all(event.get("turn_id") is None for event in background)
+    assert background[0]["answers"]["condition_met"]["choice"] == "no"
+    foreground_decision = next(event for event in events
+                               if event.get("state", {}).get("attribution_probe") == "foreground")
+    assert foreground_decision["origin"] == "foreground"
+    assert foreground_decision["turn_id"] == start["turn_id"]
+    child_decision = next(event for event in events
+                         if event.get("state", {}).get("attribution_probe") == "child")
+    assert child_decision["origin"] == "unscoped" and child_decision["turn_id"] is None
     auxiliary = next(event for event in events if event.get("text") == "Auxiliary output.")
     assert auxiliary["origin"] == "unscoped" and auxiliary["turn_id"] is None
     turns = [event for event in events if event["kind"] == "user"]

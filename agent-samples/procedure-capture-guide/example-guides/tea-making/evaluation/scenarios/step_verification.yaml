@@ -25,13 +25,14 @@ actions:
   - {action: say, text: Next, expect: Heat fresh water, tools: [workflow__advance], arguments: [{skip: false}]}
   - {action: observe, case: current65}
   - {action: say, text: 'Could I continue?', expect: not complete, tools: [workflow__advance], arguments: [{skip: false}]}
-  - {action: image, scene: target100}
-  - {action: observe, case: target100}
+  - {action: image, scene: current100f}
+  - {action: observe, case: current100f}
+  - {action: image, scene: mixed94}
+  - {action: observe, case: mixed94}
+  - {action: say, text: Next, expect: not complete, tools: [workflow__advance], arguments: [{skip: false}]}
   - {action: say, text: 'What is my status?', expect: 'current step: Verify the brewing temperature\.$', tools: [workflow__status]}
   - {action: image, scene: unlabeled100}
-  - {action: observe, case: unlabeled100}
-  - {action: image, scene: current100}
-  - {action: wait_speech, expect: The displayed current water temperature is at the brewing target}
+  - {action: wait_speech, expect: The display shows the brewing target temperature}
   - {action: image, scene: dry_bag}
   - {action: say, text: Next, expect: Carefully put the chamomile, tools: [workflow__advance], arguments: [{skip: false}]}
   - {action: observe, case: dry_bag}
