@@ -97,7 +97,7 @@ async def main():
         config=config.sop,
         llm=llm,
         decisions=decisions,
-        images=SimpleNamespace(get_current_frame=SimpleNamespace(execute=no_camera)),
+        frames=SimpleNamespace(execute=no_camera),
         image_query=SimpleNamespace(),
         rag=SimpleNamespace(retrieve=SimpleNamespace(execute=no_passages)),
         context=context,

@@ -22,7 +22,7 @@ reusable flow reads YAML.
 
 Start with the independent async functions in `tea_making_worker.flows`, then
 read `agents/sop/agent.py::_procedure` for the explicit tea procedure. The
-application's Pydantic identity/quantity models live in `agents/sop/_settings.py`.
+tea application's Pydantic identity/quantity models live in `agents/sop/_settings.py`.
 There is no common flow base class; a little duplication keeps the three functions
 independently understandable and usable without the SOP runner.
 
@@ -107,22 +107,28 @@ Import `SOPAgent`, `SOPConfig`, `VisualInstructions`, `TeaIdentity`,
 `BrewingSettings`, `TemperatureSetting` and `DurationSetting` from
 `tea_making_worker`. These are sample-local APIs, not SDK promotion.
 
-Import `run_identification_flow`, `run_visual_verification_flow` and
+Import `run_vision_rag_retrieval_flow`, `run_visual_verification_flow` and
 `run_timer_flow` from `tea_making_worker.flows`. Supply all dependencies,
 inputs, wording, limits and the optional asynchronous `on_state` callback in
 the call, and await its result. Each flow owns its local loop and propagates
 cancellation after its awaited operations end. Callbacks run in that same task;
 a callback failure propagates to the owner.
 
-### Identification and settings
+### Vision and RAG retrieval
 
-The identification function accepts Python/Pydantic models for identity and
-settings, the typed image and retrieval tools, LLM service, a Python retrieval-query
-function, prompts and bounds. Settings fields must default to `None`; application
-defaults belong to the runner.
+`run_vision_rag_retrieval_flow` accepts `visual_model` and `result_model` as
+Python/Pydantic schemas, the typed image and retrieval tools, an LLM service,
+a Python `retrieval_query` function, prompts and bounds. `visual_question` selects
+what to extract from each image; successful schema validation makes that data
+usable for retrieval. Result fields must default to `None`; application defaults
+belong to the runner. Tea identification and brewing settings are one application
+of this flow; other visual data and result schemas require no flow changes.
 
-It observes fresh frames until identity validation succeeds, retrieves relevant
-passages, extracts supported fields and generates only missing settings.
+It observes fresh frames until visual schema validation succeeds, retrieves relevant
+passages, extracts supported fields and generates only missing result fields.
+`VisionRAGRetrievalState` reports `visual_data`, `resolved_data`, source provenance,
+recent original observations and retrieved passages. The extraction/generation
+request carries visual data under the generic `visual_data` key.
 Retrieved fields require an existing source passage and an exact quote. Python
 validates field types/units. These checks establish provenance structure; they do
 not prove that model interpretation of a passage or image is correct.
@@ -168,9 +174,9 @@ or timer-specific question formatters.
 
 Each function returns its terminal state and publishes full snapshots while
 running. The runner stores those snapshots directly; it does not rebuild flow
-progress from events. Visual and identification states retain the last few
+progress from events. Visual verification and vision/RAG retrieval states retain the last few
 original observations with time/frame labels, judgments, goals and useful source
-evidence. Identification also retains passages/provenance; timer state carries
+evidence. Vision/RAG retrieval also retains passages/provenance; timer state carries
 native operational facts.
 
 History count, optional age, observation text size and retrieval passage limits
@@ -222,12 +228,17 @@ clears current progress. Restart creates a fresh run.
 | `agents/sop/agent.py` | Controls, explicit procedure, owned tasks, latest flow state and SOP context |
 | `agents/sop/_settings.py` | Tea application models and Python policy arguments |
 | `flows/_visual.py` | Independent Omni/Clef verification loop and window |
-| `flows/_identity.py` | Independent visual identity, retrieval and missing-only resolution |
+| `flows/_vision_rag_retrieval.py` | Generic visual extraction, retrieval and missing-field resolution |
 | `flows/_timer.py` | Native timer and periodic state |
 | `_capture.py` | Flow-scoped structured images/model/evidence recording |
-| `_cleanup.py` | SDK departure to original-generation producer acknowledgments |
-| `agents/images.py` | Shared participant image acquisition and image ownership |
 | `agents/web_events.py` | Live SOP state/notices and participant lifecycle projection |
+
+Camera acquisition uses the SDK `CurrentFrameTool` and `ImageRegistry` directly
+in `app.py`. The runner receives the frame tool and the visual query tool uses the
+same registry. The SDK router serializes participant departure/rejoin; its cleanup
+hook drains SOP work before releasing cached frames and image handles. There is
+no sample image agent or cleanup acknowledgment protocol. Shutdown clears the
+registry after owned work ends.
 
 ## SOP run capture
 

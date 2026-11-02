@@ -3,7 +3,7 @@
 
 """Tea application's Python inputs and validated results, not an execution language.
 
-The reusable identification flow accepts these ordinary Pydantic models. Only
+The reusable vision/RAG retrieval flow accepts these ordinary Pydantic models. Only
 this application knows that its values are tea names, temperatures and durations.
 The runner's procedure below connects the resulting values explicitly in Python.
 """

@@ -24,6 +24,8 @@ from xr_ai_logging import setup_logging
 from xr_ai_models import load_models_config, make_decision, make_llm, make_tts, make_vlm
 from xr_ai_routing import AgentRouter, RoutingAid
 from xr_ai_runtime import AgentRuntime
+from xr_ai_tools.current_frame import CurrentFrameTool
+from xr_ai_tools.image import ImageRegistry
 from xr_ai_tools.rag import RAGTools
 from xr_ai_tools.vision import ImageQueryTool
 from xr_ai_voice import VOICE_OUTPUT_TOPIC, HubVoiceTransport, VadConfig, VoiceAgent
@@ -31,8 +33,6 @@ from xr_ai_voicegate import load_voice_gate_config
 from xr_ai_web_events import WebEventsAgent
 
 from ._capture import _RecordedDecisions, _RecordedLanguage, _RecordedVision, _SOPCapture
-from ._cleanup import _CleanupAcks
-from .agents.images import ParticipantImageAgent
 from .agents.sop.agent import SOP_CONTEXT_SOURCE, SOPAgent
 from .agents.web_events import TeaWebEventsAgent
 from .config import WorkerConfig
@@ -170,13 +170,12 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
             ),
         )
         runtime.register("web-event-adapter", TeaWebEventsAgent())
-        images = runtime.register(
-            "images",
-            ParticipantImageAgent(
-                endpoint=transport.endpoint,
-                frame_max_age_s=config.frame_max_age_s,
-                frame_timeout_s=config.frame_timeout_s,
-            ),
+        images = ImageRegistry()
+        frames = CurrentFrameTool(
+            endpoint=transport.endpoint,
+            images=images,
+            frame_max_age_s=config.frame_max_age_s,
+            frame_timeout_s=config.frame_timeout_s,
         )
         # Conversation owns dialogue. Only the runner supplies the replaceable
         # SOP source; independent flows never connect to this manager.
@@ -203,9 +202,9 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
                 config=config.sop,
                 llm=llm,
                 decisions=decisions,
-                images=images,
+                frames=frames,
                 image_query=ImageQueryTool(
-                    images=images.images,
+                    images=images,
                     vlm=vlm,
                     system_prompt=config.current_view_prompt,
                 ),
@@ -214,19 +213,25 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
                 runtime=runtime,
             ),
         )
+
+        async def cleanup_participant(participant_id: str) -> None:
+            """Drain SOP work before releasing SDK frames; the router serializes rejoins."""
+            await sop.participant_left(participant_id)
+            frames.release(participant_id)
+
         router = AgentRouter(
             {"workflow": sop, "conversation": conversation},
             decisions,
             query_topic=USER_QUERY_TOPIC,
             output_topic=VOICE_OUTPUT_TOPIC,
             participant_joined_topic=PARTICIPANT_JOINED_TOPIC,
+            participant_left_topic=PARTICIPANT_LEFT_TOPIC,
             interrupted_topic=INTERRUPTED_TOPIC,
             initialize_participant=sop.participant_joined,
-            cleanup_participant=sop.participant_left,
+            cleanup_participant=cleanup_participant,
             set_status=transport.endpoint.set_status,
         )
         runtime.register("routing", router.runtime_subscriber())
-        runtime.register("sop-cleanup", _CleanupAcks(router))
         runtime.register("voice", voice)
 
         logger.info("SOP run bundle → {}", capture.directory)
@@ -243,7 +248,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
                         await conversation.close()
                         await context.close()
 
-                        await images.stop()
+                        images.clear()
 
     logger.info("tea-making stopped")
 

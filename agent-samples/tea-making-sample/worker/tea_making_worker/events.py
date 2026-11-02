@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 from xr_ai_interaction import Interrupted, ParticipantJoined, ParticipantLeft, UserQuery
@@ -30,11 +30,6 @@ class GuidanceNotice(_Event):
     text: str
 
 
-class ParticipantCleanupComplete(_Event):
-    generation: str = Field(min_length=1)
-    producer: Literal["guidance"]
-
-
 USER_QUERY_TOPIC = Topic("tea-making.user-query", UserQuery)
 PARTICIPANT_JOINED_TOPIC = Topic(
     "tea-making.participant-joined",
@@ -47,21 +42,13 @@ PARTICIPANT_LEFT_TOPIC = Topic(
 INTERRUPTED_TOPIC = Topic("tea-making.interrupted", Interrupted)
 GUIDANCE_RECORD_TOPIC = Topic("tea-making.guidance-record", GuidanceRecord)
 GUIDANCE_NOTICE_TOPIC = Topic("tea-making.guidance-notice", GuidanceNotice)
-PARTICIPANT_CLEANUP_COMPLETE_TOPIC = Topic(
-    "tea-making.participant-cleanup-complete",
-    ParticipantCleanupComplete,
-)
-
-
 __all__ = [
     "GUIDANCE_NOTICE_TOPIC",
     "GUIDANCE_RECORD_TOPIC",
     "INTERRUPTED_TOPIC",
     "PARTICIPANT_JOINED_TOPIC",
     "PARTICIPANT_LEFT_TOPIC",
-    "PARTICIPANT_CLEANUP_COMPLETE_TOPIC",
     "USER_QUERY_TOPIC",
     "GuidanceNotice",
     "GuidanceRecord",
-    "ParticipantCleanupComplete",
 ]

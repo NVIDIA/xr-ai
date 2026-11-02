@@ -39,10 +39,18 @@ interruption does not cancel the independently owned procedure. The runner alone
 provides read-only SOP context from labeled flow states.
 
 Replace prototype `Workflow`/`load_workflow` and class-based flow imports with
-sample-local Python `SOPConfig` and `run_identification_flow`,
+sample-local Python `SOPConfig` and `run_vision_rag_retrieval_flow`,
 `run_visual_verification_flow`, `run_timer_flow` APIs. The separate workflow
 YAML, expression bindings, observation interpreter and combined foreground
-capture path are removed. Update private imports; no SDK API is changed.
+capture path are removed. The generic vision/RAG API receives `visual_model`,
+`result_model` and `visual_question`; its state reports `visual_data` and
+`resolved_data` through `VisionRAGRetrievalState`. Tea identity/settings remain
+application models. The language protocol includes an explicit response schema
+for extracted values and source quotes. Update private imports; no SDK API is changed.
+
+The sample image agent and cleanup acknowledgment protocol are also removed.
+Application composition uses SDK `CurrentFrameTool` and `ImageRegistry` directly;
+the router cleanup hook drains SOP work before releasing participant images.
 
 The complete main `yaml/tea_making_worker.yaml` owns application instructions
 and `sop` arguments. Remove `workflow_config` and `*_prompt_file` options.

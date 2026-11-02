@@ -9,7 +9,6 @@ import importlib.util
 import json
 import sys
 from pathlib import Path
-from types import SimpleNamespace
 
 import nemo_relay
 import pytest
@@ -22,7 +21,6 @@ _ROOT = Path(__file__).resolve().parents[1]
 _SAMPLE = _ROOT / "agent-samples" / "tea-making-sample"
 _WORKER = _SAMPLE / "worker"
 sys.path.insert(0, str(_WORKER))
-from tea_making_worker.agents.images import ParticipantImageAgent  # noqa: E402
 from tea_making_worker.agents.web_events import TeaWebEventsAgent  # noqa: E402
 from tea_making_worker.app import _CLIENT_TEXT_TOPIC, _relay_event_log  # noqa: E402
 from tea_making_worker.config import load_config  # noqa: E402
@@ -33,7 +31,6 @@ from tea_making_worker.events import (  # noqa: E402
     PARTICIPANT_LEFT_TOPIC,
     GuidanceNotice,
     GuidanceRecord,
-    ParticipantCleanupComplete,
 )
 
 
@@ -167,28 +164,6 @@ async def test_web_viewer_surrounds_runtime_lifecycle() -> None:
 
 
 @pytest.mark.asyncio
-async def test_images_release_after_every_producer_finishes_cleanup() -> None:
-    released: list[str] = []
-    images = object.__new__(ParticipantImageAgent)
-    images._cleanup = {}
-    images._leaving_generation = {}
-    images.get_current_frame = SimpleNamespace(release=released.append)
-    ctx = SimpleNamespace(metadata=SimpleNamespace(participant_id="participant-images", message_id="leave-1"))
-    await images.participant_left(ParticipantLeft(), ctx)
-    producers = ("guidance",)
-    for producer in producers[:-1]:
-        await images.participant_cleanup_complete(
-            ParticipantCleanupComplete(generation="leave-1", producer=producer), ctx
-        )
-    assert released == []
-    await images.participant_cleanup_complete(
-        ParticipantCleanupComplete(generation="leave-1", producer=producers[-1]), ctx
-    )
-    assert released == ["participant-images"]
-    assert images._cleanup == {}
-
-
-@pytest.mark.asyncio
 async def test_relay_event_log_buffers_and_excludes_stream_chunks(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -280,27 +255,3 @@ def test_installed_worker_default_uses_sample_yaml_or_requires_explicit_config(t
         load_config(None)
     explicit = load_config(_SAMPLE / "yaml/tea_making_worker.yaml")
     assert explicit.current_view_prompt
-
-
-@pytest.mark.asyncio
-async def test_image_cleanup_ignores_previous_participant_generation() -> None:
-    released: list[str] = []
-    images = object.__new__(ParticipantImageAgent)
-    images._cleanup = {}
-    images._leaving_generation = {}
-    images.get_current_frame = SimpleNamespace(release=released.append)
-
-    def context(message_id: str):
-        return SimpleNamespace(metadata=SimpleNamespace(participant_id="same-user", message_id=message_id))
-
-    await images.participant_left(ParticipantLeft(), context("old-leave"))
-    await images.participant_joined(ParticipantJoined(), context("new-join"))
-    await images.participant_left(ParticipantLeft(), context("new-leave"))
-    await images.participant_cleanup_complete(
-        ParticipantCleanupComplete(generation="old-leave", producer="guidance"), context("late-old-ack")
-    )
-    assert released == []
-    await images.participant_cleanup_complete(
-        ParticipantCleanupComplete(generation="new-leave", producer="guidance"), context("new-ack")
-    )
-    assert released == ["same-user"]

@@ -13,6 +13,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from pydantic import BaseModel
 from xr_ai_models import ChatResponse, DecisionAnswer, DecisionQuestion, DecisionResponse
 from xr_ai_tools.current_frame import ImageFrame
 from xr_ai_tools.image import ImageRegistry
@@ -23,8 +24,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "agent-samples/tea-
 
 from tea_making_worker import BrewingSettings, TeaIdentity  # noqa: E402
 from tea_making_worker.flows import (  # noqa: E402
-    run_identification_flow,
     run_timer_flow,
+    run_vision_rag_retrieval_flow,
     run_visual_verification_flow,
 )
 
@@ -228,7 +229,7 @@ async def test_timer_cancellation_stops_further_updates():
     assert updates[0].status == "running"
 
 
-def _identity(**overrides):
+def _vision_rag_retrieval(**overrides):
     passage = RetrievedChunk(
         source="white-tea.md",
         text="Northwind white tea: use 80 degrees Celsius.",
@@ -266,9 +267,9 @@ def _identity(**overrides):
             )
         ),
         "retrieval": SimpleNamespace(execute=AsyncMock(return_value=RetrieveResult(results=[passage]))),
-        "identity_model": TeaIdentity,
-        "settings_model": BrewingSettings,
-        "identification_question": "Read the visible tea name; return null if unreadable.",
+        "visual_model": TeaIdentity,
+        "result_model": BrewingSettings,
+        "visual_question": "Read the visible tea name; return null if unreadable.",
         "extraction_instructions": "Extract only supported settings.",
         "fallback_instructions": "Recommend only missing settings for the identified type.",
         "retrieval_query": lambda identity: identity.tea_name + " brewing settings",
@@ -284,21 +285,27 @@ def _identity(**overrides):
 
 
 @pytest.mark.asyncio
-async def test_identification_retries_then_retrieves_and_generates_only_missing_settings():
+async def test_vision_rag_retrieval_retries_then_generates_only_missing_fields():
     states = []
-    arguments = _identity(on_state=AsyncMock(side_effect=states.append))
-    result = await run_identification_flow(**arguments)
-    assert result.identity.tea_name == "Northwind White Tea"
-    assert result.settings.temperature.celsius == 80
-    assert result.settings.steep_duration.seconds == 180
+    arguments = _vision_rag_retrieval(on_state=AsyncMock(side_effect=states.append))
+    result = await run_vision_rag_retrieval_flow(**arguments)
+    assert result.visual_data.tea_name == "Northwind White Tea"
+    assert result.resolved_data.temperature.celsius == 80
+    assert result.resolved_data.steep_duration.seconds == 180
     assert result.sources["temperature"].kind == "retrieved"
     assert result.sources["temperature"].quote == "80 degrees Celsius"
     assert result.sources["steep_duration"].kind == "generated"
     fallback_request = json.loads(arguments["llm"].chat.await_args_list[1].args[0][1].content)
     assert set(fallback_request["requested_fields"]) == {"steep_duration"}
+    fallback_schema = fallback_request["response_schema"]
+    assert fallback_schema["required"] == ["values"]
+    assert set(fallback_schema["properties"]["values"]["properties"]) == {"steep_duration"}
+    assert "DurationSetting" in fallback_schema["$defs"]
     assert arguments["retrieval"].execute.await_count == 1
-    assert states[1].identity is None
-    assert any(state.settings.temperature is not None and state.settings.steep_duration is None for state in states)
+    assert states[1].visual_data is None
+    assert any(
+        state.resolved_data.temperature is not None and state.resolved_data.steep_duration is None for state in states
+    )
     assert len(result.observations) == 2
     assert result.observations[0].usable is False
     assert result.passages[0]["source"] == "white-tea.md"
@@ -306,7 +313,7 @@ async def test_identification_retries_then_retrieves_and_generates_only_missing_
 
 @pytest.mark.asyncio
 async def test_unsupported_source_quote_cannot_be_labeled_retrieved():
-    arguments = _identity()
+    arguments = _vision_rag_retrieval()
     arguments["llm"].chat.side_effect = [
         _chat(
             json.dumps(
@@ -327,9 +334,9 @@ async def test_unsupported_source_quote_cannot_be_labeled_retrieved():
             )
         ),
     ]
-    result = await run_identification_flow(**arguments)
+    result = await run_vision_rag_retrieval_flow(**arguments)
     assert all(source.kind == "generated" for source in result.sources.values())
-    assert result.settings.temperature.celsius == 80
+    assert result.resolved_data.temperature.celsius == 80
 
 
 @pytest.mark.asyncio
@@ -377,3 +384,65 @@ async def test_unavailable_visual_answer_stays_useful_context_without_becoming_n
     assert result.observations[0].description == "The requested display is occluded."
     assert result.observations[0].judgment == "unknown"
     assert result.confirmation_window == ("positive",)
+
+
+@pytest.mark.asyncio
+async def test_vision_rag_retrieval_accepts_non_identity_visual_data_and_result_models():
+    class GaugeReading(BaseModel):
+        pressure_bar: float
+        warning_light: bool
+
+    class InspectionAdvice(BaseModel):
+        action: str | None = None
+        priority: int | None = None
+
+    arguments = _vision_rag_retrieval(
+        visual_model=GaugeReading,
+        result_model=InspectionAdvice,
+        visual_question="Read gauge pressure and warning-light status.",
+        retrieval_query=lambda reading: f"pressure={reading.pressure_bar} warning={reading.warning_light}",
+        extraction_instructions="Extract only documented inspection guidance.",
+        fallback_instructions="Recommend only missing advice fields.",
+        observer=SimpleNamespace(
+            execute=AsyncMock(
+                return_value=ImageQueryResult(
+                    text='{"pressure_bar":2.4,"warning_light":true}',
+                )
+            )
+        ),
+        retrieval=SimpleNamespace(
+            execute=AsyncMock(
+                return_value=RetrieveResult(
+                    results=[
+                        RetrievedChunk(source="inspection.md", text="Inspect the inlet.", score=1),
+                    ]
+                )
+            )
+        ),
+        llm=SimpleNamespace(
+            chat=AsyncMock(
+                side_effect=[
+                    _chat(
+                        '{"values":{"action":"Inspect the inlet."},'
+                        '"sources":{"action":{"passage":0,"quote":"Inspect the inlet."}}}'
+                    ),
+                    _chat('{"values":{"priority":2}}'),
+                ]
+            )
+        ),
+    )
+    result = await run_vision_rag_retrieval_flow(**arguments)
+    assert result.visual_data == GaugeReading(pressure_bar=2.4, warning_light=True)
+    assert result.resolved_data == InspectionAdvice(action="Inspect the inlet.", priority=2)
+    assert result.sources["action"].kind == "retrieved"
+    assert result.sources["priority"].kind == "generated"
+    assert arguments["retrieval"].execute.await_args.args[0].query == "pressure=2.4 warning=True"
+    extraction = json.loads(arguments["llm"].chat.await_args_list[0].args[0][1].content)
+    fallback = json.loads(arguments["llm"].chat.await_args_list[1].args[0][1].content)
+    assert extraction["visual_data"] == {"pressure_bar": 2.4, "warning_light": True}
+    envelope = extraction["response_schema"]
+    assert set(envelope["required"]) == {"values", "sources"}
+    assert set(envelope["properties"]["values"]["properties"]) == {"action", "priority"}
+    assert envelope["properties"]["values"]["additionalProperties"] is False
+    assert envelope["properties"]["sources"]["properties"]["action"]["required"] == ["passage", "quote"]
+    assert set(fallback["requested_fields"]) == {"priority"}

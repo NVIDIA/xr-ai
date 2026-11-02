@@ -12,15 +12,15 @@ from dataclasses import replace
 from functools import partial
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import nemo_relay
 import pytest
 from xr_ai_conversation import ContextManager, Conversation
 from xr_ai_models import ChatResponse, ChatStreamEvent, DecisionAnswer, DecisionResponse
 from xr_ai_routing import AgentRouter, AgentTurn, RoutingAid
-from xr_ai_runtime import AgentRuntime, RuntimeContext
-from xr_ai_tools.current_frame import ImageFrame
+from xr_ai_runtime import AgentRuntime
+from xr_ai_tools.current_frame import CurrentFrameTool, ImageFrame
 from xr_ai_tools.image import ImageRegistry
 from xr_ai_tools.rag import RetrievedChunk, RetrieveResult
 from xr_ai_tools.vision import ImageQueryResult
@@ -32,7 +32,6 @@ sys.path.insert(0, str(_SAMPLE / "worker"))
 from tea_making_worker import SOPAgent  # noqa: E402
 from tea_making_worker.agents.sop.agent import SOP_CONTEXT_SOURCE  # noqa: E402
 from tea_making_worker.config import load_config  # noqa: E402
-from tea_making_worker.events import ParticipantCleanupComplete  # noqa: E402
 from tea_making_worker.flows import run_timer_flow  # noqa: E402
 
 
@@ -68,7 +67,7 @@ class _Decisions:
         return DecisionResponse(answers, "fixture", {}, {})
 
 
-def _runner(*, config=None, observer=None, llm=None):
+def _runner(*, config=None, observer=None, llm=None, frames=None):
     selected = load_config(_SAMPLE / "yaml/tea_making_worker.yaml")
     config = config or replace(selected.sop, poll_interval_seconds=0.001, timer_update_interval_seconds=0.005)
     runtime = AgentRuntime()
@@ -79,8 +78,8 @@ def _runner(*, config=None, observer=None, llm=None):
         topic_budget_bytes=64000,
         compaction_input_budget_bytes=40000,
     )
-    registry = ImageRegistry()
-    image = registry.put(b"fixture")
+    registry = frames.images if frames is not None else ImageRegistry()
+    image = registry.put(b"fixture", owner="p")
     sequence = 0
 
     async def acquire(_request):
@@ -129,11 +128,13 @@ def _runner(*, config=None, observer=None, llm=None):
             )
         )
     )
+    if frames is not None:
+        frames.execute = acquire
     sop = SOPAgent(
         config=config,
         llm=llm,
         decisions=_Decisions(),
-        images=SimpleNamespace(get_current_frame=SimpleNamespace(execute=acquire)),
+        frames=frames or SimpleNamespace(execute=acquire),
         image_query=observer or SimpleNamespace(execute=observe),
         rag=SimpleNamespace(
             retrieve=SimpleNamespace(
@@ -400,16 +401,13 @@ async def test_scoped_parallel_flow_keeps_its_own_state_across_foreground_steps(
 
 
 @pytest.mark.asyncio
-async def test_runtime_departure_drains_work_before_ack_and_readmits_fresh_session():
-    from tea_making_worker._cleanup import _CleanupAcks
+async def test_runtime_departure_drains_work_before_releasing_frames_and_readmits_fresh_session():
     from tea_making_worker.events import (
-        PARTICIPANT_CLEANUP_COMPLETE_TOPIC,
         PARTICIPANT_JOINED_TOPIC,
         PARTICIPANT_LEFT_TOPIC,
         USER_QUERY_TOPIC,
     )
     from xr_ai_interaction import ParticipantJoined, ParticipantLeft, UserQuery
-    from xr_ai_runtime import Agent, subscribe
 
     inference_started = asyncio.Event()
     cancellation_seen = asyncio.Event()
@@ -426,7 +424,9 @@ async def test_runtime_departure_drains_work_before_ack_and_readmits_fresh_sessi
             await backend_released.wait()
         return ImageQueryResult(text="late visual result")
 
-    sop, runtime, context = _runner(observer=SimpleNamespace(execute=observe))
+    registry = ImageRegistry()
+    frames = CurrentFrameTool(endpoint=Mock(), images=registry)
+    sop, runtime, context = _runner(observer=SimpleNamespace(execute=observe), frames=frames)
     language = _ConversationLanguage()
     conversation = Conversation(
         language,
@@ -435,25 +435,24 @@ async def test_runtime_departure_drains_work_before_ack_and_readmits_fresh_sessi
         output_topic=VOICE_OUTPUT_TOPIC,
         instructions=sop.config.conversation_instructions,
     )
+    released_participants = []
+
+    async def cleanup_participant(participant_id):
+        await sop.participant_left(participant_id)
+        frames.release(participant_id)
+        released_participants.append(participant_id)
+
     router = AgentRouter(
         {"workflow": sop, "conversation": conversation},
         sop._decisions,
         query_topic=USER_QUERY_TOPIC,
         output_topic=VOICE_OUTPUT_TOPIC,
         participant_joined_topic=PARTICIPANT_JOINED_TOPIC,
+        participant_left_topic=PARTICIPANT_LEFT_TOPIC,
         initialize_participant=sop.participant_joined,
-        cleanup_participant=sop.participant_left,
+        cleanup_participant=cleanup_participant,
     )
     runtime.register("routing", router.runtime_subscriber())
-    runtime.register("cleanup", _CleanupAcks(router))
-    acknowledgments = []
-
-    class Recorder(Agent):
-        @subscribe(PARTICIPANT_CLEANUP_COMPLETE_TOPIC)
-        async def observe(self, message: ParticipantCleanupComplete, ctx: RuntimeContext):
-            acknowledgments.append((message.generation, message.producer, ctx.metadata.participant_id))
-
-    runtime.register("recorder", Recorder())
     async with runtime:
         try:
             await runtime.publish(PARTICIPANT_JOINED_TOPIC, ParticipantJoined(), participant_id="p")
@@ -473,7 +472,8 @@ async def test_runtime_departure_drains_work_before_ack_and_readmits_fresh_sessi
             )
             await asyncio.wait_for(cancellation_seen.wait(), 1)
             assert not leave_task.done()
-            assert acknowledgments == []
+            assert released_participants == []
+            assert len(registry) == 1
             rejoin_task = asyncio.create_task(
                 runtime.publish(
                     PARTICIPANT_JOINED_TOPIC,
@@ -487,9 +487,10 @@ async def test_runtime_departure_drains_work_before_ack_and_readmits_fresh_sessi
             await _until(lambda: "p" in sop._sessions and sop._sessions["p"] is not old_session)
             assert sop.context_snapshot("p")["status"] == "idle"
             assert sop.context_snapshot("p")["active_flows"] == {}
-            assert len(acknowledgments) == 1
-            assert len({item[0] for item in acknowledgments}) == 1
-            assert {item[1] for item in acknowledgments} == {"guidance"}
+            assert released_participants == ["p"]
+            assert len(registry) == 0
+            new_image = registry.put(b"new session image", owner="p")
+            assert registry.resolve(new_image) == b"new session image"
             assert not old_session.active_tasks
         finally:
             backend_released.set()

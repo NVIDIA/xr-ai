@@ -29,7 +29,7 @@ from xr_ai_interaction import ResponseOutputs
 from xr_ai_models import DecisionQuestion, DecisionService, LLMService
 from xr_ai_routing import Admission, AgentTurn, DestinationResult, RoutingAid
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeClosedError
-from xr_ai_tools.current_frame import CurrentFrameRequest
+from xr_ai_tools.current_frame import CurrentFrameRequest, CurrentFrameTool
 from xr_ai_tools.rag import RAGTools
 from xr_ai_tools.vision import ImageQueryTool
 from xr_ai_voice import VOICE_OUTPUT_TOPIC
@@ -37,12 +37,11 @@ from xr_ai_voice import VOICE_OUTPUT_TOPIC
 from ..._capture import _attempt, _event, _frame, _json
 from ...events import GUIDANCE_NOTICE_TOPIC, GUIDANCE_RECORD_TOPIC, GuidanceNotice, GuidanceRecord
 from ...flows import (
-    IdentificationState,
-    run_identification_flow,
+    VisionRAGRetrievalState,
     run_timer_flow,
+    run_vision_rag_retrieval_flow,
     run_visual_verification_flow,
 )
-from ..images import ParticipantImageAgent
 from ._settings import BrewingSettings, SOPConfig, TeaIdentity
 
 SOP_CONTEXT_SOURCE = "tea-making.sop-context"
@@ -78,7 +77,7 @@ class SOPAgent(Agent):
         config: Ordinary Python application arguments for the explicit tea procedure.
         llm: Settings extraction/generation service.
         decisions: Semantic control authorization and visual judgment service.
-        images: Existing participant image owner; owns image lifetime, not this agent.
+        frames: SDK current-frame tool; the application owns its image lifetime.
         image_query: Omni image tool shared by the independent flow calls.
         rag: Existing typed retrieval tools.
         context: SDK context manager shared with the separate Conversation destination.
@@ -91,7 +90,7 @@ class SOPAgent(Agent):
         config: SOPConfig,
         llm: LLMService,
         decisions: DecisionService,
-        images: ParticipantImageAgent,
+        frames: CurrentFrameTool,
         image_query: ImageQueryTool,
         rag: RAGTools,
         context: ContextManager,
@@ -101,7 +100,7 @@ class SOPAgent(Agent):
         self.config = config
         self._llm = llm
         self._decisions = decisions
-        self._images = images
+        self._frames = frames
         self._image_query = image_query
         self._rag = rag
         self._context = context
@@ -336,13 +335,13 @@ class SOPAgent(Agent):
         await self._run_step(
             session,
             0,
-            run_identification_flow(
+            run_vision_rag_retrieval_flow(
                 **flow_arguments,
                 llm=self._llm,
                 retrieval=self._rag.retrieve,
-                identity_model=TeaIdentity,
-                settings_model=BrewingSettings,
-                identification_question=self.config.identification_question,
+                visual_model=TeaIdentity,
+                result_model=BrewingSettings,
+                visual_question=self.config.identification_question,
                 extraction_instructions=self.config.extraction_instructions,
                 fallback_instructions=self.config.fallback_instructions,
                 retrieval_query=lambda identity: identity.tea_name + " " + self.config.retrieval_query_suffix,
@@ -428,9 +427,7 @@ class SOPAgent(Agent):
     async def _acquire_frame(self, session: _Session):
         """Record acquisition at the runner boundary, keeping flows independent of capture."""
         try:
-            frame = await self._images.get_current_frame.execute(
-                CurrentFrameRequest(participant_id=session.participant_id)
-            )
+            frame = await self._frames.execute(CurrentFrameRequest(participant_id=session.participant_id))
         except FrameUnavailable:
             return None
         await _frame(frame)
@@ -534,9 +531,11 @@ class SOPAgent(Agent):
     def _resolved_settings(self, session: _Session) -> dict[str, Any]:
         """Use valid partial results and label only missing values as runner defaults."""
         identification = session.flow_states.get("identify")
-        settings = identification.settings if isinstance(identification, IdentificationState) else BrewingSettings()
-        sources = identification.sources if isinstance(identification, IdentificationState) else {}
-        identity = identification.identity if isinstance(identification, IdentificationState) else None
+        settings = (
+            identification.resolved_data if isinstance(identification, VisionRAGRetrievalState) else BrewingSettings()
+        )
+        sources = identification.sources if isinstance(identification, VisionRAGRetrievalState) else {}
+        identity = identification.visual_data if isinstance(identification, VisionRAGRetrievalState) else None
         return {
             "tea_name": identity.tea_name if identity is not None else self.config.default_tea_name,
             "temperature_c": (
