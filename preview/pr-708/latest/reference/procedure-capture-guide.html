@@ -608,7 +608,7 @@ progress indicators.</p>
 <td><p>Final user transcripts inside the task recording boundary</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">artifacts/sessions/&lt;session-id&gt;/summary.md</span></code></p></td>
-<td><p>Human-readable activity and phase summary</p></td>
+<td><p>Human-readable activity and phase summary, plus a combined timeline of narration (<strong>Heard</strong>) and captions (<strong>Saw</strong>) in time order</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">artifacts/sessions/&lt;session-id&gt;/errors.jsonl</span></code></p></td>
 <td><p>Frame, caption, or persistence errors, when present</p></td>
@@ -711,6 +711,10 @@ to the generation workflow. No separate sample regression suite is needed.</p>
 <p>The authoring model observes runtime results and edits the
 guide. It does not replace the runtime VLM, invent tool answers, compile a plan
 into YAML, or approve the result. The capture worker does not invoke the skills.</p>
+<p>Start from <code class="docutils literal notranslate"><span class="pre">summary.md</span></code>: its combined timeline places narration and captions side
+by side and deliberately does not reconcile them. Where they disagree (for example,
+a caption names a different tool than the narrator), the drafting agent resolves the
+conflict using the original frames and records the correction in <code class="docutils literal notranslate"><span class="pre">review.md</span></code>.</p>
 <p>From the repository root, give the agent this request:</p>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Read agent-samples/procedure-capture-guide/guide-generation-skills/SKILL.md
 and follow its draft-guide and evaluate-guide child skills, shared schema,
@@ -925,7 +929,7 @@ five-minute timer expires. Say <strong>start guide</strong> to repeat.</p>
 <p>Use a tea packet or box labeled <strong>chamomile</strong>, a stable heat-safe vessel,
 and a kettle or thermometer with a readable <strong>current</strong> water-temperature
 display. The example uses the chamomile settings in the tea sample’s
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/d33443b4d7d4942489a9f519843eb2619a3039b9/agent-samples/tea-making-sample/rag-documents/tea-brewing.md">brewing reference</a>:
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/7af980c83fab4d81c36694d789fa30627e2a4049/agent-samples/tea-making-sample/rag-documents/tea-brewing.md">brewing reference</a>:
 100°C (212°F) water and a 5–7 minute steep. It selects five minutes and verifies
 a displayed 100°C (212°F) current reading. If the packet requires a different
 recipe or local boiling temperature cannot reach that target, stop and adapt a
