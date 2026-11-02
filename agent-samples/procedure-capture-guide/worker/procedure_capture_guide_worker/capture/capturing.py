@@ -84,6 +84,8 @@ class _Session:
     latest_frame: _Frame | None = None
     previous_caption: dict[str, str] | None = None
     activities: list[_Activity] = field(default_factory=list)
+    # (timestamp_us, "Heard" | "Saw", text): narration and captions merged by time.
+    timeline: list[tuple[int, str, str]] = field(default_factory=list)
     tasks: list[asyncio.Task[None]] = field(default_factory=list)
     pending_writes: set[asyncio.Task[Any]] = field(default_factory=set)
     frame_ready: asyncio.Event = field(default_factory=asyncio.Event)
@@ -256,6 +258,7 @@ class _Capture:
                 state.status = "incomplete"
                 raise
             state.transcript_count += 1
+            state.timeline.append((timestamp_us, "Heard", text.strip()))
 
     async def finish_capture(
         self, participant_id: str, *, stop_command: dict[str, Any] | None = None,
@@ -448,6 +451,9 @@ class _Capture:
                     caption_count=0,
                 )
             )
+        state.timeline.append((
+            timestamp_us, "Saw", f"{caption['phase']}: {caption['caption']}",
+        ))
         activity = state.activities[-1]
         activity.ended_at_us = timestamp_us
         activity.caption_count += 1
@@ -520,6 +526,27 @@ class _Capture:
             packet,
         )
 
+    @staticmethod
+    def _timeline_lines(state: _Session) -> list[str]:
+        lines = [
+            "",
+            "## Combined timeline",
+            "",
+            (
+                "Narration (**Heard**, speech-to-text) and visual captions (**Saw**, "
+                "model-generated) in time order. They can disagree or contain errors; "
+                "inspect the frames before trusting either."
+            ),
+            "",
+        ]
+        if not state.timeline:
+            lines.append("Waiting for narration or the first visual caption.")
+            return lines
+        # Heard sorts before Saw at the same instant; both timestamps are alignment hints.
+        for timestamp_us, kind, text in sorted(state.timeline, key=lambda item: (item[0], item[1] != "Heard")):
+            lines.append(f"- `{_clock(timestamp_us, state.started_at_us)}` **{kind}:** {_markdown(text)}")
+        return lines
+
     def _summary(self, state: _Session) -> str:
         lines = [
             f"# Capture {state.session_id}",
@@ -555,6 +582,7 @@ class _Capture:
                     f"{_markdown(phase.summary)} | {_markdown(phase.latest_delta)} | "
                     f"{evidence} |"
                 )
+        lines.extend(self._timeline_lines(state))
         lines.extend(
             (
                 "",
@@ -657,6 +685,7 @@ class _Capture:
         captions = await asyncio.to_thread(read_entries, "captions.jsonl")
         state.caption_count = len(captions)
         state.activities.clear()
+        state.timeline.clear()
         for caption in captions:
             self._update_hierarchy(state, caption)
         # Count the durable log after all queued transcript writes have drained.
@@ -665,11 +694,22 @@ class _Capture:
             # Startup was cancelled or failed before narration was initialized.
             return
 
-        def count_transcripts() -> int:
+        def read_transcripts() -> tuple[int, list[tuple[int, str, str]]]:
+            count, heard = 0, []
             with transcript_path.open(encoding="utf-8") as stream:
-                return sum(bool(line.strip()) for line in stream)
+                for line in stream:
+                    if not line.strip():
+                        continue
+                    count += 1
+                    try:
+                        entry = json.loads(line)
+                        heard.append((int(entry["timestamp_us"]), "Heard", str(entry["text"])))
+                    except (ValueError, KeyError, TypeError):
+                        continue
+            return count, heard
         try:
-            state.transcript_count = await asyncio.to_thread(count_transcripts)
+            state.transcript_count, heard = await asyncio.to_thread(read_transcripts)
+            state.timeline.extend(heard)
             if state.narration_status != "failed":
                 state.narration_status = "complete"
         except OSError as exc:
