@@ -470,11 +470,15 @@
 -->
 <section id="python-code-style">
 <h1>Python code style<a class="headerlink" href="#python-code-style" title="Link to this heading">#</a></h1>
-<p>This reference governs Python code throughout the repository:
-where the public API ends, how failures are represented, and how modules are
-laid out. It covers the SDK, utilities, services, samples, and tests.
-Application-owned projects under <code class="docutils literal notranslate"><span class="pre">apps/</span></code> are outside repository tooling and
-outside this reference. Package surfaces and their documented behavior live in
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">#</a></h2>
+<p>Python conventions for the repository’s SDK, utilities, services, samples, and
+tests. These rules govern public interfaces, error handling, and module
+layout. Application-owned code under <code class="docutils literal notranslate"><span class="pre">apps/</span></code> is outside their scope.</p>
+</section>
+<section id="scope-and-conventions">
+<h2>Scope and conventions<a class="headerlink" href="#scope-and-conventions" title="Link to this heading">#</a></h2>
+<p>Package surfaces and their documented behavior live in
 each package’s <code class="docutils literal notranslate"><span class="pre">__all__</span></code> and docstrings; this reference covers only the
 conventions that keep them consistent.</p>
 <p>These rules describe the target state of all Python code. Code that does not yet
@@ -499,6 +503,7 @@ source.</p>
 <p>Review feedback on a change cites a rule from this reference. A preference
 that is not written here is raised as a change to this reference, in its own
 pull request, so that every contributor works from the same rules.</p>
+</section>
 <section id="public-and-private-code">
 <h2>Public and private code<a class="headerlink" href="#public-and-private-code" title="Link to this heading">#</a></h2>
 <p>The public surface of a package is the names in <code class="docutils literal notranslate"><span class="pre">__all__</span></code> of its top-level
@@ -882,6 +887,8 @@ conventions</strong>.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#scope-and-conventions">Scope and conventions</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#public-and-private-code">Public and private code</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#exports">Exports</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#module-boundaries">Module boundaries</a></li>

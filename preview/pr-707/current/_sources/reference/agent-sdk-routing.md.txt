@@ -5,13 +5,16 @@
 
 # xr-ai-routing
 
-`xr-ai-routing` provides typed contracts and a participant-scoped router
-for routing turns among application destinations. Each registered destination
-implements the public `RoutableAgent` protocol. It uses the typed
-`DecisionService` for route selection. Destinations keep ownership of their
-model calls, application state, and resources.
+## Overview
+
+Route user turns among specialized agents for conversation, scene inspection,
+or note-taking. Routing lets those agents share one interaction and keep a
+task in focus, so a multi-step activity can continue across user turns.
 
 ## Route a turn
+
+Each registered destination implements the public `RoutableAgent` protocol;
+the router uses the typed `DecisionService` for route selection.
 
 Configure `AgentRouter(output=...)` with an async callback for router-owned
 admission, clarification, and acknowledgment text. The callback receives the

@@ -6,10 +6,15 @@
 (task-capture)=
 # Procedure capture and guidance
 
-The procedure-capture-guide sample records narrated demonstrations between
-spoken commands. It saves snapshots, visual captions, and transcribed narration for review and downstream
-processing. Guide mode guides participants through a locally approved procedure
-and verifies progress with visual observations and elapsed-time checks.
+## Overview
+
+Use this reference for applications that record task demonstrations and guide
+users through approved procedures. It shows how to capture images and
+narration, author a guide from the saved evidence, and run that guide with
+spoken instructions and progress checks.
+
+Guide mode is at an early stage of development. For a more comprehensive
+example of procedural guidance, refer to the separate {doc}`tea-making-sample`.
 
 ## Run a demonstration
 

@@ -5,6 +5,12 @@
 
 # Requirements
 
+## Overview
+
+Hardware and software prerequisites for the hub, model services, and sample
+clients. Requirements differ depending on which sample you run and whether
+inference is local or hosted.
+
 ## Hardware
 
 The bundled GPU profiles target two 48 GB NVIDIA Ada GPUs, a single NVIDIA RTX PRO

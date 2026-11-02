@@ -5,6 +5,14 @@
 
 # Contributing and conventions
 
+## Overview
+
+Repository contracts for changes to shared code, dependencies, documentation,
+and release guidance. Application-owned projects under `apps/` are outside the
+repository contribution tooling described here.
+
+## Repository contracts
+
 Refer to the root
 [`CONTRIBUTING.md`](https://github.com/NVIDIA/xr-ai/blob/main/CONTRIBUTING.md)
 for setup, testing, pull requests, and DCO sign-off. Refer to

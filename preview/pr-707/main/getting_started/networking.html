@@ -470,6 +470,15 @@
 -->
 <section id="networking-and-firewall">
 <h1>Networking and firewall<a class="headerlink" href="#networking-and-firewall" title="Link to this heading">#</a></h1>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">#</a></h2>
+<p>Configure the network connections between your clients and the XR AI host,
+including firewall ports, TLS, and proxies. This is relevant when connecting
+from another device, using a remote host, or adding CloudXR or an application
+viewer.</p>
+</section>
+<section id="required-ports">
+<h2>Required ports<a class="headerlink" href="#required-ports" title="Link to this heading">#</a></h2>
 <p>DeviceIOHub, CloudXR, and optional application viewers use the following
 ports. Open only the externally reachable ports required by the deployment.</p>
 <div class="pst-scrollable-table-container"><table class="table">
@@ -507,6 +516,7 @@ ports. Open only the externally reachable ports required by the deployment.</p>
 </tbody>
 </table>
 </div>
+</section>
 <section id="onnx-runtime-telemetry">
 <span id="id1"></span><h2>ONNX Runtime telemetry<a class="headerlink" href="#onnx-runtime-telemetry" title="Link to this heading">#</a></h2>
 <p>The voice pipeline uses ONNX Runtime through <code class="docutils literal notranslate"><span class="pre">xr-ai-vad</span></code> for Silero VAD.
@@ -802,6 +812,8 @@ certificate with one from a public CA by setting <code class="docutils literal n
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#required-ports">Required ports</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#onnx-runtime-telemetry">ONNX Runtime telemetry</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#ubuntu-or-debian-ufw">Ubuntu or Debian (<code class="docutils literal notranslate"><span class="pre">ufw</span></code>)</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#cloud-vms-behind-nat">Cloud VMs behind NAT</a></li>

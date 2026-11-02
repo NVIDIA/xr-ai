@@ -470,22 +470,20 @@
 -->
 <section id="lab-instrument-monitoring-building-marker-associated-visual-agents">
 <h1>Lab instrument monitoring — building marker-associated visual agents<a class="headerlink" href="#lab-instrument-monitoring-building-marker-associated-visual-agents" title="Link to this heading">#</a></h1>
-<p>The lab instrument sample is a reference for applications that combine
-foreground questions, opt-in background work, persistent participant state,
-visual identification, and event-driven notifications. Refer to the
-<a class="reference internal" href="../getting_started/quickstart.html"><span class="doc">quickstart</span></a> to run the sample. This
-architecture reference focuses on reusing the sample’s structure for another
-application.</p>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">#</a></h2>
+<p>Use this reference for applications that identify marked objects in a camera view,
+track observations about each object over time, and notify users of changes.
+The sample uses marked lab instruments to demonstrate how identification,
+visual readings, state tracking, and notifications work together.</p>
+<p>To run the sample, refer to the
+<a class="reference internal" href="../getting_started/quickstart.html"><span class="doc">quickstart</span></a>.</p>
 <p>For speech deployment and explicit batch-STT selection, refer to
 <a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a>.</p>
-<p>The central design choice is to separate perception, interpretation, state,
-policy, and presentation. A marker scan identifies an instrument, a VLM reads
-its display, a stateful agent decides whether the reading changed, and a
-separate subscriber decides whether to speak. Each concern can therefore be
-replaced without rewriting the others.</p>
+</section>
 <section id="what-to-copy">
 <h2>What to copy<a class="headerlink" href="#what-to-copy" title="Link to this heading">#</a></h2>
-<p>Use this sample when your application needs one or more of these patterns:</p>
+<p>Reusable patterns include:</p>
 <ul class="simple">
 <li><p>a foreground agent that selects participant-bound tools;</p></li>
 <li><p>visual queries without exposing participant IDs or raw images to the model;</p></li>
@@ -500,6 +498,10 @@ tool-loop, image-selection, visual-query, and event patterns are reusable.</p>
 </section>
 <section id="architecture">
 <h2>Architecture<a class="headerlink" href="#architecture" title="Link to this heading">#</a></h2>
+<p>Perception, interpretation, state, policy, and presentation have separate
+owners. A marker scan identifies an instrument, a VLM reads its display, a
+stateful agent decides whether the reading changed, and a separate subscriber
+decides whether to speak. Each concern can be replaced independently.</p>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>camera frames ────────────────&gt; ParticipantImageAgent
                                       │
 accepted speech or typed query         ├─&gt; current frame + generic VLM query
@@ -1070,6 +1072,7 @@ another concrete application needs exactly the same behavior.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-to-copy">What to copy</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#architecture">Architecture</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#agent-responsibilities">Agent responsibilities</a></li>

@@ -470,18 +470,20 @@
 -->
 <section id="conversation-example">
 <h1>Conversation example<a class="headerlink" href="#conversation-example" title="Link to this heading">#</a></h1>
-<p>The conversation example combines four distinct roles: general conversation,
-direct questions about the current view, one-shot background visual alerts, and
-foreground note-taking. An alert watches for a requested visible condition,
-notifies the participant once, then stops. Its observations stay private to the
-alert job. Notes capture participant-authored text and can share saved notes
-with conversation.</p>
-<p>The sample composes these roles with <code class="docutils literal notranslate"><span class="pre">xr_ai_routing.AgentRouter</span></code> and
-<code class="docutils literal notranslate"><span class="pre">xr_ai_conversation.Conversation</span></code>. Responses use the same voice output path to
-Pocket TTS and the <code class="docutils literal notranslate"><span class="pre">vlm.response</span></code> data topic. Refer to the <a class="reference internal" href="../getting_started/quickstart.html"><span class="doc">quickstart</span></a> for client setup and the sample README for run
-commands.</p>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">#</a></h2>
+<p>Use this reference to build assistants that let a user switch between
+conversation and focused tasks while background work continues. The sample
+combines visual questions, note-taking, and one-shot alerts to demonstrate how
+specialized agents share context and a voice interface.</p>
+<p>For a new application, start with this sample in place of deprecated
+<a class="reference internal" href="simple-vlm-example.html"><span class="doc">Simple VLM example</span></a>. Refer to the <a class="reference internal" href="../getting_started/quickstart.html"><span class="doc">quickstart</span></a> for run commands and client setup.</p>
+</section>
 <section id="runtime-boundary">
 <h2>Runtime boundary<a class="headerlink" href="#runtime-boundary" title="Link to this heading">#</a></h2>
+<p>The worker composes <code class="docutils literal notranslate"><span class="pre">xr_ai_routing.AgentRouter</span></code> and
+<code class="docutils literal notranslate"><span class="pre">xr_ai_conversation.Conversation</span></code> with its visual and note-taking agents.
+Responses stream to Pocket TTS and the <code class="docutils literal notranslate"><span class="pre">vlm.response</span></code> data topic.</p>
 <p><code class="docutils literal notranslate"><span class="pre">AgentRouter</span></code> and <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> are registered directly with the same
 <code class="docutils literal notranslate"><span class="pre">AgentRuntime</span></code>. The sample configures the router’s query, participant lifecycle,
 interruption, and voice output topics. The router owns routing tasks, focus,
@@ -516,7 +518,7 @@ total output limit. Start those endpoints together with
 the sample’s local model-server stack. The worker checks LLM, Clef, and VLM
 health and waits for the required speaker STT service before opening the voice
 session; readiness does not send an inference request through the VLM.</p>
-<p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> owns application readiness, hub transport, voice gating, TTS, signals,
+<p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> owns worker readiness, hub transport, voice gating, TTS, signals,
 and cleanup. It publishes accepted speech and typed text as a participant-scoped
 <code class="docutils literal notranslate"><span class="pre">UserQuery</span></code>. <code class="docutils literal notranslate"><span class="pre">xr_ai_routing.AgentRouter</span></code> subscribes directly to the configured
 query topic. Clef routes among general conversation, direct visual observation,
@@ -616,9 +618,10 @@ evenly between the two sections; with the default 12,000 bytes, each gets 6,000.
 <code class="docutils literal notranslate"><span class="pre">compaction_input_budget_bytes</span></code> separately limits one summary request; its
 default is 12,000 bytes. These are UTF-8 byte budgets, not token limits.</p>
 <p>Conversation prompts show the current time and coarse minute-rounded timestamps
-for completed exchanges and named context where available. FE-owned turns use
-their completion time, runtime context uses its publication time, and visual
-evidence includes the frame’s source timestamp. Imported history without a time
+for completed exchanges and named context where available. Completed
+conversation turns use their completion time, runtime context uses its
+publication time, and visual evidence includes the frame’s source timestamp.
+Imported history without a time
 is labeled unknown. These timestamps help the model distinguish older context
 from a present observation; they do not expire or remove information.</p>
 </section>
@@ -851,7 +854,9 @@ persistent stack, and start it again before restarting this sample.</p>
 fields, checked-in values, and adjacent YAML comments.</p>
 <p>After connecting, say <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">start</span> <span class="pre">talking</span></code>, then ask questions
 without a wake phrase. Say <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">stop</span> <span class="pre">talking</span></code> to finish. These
-controls work with the sample’s existing STT endpoint, including NIM. Refer to
+controls work with the sample’s configured speaker-ASR service. To switch to
+native NIM speech, update both the model profile and the voice-gate backend as
+described in <a class="reference internal" href="../guides/deploying-with-nim.html"><span class="doc">Deploying samples with NIM endpoints</span></a>. Refer to
 <a class="reference internal" href="agent-sdk-voice.html#voice-conversation-controls"><span class="std std-ref">Conversation controls</span></a> for paused phrases and the legacy wake mode.</p>
 </section>
 <section id="opt-in-session-capture">
@@ -955,6 +960,7 @@ log. Treat that file as sensitive diagnostic output.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#runtime-boundary">Runtime boundary</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#composition">Composition</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#source-map">Source map</a></li>
