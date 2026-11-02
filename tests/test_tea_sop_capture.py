@@ -169,7 +169,7 @@ async def test_sop_capture_isolates_concurrent_participants_and_redacts_credenti
 
     async def run(participant, step):
         nonlocal entered
-        async with _attempt(participant, "foreground", step_id=step, request_id=participant):
+        async with _attempt(participant, "flow", step_id=step, request_id=participant):
             entered += 1
             if entered == 2:
                 all_entered.set()

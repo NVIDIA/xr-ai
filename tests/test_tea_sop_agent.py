@@ -14,6 +14,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import nemo_relay
 import pytest
 from xr_ai_conversation import ContextManager, Conversation
 from xr_ai_models import ChatResponse, ChatStreamEvent, DecisionAnswer, DecisionResponse
@@ -228,8 +229,11 @@ async def test_questions_reach_sdk_conversation_while_sop_runs_and_stop_is_a_con
     async def observe(request):
         if "Return JSON matching" in request.query:
             return ImageQueryResult(text='{"tea_name":"Northwind White Tea"}')
-        water_started.set()
-        await asyncio.Event().wait()
+        # Hold an actual model/tool trace scope open while QA and stop proceed.
+        # A flow must inherit trace lineage without sharing its mutable stack.
+        with nemo_relay.scope.scope("blocked-visual-tool", nemo_relay.ScopeType.Tool):
+            water_started.set()
+            await asyncio.Event().wait()
 
     sop, runtime, context = _runner(observer=SimpleNamespace(execute=observe))
     router, conversation, language = _router(sop, runtime, context)
@@ -464,7 +468,8 @@ async def test_runtime_departure_drains_work_before_ack_and_readmits_fresh_sessi
                     PARTICIPANT_LEFT_TOPIC,
                     ParticipantLeft(),
                     participant_id="p",
-                )
+                ),
+                context=nemo_relay.fork_asyncio_context(),
             )
             await asyncio.wait_for(cancellation_seen.wait(), 1)
             assert not leave_task.done()
@@ -474,16 +479,17 @@ async def test_runtime_departure_drains_work_before_ack_and_readmits_fresh_sessi
                     PARTICIPANT_JOINED_TOPIC,
                     ParticipantJoined(),
                     participant_id="p",
-                )
+                ),
+                context=nemo_relay.fork_asyncio_context(),
             )
             backend_released.set()
             await asyncio.wait_for(asyncio.gather(leave_task, rejoin_task), 1)
             await _until(lambda: "p" in sop._sessions and sop._sessions["p"] is not old_session)
             assert sop.context_snapshot("p")["status"] == "idle"
             assert sop.context_snapshot("p")["active_flows"] == {}
-            assert len(acknowledgments) == 2
+            assert len(acknowledgments) == 1
             assert len({item[0] for item in acknowledgments}) == 1
-            assert {item[1] for item in acknowledgments} == {"foreground", "guidance"}
+            assert {item[1] for item in acknowledgments} == {"guidance"}
             assert not old_session.active_tasks
         finally:
             backend_released.set()

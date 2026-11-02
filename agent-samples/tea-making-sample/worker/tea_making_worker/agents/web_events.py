@@ -11,22 +11,12 @@ from xr_ai_runtime import Agent, RuntimeContext, subscribe
 from xr_ai_web_events import WEB_EVENT_TOPIC, WebEvent
 
 from ..events import (
-    BACKGROUND_FACT_TOPIC,
-    CHANGE_WATCH_RECORD_TOPIC,
-    FOREGROUND_RECORD_TOPIC,
     GUIDANCE_NOTICE_TOPIC,
     GUIDANCE_RECORD_TOPIC,
     PARTICIPANT_JOINED_TOPIC,
     PARTICIPANT_LEFT_TOPIC,
-    TRANSCRIPT_RECORD_TOPIC,
-    VIDEO_LOG_RECORD_TOPIC,
-    BackgroundFact,
-    ChangeWatchRecord,
-    ForegroundRecord,
     GuidanceNotice,
     GuidanceRecord,
-    TranscriptRecord,
-    VideoLogRecord,
 )
 
 
@@ -35,14 +25,6 @@ class TeaWebEventsAgent(Agent):
 
     def __init__(self) -> None:
         super().__init__()
-
-    @subscribe(FOREGROUND_RECORD_TOPIC)
-    async def foreground(
-        self,
-        record: ForegroundRecord,
-        ctx: RuntimeContext,
-    ) -> None:
-        await self._publish("foreground", "Foreground answers", record, ctx)
 
     @subscribe(GUIDANCE_RECORD_TOPIC)
     async def guidance_record(
@@ -59,54 +41,6 @@ class TeaWebEventsAgent(Agent):
         ctx: RuntimeContext,
     ) -> None:
         await self._publish("guidance.notices", "Guidance notices", notice, ctx)
-
-    @subscribe(BACKGROUND_FACT_TOPIC)
-    async def background_fact(
-        self,
-        fact: BackgroundFact,
-        ctx: RuntimeContext,
-    ) -> None:
-        presentation = {
-            "change_watch": ("background.change-watch", "Visual change watch"),
-            "video_log": ("background.video-log", "Video log"),
-        }.get(fact.application)
-        if presentation is None:
-            return
-        topic, title = presentation
-        await self._publish_payload(topic, title, {"text": fact.text}, ctx)
-
-    @subscribe(CHANGE_WATCH_RECORD_TOPIC)
-    async def change_watch(
-        self,
-        record: ChangeWatchRecord,
-        ctx: RuntimeContext,
-    ) -> None:
-        if record.record_type not in {"started", "stopped"}:
-            return
-        await self._publish(
-            "background.change-watch",
-            "Visual change watch",
-            record,
-            ctx,
-        )
-
-    @subscribe(TRANSCRIPT_RECORD_TOPIC)
-    async def transcript(
-        self,
-        record: TranscriptRecord,
-        ctx: RuntimeContext,
-    ) -> None:
-        await self._publish("background.transcript", "Transcript", record, ctx)
-
-    @subscribe(VIDEO_LOG_RECORD_TOPIC)
-    async def video_log(
-        self,
-        record: VideoLogRecord,
-        ctx: RuntimeContext,
-    ) -> None:
-        if record.record_type not in {"started", "stopped"}:
-            return
-        await self._publish("background.video-log", "Video log", record, ctx)
 
     @subscribe(PARTICIPANT_JOINED_TOPIC)
     async def participant_joined(

@@ -22,6 +22,7 @@ from functools import partial
 from typing import Any, Literal
 from uuid import uuid4
 
+import nemo_relay
 from xr_ai_conversation import ContextManager, ConversationContextUpdate
 from xr_ai_hub import FrameUnavailable
 from xr_ai_interaction import ResponseOutputs
@@ -205,7 +206,9 @@ class SOPAgent(Agent):
                 # Once admitted, finish this native state transition even if a
                 # newer utterance cancels its spoken acknowledgment. The SDK
                 # still owns the turn; this task owns only the committed control.
-                control_task = asyncio.create_task(self._control(session, control))
+                control_task = asyncio.create_task(
+                    self._control(session, control), context=nemo_relay.fork_asyncio_context()
+                )
                 try:
                     response_text = await asyncio.shield(control_task)
                 except asyncio.CancelledError:
@@ -250,7 +253,11 @@ class SOPAgent(Agent):
             session.flow_states.clear()
             session.flow_statuses.clear()
             session.issue = ""
-            session.procedure = asyncio.create_task(self._supervise(session), name=f"sop:{session.participant_id}")
+            session.procedure = asyncio.create_task(
+                self._supervise(session),
+                name=f"sop:{session.participant_id}",
+                context=nemo_relay.fork_asyncio_context(),
+            )
             await self._publish_context(session)
             return self.config.messages["start"]
         if control in {"stop", "reset"}:
@@ -448,7 +455,11 @@ class SOPAgent(Agent):
                 step_id=step_id,
                 snapshot=lambda: self.context_snapshot(session.participant_id),
             ):
-                flow_task = asyncio.create_task(execution, name=f"sop:{session.participant_id}:{step_id}")
+                flow_task = asyncio.create_task(
+                    execution,
+                    name=f"sop:{session.participant_id}:{step_id}",
+                    context=nemo_relay.fork_asyncio_context(),
+                )
                 session.active_tasks[step_id] = flow_task
                 try:
                     result = await flow_task

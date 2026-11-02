@@ -98,5 +98,5 @@ stop them with `uv run --project model-servers tea_making_sample_model_servers -
 <a id="configuration"></a><a id="safety"></a>
 
 Refer to the [sample reference](https://nvidia.github.io/xr-ai/latest/reference/tea-making-sample.html)
-for architecture, configuration, output contracts, safety, foreground-routing
+for architecture, configuration, output contracts, safety, SOP control-routing
 behavior, evaluation, and adaptation guidance.

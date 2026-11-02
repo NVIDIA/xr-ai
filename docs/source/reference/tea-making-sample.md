@@ -227,8 +227,7 @@ clears current progress. Restart creates a fresh run.
 | `_capture.py` | Flow-scoped structured images/model/evidence recording |
 | `_cleanup.py` | SDK departure to original-generation producer acknowledgments |
 | `agents/images.py` | Shared participant image acquisition and image ownership |
-| `agents/file_output.py`, `agents/web_events.py` | Typed record consumers |
-| Other `agents/` modules | Existing opt-in background native tools/producers |
+| `agents/web_events.py` | Live SOP state/notices and participant lifecycle projection |
 
 ## SOP run capture
 
@@ -247,7 +246,6 @@ runs/<run>/
   attempts.jsonl
   images/<SHA256>.jpg
   participants/<participant>/steps/<step>/flow/<attempt>/events.jsonl
-  <participant-session>/guidance.jsonl
   relay-events.jsonl
 ```
 
@@ -310,7 +308,7 @@ the checked-in YAML; an installed worker started from the sample directory finds
 
 | File | Responsibility |
 |---|---|
-| `yaml/tea_making_worker.yaml` | SOP prompts/criteria/defaults/bounds, conversation instructions, existing background policy and worker services |
+| `yaml/tea_making_worker.yaml` | SOP prompts/criteria/defaults/bounds, conversation instructions and worker services |
 | `yaml/models.local.json` | Typed model adapters/shared endpoints |
 | `yaml/voice_gate.yaml` | Conversation/wake addressing |
 | `yaml/rag_service.yaml` | Retrieval documents, embedding/cache/chunking/threshold |
@@ -324,31 +322,19 @@ not require restarting model services. A server/profile change follows
 the external NIM profile uses `nvidia/nemotron-3-embed-1b`. See
 {doc}`/guides/deploying-with-nim`.
 
-## Independent background agents
-
-Existing watcher, transcript and journal agents remain opt-in runtime producers
-with participant-bound native tools. They are not extra routed SOP destinations.
-Applications that need them invoke their tools explicitly in Python.
-`BackgroundContextAgent` stores bounded facts; these producers do not mutate
-SOP progress. Image/file/event agents remain infrastructure, not conversational
-or workflow coordinators.
-
 ## Live inspection and durable output
 
 The worker starts a generic loopback event viewer before it announces voice
 readiness. Open `http://127.0.0.1:8093` on the XR-AI host, or pass
 `--expose-web-events` to bind all IPv4 interfaces and browse
 `http://<xr-host>:8093` from a trusted development network.
-`TeaWebEventsAgent` explicitly subscribes to the
-foreground, guidance, background, transcript, video-log, and participant
-lifecycle topics and publishes compact `WebEvent` payloads. Visual panes show
-only application lifecycle and material `BackgroundFact` results; every-frame
-captions, no-change observations, unavailable frames, and errors remain in the
-durable records and worker log. There is no runtime wildcard subscription and
-no file tailing.
+`TeaWebEventsAgent` subscribes to SOP state, SOP notices and participant lifecycle
+topics and publishes compact `WebEvent` payloads. There is no runtime wildcard
+subscription or file tailing. The sample has no general change watcher,
+transcript-summary service or video journal.
 
 The viewer keeps only a bounded in-memory history for the current process. The
-participant JSONL files under `artifacts/runs/<run>/` remain the durable record and include
+structured SOP bundles under `artifacts/runs/<run>/` remain the durable record and include
 events that may not be selected for live presentation. The listener is
 read-only but has no authentication or TLS. Restrict TCP port 8093 to a trusted
 development network when `--expose-web-events` is enabled, or place the viewer
@@ -378,8 +364,8 @@ class JournalBackendAgent(Agent):
         )
 ```
 
-Register the subscriber beside `FileOutputAgent`. A customer system can consume
-guidance records, background facts, transcripts, or video deltas independently.
+Register the subscriber in `app.py` beside the SOP event viewer adapter. A customer system can consume
+SOP state records and notices independently.
 If it runs in another process, expose the boundary through a typed msgpack over
 ZMQ service rather than bypassing the repository's service model.
 

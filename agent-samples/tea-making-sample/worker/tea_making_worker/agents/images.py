@@ -18,9 +18,7 @@ from ..events import (
     ParticipantCleanupComplete,
 )
 
-_CLEANUP_PRODUCERS = frozenset(
-    {"guidance", "foreground", "change_watch", "transcript", "video_log"}
-)
+_CLEANUP_PRODUCERS = frozenset({"guidance"})
 
 
 class ParticipantImageAgent(Agent):
@@ -67,9 +65,7 @@ class ParticipantImageAgent(Agent):
             return
         generation = ctx.metadata.message_id
         self._leaving_generation[participant_id] = generation
-        completed = self._cleanup.setdefault(participant_id, {}).get(
-            generation, set()
-        )
+        completed = self._cleanup.setdefault(participant_id, {}).get(generation, set())
         if _CLEANUP_PRODUCERS <= completed:
             self._release(participant_id)
 
@@ -85,10 +81,7 @@ class ParticipantImageAgent(Agent):
         generations = self._cleanup.setdefault(participant_id, {})
         completed = generations.setdefault(event.generation, set())
         completed.add(event.producer)
-        if (
-            self._leaving_generation.get(participant_id) == event.generation
-            and _CLEANUP_PRODUCERS <= completed
-        ):
+        if self._leaving_generation.get(participant_id) == event.generation and _CLEANUP_PRODUCERS <= completed:
             self._release(participant_id)
 
     def _release(self, participant_id: str) -> None:

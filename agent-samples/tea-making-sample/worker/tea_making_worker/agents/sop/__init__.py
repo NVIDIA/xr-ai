@@ -1,10 +1,10 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Private implementation of the focused SOP agent and its owned workflow engine.
+"""Private runner and tea application types.
 
-Use the sample root exports to compose SOPAgent and load a workflow. The engine,
-state, tools and run-context projection are implementation details of this agent.
+Use sample-root exports for SOPAgent and its Python configuration. The runner
+owns the explicit procedure, controls, flow tasks and conversation context.
 """
 
 __all__ = []

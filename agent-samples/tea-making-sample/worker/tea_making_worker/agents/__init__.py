@@ -3,7 +3,7 @@
 
 """Sample agent implementations; application composition lives in app.py.
 
-Subscribed peers own background state/resources. Routed destinations implement the
+Subscribed peers own camera resources and SOP event presentation. Routed destinations implement the
 SDK RoutableAgent contract; reusable stateless steps remain in the flows package.
 """
 

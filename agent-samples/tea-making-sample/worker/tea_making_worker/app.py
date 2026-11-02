@@ -4,8 +4,8 @@
 """Wire the sample's services, focused SOP agent, and SDK runtime.
 
 ``run_app`` is the composition entry point: create services, activate capture,
-register background capabilities, then connect the SOP destination to AgentRouter
-and voice. Model behavior comes from worker/workflow YAML, not this module.
+register camera and SOP event infrastructure, then connect the SOP destination to AgentRouter
+and voice. Model behavior comes from application YAML, not this module.
 Shutdown reverses ownership: stop routing before closing SOP context and producers,
 then allow recording and service resources to finish.
 """
@@ -32,13 +32,8 @@ from xr_ai_web_events import WebEventsAgent
 
 from ._capture import _RecordedDecisions, _RecordedLanguage, _RecordedVision, _SOPCapture
 from ._cleanup import _CleanupAcks
-from .agents.background_context import BackgroundContextAgent
-from .agents.change_watch import ChangeWatchAgent
-from .agents.file_output import FileOutputAgent
 from .agents.images import ParticipantImageAgent
 from .agents.sop.agent import SOP_CONTEXT_SOURCE, SOPAgent
-from .agents.transcript import TranscriptAgent
-from .agents.video_log import VideoLogAgent
 from .agents.web_events import TeaWebEventsAgent
 from .config import WorkerConfig
 from .events import (
@@ -175,59 +170,12 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
             ),
         )
         runtime.register("web-event-adapter", TeaWebEventsAgent())
-        files = runtime.register(
-            "file-output",
-            FileOutputAgent(
-                capture.directory,
-                history_size=config.background_history_size,
-            ),
-        )
         images = runtime.register(
             "images",
             ParticipantImageAgent(
                 endpoint=transport.endpoint,
                 frame_max_age_s=config.frame_max_age_s,
                 frame_timeout_s=config.frame_timeout_s,
-            ),
-        )
-        runtime.register(
-            "background-context",
-            BackgroundContextAgent(capacity=config.background_history_size),
-        )
-        change_watch = runtime.register(
-            "change-watch",
-            ChangeWatchAgent(
-                images=images,
-                vlm=vlm,
-                llm=llm,
-                decisions=decisions,
-                decision=config.change_watch_decision,
-                caption_prompt=config.change_watch_caption_prompt,
-                event_prompt=config.change_watch_event_prompt,
-                default_instruction=config.change_watch_default_instruction,
-                interval_s=config.change_watch_interval_s,
-            ),
-        )
-        transcript = runtime.register(
-            "transcript",
-            TranscriptAgent(
-                llm=llm,
-                summary_prompt=config.transcript_summary_prompt,
-                summary_interval_s=config.transcript_summary_interval_s,
-            ),
-        )
-        video_log = runtime.register(
-            "video-log",
-            VideoLogAgent(
-                images=images,
-                vlm=vlm,
-                llm=llm,
-                decisions=decisions,
-                decision=config.video_delta_decision,
-                caption_prompt=config.video_caption_prompt,
-                delta_prompt=config.video_delta_prompt,
-                interval_s=config.video_log_interval_s,
-                history_size=5,
             ),
         )
         # Conversation owns dialogue. Only the runner supplies the replaceable
@@ -287,9 +235,6 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
             async with web_events:
                 logger.info("live events → {}", web_events.url)
                 async with runtime:
-                    change_watch.bind_runtime(runtime)
-                    transcript.bind_runtime(runtime)
-                    video_log.bind_runtime(runtime)
                     try:
                         await voice.run(runtime)
                     finally:
@@ -297,11 +242,8 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
                         await sop.stop()
                         await conversation.close()
                         await context.close()
-                        await change_watch.stop()
-                        await transcript.stop()
-                        await video_log.stop()
+
                         await images.stop()
-                        await files.stop()
 
     logger.info("tea-making stopped")
 
