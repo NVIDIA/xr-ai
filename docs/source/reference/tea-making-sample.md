@@ -124,16 +124,31 @@ a Python `retrieval_query` function, prompts and bounds. `visual_question` selec
 what to extract from each image; successful schema validation makes that data
 usable for retrieval. Result fields must default to `None`; application defaults
 belong to the runner. Tea identification and brewing settings are one application
-of this flow; other visual data and result schemas require no flow changes.
+of this flow; other visual data and result schemas require no flow changes. The tea
+schema accepts a readable name or explicitly printed `tea_type`; a brand is optional.
 
 It observes fresh frames until visual schema validation succeeds, retrieves relevant
 passages, extracts supported fields and generates only missing result fields.
 `VisionRAGRetrievalState` reports `visual_data`, `resolved_data`, source provenance,
 recent original observations and retrieved passages. The extraction/generation
 request carries visual data under the generic `visual_data` key.
-Retrieved fields require an existing source passage and an exact quote. Python
-validates field types/units. These checks establish provenance structure; they do
-not prove that model interpretation of a passage or image is correct.
+Passages carry explicit `passage_id` labels. The response schema enumerates only
+those IDs; source validation requires an exact ID and exact quote without guessing
+an index convention. Field validators receive `source_kind` and `source_quote`
+through standard Pydantic validation context. The tea quantity models reject a
+range-selected scalar as a literal retrieved value and constrain generated values
+to recognized, explicitly unit-bearing cited ranges. Valid range evidence and
+passages remain in missing-only generation requests; recommendations are labeled
+`generated`. These checks do not prove every semantic interpretation of an image
+or document is correct.
+
+Successful retrieval and validated partial/null resolution are cached for the
+current visual data. Unchanged data does not rerun retrieval/extraction/generation;
+the flow waits for new visual information. Malformed responses or invalid
+candidates repair against the known data with bounded feedback, without rereading
+the camera or repeating retrieval. A genuinely new visual result clears the old
+entity's partial values/evidence. Callback and service failures propagate to the
+owner; cancellation ends the observation/repair loop.
 
 Validated partial results are published before subsequent calls. If identification
 is skipped, the runner retains those values and defaults only missing fields,
@@ -160,8 +175,10 @@ negatives consume a slot rather than resetting every prior positive.
 
 Water presence, tea-water contact and target temperature use the same function.
 The runner constructs temperature wording from the resolved target. Current
-temperature must be distinguished from a setpoint and have an explicit unit;
-the configured criteria account for Celsius/Fahrenheit. This semantic comparison
+temperature must be visibly readable with an explicit unit and distinguished from
+a setpoint. Otherwise the observer answers `no visible temperature`; Clef treats
+that as unknown, consuming no confirmation slot. No freezing/boiling examples are
+included in the visual question. The configured criteria account for Celsius/Fahrenheit. This semantic comparison
 requires model qualification and is not the former native numeric evaluator.
 
 ### Native timer

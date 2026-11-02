@@ -345,7 +345,9 @@ class SOPAgent(Agent):
                 visual_question=self.config.identification_question,
                 extraction_instructions=self.config.extraction_instructions,
                 fallback_instructions=self.config.fallback_instructions,
-                retrieval_query=lambda identity: identity.tea_name + " " + self.config.retrieval_query_suffix,
+                retrieval_query=lambda identity: " ".join(
+                    filter(None, (identity.tea_name, identity.tea_type, self.config.retrieval_query_suffix))
+                ),
                 max_retrieved_passages=self.config.max_retrieved_passages,
                 retrieved_text_limit=self.config.retrieved_text_limit,
                 on_state=partial(self._flow_state, session, session.run_id, "identify"),
@@ -538,7 +540,9 @@ class SOPAgent(Agent):
         sources = identification.sources if isinstance(identification, VisionRAGRetrievalState) else {}
         identity = identification.visual_data if isinstance(identification, VisionRAGRetrievalState) else None
         return {
-            "tea_name": identity.tea_name if identity is not None else self.config.default_tea_name,
+            "tea_name": (identity.tea_name or identity.tea_type)
+            if identity is not None
+            else self.config.default_tea_name,
             "temperature_c": (
                 settings.temperature.celsius if settings.temperature is not None else self.config.default_temperature_c
             ),

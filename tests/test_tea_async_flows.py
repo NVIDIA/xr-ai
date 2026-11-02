@@ -252,7 +252,7 @@ def _vision_rag_retrieval(**overrides):
                         json.dumps(
                             {
                                 "values": {"temperature": {"value": 80, "unit": "celsius"}},
-                                "sources": {"temperature": {"passage": 0, "quote": "80 degrees Celsius"}},
+                                "sources": {"temperature": {"passage_id": "P1", "quote": "80 degrees Celsius"}},
                             }
                         )
                     ),
@@ -319,7 +319,7 @@ async def test_unsupported_source_quote_cannot_be_labeled_retrieved():
             json.dumps(
                 {
                     "values": {"temperature": {"value": 90, "unit": "celsius"}},
-                    "sources": {"temperature": {"passage": 0, "quote": "this quote does not occur"}},
+                    "sources": {"temperature": {"passage_id": "P1", "quote": "this quote does not occur"}},
                 }
             )
         ),
@@ -424,7 +424,7 @@ async def test_vision_rag_retrieval_accepts_non_identity_visual_data_and_result_
                 side_effect=[
                     _chat(
                         '{"values":{"action":"Inspect the inlet."},'
-                        '"sources":{"action":{"passage":0,"quote":"Inspect the inlet."}}}'
+                        '"sources":{"action":{"passage_id":"P1","quote":"Inspect the inlet."}}}'
                     ),
                     _chat('{"values":{"priority":2}}'),
                 ]
@@ -444,5 +444,272 @@ async def test_vision_rag_retrieval_accepts_non_identity_visual_data_and_result_
     assert set(envelope["required"]) == {"values", "sources"}
     assert set(envelope["properties"]["values"]["properties"]) == {"action", "priority"}
     assert envelope["properties"]["values"]["additionalProperties"] is False
-    assert envelope["properties"]["sources"]["properties"]["action"]["required"] == ["passage", "quote"]
+    assert envelope["properties"]["sources"]["properties"]["action"]["required"] == ["passage_id", "quote"]
     assert set(fallback["requested_fields"]) == {"priority"}
+
+
+def _resolved_point_response():
+    """A fully sourced scalar response used to verify protocol repair and caching."""
+    return _chat(
+        json.dumps(
+            {
+                "values": {
+                    "temperature": {"value": 80, "unit": "celsius"},
+                    "steep_duration": {"value": 3, "unit": "minutes"},
+                },
+                "sources": {
+                    name: {"passage_id": "P1", "quote": quote}
+                    for name, quote in (("temperature", "80 degrees Celsius"), ("steep_duration", "3 minutes"))
+                },
+            }
+        )
+    )
+
+
+def _single_visual_input():
+    """A usable type-only input with two literal settings in its source."""
+    return _vision_rag_retrieval(
+        frame_source=AsyncMock(return_value=_frame(1)),
+        observer=SimpleNamespace(execute=AsyncMock(return_value=ImageQueryResult(text='{"tea_type":"white tea"}'))),
+        retrieval=SimpleNamespace(
+            execute=AsyncMock(
+                return_value=RetrieveResult(
+                    results=[
+                        RetrievedChunk(source="tea.md", text="Use 80 degrees Celsius for 3 minutes.", score=1),
+                    ]
+                )
+            )
+        ),
+        retrieval_query=lambda visual: visual.tea_name or visual.tea_type,
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("invalid_id", [2, "2", "P2", ["P1"]])
+async def test_source_ids_are_closed_and_invalid_ids_repair_without_reacquisition(invalid_id):
+    states = []
+    arguments = _single_visual_input()
+    arguments["on_state"] = AsyncMock(side_effect=states.append)
+    arguments["llm"].chat.side_effect = [
+        _chat(
+            json.dumps(
+                {
+                    "values": {"temperature": {"value": 80, "unit": "celsius"}},
+                    "sources": {"temperature": {"passage_id": invalid_id, "quote": "80 degrees Celsius"}},
+                }
+            )
+        ),
+        _chat('{"values":{"temperature":null,"steep_duration":null}}'),
+        _resolved_point_response(),
+    ]
+    result = await run_vision_rag_retrieval_flow(**arguments)
+    assert result.resolved_data.temperature.celsius == 80
+    assert all(source.kind == "retrieved" for source in result.sources.values())
+    arguments["frame_source"].assert_awaited_once()
+    arguments["observer"].execute.assert_awaited_once()
+    arguments["retrieval"].execute.assert_awaited_once()
+    assert arguments["llm"].chat.await_count == 3
+    payload = json.loads(arguments["llm"].chat.await_args_list[0].args[0][1].content)
+    assert payload["passages"][0]["passage_id"] == "P1"
+    assert payload["response_schema"]["properties"]["sources"]["properties"]["temperature"]["properties"]["passage_id"][
+        "enum"
+    ] == ["P1"]
+    assert any("passage_id" in state.issue for state in states)
+
+
+@pytest.mark.asyncio
+async def test_malformed_resolution_retries_cached_input_and_propagates_feedback():
+    arguments = _single_visual_input()
+    arguments["llm"].chat.side_effect = [_chat("{"), _resolved_point_response()]
+    result = await run_vision_rag_retrieval_flow(**arguments)
+    assert result.resolved_data.steep_duration.seconds == 180
+    arguments["frame_source"].assert_awaited_once()
+    arguments["retrieval"].execute.assert_awaited_once()
+    payload = json.loads(arguments["llm"].chat.await_args_list[1].args[0][1].content)
+    assert "valid JSON" in payload["validation_feedback"]["response"]
+
+
+@pytest.mark.asyncio
+async def test_generated_value_respects_retained_range_and_invalid_value_is_repaired():
+    arguments = _single_visual_input()
+    arguments["retrieval"].execute.return_value = RetrieveResult(
+        results=[
+            RetrievedChunk(source="tea.md", text="Use 80 degrees Celsius; steep for 2–3 minutes.", score=1),
+        ]
+    )
+    arguments["llm"].chat.side_effect = [
+        _chat(
+            json.dumps(
+                {
+                    "values": {"temperature": {"value": 80, "unit": "celsius"}, "steep_duration": None},
+                    "sources": {
+                        "temperature": {"passage_id": "P1", "quote": "80 degrees Celsius"},
+                        "steep_duration": {"passage_id": "P1", "quote": "2–3 minutes"},
+                    },
+                }
+            )
+        ),
+        _chat('{"values":{"steep_duration":{"value":4,"unit":"minutes"}}}'),
+        _chat('{"values":{"steep_duration":{"value":3,"unit":"minutes"}}}'),
+    ]
+    states = []
+    arguments["on_state"] = AsyncMock(side_effect=states.append)
+    result = await run_vision_rag_retrieval_flow(**arguments)
+    assert result.resolved_data.steep_duration.seconds == 180
+    assert result.sources["temperature"].kind == "retrieved"
+    assert result.sources["steep_duration"].kind == "generated"
+    assert any("outside the cited source range" in state.issue for state in states)
+    assert arguments["llm"].chat.await_count == 3
+    for call in arguments["llm"].chat.await_args_list[1:]:
+        payload = json.loads(call.args[0][1].content)
+        assert set(payload["requested_fields"]) == {"steep_duration"}
+        assert payload["field_evidence"]["steep_duration"]["quote"] == "2–3 minutes"
+        assert payload["passages"]
+    arguments["frame_source"].assert_awaited_once()
+    arguments["retrieval"].execute.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_valid_null_outcome_waits_for_changed_visual_data_without_resolution_churn(monkeypatch):
+    import tea_making_worker.components.vision_rag_retrieval_flow as flow_module
+
+    clock = [1_000_000_000]
+    waits = []
+
+    async def wait(interval):
+        waits.append(interval)
+        clock[0] += round(interval * 1_000_000_000)
+
+    monkeypatch.setattr(flow_module, "time", SimpleNamespace(time_ns=lambda: clock[0]))
+    monkeypatch.setattr(
+        flow_module,
+        "asyncio",
+        SimpleNamespace(
+            current_task=asyncio.current_task,
+            timeout=asyncio.timeout,
+            CancelledError=asyncio.CancelledError,
+            sleep=wait,
+        ),
+    )
+    arguments = _single_visual_input()
+    arguments["frame_source"].side_effect = [_frame(number) for number in range(1, 5)]
+    arguments["observer"].execute.side_effect = [
+        ImageQueryResult(text='{"tea_type":"white tea"}'),
+        ImageQueryResult(text='{"tea_type":"white tea"}'),
+        ImageQueryResult(text='{"tea_type":"white tea"}'),
+        ImageQueryResult(text='{"tea_type":"black tea"}'),
+    ]
+    arguments["retrieval"].execute.return_value = RetrieveResult(results=[])
+    arguments["llm"].chat.side_effect = [
+        _chat('{"values":{"temperature":{"value":80,"unit":"celsius"},"steep_duration":null}}'),
+        _chat('{"values":{"temperature":{"value":98,"unit":"celsius"},"steep_duration":{"value":4,"unit":"minutes"}}}'),
+    ]
+    states = []
+    arguments["on_state"] = AsyncMock(side_effect=states.append)
+    result = await run_vision_rag_retrieval_flow(**arguments)
+    assert result.visual_data.tea_type == "black tea"
+    assert result.resolved_data.temperature.celsius == 98
+    assert result.resolved_data.steep_duration.seconds == 240
+    assert arguments["retrieval"].execute.await_count == 2
+    assert arguments["llm"].chat.await_count == 2
+    assert waits == [arguments["poll_interval_seconds"]] * 3
+    assert result.updated_at_us - result.started_at_us == 3000
+    assert any(
+        state.resolved_data.temperature is not None and state.resolved_data.steep_duration is None for state in states
+    )
+    assert all(left.updated_at_us <= right.updated_at_us for left, right in zip(states, states[1:]))
+
+
+def test_tea_type_is_usable_without_name_and_empty_visual_data_is_rejected():
+    from pydantic import ValidationError
+
+    assert TeaIdentity(tea_type="green tea").tea_name is None
+    assert TeaIdentity(tea_name="", tea_type="green tea").tea_name is None
+    with pytest.raises(ValidationError):
+        TeaIdentity(tea_name="unknown", tea_type=None)
+
+
+@pytest.mark.parametrize(
+    "quantity, value, unit, quote",
+    [
+        ("duration", 180, "seconds", "2–3 minutes"),
+        ("temperature", 80, "celsius", "167–180 °F"),
+    ],
+)
+def test_app_quantities_require_generated_provenance_for_cited_ranges(quantity, value, unit, quote):
+    from pydantic import TypeAdapter, ValidationError
+    from tea_making_worker.application.tea_data_models import DurationSetting, TemperatureSetting
+
+    adapter = TypeAdapter(DurationSetting if quantity == "duration" else TemperatureSetting)
+    payload = {"value": value, "unit": unit}
+    with pytest.raises(ValidationError, match="generated recommendation"):
+        adapter.validate_python(payload, context={"source_kind": "retrieved", "source_quote": quote})
+    validated = adapter.validate_python(payload, context={"source_kind": "generated", "source_quote": quote})
+    assert validated.value == value
+
+
+@pytest.mark.asyncio
+async def test_resolution_callback_failure_is_not_mistaken_for_model_parse_failure():
+    arguments = _single_visual_input()
+
+    async def receive(state):
+        if state.phase == "extracting":
+            raise ValueError("callback unavailable")
+
+    arguments["on_state"] = receive
+    with pytest.raises(ValueError, match="callback unavailable"):
+        await run_vision_rag_retrieval_flow(**arguments)
+    arguments["llm"].chat.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_a_range_endpoint_is_generated_rather_than_mislabeled_as_retrieved():
+    arguments = _single_visual_input()
+    arguments["retrieval"].execute.return_value = RetrieveResult(
+        results=[
+            RetrievedChunk(source="tea.md", text="80 degrees Celsius; 2–3 minutes.", score=1),
+        ]
+    )
+    arguments["llm"].chat.side_effect = [
+        _chat(
+            json.dumps(
+                {
+                    "values": {
+                        "temperature": {"value": 80, "unit": "celsius"},
+                        "steep_duration": {"value": 2, "unit": "minutes"},
+                    },
+                    "sources": {
+                        "temperature": {"passage_id": "P1", "quote": "80 degrees Celsius"},
+                        "steep_duration": {"passage_id": "P1", "quote": "2–3 minutes"},
+                    },
+                }
+            )
+        ),
+        _chat('{"values":{"steep_duration":{"value":2.5,"unit":"minutes"}}}'),
+    ]
+    result = await run_vision_rag_retrieval_flow(**arguments)
+    assert result.resolved_data.steep_duration.seconds == 150
+    assert result.sources["steep_duration"].kind == "generated"
+    assert result.sources["temperature"].kind == "retrieved"
+    assert arguments["llm"].chat.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_cancelling_a_cached_null_outcome_stops_further_callbacks_and_model_calls():
+    arguments = _single_visual_input()
+    arguments["frame_source"].side_effect = [_frame(1), _frame(2)]
+    arguments["retrieval"].execute.return_value = RetrieveResult(results=[])
+    arguments["llm"].chat.side_effect = [_chat('{"values":{"temperature":null,"steep_duration":null}}')]
+    received = []
+
+    async def receive(state):
+        received.append(state)
+        if len(state.observations) == 2:
+            raise asyncio.CancelledError
+
+    arguments["on_state"] = receive
+    with pytest.raises(asyncio.CancelledError):
+        await run_vision_rag_retrieval_flow(**arguments)
+    assert arguments["llm"].chat.await_count == 1
+    arguments["retrieval"].execute.assert_awaited_once()
+    assert received[-1].observations[-1].usable

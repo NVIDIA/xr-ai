@@ -31,6 +31,10 @@ VisualData = TypeVar("VisualData", bound=BaseModel)
 ResolvedData = TypeVar("ResolvedData", bound=BaseModel)
 
 
+class _ResolutionResponseError(ValueError):
+    """A malformed model envelope can retry using already retrieved passages."""
+
+
 @dataclass(frozen=True, slots=True)
 class FieldSource:
     """Source of one validated field; generated values cannot claim a document quote."""
@@ -99,6 +103,8 @@ async def run_vision_rag_retrieval_flow(
         retrieval: Existing typed RAG tool; retrieval remains demonstrably separate.
         visual_model: Python model whose validation defines usable visual input.
         result_model: Python model with requested result fields defaulting to None.
+            Field validators receive source_kind and exact source_quote in Pydantic
+            validation context, so application quantities can enforce evidence constraints.
         visual_question: Task wording; code appends the response schema.
         extraction_instructions: Source-extraction policy supplied by the application.
         fallback_instructions: Policy for generating recommendations for missing fields.
@@ -144,6 +150,10 @@ async def run_vision_rag_retrieval_flow(
     observations: deque[VisionRAGRetrievalObservation] = deque()
     passages: tuple[dict[str, Any], ...] = ()
     omitted_count = 0
+    retrieved_for: VisualData | None = None
+    resolved_for: VisualData | None = None
+    field_evidence: dict[str, FieldSource] = {}
+    resolution_issues: dict[str, str] = {}
     latest_frame_keys: dict[str, tuple[int, int]] = {}
 
     async def report(phase, *, complete=False, issue=""):
@@ -170,7 +180,9 @@ async def run_vision_rag_retrieval_flow(
             tuple(observations),
             passages,
             omitted_count,
-            issue,
+            "; ".join(filter(None, (issue, *(f"{name}: {reason}" for name, reason in resolution_issues.items()))))[
+                :observation_text_limit
+            ],
         )
         if on_state is not None:
             await on_state(state)
@@ -194,10 +206,14 @@ async def run_vision_rag_retrieval_flow(
                     name: {
                         "type": "object",
                         "properties": {
-                            "passage": {"type": "integer", "minimum": 0},
+                            "passage_id": {
+                                "type": "string",
+                                "enum": [passage["passage_id"] for passage in passages],
+                                "description": "Copy an exact passage_id from the supplied passages.",
+                            },
                             "quote": {"type": "string", "minLength": 1},
                         },
-                        "required": ["passage", "quote"],
+                        "required": ["passage_id", "quote"],
                         "additionalProperties": False,
                     }
                     for name in requested_fields
@@ -220,7 +236,13 @@ async def run_vision_rag_retrieval_flow(
                         {
                             "visual_data": visual_data.model_dump(mode="json"),
                             "requested_fields": output_schema,
-                            "passages": passages if document_backed else (),
+                            "passages": passages,
+                            "field_evidence": {
+                                name: {"source": evidence.source, "quote": evidence.quote}
+                                for name, evidence in field_evidence.items()
+                                if name in requested_fields
+                            },
+                            "validation_feedback": dict(resolution_issues),
                             "response_schema": response_schema,
                         }
                     ),
@@ -232,46 +254,62 @@ async def run_vision_rag_retrieval_flow(
             timeout=timeout_seconds,
         )
         if response.tool_calls:
-            raise ValueError("field resolution cannot invoke model tools")
-        response_data = json.loads(response.content)
+            raise _ResolutionResponseError("Field resolution cannot invoke model tools.")
+        try:
+            response_data = json.loads(response.content)
+        except json.JSONDecodeError as error:
+            raise _ResolutionResponseError("Field response is not valid JSON.") from error
         if not isinstance(response_data, dict):
-            raise ValueError("field response must be an object")
+            raise _ResolutionResponseError("Field response must be an object.")
         values = response_data.get("values")
         if not isinstance(values, dict) or set(values) - set(requested_fields):
-            raise ValueError("field response contains unexpected fields")
+            raise _ResolutionResponseError("Field response contains unexpected fields.")
         response_sources = response_data.get("sources", {})
         if not isinstance(response_sources, dict):
-            raise ValueError("field sources must be a field-keyed object")
+            raise _ResolutionResponseError("Field sources must be a field-keyed object.")
+        resolution_issues.pop("response", None)
         resolved_values = resolved_data.model_dump()
-        for name, value in values.items():
+        passage_lookup = {passage["passage_id"]: passage for passage in passages}
+        valid_response = True
+        for name in requested_fields:
+            value = values.get(name)
+            if document_backed:
+                source = response_sources.get(name)
+                if value is None and source is None:
+                    continue
+                passage_id = source.get("passage_id") if isinstance(source, dict) else None
+                if not isinstance(passage_id, str) or passage_id not in passage_lookup:
+                    resolution_issues[name] = "The source must cite an exact supplied passage_id."
+                    valid_response = False
+                    continue
+                passage = passage_lookup[passage_id]
+                quote = source.get("quote")
+                if not isinstance(quote, str) or not quote.strip() or quote not in passage["text"]:
+                    resolution_issues[name] = "The quote is not present in the cited passage."
+                    valid_response = False
+                    continue
+                # A valid quote remains useful evidence even when it supplies a
+                # range rather than a directly usable scalar result.
+                field_evidence[name] = FieldSource("retrieved", passage["source"], quote)
             if value is None:
                 continue
-            field_source = FieldSource("generated")
-            if document_backed:
-                source = response_sources.get(name, {})
-                if not isinstance(source, dict):
-                    continue
-                passage_index, quote = source.get("passage"), source.get("quote")
-                if (
-                    type(passage_index) is not int
-                    or not 0 <= passage_index < len(passages)
-                    or not isinstance(quote, str)
-                    or not quote.strip()
-                    or quote not in passages[passage_index]["text"]
-                ):
-                    continue
-                field_source = FieldSource("retrieved", passages[passage_index]["source"], quote)
+            evidence = field_evidence.get(name)
+            source_kind = "retrieved" if document_backed else "generated"
             try:
                 validated_value = TypeAdapter(result_model.model_fields[name].rebuild_annotation()).validate_python(
-                    value
+                    value,
+                    context={"source_kind": source_kind, "source_quote": evidence.quote if evidence else ""},
                 )
-            except ValidationError:
-                # A malformed field must not discard other source-supported fields.
+            except ValidationError as error:
+                resolution_issues[name] = error.errors()[0]["msg"]
+                valid_response = False
                 continue
             resolved_values[name] = validated_value
             resolved_data = result_model.model_validate(resolved_values)
-            sources[name] = field_source
+            sources[name] = evidence if document_backed else FieldSource("generated")
+            resolution_issues.pop(name, None)
             await report("extracting" if document_backed else "generating")
+        return valid_response
 
     while True:
         await report("observing")
@@ -295,16 +333,12 @@ async def run_vision_rag_retrieval_flow(
                     + json.dumps(visual_model.model_json_schema()),
                 )
             )
-        previous_visual_data = visual_data
         issue = ""
         try:
             visual_data = visual_model.model_validate_json(response.text) if response.available else None
         except ValidationError as error:
             visual_data = None
             issue = str(error)[:observation_text_limit]
-        if visual_data is not None and previous_visual_data is not None and visual_data != previous_visual_data:
-            resolved_data = result_model.model_validate({})
-            sources.clear()
         sampled_at_us = time.time_ns() // 1000
         observations.append(
             VisionRAGRetrievalObservation(
@@ -327,33 +361,67 @@ async def run_vision_rag_retrieval_flow(
             await asyncio.sleep(poll_interval_seconds)
             continue
 
-        await report("retrieving")
-        async with asyncio.timeout(timeout_seconds):
-            retrieved = await retrieval.execute(
-                RetrieveRequest(
-                    query=retrieval_query(visual_data),
-                    top_k=max_retrieved_passages,
+        if visual_data != retrieved_for:
+            # Keep only one visual input's evidence. A new entity must never
+            # inherit partial results or generation constraints from the old one.
+            resolved_data = result_model.model_validate({})
+            sources.clear()
+            field_evidence.clear()
+            resolution_issues.clear()
+            resolved_for = None
+            await report("retrieving")
+            async with asyncio.timeout(timeout_seconds):
+                retrieved = await retrieval.execute(
+                    RetrieveRequest(query=retrieval_query(visual_data), top_k=max_retrieved_passages)
                 )
+            passages = tuple(
+                {
+                    "passage_id": f"P{index + 1}",
+                    "source": passage.source,
+                    "text": passage.text[:retrieved_text_limit],
+                    "truncated": len(passage.text) > retrieved_text_limit,
+                }
+                for index, passage in enumerate(retrieved.results[:max_retrieved_passages])
             )
-        passages = tuple(
-            {
-                "source": passage.source,
-                "text": passage.text[:retrieved_text_limit],
-                "truncated": len(passage.text) > retrieved_text_limit,
-            }
-            for passage in retrieved.results[:max_retrieved_passages]
-        )
-        missing_fields = [name for name, value in resolved_data.model_dump().items() if value is None]
-        if passages:
-            await report("extracting")
-            await resolve_fields(extraction_instructions, missing_fields, document_backed=True)
-        missing_fields = [name for name, value in resolved_data.model_dump().items() if value is None]
-        if missing_fields:
+            # Cache only a completed retrieval, not a failed operation.
+            retrieved_for = visual_data.model_copy(deep=True)
+
+        if visual_data == resolved_for:
+            await report("observing", issue="Requested fields remain unavailable; waiting for new visual information.")
+            await asyncio.sleep(poll_interval_seconds)
+            continue
+
+        extraction_complete = not passages
+        while True:
+            missing_fields = [name for name, value in resolved_data.model_dump().items() if value is None]
+            try:
+                if not extraction_complete and missing_fields:
+                    await report("extracting")
+                    extraction_complete = await resolve_fields(
+                        extraction_instructions, missing_fields, document_backed=True
+                    )
+                missing_fields = [name for name, value in resolved_data.model_dump().items() if value is None]
+                valid_generation = True
+                if missing_fields:
+                    await report("generating")
+                    valid_generation = await resolve_fields(
+                        fallback_instructions, missing_fields, document_backed=False
+                    )
+            except _ResolutionResponseError as error:
+                # Repair malformed output against the already known input. Do
+                # not reacquire/re-read frames or retrieve the same documents.
+                resolution_issues["response"] = str(error)
+                await report("extracting")
+                await asyncio.sleep(poll_interval_seconds)
+                continue
+            if all(value is not None for value in resolved_data.model_dump().values()):
+                return await report("complete", complete=True)
+            if extraction_complete and valid_generation:
+                # A validated partial/null outcome needs new visual information,
+                # rather than another identical extraction/generation request.
+                resolved_for = visual_data.model_copy(deep=True)
+                break
             await report("generating")
-            await resolve_fields(fallback_instructions, missing_fields, document_backed=False)
-        if all(value is not None for value in resolved_data.model_dump().values()):
-            return await report("complete", complete=True)
-        # Usable visual data is not permission to invent unavailable results.
-        # A new image may reveal better visual data; preserve validated results.
+            await asyncio.sleep(poll_interval_seconds)
         await report("observing", issue="Requested fields remain unavailable.")
         await asyncio.sleep(poll_interval_seconds)

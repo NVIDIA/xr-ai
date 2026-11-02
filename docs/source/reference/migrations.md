@@ -563,3 +563,18 @@ refer to {doc}`clef-flash`.
 For routing and conversation output contracts, refer to
 [the routing contract](agent-sdk-routing.md#response-progress-and-routing-context)
 and {doc}`agent-sdk-conversation`.
+
+
+### Tea retrieval citations and explicit temperature abstention
+
+Visual/RAG source responses now copy an explicit `passage_id` from the supplied
+passages instead of returning a numeric `passage` index. Custom extraction prompts
+must respect the provided response schema. Generated missing values receive the
+retained passages and per-field evidence. Native Pydantic validators can use
+`source_kind` and `source_quote` context to enforce application evidence rules.
+The tea schema permits a readable `tea_type` without a product name. Range-derived
+recommendations remain generated and must respect recognized cited ranges.
+Unchanged visual data reuses validated resolution outcomes; malformed/invalid
+responses repair against cached inputs. Temperature observations explicitly return
+`no visible temperature` when either value or unit is unreadable. The confirmation
+threshold and polling cadence are unchanged.

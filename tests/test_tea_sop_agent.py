@@ -120,7 +120,8 @@ def _runner(*, config=None, observer=None, llm=None, frames=None):
                             "steep_duration": {"value": 0.02, "unit": "seconds"},
                         },
                         "sources": {
-                            name: {"passage": 0, "quote": source_text} for name in ("temperature", "steep_duration")
+                            name: {"passage_id": "P1", "quote": source_text}
+                            for name in ("temperature", "steep_duration")
                         },
                     }
                 ),
@@ -272,12 +273,12 @@ async def test_skip_retains_partial_settings_and_defaults_only_missing_fields():
 
     async def chat(messages, **_kwargs):
         payload = json.loads(messages[1].content)
-        if payload["passages"]:
+        if "sources" in payload["response_schema"]["properties"]:
             return ChatResponse(
                 json.dumps(
                     {
                         "values": {"temperature": {"value": 80, "unit": "celsius"}},
-                        "sources": {"temperature": {"passage": 0, "quote": "80 degrees Celsius"}},
+                        "sources": {"temperature": {"passage_id": "P1", "quote": "80 degrees Celsius"}},
                     }
                 ),
                 None,
@@ -747,6 +748,34 @@ async def test_stopping_runner_drains_every_parallel_child_before_returning():
             assert session.active_tasks == {}
         finally:
             release_children.set()
+            await router.stop()
+            await sop.stop()
+            await conversation.close()
+            await context.close()
+
+
+@pytest.mark.asyncio
+async def test_type_only_identity_labels_runner_context_without_a_missing_name():
+    water_started = asyncio.Event()
+
+    async def observe(request):
+        if "Return JSON matching" in request.query:
+            return ImageQueryResult(text='{"tea_type":"white tea"}')
+        water_started.set()
+        await asyncio.Event().wait()
+
+    sop, runtime, context = _runner(observer=SimpleNamespace(execute=observe))
+    router, conversation, _language = _router(sop, runtime, context)
+    async with runtime:
+        try:
+            await router.handle(AgentTurn("p", "start", "start tea making"))
+            await asyncio.wait_for(water_started.wait(), 1)
+            snapshot = sop.context_snapshot("p")
+            assert snapshot["resolved_settings"]["tea_name"] == "white tea"
+            assert snapshot["current_step"] == "fill_water"
+            query = sop._rag.retrieve.execute.await_args.args[0].query
+            assert query == "white tea " + sop.config.retrieval_query_suffix
+        finally:
             await router.stop()
             await sop.stop()
             await conversation.close()
