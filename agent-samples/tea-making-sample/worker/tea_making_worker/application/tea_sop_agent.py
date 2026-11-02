@@ -18,6 +18,7 @@ import logging
 import time
 from collections.abc import Awaitable, Callable, Coroutine
 from dataclasses import dataclass, field, replace
+from datetime import UTC, datetime
 from functools import partial
 from typing import Any, Literal
 from uuid import uuid4
@@ -262,7 +263,7 @@ class SOPAgent(Agent):
             return self.config.messages["start"]
         if control in {"stop", "reset"}:
             await self._stop_run(session)
-            session.last_run = self._run_summary(session)
+            session.last_run = self._run_summary(session) if session.run_id else None
             session.status = "idle" if control == "reset" else "stopped"
             session.revision += 1
             if control == "reset":
@@ -560,21 +561,35 @@ class SOPAgent(Agent):
         }
 
     def context_snapshot(self, participant_id: str) -> dict[str, Any]:
-        """Build read-only SOP context with active and completed flows clearly separated."""
+        """Expose entered steps, never turn future configuration into observed state."""
         session = self._sessions.get(participant_id)
         if session is None:
             return {"status": "idle", "active_flows": {}}
-        return {
+        if session.status == "idle":
+            return {
+                "status": "idle",
+                "active_flows": {},
+                "historical_previous_run": session.last_run,
+            }
+        snapshot = {
             "run_id": session.run_id,
             "status": session.status,
             "current_step": self._step_id(session),
             "step_ready": session.ready,
             "advancement": self.config.advancement,
-            "procedure_steps": {step_id: self.config.messages[step_id] for step_id in _STEP_IDS},
-            "resolved_settings": self._resolved_settings(session),
+            "entered_step_instructions": {
+                step_id: self.config.messages[step_id].format_map(self._resolved_settings(session))
+                for step_id in _STEP_IDS
+                if step_id in session.flow_statuses
+            },
             "flow_outcomes": dict(session.flow_statuses),
             "active_flows": {
-                flow_id: _json(state)
+                flow_id: {
+                    **_json(state),
+                    "sampled_at_utc": datetime.fromtimestamp(state.updated_at_us / 1_000_000, UTC).isoformat(
+                        timespec="seconds"
+                    ),
+                }
                 for flow_id, state in session.flow_states.items()
                 if session.flow_statuses.get(flow_id) == "running" and session.status == "running"
             },
@@ -586,6 +601,11 @@ class SOPAgent(Agent):
             "issue": session.issue,
             "historical_previous_run": session.last_run,
         }
+        # Defaults become execution settings only after identification completes or
+        # is explicitly skipped. Partial model values remain in the flow state.
+        if session.flow_statuses.get("identify") in {"completed", "skipped"}:
+            snapshot["resolved_settings"] = self._resolved_settings(session)
+        return snapshot
 
     async def _publish_context(self, session: _Session) -> None:
         """Replace the SDK SOP-status source; the conversation agent owns its dialogue."""
@@ -653,7 +673,9 @@ class SOPAgent(Agent):
         return {
             "run_id": session.run_id,
             "status": session.status,
-            "settings": self._resolved_settings(session),
+            "settings": self._resolved_settings(session)
+            if session.flow_statuses.get("identify") in {"completed", "skipped"}
+            else {},
             "last_step": self._step_id(session),
         }
 

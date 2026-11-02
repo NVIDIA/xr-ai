@@ -20,9 +20,16 @@ import nemo_relay
 
 
 def _format_minute(timestamp_us: int) -> str:
-    """Format an exchange timestamp at the conversation's display precision."""
+    """Format coarse timestamps for historical summaries and incremental updates."""
 
     return datetime.fromtimestamp(timestamp_us / 1_000_000, UTC).strftime("%Y-%m-%d %H:%M UTC")
+
+
+def _format_timestamp(timestamp_us: int | None) -> str:
+    """Keep same-minute dialogue and mutable state samples distinguishable."""
+    if timestamp_us is None:
+        return "unknown"
+    return datetime.fromtimestamp(timestamp_us / 1_000_000, UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
 def _time_label(timestamp_us: int | None) -> str:
@@ -626,7 +633,10 @@ def _exchange_text(entry: _TranscriptEntry, field_limit_bytes: int | None = None
     user, assistant = entry.user, entry.assistant
     if field_limit_bytes is not None:
         user, assistant = _clip(user, field_limit_bytes), _clip(assistant, field_limit_bytes)
-    return f"Exchange completed {_time_label(entry.timestamp_us)}:\nUser: {user}\nAssistant: “{assistant}”"
+    return (
+        f"BEGIN HISTORICAL DIALOGUE\ncompleted_at: {_format_timestamp(entry.timestamp_us)}\n"
+        f"User: {user}\nAssistant said then: “{assistant}”\nEND HISTORICAL DIALOGUE"
+    )
 
 
 def _update_text(record: _ContextRecord, limit_bytes: int | None = None) -> str:
@@ -635,7 +645,10 @@ def _update_text(record: _ContextRecord, limit_bytes: int | None = None) -> str:
 
 
 def _state_text(source: str, text: str, timestamp_us: int | None) -> str:
-    return f"Source {source} current state, published {_time_label(timestamp_us)}:\n{text}"
+    return (
+        f"BEGIN CURRENT SOURCE SNAPSHOT\nsource: {source}\npublished_at: {_format_timestamp(timestamp_us)}\n"
+        f"{text}\nEND CURRENT SOURCE SNAPSHOT"
+    )
 
 
 def _dialogue_summary_text(section: _BackgroundSection) -> str:

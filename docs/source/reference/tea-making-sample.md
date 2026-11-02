@@ -204,10 +204,24 @@ confirmation progress remain separate from history eviction. Unknown evidence
 remains useful context without becoming a confirmation.
 
 The runner replaces one SOP context topic in the SDK ContextManager; standard SDK
-Conversation owns dialogue/history/compaction. All active flow states have distinct
+conversation handles questions about tea-making guidance. Before a run starts,
+that topic contains only idle status and any explicitly historical prior run,
+not the procedure plan or unused default settings. During execution it supplies
+instructions only for steps already entered. Partial identification stays in its
+flow state; effective brewing settings appear only once identification completes
+or is explicitly skipped. Capability answers remain high level, while explicit
+step questions can use the relevant supplied state.
+
+SDK Conversation owns dialogue/history/compaction. All active flow states have distinct
 labels, and completed/skipped states remain clearly historical. Reset clears live
 SOP state and keeps a concise labeled prior-run summary; dialogue remains owned
 by Conversation. The SOP topic budget is configurable independently of dialogue.
+Dialogue retains earlier assistant replies, including countdowns, inside the
+SDK's historical-dialogue boundaries. The current SOP source is separately
+delimited and timestamped; active flow states include a readable sample time.
+The timer source holds only its latest native elapsed/remaining snapshot, while
+earlier answers remain historical dialogue. There is no step-specific deletion,
+timer-question matcher, canned answer or parallel conversation manager.
 The checked-in SOP topic budget is 64 KB; history retains up to eight observations
 with at most 1,500 characters each. These are independent configurable limits,
 not a guarantee that every worst-case combination fits. Adjust them together

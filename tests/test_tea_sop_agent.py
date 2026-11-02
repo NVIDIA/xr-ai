@@ -74,6 +74,7 @@ def _runner(*, config=None, observer=None, llm=None, frames=None):
     selected = load_config(_SAMPLE / "yaml/tea_making_worker.yaml")
     config = config or replace(selected.sop, poll_interval_seconds=0.001, timer_update_interval_seconds=0.005)
     runtime = AgentRuntime()
+
     context = ContextManager(
         SimpleNamespace(),
         summary_context_topics=(SOP_CONTEXT_SOURCE,),
@@ -160,14 +161,15 @@ def _runner(*, config=None, observer=None, llm=None, frames=None):
 class _ConversationLanguage:
     def __init__(self):
         self.messages = []
+        self.response = "The latest SOP context is available."
 
     async def stream_events(self, messages):
         self.messages.append(messages)
-        yield ChatStreamEvent(kind="text", text="The latest SOP context is available.")
+        yield ChatStreamEvent(kind="text", text=self.response)
         yield ChatStreamEvent(kind="finish", finish_reason="stop")
 
 
-def _router(sop, runtime, context, conversation_language=None):
+def _router(sop, runtime, context, conversation_language=None, **router_options):
     language = conversation_language or _ConversationLanguage()
     conversation = Conversation(
         language,
@@ -186,6 +188,7 @@ def _router(sop, runtime, context, conversation_language=None):
         output=AsyncMock(),
         initialize_participant=sop.participant_joined,
         cleanup_participant=sop.participant_left,
+        **router_options,
     )
     runtime.register("routing", router.runtime_subscriber())
     return router, conversation, language
@@ -775,6 +778,152 @@ async def test_type_only_identity_labels_runner_context_without_a_missing_name()
             assert snapshot["current_step"] == "fill_water"
             query = sop._rag.retrieve.execute.await_args.args[0].query
             assert query == "white tea " + sop.config.retrieval_query_suffix
+        finally:
+            await router.stop()
+            await sop.stop()
+            await conversation.close()
+            await context.close()
+
+
+@pytest.mark.asyncio
+async def test_conversation_context_exposes_only_entered_steps_and_established_settings():
+    """Startup capabilities must not receive the future plan or unused defaults."""
+    identification_started = asyncio.Event()
+    release_identification = asyncio.Event()
+    water_started = asyncio.Event()
+
+    async def observe(request):
+        if "Return JSON matching" in request.query:
+            identification_started.set()
+            await release_identification.wait()
+            return ImageQueryResult(text='{"tea_name":"Northwind White Tea"}')
+        water_started.set()
+        await asyncio.Event().wait()
+
+    sop, runtime, context = _runner(observer=SimpleNamespace(execute=observe))
+    router, conversation, language = _router(sop, runtime, context)
+
+    async def ask(question, request_id):
+        await router.handle(AgentTurn("p", request_id, question))
+        return "\n".join(message.content for message in language.messages[-1])
+
+    async with runtime:
+        try:
+            messages = await ask("What can you do?", "capabilities")
+            assert sop.context_snapshot("p") == {
+                "status": "idle",
+                "active_flows": {},
+                "historical_previous_run": None,
+            }
+            for absent in ("procedure_steps", "resolved_settings", "93", "180", "Fill a kettle", "Heat the water"):
+                assert absent not in messages
+            assert "tea-making guidance" in messages
+
+            await router.handle(AgentTurn("p", "start", "start tea making"))
+            await asyncio.wait_for(identification_started.wait(), 1)
+            messages = await ask("What are we doing?", "identifying")
+            snapshot = sop.context_snapshot("p")
+            assert list(snapshot["entered_step_instructions"]) == ["identify"]
+            assert "resolved_settings" not in snapshot
+            assert "Hold the tea package" in messages
+            assert "Heat the water" not in messages and '"temperature_c": 93' not in messages
+
+            release_identification.set()
+            await asyncio.wait_for(water_started.wait(), 1)
+            messages = await ask("What is the current step?", "water")
+            snapshot = sop.context_snapshot("p")
+            assert list(snapshot["entered_step_instructions"]) == ["identify", "fill_water"]
+            assert snapshot["resolved_settings"]["temperature_c"] == 80
+            assert "Northwind White Tea" in messages and "Fill a kettle" in messages
+            assert "Heat the water" not in messages and "Steep for" not in messages
+
+            await router.handle(AgentTurn("p", "stop", "stop tea making"))
+            snapshot = sop.context_snapshot("p")
+            assert snapshot["status"] == "stopped" and snapshot["active_flows"] == {}
+            await router.handle(AgentTurn("p", "reset", "reset"))
+            messages = await ask("Is guidance running?", "after-reset")
+            snapshot = sop.context_snapshot("p")
+            assert snapshot["status"] == "idle" and snapshot["active_flows"] == {}
+            assert "resolved_settings" not in snapshot and "entered_step_instructions" not in snapshot
+            assert snapshot["historical_previous_run"]["status"] == "stopped"
+            assert '"historical_previous_run"' in messages
+        finally:
+            release_identification.set()
+            await router.stop()
+            await sop.stop()
+            await conversation.close()
+            await context.close()
+
+
+@pytest.mark.asyncio
+async def test_consecutive_timer_questions_receive_fresh_native_samples_and_lifecycle_context(monkeypatch):
+    """Live source values replace previous values while old answers stay historical."""
+    import time
+
+    from tea_making_worker.application.tea_events import PARTICIPANT_JOINED_TOPIC
+    from tea_making_worker.components import timer_flow
+    from xr_ai_interaction import ParticipantJoined
+
+    elapsed = 47.0
+    started_at_us = time.time_ns() // 1000 - 47_000_000
+    monkeypatch.setattr(
+        timer_flow,
+        "time",
+        SimpleNamespace(
+            monotonic=lambda: elapsed,
+            time_ns=lambda: (started_at_us + round(elapsed * 1_000_000)) * 1000,
+        ),
+    )
+    sop, runtime, context = _runner()
+    router, conversation, language = _router(sop, runtime, context, participant_joined_topic=PARTICIPANT_JOINED_TOPIC)
+    async with runtime:
+        try:
+            await sop.participant_joined("p")
+            session = sop._sessions["p"]
+            session.status = "running"
+            session.run_id = "timer-regression"
+            session.step_index = 4
+            session.flow_statuses["steep_timer"] = "running"
+            # Native timer begins at this monotonic origin, then advances under
+            # the test clock. The actual callback/SDK context path is unchanged.
+            timer = asyncio.create_task(
+                run_timer_flow(
+                    duration_seconds=150,
+                    update_interval_seconds=0.001,
+                    on_state=partial(sop._flow_state, session, session.run_id, "steep_timer"),
+                ),
+                context=nemo_relay.fork_asyncio_context(),
+            )
+            session.procedure = timer
+            await _until(lambda: "steep_timer" in session.flow_states)
+            for number, (advance, remaining, question) in enumerate(
+                (
+                    (47, 103, "How long do I have?"),
+                    (81, 69, "Okay what about now?"),
+                    (92, 58, "How much longer do I need to wait?"),
+                )
+            ):
+                elapsed = 47 + advance
+                await _until(lambda: session.flow_states["steep_timer"].remaining_seconds == remaining)
+                language.response = f"{remaining} seconds remaining"
+                response = await router.handle(AgentTurn("p", f"timer-{number}", question))
+                assert response.text == language.response
+                messages = "\n".join(message.content for message in language.messages[-1])
+                assert f'"remaining_seconds": {remaining}.0' in messages
+                assert '"sampled_at_utc":' in messages
+                if remaining != 103:
+                    assert '"remaining_seconds": 103.0' not in messages
+                    assert "103 seconds remaining" in messages
+            await router.handle(AgentTurn("p", "stop-timer", "stop tea making"))
+            assert timer.done()
+            await router.handle(AgentTurn("p", "reset-timer", "reset"))
+            assert sop.context_snapshot("p")["active_flows"] == {}
+            assert sop.context_snapshot("p")["historical_previous_run"]["run_id"] == "timer-regression"
+            await router.participant_left("p")
+            await runtime.publish(PARTICIPANT_JOINED_TOPIC, ParticipantJoined(), participant_id="p")
+            await router.handle(AgentTurn("p", "fresh-session", "What can you do?"))
+            messages = "\n".join(message.content for message in language.messages[-1])
+            assert "103 seconds remaining" not in messages and "timer-regression" not in messages
         finally:
             await router.stop()
             await sop.stop()
