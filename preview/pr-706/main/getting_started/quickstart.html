@@ -470,8 +470,14 @@
 -->
 <section id="quickstart">
 <h1>Quickstart<a class="headerlink" href="#quickstart" title="Link to this heading">#</a></h1>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">#</a></h2>
+<p>Run a sample, connect a client, and try its main interaction before adapting
+it to your own application. Choose Conversation for a voice-and-vision
+starting point, or one of the task-specific samples below.</p>
 <!-- Compatibility anchor for the earlier setup heading. -->
 <p><a id="set-up-with-a-coding-agent"></a></p>
+</section>
 <section id="run-with-a-coding-agent">
 <h2>Run with a coding agent<a class="headerlink" href="#run-with-a-coding-agent" title="Link to this heading">#</a></h2>
 <p>Paste this to your coding agent to run the Simple VLM browser demo:</p>
@@ -492,13 +498,14 @@ status, and stop instructions.
 <p>Before launching a voice sample, refer to <a class="reference internal" href="networking.html#onnx-runtime-telemetry"><span class="std std-ref">ONNX Runtime telemetry</span></a>.
 If outbound ONNX Runtime telemetry is unwanted, export
 <code class="docutils literal notranslate"><span class="pre">ORT_DISABLE_TELEMETRY=1</span></code> in the launch environment before starting the process.</p>
-<p>Every sample follows the same pattern: <strong>start the sample’s model stack, wait for
-its launcher to report readiness and return, start the sample from the same
-terminal, then connect a client.</strong> Once the sample is ready, any supported
-client — web browser, Android app, iOS/visionOS app, or AR glasses — can join
-the session using the token printed on startup. Each procedure below starts
-with a <code class="docutils literal notranslate"><span class="pre">cd</span></code> from the repository root; keep running that procedure’s commands
-from the selected sample directory.</p>
+<p>Start only the local model services the sample needs, wait for their launcher
+to report readiness and return, then start the sample from the same terminal.
+For model services hosted externally, configure and validate those endpoints
+before starting the sample; a mixed setup can use both local and external
+services. Once the sample is ready, any supported client — web browser, Android
+app, iOS/visionOS app, or AR glasses — can join the session using the token
+printed on startup. Each procedure below starts with a <code class="docutils literal notranslate"><span class="pre">cd</span></code> from the repository
+root; keep running that procedure’s commands from the selected sample directory.</p>
 <p>Each interactive procedure includes one concrete spoken request that exercises
 the sample’s main path. In the shipped voice-gated samples, first say
 “Hey agent, let’s start talking” and wait for “I’m listening to you now.”
@@ -528,9 +535,47 @@ stack and agent. This releases unused models and applies the current settings
 without keeping track of previous launches. Refer to
 <a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a> for configuration and the full flow.</p>
 </section>
+<section id="conversation-example">
+<h2>Conversation example<a class="headerlink" href="#conversation-example" title="Link to this heading">#</a></h2>
+<p>Start here for a new voice-and-vision application. The sample combines
+conversation and questions about the current view with opt-in visual alerts
+and note-taking. Refer to <a class="reference internal" href="../reference/conversation-example.html"><span class="doc">Conversation example</span></a> for its
+behavior, configuration, and architecture.</p>
+<p>From the repository root, enter the sample directory and start its local models:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>agent-samples/conversation-example
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-servers<span class="w"> </span>conversation_example_model_servers
+</pre></div>
+</div>
+<p>Wait for the model launcher to report readiness and return, then start the
+sample from the same terminal:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>sync
+uv<span class="w"> </span>run<span class="w"> </span>conversation_example
+</pre></div>
+</div>
+<p>Open the authenticated web-client URL printed by DeviceIOHub and select
+<strong>Connect</strong>. Choose <strong>Live video</strong> or <strong>On-demand images</strong> under <strong>Camera Mode</strong>,
+then select <strong>Start Microphone</strong> and grant camera and microphone access when
+prompted. After the agent reports ready, say
+“Hey agent, let’s start talking,” then ask “What is in front of me?” while
+pointing the camera at an object. Typed questions also work without opening a
+voice conversation. Refer to <a class="reference internal" href="clients.html"><span class="doc">Connecting clients</span></a> for other client platforms.</p>
+<p>Press Ctrl+C to stop the sample. Its local model services remain running;
+stop them separately from the same sample directory:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-servers<span class="w"> </span>conversation_example_model_servers<span class="w"> </span>--stop
+</pre></div>
+</div>
+</section>
 <section id="simple-vlm-example-vision-q-a-over-voice-text">
 <h2>Simple VLM example (vision Q&amp;A over voice + text)<a class="headerlink" href="#simple-vlm-example-vision-q-a-over-voice-text" title="Link to this heading">#</a></h2>
-<p>End-to-end voice + vision sample. Speak into the mic or type into the data
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>Simple VLM is deprecated and remains available as a small browser demo and
+legacy reference. For a new voice-and-vision application, start with
+<a class="reference internal" href="../reference/conversation-example.html"><span class="doc">Conversation example</span></a>, which is the recommended foundation.
+The <code class="docutils literal notranslate"><span class="pre">run-demo</span></code> workflow still uses Simple VLM to provide a quick end-to-end
+demo.</p>
+</div>
+<p>Legacy end-to-end voice + vision demo. Speak into the mic or type into the data
 channel; both routes use the same VLM pipeline against the latest video frame.
 Replies arrive as streaming Pocket TTS audio plus a <code class="docutils literal notranslate"><span class="pre">vlm.response</span></code> text message.</p>
 <p>Uses the text-output Reasoner from <code class="docutils literal notranslate"><span class="pre">nvidia/Cosmos3-Nano</span></code> by default. Refer to
@@ -858,8 +903,10 @@ documented beside its value.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#run-with-a-coding-agent">Run with a coding agent</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#model-servers-for-each-sample">Model servers for each sample</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#conversation-example">Conversation example</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#simple-vlm-example-vision-q-a-over-voice-text">Simple VLM example (vision Q&amp;A over voice + text)</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#step-1-start-the-server">Step 1 — Start the server</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#step-2-connect-a-client">Step 2 — Connect a client</a></li>

@@ -445,16 +445,24 @@
 -->
 <section id="contributing-and-conventions">
 <h1>Contributing and conventions<a class="headerlink" href="#contributing-and-conventions" title="Link to this heading">#</a></h1>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">#</a></h2>
+<p>Repository contracts for changes to shared code, dependencies, documentation,
+and release guidance. Application-owned projects under <code class="docutils literal notranslate"><span class="pre">apps/</span></code> are outside the
+repository contribution tooling described here.</p>
+</section>
+<section id="repository-contracts">
+<h2>Repository contracts<a class="headerlink" href="#repository-contracts" title="Link to this heading">#</a></h2>
 <p>Refer to the root
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/455278bbbdd2883c954df07fb964efecd621b4a5/CONTRIBUTING.md"><code class="docutils literal notranslate"><span class="pre">CONTRIBUTING.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/e160bcd3b2cade176a52efc48c7864a7e8b46c20/CONTRIBUTING.md"><code class="docutils literal notranslate"><span class="pre">CONTRIBUTING.md</span></code></a>
 for setup, testing, pull requests, and DCO sign-off. Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/455278bbbdd2883c954df07fb964efecd621b4a5/AGENTS.md"><code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code></a> for the
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/e160bcd3b2cade176a52efc48c7864a7e8b46c20/AGENTS.md"><code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code></a> for the
 architecture and change constraints used by humans and coding agents. Refer to
 <a class="reference internal" href="documentation-style.html"><span class="doc">Documentation style</span></a> for requirements governing
 customer-facing Markdown and reStructuredText. Refer to
 <a class="reference internal" href="python-code-style.html"><span class="doc">Python code style</span></a> for the public API, exception handling,
 and module layout conventions for Python code. Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/455278bbbdd2883c954df07fb964efecd621b4a5/DEPENDENCIES.md"><code class="docutils literal notranslate"><span class="pre">DEPENDENCIES.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/e160bcd3b2cade176a52efc48c7864a7e8b46c20/DEPENDENCIES.md"><code class="docutils literal notranslate"><span class="pre">DEPENDENCIES.md</span></code></a>
 for the package dependency map.</p>
 <p>For a Python change:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>uv.toml<span class="w"> </span>sync<span class="w"> </span>--project<span class="w"> </span>&lt;affected-project&gt;
@@ -470,7 +478,7 @@ a narrative page when concepts, workflows, operations, or architecture change,
 and add a migration entry for a breaking change to released behavior. Refer to
 <a class="reference internal" href="#migration-release-rollover"><span class="std std-ref">Migration entries and release rollover</span></a> for the migration guide’s release scope.</p>
 <p>The repository-wide README and documentation ownership rules live in the
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/455278bbbdd2883c954df07fb964efecd621b4a5/AGENTS.md#comments-and-documentation"><code class="docutils literal notranslate"><span class="pre">Comments</span> <span class="pre">and</span> <span class="pre">documentation</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/e160bcd3b2cade176a52efc48c7864a7e8b46c20/AGENTS.md#comments-and-documentation"><code class="docutils literal notranslate"><span class="pre">Comments</span> <span class="pre">and</span> <span class="pre">documentation</span></code></a>
 section of <code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code>. Follow that contract instead of introducing another
 placement rule in a package or sample.</p>
 <p>Ruff enforces exception-handling rules (<code class="docutils literal notranslate"><span class="pre">BLE001</span></code>, <code class="docutils literal notranslate"><span class="pre">S110</span></code>, <code class="docutils literal notranslate"><span class="pre">S112</span></code>, <code class="docutils literal notranslate"><span class="pre">B904</span></code>) on
@@ -523,6 +531,7 @@ global cutoff. Resolve each affected project with the root config explicitly
 supplied, validate the affected behavior, and regenerate the dependency
 manifest with <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">--script</span> <span class="pre">.github/scripts/generate_dependency_manifest.py</span></code>.
 Commit the generated manifest changes alongside the dependency declarations.</p>
+</section>
 <section id="migration-entries-and-release-rollover">
 <span id="migration-release-rollover"></span><h2>Migration entries and release rollover<a class="headerlink" href="#migration-entries-and-release-rollover" title="Link to this heading">#</a></h2>
 <p><a class="reference internal" href="../reference/migrations.html"><span class="doc">Release migration</span></a> covers changes from the latest published release
@@ -625,6 +634,8 @@ the entry.</p></li>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#repository-contracts">Repository contracts</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#migration-entries-and-release-rollover">Migration entries and release rollover</a></li>
 </ul>
   </nav></div>

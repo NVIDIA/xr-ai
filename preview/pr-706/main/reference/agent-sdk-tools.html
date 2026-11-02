@@ -470,10 +470,19 @@
 -->
 <section id="xr-ai-tools">
 <h1>xr-ai-tools<a class="headerlink" href="#xr-ai-tools" title="Link to this heading">#</a></h1>
-<p><code class="docutils literal notranslate"><span class="pre">xr-ai-tools</span></code> is the toolkit-independent native tool layer. Finite <code class="docutils literal notranslate"><span class="pre">Tool</span></code> and
-streaming <code class="docutils literal notranslate"><span class="pre">AsyncTool</span></code> objects share one typed Pydantic invocation contract, and
-every execution passes through NeMo Relay. Refer to <a class="reference internal" href="python/index.html"><span class="doc">API Reference</span></a> for the
-exact public APIs.</p>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">#</a></h2>
+<p>Tools let an agent call your application’s functions, such as reading a
+display, editing a scene, or checking task progress. They provide validated
+inputs and results for actions invoked directly by another agent or selected
+by a model.</p>
+</section>
+<section id="tool-contract">
+<h2>Tool contract<a class="headerlink" href="#tool-contract" title="Link to this heading">#</a></h2>
+<p>Finite <code class="docutils literal notranslate"><span class="pre">Tool</span></code> and streaming <code class="docutils literal notranslate"><span class="pre">AsyncTool</span></code> objects share one typed Pydantic
+invocation contract, and every execution passes through NeMo Relay. Refer to
+<a class="reference internal" href="python/index.html"><span class="doc">API Reference</span></a> for the exact public APIs.</p>
+</section>
 <section id="bounded-model-tool-loops">
 <span id="native-tools-and-model-tool-calls"></span><h2>Bounded model tool loops<a class="headerlink" href="#bounded-model-tool-loops" title="Link to this heading">#</a></h2>
 <p>Install the <code class="docutils literal notranslate"><span class="pre">relay</span></code> extra for <code class="docutils literal notranslate"><span class="pre">ToolSet</span></code> adapters and <code class="docutils literal notranslate"><span class="pre">run_tool_loop()</span></code>:</p>
@@ -697,6 +706,8 @@ internal tool exception.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tool-contract">Tool contract</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#bounded-model-tool-loops">Bounded model tool loops</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#agent-controlled-recording">Agent-controlled recording</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#capability-services">Capability services</a></li>

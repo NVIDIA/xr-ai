@@ -5,13 +5,18 @@
 
 # Deploying samples with NIM endpoints
 
-Develop samples with the local `model-servers` profile, then configure the same
-workers to consume independently deployed NVIDIA NIM endpoints. Samples use
-`xr_ai_models` factories and typed service interfaces in both environments.
-They do not launch model containers or require local compatibility proxies.
-The local server defaults and sample model profiles remain the development path.
+## Overview
+
+Connect application workers to independently deployed NVIDIA NIM endpoints.
+Configure and validate the required model roles, then switch the worker
+profiles while keeping model deployment separate from application startup.
 
 ## Ownership and protocol boundaries
+
+Workers use `xr_ai_models` factories and typed service interfaces for both
+local and NIM inference. They do not launch model containers or require local
+compatibility proxies. The local server defaults and sample model profiles
+remain the development path.
 
 | Responsibility | Owner |
 |---|---|
@@ -215,8 +220,12 @@ Use the current sample's model command with `--stop` and the same explicit
 
 Keep copies of the sample's active local JSON and selected voice-gate YAML. Replace its model entries with
 the roles required for native deployment in the table below, including the
-explicit `stt` entry for ordinary Riva speech. This example adapts
-simple VLM; run it from the repository root after validation:
+explicit `stt` entry for ordinary Riva speech. This worked example adapts the
+deprecated Simple VLM sample and is retained for existing users. For new
+voice-and-vision applications, start from
+{doc}`conversation-example </reference/conversation-example>` and adapt its
+consumer profile while retaining its decision-service role as described below.
+Run the legacy example from the repository root after validation:
 
 ```bash
 uv --config-file uv.toml run --project agent-sdk/xr-ai-models python - <<'PYTHON'
@@ -248,17 +257,36 @@ uv run --project agent-samples/simple-vlm-example simple_vlm_example
 
 | Sample | Active profile | Required roles |
 |---|---|---|
-| Simple VLM | `yaml/models.json` | `stt`, `vlm`, `tts` |
+| Conversation example | `yaml/models.json` | `llm`, `vlm`, `stt`, `tts`, plus the existing `router` decision service |
+| Simple VLM (deprecated) | `yaml/models.json` | `stt`, `vlm`, `tts` |
 | Lab instrument monitoring | `yaml/models.json` | `llm`, `vlm`, `stt`, `tts` |
 | XR render demo | `yaml/models.json` | `llm`, `vlm`, `stt`, `tts` |
 | Procedure capture and guide | `yaml/models.json` | `llm`, `vlm`, `stt`, `tts` |
 | Tea making | `yaml/models.local.json` | `llm`, `vlm`, `stt`, `tts`, `embedding` |
 
-Simple VLM, lab monitoring, XR render, and procedure capture resolve
+Conversation, Simple VLM, lab monitoring, XR render, and procedure capture resolve
 `models.json` beside their worker YAML. Tea making's worker and RAG YAML each select `models_config`;
 update both when choosing a different profile path. Paths are relative to the
 respective YAML. Keep application-specific extra roles when adapting other
 samples. No sample launcher option or model-serving process is needed.
+
+The conversation example also requires its Clef `router` entry. Keep that entry
+when replacing the inference roles: the NIM reference profile does not provide
+a replacement decision service. Stopping the conversation model stack also
+stops its local Clef service. After stopping the stack, restart Clef separately
+from the repository root before starting the conversation worker:
+
+```bash
+uv --config-file uv.toml run --project services/clef-server clef_server \
+  --config services/clef-server/clef_server.yaml
+```
+
+Alternatively, configure the `router` entry for an independently operated
+compatible endpoint. Keep its address aligned with the service configuration;
+refer to {doc}`/reference/clef-flash` for operation and readiness. Validate only
+the NIM roles with `smoke_test.py`; the smoke check rejects a profile containing
+`router`. The worker separately checks the decision service's health during
+startup.
 
 Use the worker's selected `voice_gate_yaml` path for `gate_path` (Tea making
 defaults to `voice_gate.yaml`). Disable speaker ASR in that file, and back up

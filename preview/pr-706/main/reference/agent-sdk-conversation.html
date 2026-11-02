@@ -470,15 +470,19 @@
 -->
 <section id="xr-ai-conversation">
 <h1>xr-ai-conversation<a class="headerlink" href="#xr-ai-conversation" title="Link to this heading">#</a></h1>
-<p><code class="docutils literal notranslate"><span class="pre">xr-ai-conversation</span></code> provides an application-instructed
-conversation agent and a <code class="docutils literal notranslate"><span class="pre">ContextManager</span></code> that holds participant-scoped
-history and named background-context sources for it and for any other agent.
-It does not contain turn selection, focus
-management, or tools; routing contracts are provided by
-<a class="reference internal" href="agent-sdk-routing.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">xr-ai-routing</span></code></span></a>, and other capabilities, such as
-questions about the camera view, belong in separate routed destinations.</p>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">#</a></h2>
+<p>Add conversation that uses earlier dialogue and information supplied by other
+agents, such as saved notes or background observations. The conversation agent
+combines that context with your application’s instructions to answer follow-up
+questions.</p>
+</section>
 <section id="compose-a-conversation">
 <h2>Compose a conversation<a class="headerlink" href="#compose-a-conversation" title="Link to this heading">#</a></h2>
+<p>Compose <code class="docutils literal notranslate"><span class="pre">Conversation</span></code> with a <code class="docutils literal notranslate"><span class="pre">ContextManager</span></code> for participant-scoped history
+and named background-context sources. Turn selection and focus management
+belong to <a class="reference internal" href="agent-sdk-routing.html"><span class="doc">xr-ai-routing</span></a>; tools and capabilities such as camera
+questions belong in separate routed destinations.</p>
 <p><code class="docutils literal notranslate"><span class="pre">Conversation</span></code> implements <code class="docutils literal notranslate"><span class="pre">xr_ai_routing.RoutableAgent</span></code>, so it can be passed to
 <code class="docutils literal notranslate"><span class="pre">AgentRouter</span></code> alongside application-specific agents.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_conversation</span><span class="w"> </span><span class="kn">import</span> <span class="n">ContextManager</span><span class="p">,</span> <span class="n">Conversation</span>
@@ -768,6 +772,7 @@ documents the package exports and their signatures and behavior.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#compose-a-conversation">Compose a conversation</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#prompts">Prompts</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-context-manager">The context manager</a></li>

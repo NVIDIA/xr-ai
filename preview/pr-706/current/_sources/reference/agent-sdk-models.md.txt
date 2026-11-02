@@ -5,11 +5,20 @@
 
 # xr-ai-models
 
+## Overview
+
+The model that works for your prototype may change as you tune quality,
+hardware use, or deployment. Shared model interfaces let your application call
+the capabilities it needs while configuration selects the supported model
+adapter and endpoint.
+
+## Model interfaces
+
 <a id="contract"></a>
 (agent-sdk-models-contract)=
-`xr-ai-models` defines typed LLM, VLM, STT, TTS, embedding, decision, and OCR protocols and
-constructs concrete clients from deployment profiles. Workers depend on those
-protocols instead of hand-written HTTP or vendor SDK calls. Refer to
+The protocols cover LLM, VLM, STT, TTS, embedding, decision, and OCR services.
+Workers construct clients through the factories in `xr-ai-models`; model HTTP
+and vendor SDK calls stay inside the adapters. Refer to
 {doc}`python/index` for exact classes, methods, fields, and defaults. Refer to
 {doc}`/components/ai-services` for server operation.
 
