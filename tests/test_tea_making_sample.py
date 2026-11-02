@@ -5,8 +5,10 @@
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -21,10 +23,10 @@ _ROOT = Path(__file__).resolve().parents[1]
 _SAMPLE = _ROOT / "agent-samples" / "tea-making-sample"
 _WORKER = _SAMPLE / "worker"
 sys.path.insert(0, str(_WORKER))
-from tea_making_worker.agents.web_events import TeaWebEventsAgent  # noqa: E402
-from tea_making_worker.app import _CLIENT_TEXT_TOPIC, _relay_event_log  # noqa: E402
-from tea_making_worker.config import load_config  # noqa: E402
-from tea_making_worker.events import (  # noqa: E402
+from tea_making_worker.application.application_config import load_config  # noqa: E402
+from tea_making_worker.application.tea_application import _CLIENT_TEXT_TOPIC, _relay_event_log  # noqa: E402
+from tea_making_worker.application.tea_event_viewer import TeaWebEventsAgent  # noqa: E402
+from tea_making_worker.application.tea_events import (  # noqa: E402
     GUIDANCE_NOTICE_TOPIC,
     GUIDANCE_RECORD_TOPIC,
     PARTICIPANT_JOINED_TOPIC,
@@ -245,9 +247,9 @@ def test_prompt_file_options_are_replaced_by_inline_yaml(tmp_path, name):
 
 
 def test_installed_worker_default_uses_sample_yaml_or_requires_explicit_config(tmp_path, monkeypatch):
-    import tea_making_worker.config as config_module
+    import tea_making_worker.application.application_config as config_module
 
-    monkeypatch.setattr(config_module, "_PACKAGE", tmp_path / "site-packages/tea_making_worker")
+    monkeypatch.setattr(config_module, "_WORKER_PACKAGE", tmp_path / "site-packages/tea_making_worker")
     monkeypatch.chdir(_SAMPLE)
     assert load_config(None).sop.advancement == "automatic"
     monkeypatch.chdir(tmp_path)
@@ -255,3 +257,32 @@ def test_installed_worker_default_uses_sample_yaml_or_requires_explicit_config(t
         load_config(None)
     explicit = load_config(_SAMPLE / "yaml/tea_making_worker.yaml")
     assert explicit.current_view_prompt
+
+
+def test_reusable_components_have_no_application_dependencies():
+    component_directory = _WORKER / "tea_making_worker/components"
+    for path in component_directory.glob("*.py"):
+        for node in ast.walk(ast.parse(path.read_text())):
+            if isinstance(node, ast.ImportFrom):
+                assert node.level <= 1, f"{path.name} imports outside components"
+                imported_names = [node.module or ""]
+            elif isinstance(node, ast.Import):
+                imported_names = [alias.name for alias in node.names]
+            else:
+                continue
+            assert all(
+                not name.startswith("tea_making_worker") or name.startswith("tea_making_worker.components")
+                for name in imported_names
+            ), f"{path.name} imports application through the package root"
+
+
+def test_fresh_component_import_does_not_load_the_application():
+    # A clean interpreter catches eager package-root reexports that a static
+    # dependency check misses, without importing/starting the application.
+    script = (
+        "import sys; sys.path.insert(0, sys.argv[1]); "
+        "from tea_making_worker.components import run_visual_verification_flow, "
+        "run_vision_rag_retrieval_flow, run_timer_flow; "
+        "assert not any(name.startswith('tea_making_worker.application') for name in sys.modules)"
+    )
+    subprocess.run([sys.executable, "-c", script, str(_WORKER)], check=True, capture_output=True, text=True)

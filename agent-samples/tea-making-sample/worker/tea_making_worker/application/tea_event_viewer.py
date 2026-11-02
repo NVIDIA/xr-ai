@@ -10,7 +10,7 @@ from xr_ai_interaction import ParticipantJoined, ParticipantLeft
 from xr_ai_runtime import Agent, RuntimeContext, subscribe
 from xr_ai_web_events import WEB_EVENT_TOPIC, WebEvent
 
-from ..events import (
+from .tea_events import (
     GUIDANCE_NOTICE_TOPIC,
     GUIDANCE_RECORD_TOPIC,
     PARTICIPANT_JOINED_TOPIC,

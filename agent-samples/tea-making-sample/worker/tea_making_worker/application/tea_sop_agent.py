@@ -34,15 +34,16 @@ from xr_ai_tools.rag import RAGTools
 from xr_ai_tools.vision import ImageQueryTool
 from xr_ai_voice import VOICE_OUTPUT_TOPIC
 
-from ..._capture import _attempt, _event, _frame, _json
-from ...events import GUIDANCE_NOTICE_TOPIC, GUIDANCE_RECORD_TOPIC, GuidanceNotice, GuidanceRecord
-from ...flows import (
+from ..components import (
     VisionRAGRetrievalState,
     run_timer_flow,
     run_vision_rag_retrieval_flow,
     run_visual_verification_flow,
 )
-from ._settings import BrewingSettings, SOPConfig, TeaIdentity
+from ..components.sop_run_recording import _attempt, _event, _frame, _json
+from .tea_data_models import BrewingSettings, TeaIdentity
+from .tea_events import GUIDANCE_NOTICE_TOPIC, GUIDANCE_RECORD_TOPIC, GuidanceNotice, GuidanceRecord
+from .tea_sop_configuration import SOPConfig
 
 SOP_CONTEXT_SOURCE = "tea-making.sop-context"
 _STEP_IDS = ("identify", "fill_water", "heat_water", "start_steeping", "steep_timer")

@@ -16,6 +16,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+import yaml
 from PIL import Image
 from xr_ai_models import ChatResponse, DecisionAnswer, DecisionQuestion, DecisionResponse
 from xr_ai_tools.current_frame import ImageFrame
@@ -25,7 +26,9 @@ from xr_ai_tools.vision import ImageQueryTool
 _SAMPLE = Path(__file__).resolve().parents[1] / "agent-samples/tea-making-sample"
 sys.path.insert(0, str(_SAMPLE / "worker"))
 
-from tea_making_worker._capture import (  # noqa: E402  # noqa: E402
+from tea_making_worker.application.application_config import load_config  # noqa: E402
+from tea_making_worker.components import run_visual_verification_flow  # noqa: E402
+from tea_making_worker.components.sop_run_recording import (  # noqa: E402  # noqa: E402
     _attempt,
     _event,
     _frame,
@@ -34,8 +37,6 @@ from tea_making_worker._capture import (  # noqa: E402  # noqa: E402
     _RecordedVision,
     _SOPCapture,
 )
-from tea_making_worker.config import load_config  # noqa: E402
-from tea_making_worker.flows import run_visual_verification_flow  # noqa: E402
 
 
 def _image():
@@ -56,7 +57,12 @@ async def _capture(tmp_path, *, enabled=True):
     config = load_config(_SAMPLE / "yaml/tea_making_worker.yaml")
     capture = _SOPCapture(tmp_path, enabled=enabled)
     await capture.start(
-        config,
+        configuration_snapshots={
+            "worker": config,
+            "models": json.loads(config.models_config.read_text()),
+            "voice_gate": yaml.safe_load(config.voice_gate_yaml.read_text()),
+        },
+        source_directory=_SAMPLE / "worker/tea_making_worker",
         workflow_name="tea making",
         steps=("identify", "fill_water", "heat_water", "start_steeping", "steep_timer"),
     )
@@ -76,6 +82,16 @@ def _decision(choice="accepted"):
 @pytest.mark.asyncio
 async def test_sop_capture_records_exact_images_decisions_and_confirmed_state(tmp_path):
     capture, config = await _capture(tmp_path)
+    manifest = json.loads((capture.directory / "manifest.json").read_text())
+    # Moving recording into components must still fingerprint the application
+    # procedure and schemas, rather than only the recorder's own directory.
+    for source_path in (
+        "application/tea_sop_agent.py",
+        "application/tea_data_models.py",
+        "components/visual_verification_flow.py",
+    ):
+        source = _SAMPLE / "worker/tea_making_worker" / source_path
+        assert manifest["source_sha256"][source_path] == hashlib.sha256(source.read_bytes()).hexdigest()
     snapshot = json.loads((capture.directory / "config/worker.json").read_text())
     assert snapshot["sop"]["water"]["question"] == config.water.question
     assert not (capture.directory / "config/prompts").exists()
@@ -336,7 +352,7 @@ async def test_sop_capture_new_launch_keeps_previous_run_and_rejects_late_attemp
 async def test_sop_capture_is_active_in_real_worker_composition(tmp_path, monkeypatch):
     from dataclasses import replace
 
-    import tea_making_worker.app as app
+    import tea_making_worker.application.tea_application as app
     from xr_ai_runtime import Agent
 
     config = replace(load_config(_SAMPLE / "yaml/tea_making_worker.yaml"), artifacts_dir=tmp_path, web_events_port=0)

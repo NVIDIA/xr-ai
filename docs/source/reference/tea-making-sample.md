@@ -20,9 +20,9 @@ reusable flow reads YAML.
 
 ## What to copy
 
-Start with the independent async functions in `tea_making_worker.flows`, then
-read `agents/sop/agent.py::_procedure` for the explicit tea procedure. The
-tea application's Pydantic identity/quantity models live in `agents/sop/_settings.py`.
+Start with the independent async functions in `tea_making_worker.components`, then
+read `application/tea_sop_agent.py::_procedure` for the explicit tea procedure. The
+tea application's Pydantic identity/quantity models live in `application/tea_data_models.py`.
 There is no common flow base class; a little duplication keeps the three functions
 independently understandable and usable without the SOP runner.
 
@@ -103,12 +103,14 @@ do not import conversation, recording, the runner or application configuration.
 
 ## Sample-local APIs and prompt ownership
 
-Import `SOPAgent`, `SOPConfig`, `VisualInstructions`, `TeaIdentity`,
-`BrewingSettings`, `TemperatureSetting` and `DurationSetting` from
-`tea_making_worker`. These are sample-local APIs, not SDK promotion.
+Import `SOPAgent` from `tea_making_worker.application.tea_sop_agent`,
+`SOPConfig`/`VisualInstructions` from `application.tea_sop_configuration`, and
+tea result schemas from `application.tea_data_models` under the same package.
+These are application-local APIs, not SDK promotion. The package root is a marker;
+importing reusable components does not load the tea application.
 
 Import `run_vision_rag_retrieval_flow`, `run_visual_verification_flow` and
-`run_timer_flow` from `tea_making_worker.flows`. Supply all dependencies,
+`run_timer_flow` from `tea_making_worker.components`. Supply all dependencies,
 inputs, wording, limits and the optional asynchronous `on_state` callback in
 the call, and await its result. Each flow owns its local loop and propagates
 cancellation after its awaited operations end. Callbacks run in that same task;
@@ -221,20 +223,53 @@ clears current progress. Restart creates a fresh run.
 
 ## Source map
 
+The worker separates application-specific code from reusable components at the
+package's top level. Components depend on SDK libraries and each other; they do
+not import tea schemas, the runner, application configuration or the YAML adapter.
+The runner remains explicitly tea-specific, rather than hiding its procedure
+behind a generic engine or workflow language.
+
+```text
+tea_making_worker/
+  __init__.py
+  __main__.py
+  application/
+    __init__.py
+    tea_application.py
+    application_config.py
+    tea_data_models.py
+    tea_sop_configuration.py
+    tea_sop_agent.py
+    tea_events.py
+    tea_event_viewer.py
+  components/
+    __init__.py
+    visual_verification_flow.py
+    vision_rag_retrieval_flow.py
+    timer_flow.py
+    sop_run_recording.py
+```
+
 | File | Responsibility |
 |---|---|
-| `app.py` | Compose services, SDK Conversation/context/router and runtime producers |
-| `config.py` | Adapt complete application YAML into Python arguments |
-| `agents/sop/agent.py` | Controls, explicit procedure, owned tasks, latest flow state and SOP context |
-| `agents/sop/_settings.py` | Tea application models and Python policy arguments |
-| `flows/_visual.py` | Independent Omni/Clef verification loop and window |
-| `flows/_vision_rag_retrieval.py` | Generic visual extraction, retrieval and missing-field resolution |
-| `flows/_timer.py` | Native timer and periodic state |
-| `_capture.py` | Flow-scoped structured images/model/evidence recording |
-| `agents/web_events.py` | Live SOP state/notices and participant lifecycle projection |
+| `__init__.py` | Package marker without application imports |
+| `__main__.py` | CLI delegates to application config/loading |
+| `application/__init__.py` | Application package marker |
+| `application/tea_application.py` | Compose SDK models, voice, camera, conversation/router and the tea runner |
+| `application/application_config.py` | Validate main YAML and construct Python configuration |
+| `application/tea_data_models.py` | Tea identity, temperature, duration and partial brewing-result schemas |
+| `application/tea_sop_configuration.py` | Plain Python tea prompts, criteria, defaults and loop/bounds arguments |
+| `application/tea_sop_agent.py` | Controls, explicit tea procedure, task/state ownership and SOP conversation context |
+| `application/tea_events.py` | Typed tea SOP state/notices and participant lifecycle topics |
+| `application/tea_event_viewer.py` | Project application events into the SDK browser viewer |
+| `components/__init__.py` | Public reusable flow/state exports |
+| `components/visual_verification_flow.py` | Independent Omni/Clef verification and confirmation window |
+| `components/vision_rag_retrieval_flow.py` | Generic visual extraction, retrieval and missing-field resolution |
+| `components/timer_flow.py` | Native timer and periodic full state |
+| `components/sop_run_recording.py` | Structured state, inference and image recording from caller-supplied snapshots/source directory |
 
 Camera acquisition uses the SDK `CurrentFrameTool` and `ImageRegistry` directly
-in `app.py`. The runner receives the frame tool and the visual query tool uses the
+in `application/tea_application.py`. The runner receives the frame tool and the visual query tool uses the
 same registry. The SDK router serializes participant departure/rejoin; its cleanup
 hook drains SOP work before releasing cached frames and image handles. There is
 no sample image agent or cleanup acknowledgment protocol. Shutdown clears the
@@ -375,7 +410,7 @@ class JournalBackendAgent(Agent):
         )
 ```
 
-Register the subscriber in `app.py` beside the SOP event viewer adapter. A customer system can consume
+Register the subscriber in `application/tea_application.py` beside the SOP event viewer adapter. A customer system can consume
 SOP state records and notices independently.
 If it runs in another process, expose the boundary through a typed msgpack over
 ZMQ service rather than bypassing the repository's service model.

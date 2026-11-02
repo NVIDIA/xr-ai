@@ -13,9 +13,9 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import yaml
-from tea_making_worker import SOPAgent
-from tea_making_worker.agents.sop.agent import SOP_CONTEXT_SOURCE
-from tea_making_worker.config import load_config
+from tea_making_worker.application.application_config import load_config
+from tea_making_worker.application.tea_events import USER_QUERY_TOPIC
+from tea_making_worker.application.tea_sop_agent import SOP_CONTEXT_SOURCE, SOPAgent
 from xr_ai_conversation import ContextManager, Conversation
 from xr_ai_hub import FrameUnavailable
 from xr_ai_models import load_models_config, make_decision, make_llm
@@ -115,7 +115,7 @@ async def main():
     router = AgentRouter(
         {"workflow": sop, "conversation": conversation},
         decisions,
-        query_topic=__import__("tea_making_worker.events", fromlist=["USER_QUERY_TOPIC"]).USER_QUERY_TOPIC,
+        query_topic=USER_QUERY_TOPIC,
         output_topic=VOICE_OUTPUT_TOPIC,
         output=control_output,
         initialize_participant=sop.participant_joined,

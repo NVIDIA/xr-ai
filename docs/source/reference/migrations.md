@@ -39,7 +39,7 @@ interruption does not cancel the independently owned procedure. The runner alone
 provides read-only SOP context from labeled flow states.
 
 Replace prototype `Workflow`/`load_workflow` and class-based flow imports with
-sample-local Python `SOPConfig` and `run_vision_rag_retrieval_flow`,
+application-local Python `SOPConfig` and `run_vision_rag_retrieval_flow`,
 `run_visual_verification_flow`, `run_timer_flow` APIs. The separate workflow
 YAML, expression bindings, observation interpreter and combined foreground
 capture path are removed. The generic vision/RAG API receives `visual_model`,
@@ -71,6 +71,16 @@ and unit interpretation on the intended model.
 New SOP bundles snapshot complete application configuration plus Python procedure
 metadata and source hashes, not a workflow interpreter. Consumed images remain
 recorded under runner-owned flow attempts. Prior bundles are unchanged.
+
+Tea worker code is separated into peer `application/` and `components/` packages.
+Import flow functions/state from `tea_making_worker.components` instead of `.flows`.
+Import `SOPAgent` explicitly from `application.tea_sop_agent`, configuration types
+from `application.tea_sop_configuration`, and tea schemas from
+`application.tea_data_models`; the package root no longer eagerly reexports tea
+application types. Worker entry points remain unchanged. The application YAML
+loader is `application.application_config`; source/default/explicit YAML behavior
+is preserved. Recorder snapshot selection belongs to application composition;
+reusable recording receives explicit data and source-directory arguments.
 
 ### Tea SOP run bundles retain inference images
 

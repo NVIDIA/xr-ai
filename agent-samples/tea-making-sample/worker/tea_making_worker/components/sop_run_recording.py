@@ -30,7 +30,6 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-import yaml
 from pydantic import BaseModel
 
 _ACTIVE: ContextVar[_SOPCapture | None] = ContextVar("sop_capture", default=None)
@@ -120,13 +119,26 @@ class _SOPCapture:
                 write_task.result()
                 raise
 
-    async def start(self, config, *, workflow_name: str, steps: tuple[str, ...],
-                    source_revision: str | None = None) -> None:
+    async def start(
+        self,
+        *,
+        configuration_snapshots: dict[str, Any],
+        source_directory: Path,
+        workflow_name: str,
+        steps: tuple[str, ...],
+        source_revision: str | None = None,
+    ) -> None:
         """Create the manifest and snapshot effective configuration plus source hashes.
 
-        The effective worker snapshot includes all inline prompts and Python argument
-        configuration. The manifest names the application procedure and its steps;
-        source hashes identify the actual Python connections.
+        The caller selects snapshot contents and source scope. This recorder only
+        redacts, serializes and fingerprints them; it does not read application YAML.
+
+        Args:
+            configuration_snapshots: Named configuration objects or JSON-compatible data.
+            source_directory: Directory whose Python sources belong in the manifest.
+            workflow_name: Caller-supplied procedure name recorded without interpretation.
+            steps: Caller-supplied step labels used to describe the recorded procedure.
+            source_revision: Optional caller-supplied revision identifier.
         """
         self._manifest = {
             "schema_version": 1,
@@ -138,19 +150,14 @@ class _SOPCapture:
             "workflow": {"name": workflow_name, "steps": list(steps)},
         }
         await self.io(_write_json, self.directory / "manifest.json", self._manifest)
-        snapshots = {
-            "worker": _json(config),
-            "models": json.loads(config.models_config.read_text()),
-            "voice_gate": yaml.safe_load(config.voice_gate_yaml.read_text()),
-        }
         configuration_hashes = {}
-        for name, value in snapshots.items():
+        for name, value in configuration_snapshots.items():
             safe_snapshot = _json(value)
             configuration_hashes[name] = hashlib.sha256(json.dumps(safe_snapshot, sort_keys=True).encode()).hexdigest()
             await self.io(_write_json, self.directory / "config" / f"{name}.json", safe_snapshot)
         self._manifest["source_sha256"] = {
-            path.relative_to(Path(__file__).parent).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
-            for path in Path(__file__).parent.rglob("*.py")
+            path.relative_to(source_directory).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in source_directory.rglob("*.py")
         }
         self._manifest["config_sha256"] = configuration_hashes
         await self.io(_write_json, self.directory / "manifest.json", self._manifest)
@@ -189,9 +196,7 @@ class _SOPCapture:
         encoded_image = await self.encoded_image(image)
         image_digest = hashlib.sha256(encoded_image).hexdigest()
         extension = (
-            "jpg" if encoded_image.startswith(b"\xff\xd8")
-            else "png" if encoded_image.startswith(b"\x89PNG")
-            else "bin"
+            "jpg" if encoded_image.startswith(b"\xff\xd8") else "png" if encoded_image.startswith(b"\x89PNG") else "bin"
         )
         relative_image_path = Path("images") / f"{image_digest}.{extension}"
 
@@ -335,9 +340,7 @@ class _RecordedVision:
         try:
             response = await self._service.ask_images(images, question, **kwargs)
         except (Exception, asyncio.CancelledError) as exc:  # noqa: BLE001 -- record the model boundary failure and re-raise unchanged.
-            await current_attempt.event(
-                "vision.failed", call_id=call_id, error_type=type(exc).__name__, error=str(exc)
-            )
+            await current_attempt.event("vision.failed", call_id=call_id, error_type=type(exc).__name__, error=str(exc))
             raise
         await current_attempt.event(
             "vision.finished",
@@ -380,9 +383,7 @@ class _RecordedVision:
                 yield text
             stream_completed = True
         except (Exception, asyncio.CancelledError) as exc:  # noqa: BLE001 -- retain the streaming failure and re-raise unchanged.
-            await current_attempt.event(
-                "vision.failed", call_id=call_id, error_type=type(exc).__name__, error=str(exc)
-            )
+            await current_attempt.event("vision.failed", call_id=call_id, error_type=type(exc).__name__, error=str(exc))
             raise
         finally:
             close = getattr(stream, "aclose", None)

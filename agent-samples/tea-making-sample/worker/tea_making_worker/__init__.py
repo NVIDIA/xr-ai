@@ -1,24 +1,10 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Compose a Python SOP runner with independent async flows and SDK conversation.
+"""Tea application and independent reusable components, with explicit imports.
 
-Construct SOPConfig directly in Python or through the application's YAML loader.
-The runner owns controls/procedure/state; reusable functions are exported by
-tea_making_worker.flows. Stop the SDK router before the runner and its services.
+Import application-specific agents/models from application and generic async flow
+functions from components. Importing components does not initialize the tea app.
 """
 
-from .agents.sop._settings import (
-    BrewingSettings,
-    DurationSetting,
-    SOPConfig,
-    TeaIdentity,
-    TemperatureSetting,
-    VisualInstructions,
-)
-from .agents.sop.agent import SOPAgent
-
-__all__ = [
-    "BrewingSettings", "DurationSetting", "SOPAgent", "SOPConfig", "TeaIdentity",
-    "TemperatureSetting", "VisualInstructions",
-]
+__all__ = []

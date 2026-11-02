@@ -22,8 +22,8 @@ from xr_ai_tools.vision import ImageQueryResult
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "agent-samples/tea-making-sample/worker"))
 
-from tea_making_worker import BrewingSettings, TeaIdentity  # noqa: E402
-from tea_making_worker.flows import (  # noqa: E402
+from tea_making_worker.application.tea_data_models import BrewingSettings, TeaIdentity  # noqa: E402
+from tea_making_worker.components import (  # noqa: E402
     run_timer_flow,
     run_vision_rag_retrieval_flow,
     run_visual_verification_flow,
@@ -179,7 +179,7 @@ async def test_visual_cancellation_cannot_publish_or_succeed_after_backend_swall
 
 @pytest.mark.asyncio
 async def test_native_timer_owns_start_deadline_updates_and_completion(monkeypatch):
-    import tea_making_worker.flows._timer as timer_module
+    import tea_making_worker.components.timer_flow as timer_module
 
     monotonic_seconds = [100.0]
     wall_seconds = [1000.0]
@@ -341,7 +341,7 @@ async def test_unsupported_source_quote_cannot_be_labeled_retrieved():
 
 @pytest.mark.asyncio
 async def test_history_age_expires_context_without_expiring_confirmation_evidence(monkeypatch):
-    import tea_making_worker.flows._visual as visual_module
+    import tea_making_worker.components.visual_verification_flow as visual_module
 
     now_ns = [1_000_000_000]
     monkeypatch.setattr(visual_module.time, "time_ns", lambda: now_ns[0])

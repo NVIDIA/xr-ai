@@ -23,7 +23,8 @@ async def test_sample_does_not_register_model_health_probes(
     root = Path(__file__).resolve().parents[1]
     monkeypatch.syspath_prepend(str(root / "agent-samples" / sample / "worker"))
     monkeypatch.syspath_prepend(str(root / "agent-samples/xr-render-demo/scene"))
-    app = importlib.import_module(f"{package}.app")
+    application_module = "application.tea_application" if sample == "tea-making-sample" else "app"
+    app = importlib.import_module(f"{package}.{application_module}")
     service = SimpleNamespace(
         health=AsyncMock(side_effect=AssertionError("unexpected model health probe")),
         chat=AsyncMock(),
@@ -106,7 +107,8 @@ async def test_shipped_speaker_mode_never_constructs_batch_client(
     root = Path(__file__).resolve().parents[1]
     monkeypatch.syspath_prepend(str(root / "agent-samples" / sample / "worker"))
     monkeypatch.syspath_prepend(str(root / "agent-samples/xr-render-demo/scene"))
-    app = importlib.import_module(f"{package}.app")
+    application_module = "application.tea_application" if sample == "tea-making-sample" else "app"
+    app = importlib.import_module(f"{package}.{application_module}")
     model_file = "models.local.json" if sample == "tea-making-sample" else "models.json"
     profile = load_models_config(root / "agent-samples" / sample / "yaml" / model_file)
     assert "stt" not in profile.entries

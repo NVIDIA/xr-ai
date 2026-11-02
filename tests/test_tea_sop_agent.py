@@ -29,10 +29,13 @@ from xr_ai_voice import VOICE_OUTPUT_TOPIC
 _SAMPLE = Path(__file__).resolve().parents[1] / "agent-samples/tea-making-sample"
 sys.path.insert(0, str(_SAMPLE / "worker"))
 
-from tea_making_worker import SOPAgent  # noqa: E402
-from tea_making_worker.agents.sop.agent import SOP_CONTEXT_SOURCE  # noqa: E402
-from tea_making_worker.config import load_config  # noqa: E402
-from tea_making_worker.flows import run_timer_flow  # noqa: E402
+from tea_making_worker.application.application_config import load_config  # noqa: E402
+from tea_making_worker.application.tea_events import USER_QUERY_TOPIC  # noqa: E402
+from tea_making_worker.application.tea_sop_agent import (  # noqa: E402
+    SOP_CONTEXT_SOURCE,
+    SOPAgent,
+)
+from tea_making_worker.components import run_timer_flow  # noqa: E402
 
 
 class _Decisions:
@@ -177,7 +180,7 @@ def _router(sop, runtime, context, conversation_language=None):
     router = AgentRouter(
         {"workflow": sop, "conversation": conversation},
         sop._decisions,
-        query_topic=__import__("tea_making_worker.events", fromlist=["USER_QUERY_TOPIC"]).USER_QUERY_TOPIC,
+        query_topic=USER_QUERY_TOPIC,
         output_topic=VOICE_OUTPUT_TOPIC,
         output=AsyncMock(),
         initialize_participant=sop.participant_joined,
@@ -402,7 +405,7 @@ async def test_scoped_parallel_flow_keeps_its_own_state_across_foreground_steps(
 
 @pytest.mark.asyncio
 async def test_runtime_departure_drains_work_before_releasing_frames_and_readmits_fresh_session():
-    from tea_making_worker.events import (
+    from tea_making_worker.application.tea_events import (
         PARTICIPANT_JOINED_TOPIC,
         PARTICIPANT_LEFT_TOPIC,
         USER_QUERY_TOPIC,

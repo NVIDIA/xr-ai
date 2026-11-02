@@ -13,11 +13,13 @@ then allow recording and service resources to finish.
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 import nemo_relay
+import yaml
 from loguru import logger
 from xr_ai_conversation import ContextManager, Conversation
 from xr_ai_logging import setup_logging
@@ -32,16 +34,16 @@ from xr_ai_voice import VOICE_OUTPUT_TOPIC, HubVoiceTransport, VadConfig, VoiceA
 from xr_ai_voicegate import load_voice_gate_config
 from xr_ai_web_events import WebEventsAgent
 
-from ._capture import _RecordedDecisions, _RecordedLanguage, _RecordedVision, _SOPCapture
-from .agents.sop.agent import SOP_CONTEXT_SOURCE, SOPAgent
-from .agents.web_events import TeaWebEventsAgent
-from .config import WorkerConfig
-from .events import (
+from ..components.sop_run_recording import _RecordedDecisions, _RecordedLanguage, _RecordedVision, _SOPCapture
+from .application_config import WorkerConfig
+from .tea_event_viewer import TeaWebEventsAgent
+from .tea_events import (
     INTERRUPTED_TOPIC,
     PARTICIPANT_JOINED_TOPIC,
     PARTICIPANT_LEFT_TOPIC,
     USER_QUERY_TOPIC,
 )
+from .tea_sop_agent import SOP_CONTEXT_SOURCE, SOPAgent
 
 _CLIENT_TEXT_TOPIC = "agent.response"
 
@@ -150,7 +152,12 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
     # evidence. All later model calls inherit this capture scope.
     capture = _SOPCapture(config.artifacts_dir, enabled=config.capture_enabled)
     await capture.start(
-        config,
+        configuration_snapshots={
+            "worker": config,
+            "models": json.loads(config.models_config.read_text()),
+            "voice_gate": yaml.safe_load(config.voice_gate_yaml.read_text()),
+        },
+        source_directory=Path(__file__).resolve().parents[1],
         workflow_name="tea making",
         steps=("identify", "fill_water", "heat_water", "start_steeping", "steep_timer"),
     )

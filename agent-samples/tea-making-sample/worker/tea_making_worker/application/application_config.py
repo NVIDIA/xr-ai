@@ -19,9 +19,9 @@ from typing import Any
 import yaml
 from xr_ai_models import DecisionQuestion
 
-from .agents.sop._settings import SOPConfig, VisualInstructions
+from .tea_sop_configuration import SOPConfig, VisualInstructions
 
-_PACKAGE = Path(__file__).resolve().parent
+_WORKER_PACKAGE = Path(__file__).resolve().parents[1]
 
 
 @dataclass(frozen=True, slots=True)
@@ -225,7 +225,7 @@ def load_config(path: Path | None) -> WorkerConfig:
     """
 
     if path is None:
-        path = _PACKAGE.parents[1] / "yaml" / "tea_making_worker.yaml"
+        path = _WORKER_PACKAGE.parents[1] / "yaml" / "tea_making_worker.yaml"
         if not path.is_file():
             path = Path.cwd() / "yaml" / "tea_making_worker.yaml"
     path = path.resolve()
