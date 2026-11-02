@@ -1042,6 +1042,29 @@ async def test_effective_end_preserves_frames_after_stop_utterance(manual_captio
     assert records[0]["timestamp_us"] == 3_000_000
 
 
+async def test_summary_merges_narration_and_captions_by_time(manual_caption_demo):
+    demo = manual_caption_demo
+    await speak(demo, "start capture", timestamp_us=1_000_000)
+    state = demo.capture_backend._sessions["user"]
+    source = demo.frames.execute.return_value
+    demo.frames.execute.return_value = source.model_copy(update={"timestamp_us": 4_000_000})
+    await demo.capture_backend._capture(state)
+    await demo.capture_backend._caption(state)
+    # Narration both before and after the caption; the caption's own wording is kept as is.
+    await speak(demo, "I am using the hot air gun", timestamp_us=3_000_000)
+    await speak(demo, "Now the solder wick", timestamp_us=6_000_000)
+    await speak(demo, "stop capture", timestamp_us=7_000_000)
+    summary = (state.directory / "summary.md").read_text()
+    assert "## Combined timeline" in summary
+    lines = [line for line in summary.splitlines() if line.startswith("- `")]
+    assert lines == [
+        "- `00:00:02` **Heard:** I am using the hot air gun",
+        "- `00:00:03` **Saw:** Arrange: A blue block",
+        "- `00:00:05` **Heard:** Now the solder wick",
+    ]
+    assert "Waiting for narration" not in summary
+
+
 async def test_empty_packet_contract(manual_caption_demo):
     demo = manual_caption_demo
     await speak(demo, "start capture")
