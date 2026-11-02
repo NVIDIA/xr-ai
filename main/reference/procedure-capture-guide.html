@@ -524,6 +524,9 @@ updating the checkout. If you changed ports in a GPU profile, pass the same
 </section>
 <section id="output-destination">
 <h2>Output destination<a class="headerlink" href="#output-destination" title="Link to this heading">#</a></h2>
+<p>Recorded procedures are saved under
+<code class="docutils literal notranslate"><span class="pre">agent-samples/procedure-capture-guide/artifacts/sessions/&lt;session-id&gt;/</span></code> (frames, captions,
+transcript, and summary).</p>
 <p>Choose an output root at launch without editing configuration:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>main.py<span class="w"> </span>--mode<span class="w"> </span>capture<span class="w"> </span>--output-root<span class="w"> </span>/path/to/task-evidence
 </pre></div>
@@ -556,7 +559,8 @@ and retains its verification and timer rules. Disconnecting closes the raw bundl
 and then starts rendering while the recorder remains running.</p>
 <p><code class="docutils literal notranslate"><span class="pre">yaml/media_capture.yaml</span></code> selects <code class="docutils literal notranslate"><span class="pre">session_mode:</span> <span class="pre">participant</span></code> and the <code class="docutils literal notranslate"><span class="pre">demo</span></code>
 profile. It saves recordings under
-<code class="docutils literal notranslate"><span class="pre">~/.local/share/xr-ai/captures/procedure-capture-guide/</span></code>, retaining raw media and
+<code class="docutils literal notranslate"><span class="pre">~/.local/share/xr-ai/captures/procedure-capture-guide/</span></code> (not the capture
+packets in <code class="docutils literal notranslate"><span class="pre">artifacts/sessions/</span></code>), retaining raw media and
 rendering a captioned MP4 after disconnect. This option requires an NVIDIA GPU with NVENC support
 and <code class="docutils literal notranslate"><span class="pre">ffmpeg</span></code> on <code class="docutils literal notranslate"><span class="pre">PATH</span></code>. Refer to <a class="reference internal" href="../components/server-runtime.html"><span class="doc">Server runtime</span></a> for the shared
 recorder’s output and encoding contract.</p>
