@@ -128,64 +128,82 @@ def warn_if_missing(*names: str) -> None:
 
 
 def _hf_offline() -> bool:
-    """True when the user explicitly opted out of Hub traffic (HF_HUB_OFFLINE)."""
+    """True when ``HF_HUB_OFFLINE`` is set.
+
+    This is huggingface_hub's own switch for "make no Hub requests"
+    (https://huggingface.co/docs/huggingface_hub/package_reference/environment_variables#hfhuboffline).
+    Cached-model launches need no download, so we honor it and skip validation.
+    """
     return os.environ.get("HF_HUB_OFFLINE", "").upper() in {"1", "ON", "YES", "TRUE"}
 
 
-def _hf_token_rejected(token: str) -> bool:
-    """True only when the Hub answers 401 for *token*; any other outcome is unknown.
+def _hf_token_status(token: str) -> str:
+    """Ask the Hub about *token*: ``"valid"``, ``"rejected"`` (HTTP 401) or ``"unknown"``.
 
-    Offline machines and Hub outages must not block launches whose checkpoints
-    are already cached, so network errors and non-401 statuses count as valid.
+    Timeouts, network errors and other HTTP errors are ``"unknown"``: the
+    check is inconclusive and startup continues, so Hub outages never block
+    launches whose checkpoints are already cached.
     """
     request = urllib.request.Request(
         _HF_WHOAMI_URL, headers={"Authorization": f"Bearer {token}"},
     )
     try:
         with urllib.request.urlopen(request, timeout=_HF_CHECK_TIMEOUT_S):
-            return False
+            return "valid"
     except urllib.error.HTTPError as exc:
-        return exc.code == 401
+        return "rejected" if exc.code == 401 else "unknown"
     except (urllib.error.URLError, OSError, ValueError):
-        return False
+        return "unknown"
 
 
-def _reject_invalid_hf_token(from_env: bool) -> None:
+def _reject_invalid_hf_token() -> None:
     """Exit with the real cause when the resolved HF_TOKEN is rejected by the Hub.
 
     A rejected token is otherwise silent: huggingface_hub downgrades to
     anonymous requests and the Hub only logs "unauthenticated requests".
+    Call after ``load_credentials()``; the token source is inferred by
+    comparing the resolved token with the saved files, so an exported token
+    is told apart from one injected from credentials.json.
     """
     if _hf_offline():
         return
     token = os.environ["HF_TOKEN"]
-    if not _hf_token_rejected(token):
+    if _hf_token_status(token) != "rejected":
         return
     label, url, _ = _KNOWN["HF_TOKEN"]
+    saved_token = _read().get("HF_TOKEN", "")
+    login_token = _read_hf_token_file()
+    from_env = token not in (saved_token, login_token)
     source = ("the HF_TOKEN environment variable (check your shell profile)" if from_env
               else f"{_CREDS_FILE} or {_HF_TOKEN_FILE}")
     print(f"\n[credentials] {label} is set but the Hugging Face Hub rejected it (HTTP 401).",
           file=sys.stderr)
     print(f"  It came from {source}; it is likely revoked or expired. "
           "Downloads would silently run unauthenticated.", file=sys.stderr)
-    saved_token = _read().get("HF_TOKEN", "")
-    login_token = _read_hf_token_file()
     # credentials.json outranks the Hugging Face login file, so that is what
     # unsetting HF_TOKEN would fall through to.
-    fallback, fallback_file = ((saved_token, _CREDS_FILE) if saved_token
-                               else (login_token, _HF_TOKEN_FILE))
-    if from_env and fallback and fallback != token:
-        if _hf_token_rejected(fallback):
-            print(f"  Unsetting HF_TOKEN will not help: the token in {fallback_file} "
-                  f"is rejected too. Create a new token at {url} and update it there.",
-                  file=sys.stderr)
-        else:
-            print(f"  The token in {fallback_file} is valid, but the environment variable "
-                  "takes priority. Unset or update HF_TOKEN to use it.", file=sys.stderr)
-    elif (not from_env and saved_token and login_token and login_token != saved_token
-          and not _hf_token_rejected(login_token)):
-        print(f"  The token in {_HF_TOKEN_FILE} is valid, but {_CREDS_FILE} takes "
-              "priority. Update or remove HF_TOKEN there.", file=sys.stderr)
+    if from_env:
+        fallback, fallback_file = ((saved_token, _CREDS_FILE) if saved_token
+                                   else (login_token, _HF_TOKEN_FILE))
+        shadowed_by = "the environment variable"
+        advice = "Unset or update HF_TOKEN to use it."
+    else:
+        fallback, fallback_file = login_token, _HF_TOKEN_FILE
+        shadowed_by = str(_CREDS_FILE)
+        advice = "Update or remove HF_TOKEN there."
+    status = (_hf_token_status(fallback)
+              if fallback and fallback != token and (from_env or saved_token) else None)
+    if status == "rejected":
+        print(f"  The token in {fallback_file} is rejected too"
+              + (", so unsetting HF_TOKEN will not help" if from_env else "")
+              + f". Create a new token at {url} and update it there.", file=sys.stderr)
+    elif status == "valid":
+        print(f"  The token in {fallback_file} is valid, but {shadowed_by} takes "
+              f"priority. {advice}", file=sys.stderr)
+    elif status == "unknown":
+        print(f"  Could not check the token in {fallback_file} (Hub unreachable or "
+              f"errored), so its validity is unknown. Create a new token at {url} "
+              "if it is stale.", file=sys.stderr)
     else:
         print(f"  Create a new token at {url}, then update it.", file=sys.stderr)
     sys.exit(2)
@@ -200,12 +218,11 @@ def require_credentials(*names: str, allow_missing: bool = False) -> None:
     if allow_missing:
         warn_if_missing(*names)
         return
-    from_env = bool(os.environ.get("HF_TOKEN"))
     load_credentials()
     missing = [name for name in names if not os.environ.get(name)]
     if not missing:
         if "HF_TOKEN" in names:
-            _reject_invalid_hf_token(from_env)
+            _reject_invalid_hf_token()
         return
     for name in missing:
         label, url, why = _KNOWN.get(name, (name, "", ""))

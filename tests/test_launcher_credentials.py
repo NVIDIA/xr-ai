@@ -4,6 +4,7 @@
 """Unit tests for xr_ai_launcher._credentials (read/write/load/ensure helpers)."""
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import urllib.error
@@ -20,7 +21,7 @@ def _clean_env(monkeypatch):
     monkeypatch.delenv("HF_TOKEN",    raising=False)
     monkeypatch.delenv("NGC_API_KEY", raising=False)
     # Never reach the real Hub; tests opt in to a rejection explicitly.
-    monkeypatch.setattr(_creds, "_hf_token_rejected", lambda _token: False)
+    monkeypatch.setattr(_creds, "_hf_token_status", lambda _token: "valid")
 
 
 @pytest.fixture()
@@ -191,7 +192,7 @@ class TestRejectedHFToken:
 
     def test_rejected_env_token_exits_naming_env(self, fake_creds_dir, monkeypatch, capsys):
         monkeypatch.setenv("HF_TOKEN", "bad")
-        monkeypatch.setattr(_creds, "_hf_token_rejected", lambda _token: True)
+        monkeypatch.setattr(_creds, "_hf_token_status", lambda _token: "rejected")
         with pytest.raises(SystemExit) as exc:
             _creds.require_credentials("HF_TOKEN")
         assert exc.value.code == 2
@@ -204,7 +205,7 @@ class TestRejectedHFToken:
         _, hf_file = fake_creds_dir
         hf_file.write_text("good")
         monkeypatch.setenv("HF_TOKEN", "bad")
-        monkeypatch.setattr(_creds, "_hf_token_rejected", lambda token: token == "bad")
+        monkeypatch.setattr(_creds, "_hf_token_status", lambda t: "rejected" if t == "bad" else "valid")
         with pytest.raises(SystemExit):
             _creds.require_credentials("HF_TOKEN")
         assert "takes priority" in capsys.readouterr().err
@@ -212,19 +213,19 @@ class TestRejectedHFToken:
     def test_rejected_file_token_names_file(self, fake_creds_dir, monkeypatch, capsys):
         _, hf_file = fake_creds_dir
         hf_file.write_text("bad")
-        monkeypatch.setattr(_creds, "_hf_token_rejected", lambda _token: True)
+        monkeypatch.setattr(_creds, "_hf_token_status", lambda _token: "rejected")
         with pytest.raises(SystemExit):
             _creds.require_credentials("HF_TOKEN")
         assert str(hf_file) in capsys.readouterr().err
 
     def test_allow_missing_skips_validation(self, fake_creds_dir, monkeypatch):
         monkeypatch.setenv("HF_TOKEN", "bad")
-        monkeypatch.setattr(_creds, "_hf_token_rejected", lambda _token: pytest.fail("validated"))
+        monkeypatch.setattr(_creds, "_hf_token_status", lambda _token: pytest.fail("validated"))
         _creds.require_credentials("HF_TOKEN", allow_missing=True)
 
     @pytest.mark.parametrize("value", ["1", "true", "YES", "on"])
     def test_offline_mode_skips_validation_without_http(self, fake_creds_dir, monkeypatch, value):
-        monkeypatch.undo()  # exercise the real _hf_token_rejected
+        monkeypatch.undo()  # exercise the real _hf_token_status
         monkeypatch.setenv("HF_HUB_OFFLINE", value)
         monkeypatch.setenv("HF_TOKEN", "bad")
 
@@ -239,7 +240,7 @@ class TestRejectedHFToken:
         creds_file.write_text(json.dumps({"HF_TOKEN": "stale"}))
         hf_file.write_text("good")
         monkeypatch.setenv("HF_TOKEN", "bad")
-        monkeypatch.setattr(_creds, "_hf_token_rejected", lambda token: token != "good")
+        monkeypatch.setattr(_creds, "_hf_token_status", lambda t: "valid" if t == "good" else "rejected")
         with pytest.raises(SystemExit):
             _creds.require_credentials("HF_TOKEN")
         err = capsys.readouterr().err
@@ -250,7 +251,7 @@ class TestRejectedHFToken:
         creds_file, hf_file = fake_creds_dir
         creds_file.write_text(json.dumps({"HF_TOKEN": "stale"}))
         hf_file.write_text("good")
-        monkeypatch.setattr(_creds, "_hf_token_rejected", lambda token: token == "stale")
+        monkeypatch.setattr(_creds, "_hf_token_status", lambda t: "rejected" if t == "stale" else "valid")
         with pytest.raises(SystemExit):
             _creds.require_credentials("HF_TOKEN")
         err = capsys.readouterr().err
@@ -258,17 +259,53 @@ class TestRejectedHFToken:
         assert "Update or remove HF_TOKEN there" in err
 
     @pytest.mark.parametrize(("outcome", "expected"), [
-        (urllib.error.HTTPError("u", 401, "Unauthorized", {}, None), True),
-        (urllib.error.HTTPError("u", 503, "Unavailable", {}, None), False),
-        (urllib.error.URLError("offline"), False),
-        (TimeoutError(), False),
+        (urllib.error.HTTPError("u", 401, "Unauthorized", {}, None), "rejected"),
+        (urllib.error.HTTPError("u", 503, "Unavailable", {}, None), "unknown"),
+        (urllib.error.URLError("offline"), "unknown"),
+        (TimeoutError(), "unknown"),
+        (None, "valid"),
     ])
-    def test_only_401_counts_as_rejected(self, monkeypatch, outcome, expected):
-        monkeypatch.undo()  # restore the real _hf_token_rejected
+    def test_status_classifies_hub_outcomes(self, monkeypatch, outcome, expected):
+        monkeypatch.undo()  # restore the real _hf_token_status
         def fake_urlopen(*_a, **_k):
+            if outcome is None:
+                return contextlib.nullcontext()
             raise outcome
         monkeypatch.setattr(_creds.urllib.request, "urlopen", fake_urlopen)
-        assert _creds._hf_token_rejected("tok") is expected
+        assert _creds._hf_token_status("tok") == expected
+
+    def test_unknown_active_token_allows_startup(self, fake_creds_dir, monkeypatch):
+        monkeypatch.setenv("HF_TOKEN", "tok")
+        monkeypatch.setattr(_creds, "_hf_token_status", lambda _t: "unknown")
+        _creds.require_credentials("HF_TOKEN")
+
+    @pytest.mark.parametrize(("fallback_status", "expected", "forbidden"), [
+        ("valid", "is valid, but", None),
+        ("rejected", "rejected too", "is valid"),
+        ("unknown", "validity is unknown", "is valid"),
+    ])
+    @pytest.mark.parametrize("path", ["env_to_saved", "env_to_login", "saved_to_login"])
+    def test_fallback_claims_follow_validation(
+            self, fake_creds_dir, monkeypatch, capsys, path, fallback_status, expected, forbidden):
+        creds_file, hf_file = fake_creds_dir
+        if path == "env_to_saved":
+            creds_file.write_text(json.dumps({"HF_TOKEN": "fallback"}))
+            monkeypatch.setenv("HF_TOKEN", "active")
+        elif path == "env_to_login":
+            hf_file.write_text("fallback")
+            monkeypatch.setenv("HF_TOKEN", "active")
+        else:
+            creds_file.write_text(json.dumps({"HF_TOKEN": "active"}))
+            hf_file.write_text("fallback")
+        monkeypatch.setattr(_creds, "_hf_token_status",
+                            lambda t: "rejected" if t == "active" else fallback_status)
+        with pytest.raises(SystemExit) as exc:
+            _creds.require_credentials("HF_TOKEN")
+        assert exc.value.code == 2
+        err = capsys.readouterr().err
+        assert expected in err
+        if forbidden:
+            assert forbidden not in err
 
 
 class TestWarnIfMissing:
