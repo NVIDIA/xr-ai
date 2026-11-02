@@ -72,7 +72,7 @@ and finalization. On connection, the worker explains these commands once.
 Other speech while idle does not trigger a reply.
 
 Recorded procedures are saved under
-`procedure-capture-guide/artifacts/sessions/<session-id>/` (frames, captions,
+`artifacts/sessions/<session-id>/` (frames, captions,
 transcript, and summary). To choose another location, launch with
 `uv run main.py --mode capture --output-root PATH`.
 

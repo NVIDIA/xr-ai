@@ -70,7 +70,7 @@ updating the checkout. If you changed ports in a GPU profile, pass the same
 ## Output destination
 
 Recorded procedures are saved under
-`procedure-capture-guide/artifacts/sessions/<session-id>/` (frames, captions,
+`agent-samples/procedure-capture-guide/artifacts/sessions/<session-id>/` (frames, captions,
 transcript, and summary).
 
 Choose an output root at launch without editing configuration:
