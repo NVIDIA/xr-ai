@@ -53,8 +53,8 @@ the pointers below to the answers.
   in documentation URLs; the site landing page can fall back to `main`. If the
   selector prints no tag, remain on `main` and tell the user that no release tag
   was found.
-- **Working contract:** read `AGENTS.md` first. Every change must satisfy it,
-  and its canonical-references table routes deeper topics.
+- **Working contract:** read `AGENTS.md` for shared engineering guidance,
+  workflow routing, and canonical references.
 - **Docs:** `docs/source/`; published versioned site at
   <https://nvidia.github.io/xr-ai/>.
 - **Reference sample:** `agent-samples/conversation-example/`, the one to study
