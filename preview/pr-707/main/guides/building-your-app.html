@@ -472,10 +472,11 @@
 <h1>Build your application<a class="headerlink" href="#build-your-application" title="Link to this heading">#</a></h1>
 <section id="overview">
 <h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">#</a></h2>
-<p>Build your own XR AI application from a sample and keep its code and
-configuration under <code class="docutils literal notranslate"><span class="pre">apps/</span></code>. This gives you an application workspace where you
-can develop your task-specific behavior while using the checkout’s SDK and
-services.</p>
+<p>Build your own XR AI application from a sample, using the checkout’s SDK and
+services. This reference workflow keeps application code and configuration
+under <code class="docutils literal notranslate"><span class="pre">apps/&lt;your-app&gt;/</span></code>, outside the repository’s sample catalog. Adapt the
+application layout and tooling to its owner’s requirements. Refer to
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/main/AGENTS.md#engineering-guidance">Engineering guidance</a>.</p>
 </section>
 <section id="start-from-a-source-checkout">
 <h2>Start from a source checkout<a class="headerlink" href="#start-from-a-source-checkout" title="Link to this heading">#</a></h2>
@@ -818,8 +819,8 @@ application needs.</p>
 <span class="p">]</span>
 </pre></div>
 </div>
-<p>Point model clients at a <code class="docutils literal notranslate"><span class="pre">StubOpenAI</span></code>-style transport, then run the application
-test directory explicitly with the repository test environment:</p>
+<p>Point model clients at a <code class="docutils literal notranslate"><span class="pre">StubOpenAI</span></code>-style transport. One option is to run the
+application tests explicitly with the repository test environment:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>uv.toml<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>tests<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>pytest<span class="w"> </span>-v<span class="w"> </span>apps/my-app/tests<span class="w"> </span>-m<span class="w"> </span><span class="s2">"not gpu"</span>
 </pre></div>
@@ -842,9 +843,10 @@ sample documentation, configuration catalogs, and test discovery remain scoped
 to <code class="docutils literal notranslate"><span class="pre">agent-samples/</span></code> and <code class="docutils literal notranslate"><span class="pre">tests/</span></code>. Git ignores <code class="docutils literal notranslate"><span class="pre">apps/*</span></code> by default so private
 application work is not staged accidentally. Remove that ignore rule when the
 application owner wants to track the application in the fork.</p>
-<p>The rest of the checkout remains repository-owned. Commit-wide hooks such as
-DCO sign-off still run when installed, and changes outside <code class="docutils literal notranslate"><span class="pre">apps/</span></code> continue to
-follow <code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code> and the repository’s contribution checks.</p>
+<p>The tooling exclusions above apply only to <code class="docutils literal notranslate"><span class="pre">apps/</span></code>. Checks still inspect their
+configured paths elsewhere in the checkout, and commit-wide hooks such as DCO
+sign-off still run when installed. Refer to the routing in <code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code> before
+changing repository-owned files.</p>
 </section>
 </section>
 
