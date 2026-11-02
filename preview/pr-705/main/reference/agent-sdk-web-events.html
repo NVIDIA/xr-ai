@@ -470,12 +470,17 @@
 -->
 <section id="xr-ai-web-events">
 <h1>xr-ai-web-events<a class="headerlink" href="#xr-ai-web-events" title="Link to this heading">#</a></h1>
-<p><code class="docutils literal notranslate"><span class="pre">xr-ai-web-events</span></code> presents application-selected runtime events in a bounded,
-read-only browser view. It does not tail files, persist data, or enter model,
-voice, media, or DeviceIOHub authentication paths. Refer to <a class="reference internal" href="python/index.html"><span class="doc">API Reference</span></a>
-for the public APIs.</p>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">#</a></h2>
+<p>Display selected agent events in a browser while your application runs. Use
+the live view to inspect readings, observations, or progress updates as you
+test the interaction.</p>
+</section>
 <section id="publishing-selected-events">
 <h2>Publishing selected events<a class="headerlink" href="#publishing-selected-events" title="Link to this heading">#</a></h2>
+<p>The viewer keeps a bounded live history. It does not tail files, persist data,
+or enter model, voice, media, or DeviceIOHub authentication paths. Refer to
+<a class="reference internal" href="python/index.html"><span class="doc">API Reference</span></a> for the public APIs.</p>
 <p>Applications explicitly project compact JSON-compatible payloads to
 <code class="docutils literal notranslate"><span class="pre">WEB_EVENT_TOPIC</span></code>. Each event’s serialized <code class="docutils literal notranslate"><span class="pre">payload</span></code> is limited to 16 KiB.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseModel</span>
@@ -583,6 +588,7 @@ to the configured listener address. Listener addresses are IPv4-only.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#publishing-selected-events">Publishing selected events</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#exposure-boundary">Exposure boundary</a></li>
 </ul>

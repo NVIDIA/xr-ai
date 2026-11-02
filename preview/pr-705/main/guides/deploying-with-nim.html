@@ -470,13 +470,18 @@
 -->
 <section id="deploying-samples-with-nim-endpoints">
 <h1>Deploying samples with NIM endpoints<a class="headerlink" href="#deploying-samples-with-nim-endpoints" title="Link to this heading">#</a></h1>
-<p>Develop samples with the local <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> profile, then configure the same
-workers to consume independently deployed NVIDIA NIM endpoints. Samples use
-<code class="docutils literal notranslate"><span class="pre">xr_ai_models</span></code> factories and typed service interfaces in both environments.
-They do not launch model containers or require local compatibility proxies.
-The local server defaults and sample model profiles remain the development path.</p>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">#</a></h2>
+<p>Connect application workers to independently deployed NVIDIA NIM endpoints.
+Configure and validate the required model roles, then switch the worker
+profiles while keeping model deployment separate from application startup.</p>
+</section>
 <section id="ownership-and-protocol-boundaries">
 <h2>Ownership and protocol boundaries<a class="headerlink" href="#ownership-and-protocol-boundaries" title="Link to this heading">#</a></h2>
+<p>Workers use <code class="docutils literal notranslate"><span class="pre">xr_ai_models</span></code> factories and typed service interfaces for both
+local and NIM inference. They do not launch model containers or require local
+compatibility proxies. The local server defaults and sample model profiles
+remain the development path.</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Responsibility</p></th>
@@ -674,8 +679,12 @@ Use the current sample’s model command with <code class="docutils literal notr
 <a class="reference internal" href="customizing-model-servers.html"><span class="doc">Customizing model servers</span></a> for the stop/start workflow.</p>
 <p>Keep copies of the sample’s active local JSON and selected voice-gate YAML. Replace its model entries with
 the roles required for native deployment in the table below, including the
-explicit <code class="docutils literal notranslate"><span class="pre">stt</span></code> entry for ordinary Riva speech. This example adapts
-simple VLM; run it from the repository root after validation:</p>
+explicit <code class="docutils literal notranslate"><span class="pre">stt</span></code> entry for ordinary Riva speech. This worked example adapts the
+deprecated Simple VLM sample and is retained for existing users. For new
+voice-and-vision applications, start from
+<a class="reference internal" href="../reference/conversation-example.html"><span class="doc">conversation-example</span></a> and adapt its
+consumer profile while retaining its decision-service role as described below.
+Run the legacy example from the repository root after validation:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>uv.toml<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-sdk/xr-ai-models<span class="w"> </span>python<span class="w"> </span>-<span class="w"> </span><span class="s">&lt;&lt;'PYTHON'</span>
 <span class="s">import json</span>
 <span class="s">import shutil</span>
@@ -711,34 +720,53 @@ uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> <
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p>Simple VLM</p></td>
+<tr class="row-even"><td><p>Conversation example</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">llm</span></code>, <code class="docutils literal notranslate"><span class="pre">vlm</span></code>, <code class="docutils literal notranslate"><span class="pre">stt</span></code>, <code class="docutils literal notranslate"><span class="pre">tts</span></code>, plus the existing <code class="docutils literal notranslate"><span class="pre">router</span></code> decision service</p></td>
+</tr>
+<tr class="row-odd"><td><p>Simple VLM (deprecated)</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">stt</span></code>, <code class="docutils literal notranslate"><span class="pre">vlm</span></code>, <code class="docutils literal notranslate"><span class="pre">tts</span></code></p></td>
 </tr>
-<tr class="row-odd"><td><p>Lab instrument monitoring</p></td>
+<tr class="row-even"><td><p>Lab instrument monitoring</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">llm</span></code>, <code class="docutils literal notranslate"><span class="pre">vlm</span></code>, <code class="docutils literal notranslate"><span class="pre">stt</span></code>, <code class="docutils literal notranslate"><span class="pre">tts</span></code></p></td>
 </tr>
-<tr class="row-even"><td><p>XR render demo</p></td>
+<tr class="row-odd"><td><p>XR render demo</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">llm</span></code>, <code class="docutils literal notranslate"><span class="pre">vlm</span></code>, <code class="docutils literal notranslate"><span class="pre">stt</span></code>, <code class="docutils literal notranslate"><span class="pre">tts</span></code></p></td>
 </tr>
-<tr class="row-odd"><td><p>Procedure capture and guide</p></td>
+<tr class="row-even"><td><p>Procedure capture and guide</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">llm</span></code>, <code class="docutils literal notranslate"><span class="pre">vlm</span></code>, <code class="docutils literal notranslate"><span class="pre">stt</span></code>, <code class="docutils literal notranslate"><span class="pre">tts</span></code></p></td>
 </tr>
-<tr class="row-even"><td><p>Tea making</p></td>
+<tr class="row-odd"><td><p>Tea making</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">yaml/models.local.json</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">llm</span></code>, <code class="docutils literal notranslate"><span class="pre">vlm</span></code>, <code class="docutils literal notranslate"><span class="pre">stt</span></code>, <code class="docutils literal notranslate"><span class="pre">tts</span></code>, <code class="docutils literal notranslate"><span class="pre">embedding</span></code></p></td>
 </tr>
 </tbody>
 </table>
 </div>
-<p>Simple VLM, lab monitoring, XR render, and procedure capture resolve
+<p>Conversation, Simple VLM, lab monitoring, XR render, and procedure capture resolve
 <code class="docutils literal notranslate"><span class="pre">models.json</span></code> beside their worker YAML. Tea making’s worker and RAG YAML each select <code class="docutils literal notranslate"><span class="pre">models_config</span></code>;
 update both when choosing a different profile path. Paths are relative to the
 respective YAML. Keep application-specific extra roles when adapting other
 samples. No sample launcher option or model-serving process is needed.</p>
+<p>The conversation example also requires its Clef <code class="docutils literal notranslate"><span class="pre">router</span></code> entry. Keep that entry
+when replacing the inference roles: the NIM reference profile does not provide
+a replacement decision service. Stopping the conversation model stack also
+stops its local Clef service. After stopping the stack, restart Clef separately
+from the repository root before starting the conversation worker:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>uv.toml<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>services/clef-server<span class="w"> </span>clef_server<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--config<span class="w"> </span>services/clef-server/clef_server.yaml
+</pre></div>
+</div>
+<p>Alternatively, configure the <code class="docutils literal notranslate"><span class="pre">router</span></code> entry for an independently operated
+compatible endpoint. Keep its address aligned with the service configuration;
+refer to <a class="reference internal" href="../reference/clef-flash.html"><span class="doc">Clef-Flash local decision server</span></a> for operation and readiness. Validate only
+the NIM roles with <code class="docutils literal notranslate"><span class="pre">smoke_test.py</span></code>; the smoke check rejects a profile containing
+<code class="docutils literal notranslate"><span class="pre">router</span></code>. The worker separately checks the decision service’s health during
+startup.</p>
 <p>Use the worker’s selected <code class="docutils literal notranslate"><span class="pre">voice_gate_yaml</span></code> path for <code class="docutils literal notranslate"><span class="pre">gate_path</span></code> (Tea making
 defaults to <code class="docutils literal notranslate"><span class="pre">voice_gate.yaml</span></code>). Disable speaker ASR in that file, and back up
 and restore the same file. Interaction
@@ -828,6 +856,7 @@ and <code class="docutils literal notranslate"><span class="pre">xr_ai_vllm.serv
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#ownership-and-protocol-boundaries">Ownership and protocol boundaries</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#deploy-the-required-models">Deploy the required models</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#configure-a-consumer-profile">Configure a consumer profile</a><ul class="nav section-nav flex-column">

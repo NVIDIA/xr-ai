@@ -470,8 +470,14 @@
 -->
 <section id="troubleshooting">
 <h1>Troubleshooting<a class="headerlink" href="#troubleshooting" title="Link to this heading">#</a></h1>
-<p>Common issues and their fixes. If you hit something not listed here, open an
-issue on the <a class="reference external" href="https://github.com/NVIDIA/xr-ai">repository</a>.</p>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">#</a></h2>
+<p>Diagnose setup, startup, model-service, and client-connection failures using
+process logs and the symptoms below. Start with the launcher’s failure summary
+when a stack fails to start.</p>
+<p>For an issue not covered here, open an issue on the
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai">repository</a>.</p>
+</section>
 <section id="investigating-a-failed-run">
 <h2>Investigating a failed run<a class="headerlink" href="#investigating-a-failed-run" title="Link to this heading">#</a></h2>
 <p>Start with the launcher’s failure summary to identify the failed service,
@@ -1051,6 +1057,7 @@ and can stall indefinitely; set <code class="docutils literal notranslate"><span
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#investigating-a-failed-run">Investigating a failed run</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#setup-time-issues">Setup-time issues</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#docker-socket-permission-denied-during-model-server-cleanup">Docker socket permission denied during model-server cleanup</a></li>

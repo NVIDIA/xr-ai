@@ -470,13 +470,17 @@
 -->
 <section id="xr-ai-voice">
 <h1>xr-ai-voice<a class="headerlink" href="#xr-ai-voice" title="Link to this heading">#</a></h1>
-<p><code class="docutils literal notranslate"><span class="pre">xr-ai-voice</span></code> owns the voice-facing boundary for an XR agent. Pipecat implements
-the private media pipeline; applications use typed runtime events and model
-service protocols. Refer to <a class="reference internal" href="python/index.html"><span class="doc">API Reference</span></a> for exact constructors, fields,
-and defaults.</p>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> connects speech input and spoken responses to your application
+agents. It handles voice gating, interruptions, and session cleanup, letting
+several agents share a voice interface while handling their own tasks.</p>
 <p><a id="usage"></a></p>
+</section>
 <section id="voice-agent">
 <span id="agent-sdk-voice-usage"></span><h2>Voice agent<a class="headerlink" href="#voice-agent" title="Link to this heading">#</a></h2>
+<p>Pipecat implements the private media pipeline. Refer to <a class="reference internal" href="python/index.html"><span class="doc">API Reference</span></a>
+for exact constructors, fields, and defaults.</p>
 <p>Applications construct speech from their loaded model profile and voice-gate
 configuration, then register one <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> with their runtime:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
@@ -505,10 +509,12 @@ configuration, then register one <code class="docutils literal notranslate"><spa
     <span class="k">await</span> <span class="n">voice</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">runtime</span><span class="p">)</span>
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> owns application readiness, hub transport, VAD and STT, voice gating,
-typed text ingress, TTS, signals, pipeline cancellation, and cleanup. Its media
-session remains private. Applications that need a shared public
-<code class="docutils literal notranslate"><span class="pre">HubVoiceTransport</span></code> construct and inject one explicitly.</p>
+<p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> marks its worker ready after its configured dependency checks pass
+and the voice transport starts; DeviceIOHub owns aggregated client readiness.
+<code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> also owns hub transport, VAD and STT, voice gating, typed text
+ingress, TTS, signals, pipeline cancellation, and cleanup. Its media session
+remains private. Applications that need a shared public <code class="docutils literal notranslate"><span class="pre">HubVoiceTransport</span></code>
+construct and inject one explicitly.</p>
 <p>Set utterance-ending silence once through <code class="docutils literal notranslate"><span class="pre">VadConfig.silence_duration</span></code> passed
 to <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code>. It controls the active backend: Silero VAD for batch STT, or
 per-speaker inactivity for speaker ASR. For speaker ASR, words decoded within
@@ -693,8 +699,9 @@ once against the packaged baseline.</p>
 </section>
 <section id="conversation-controls">
 <span id="voice-conversation-controls"></span><h2>Conversation controls<a class="headerlink" href="#conversation-controls" title="Link to this heading">#</a></h2>
-<p>The Simple VLM, Tea making, lab monitoring and XR render samples start with
-their microphone conversation closed.
+<p>The <code class="docutils literal notranslate"><span class="pre">simple-vlm-example</span></code>, <code class="docutils literal notranslate"><span class="pre">conversation-example</span></code>, <code class="docutils literal notranslate"><span class="pre">tea-making-sample</span></code>,
+<code class="docutils literal notranslate"><span class="pre">lab-instrument-monitoring</span></code>, and <code class="docutils literal notranslate"><span class="pre">xr-render-demo</span></code> samples start with microphone
+conversation closed.
 After connecting, say <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">start</span> <span class="pre">talking</span></code>, then speak naturally
 without a wake phrase. Say <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">stop</span> <span class="pre">talking</span></code> to close the
 conversation and interrupt the current response. A short <code class="docutils literal notranslate"><span class="pre">stop</span></code> interrupts the
@@ -733,7 +740,7 @@ response while keeping the conversation open.</p>
 </table>
 </div>
 <p><code class="docutils literal notranslate"><span class="pre">wake_only</span></code> and <code class="docutils literal notranslate"><span class="pre">hybrid</span></code> require non-empty <code class="docutils literal notranslate"><span class="pre">magic_phrases</span></code>. The packaged default
-is <code class="docutils literal notranslate"><span class="pre">always_on</span></code>, preserving the existing ungated fallback; the four conversation
+is <code class="docutils literal notranslate"><span class="pre">always_on</span></code>, preserving the existing ungated fallback; the conversation
 samples explicitly select <code class="docutils literal notranslate"><span class="pre">conversation</span></code>. Procedure capture instead uses
 ungated narration with STOP disabled. Change the sample’s <code class="docutils literal notranslate"><span class="pre">mode</span></code> field to
 choose another interaction policy without maintaining a separate preset copy.</p>
@@ -860,7 +867,8 @@ to the agent; the latency-saving interruption is not undone.</p>
 <section id="speaker-filtering-and-backend-selection">
 <span id="speaker-enrollment"></span><h2>Speaker filtering and backend selection<a class="headerlink" href="#speaker-filtering-and-backend-selection" title="Link to this heading">#</a></h2>
 <p>The same conversation controls work with ordinary STT and speaker filtering.
-Shipped samples select required speaker ASR alongside <code class="docutils literal notranslate"><span class="pre">conversation</span></code>:</p>
+The conversation samples select required speaker ASR alongside
+<code class="docutils literal notranslate"><span class="pre">conversation</span></code>:</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">speaker</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="w">  </span><span class="nt">backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">required</span>
@@ -919,7 +927,7 @@ candidate transcripts before
 enrollment and additionally transcribes non-owner voices after enrollment. It
 returns activity and ignored text on <code class="docutils literal notranslate"><span class="pre">voice.speaker-diagnostic</span></code> through the
 existing participant-routed data channel. These messages cannot invoke or
-interrupt an agent or change enrollment. See
+interrupt an agent or change enrollment. Refer to
 <a class="reference internal" href="../components/ai-services.html"><span class="doc">AI inference servers</span></a> for decoder ownership and diagnostic resource cost. The
 simple VLM sample enables diagnostics for live inspection. They have no effect
 when ordinary STT is selected.</p>
@@ -945,17 +953,21 @@ delay input completion or later frames. No display-dropping policy is introduced
 <span class="w">  </span>python<span class="w"> </span>-m<span class="w"> </span>speaker_stt<span class="w"> </span>--config<span class="w"> </span>services/speaker-stt/speaker_stt.yaml
 </pre></div>
 </div>
-<p>Alternatively, each sample-local model stack starts speaker ASR. Stop a
-standalone instance before switching to the stack’s hardware configuration;
-their configuration fingerprints can differ. From the repository root:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>uv.toml<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/simple-vlm-example/model-servers<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>simple_vlm_example_model_servers
+<p>Each conversation sample’s local model stack starts speaker ASR. The
+<code class="docutils literal notranslate"><span class="pre">procedure-capture-guide</span></code> model stack uses batch STT instead. Stop a standalone
+speaker ASR instance before switching to a conversation sample stack’s
+hardware configuration; their configuration fingerprints can differ.
+From the repository root:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>uv.toml<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/conversation-example/model-servers<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>conversation_example_model_servers
 </pre></div>
 </div>
-<p>It composes the <code class="docutils literal notranslate"><span class="pre">services/speaker-stt/speaker_stt.yaml</span></code>
-defaults with that sample’s <code class="docutils literal notranslate"><span class="pre">model-servers/yaml/&lt;gpu-profile&gt;.yaml</span></code> placement
+<p>The conversation-example launcher composes the
+<code class="docutils literal notranslate"><span class="pre">services/speaker-stt/speaker_stt.yaml</span></code> defaults with that sample’s
+<code class="docutils literal notranslate"><span class="pre">model-servers/yaml/&lt;gpu-profile&gt;.yaml</span></code> placement
 and capacity overrides, waits for decoder warmup, and reuses matching warm
-instances. The sample’s model command with <code class="docutils literal notranslate"><span class="pre">--stop</span></code> includes the speaker service. Stop the stack
+instances. The sample’s model command with <code class="docutils literal notranslate"><span class="pre">--stop</span></code> includes the speaker
+service. Stop the stack
 before changing its speaker-service YAML. Native NIM deployment configures the
 worker’s ordinary speech adapters for independently deployed Riva endpoints;
 disable <code class="docutils literal notranslate"><span class="pre">speaker.enabled</span></code> when choosing that speech path. Refer to
@@ -1068,6 +1080,7 @@ not client playback.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#voice-agent">Voice agent</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#voice-output-and-interruption">Voice output and interruption</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#multiple-speech-producers">Multiple speech producers</a></li>

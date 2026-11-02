@@ -470,10 +470,15 @@
 -->
 <section id="server-runtime">
 <h1>Server runtime<a class="headerlink" href="#server-runtime" title="Link to this heading">#</a></h1>
-<p>The <code class="docutils literal notranslate"><span class="pre">services/device-io-hub/</span></code> package hosts the <strong>DeviceIOHub</strong> — the single process
-clients connect to and agents fan out from. It owns the internal LiveKit
-transport, the shared-memory + ZMQ IPC boundary to agents, the per-participant
-return path, and the same-origin <code class="docutils literal notranslate"><span class="pre">wss://</span></code> proxy that fronts LiveKit signaling.</p>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">#</a></h2>
+<p>DeviceIOHub receives camera, microphone, and data input from supported clients
+and delivers agent responses to the originating participant. Several agents
+can share the same session while each participant’s media and responses stay
+separate.</p>
+</section>
+<section id="run-deviceiohub">
+<h2>Run DeviceIOHub<a class="headerlink" href="#run-deviceiohub" title="Link to this heading">#</a></h2>
 <p>From the repository root, run it as one process:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">uv</span> <span class="n">run</span> <span class="o">--</span><span class="n">project</span> <span class="n">services</span><span class="o">/</span><span class="n">device</span><span class="o">-</span><span class="n">io</span><span class="o">-</span><span class="n">hub</span> <span class="n">device_io_hub</span> \
   <span class="o">--</span><span class="n">config</span> <span class="n">services</span><span class="o">/</span><span class="n">device</span><span class="o">-</span><span class="n">io</span><span class="o">-</span><span class="n">hub</span><span class="o">/</span><span class="n">device_io_hub</span><span class="o">.</span><span class="n">yaml</span>
@@ -495,8 +500,11 @@ Relative paths inside the YAML (such as <code class="docutils literal notranslat
 YAML file’s own directory, not the working directory.</p>
 <p>For where the hub sits in the wider system, refer to
 <a class="reference internal" href="../overview/architecture.html"><span class="doc">Architecture</span></a>.</p>
+</section>
 <section id="deviceiohub">
 <h2>DeviceIOHub<a class="headerlink" href="#deviceiohub" title="Link to this heading">#</a></h2>
+<p>The <code class="docutils literal notranslate"><span class="pre">services/device-io-hub/</span></code> package uses LiveKit internally, with shared-memory
+and ZMQ IPC to agents and a same-origin <code class="docutils literal notranslate"><span class="pre">wss://</span></code> proxy for LiveKit signaling.</p>
 <p>The hub is one hub, many clients, many agents. A single instance fans the
 inbound media stream out to every connected agent and routes any return
 traffic back to the originating client only.</p>
@@ -924,6 +932,8 @@ Custom clients behind the TLS terminator must use the external same-origin
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#run-deviceiohub">Run DeviceIOHub</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#deviceiohub">DeviceIOHub</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#isolation-contract">Isolation contract</a></li>
 </ul>

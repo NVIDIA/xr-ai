@@ -5,17 +5,30 @@
 
 # Release migration
 
+## Overview
+
+Required changes when upgrading from `v0.3.0-beta` to `v0.4.0-beta`. Apply the
+entries relevant to your application's SDK usage, configuration, clients, and
+services.
+
 ## Changes since v0.3.0-beta
 
-The development version on `main` is unreleased. These instructions cover
-changes from `v0.3.0-beta` to that version. If upgrading from an older release,
-first apply {doc}`migration-history/through-v0.3.0-beta`, then apply the changes
+If upgrading from an older release, first apply
+{doc}`migration-history/through-v0.3.0-beta`, then apply the changes
 below. Refer to {doc}`migration-history` for completed migration guides.
 
 Stop running model services with the old checkout's commands and configuration
 before updating the checkout. Start the updated services before restarting
 workers; launchers can reuse a running service whose identity matches even when
 its application code predates the update.
+
+### Simple VLM example deprecation
+
+The {doc}`simple-vlm-example` sample is deprecated. Existing demo and launch
+commands remain available. Use {doc}`conversation-example` as the starting
+point for new voice-and-vision applications. Its routed conversation and
+visual-question behavior differs from Simple VLM; migrating application code
+requires reviewing that composition rather than only renaming the launcher.
 
 ### vLLM 0.31 security update
 
@@ -275,10 +288,10 @@ speaker:
   base_url: http://127.0.0.1:8102
 ```
 
-A retained YAML without a `speaker` mapping selects batch STT. The new sample
-profiles omit the `stt` role, so this configuration raises `KeyError` during
-worker construction. With the mapping above, workers wait for `speaker-stt`
-before reporting ready. Refer to
+A retained YAML without a `speaker` mapping selects batch STT. The
+speaker-ASR sample profiles omit the `stt` role, so this configuration raises
+`KeyError` during worker construction. With the mapping above, workers wait for
+`speaker-stt` before reporting ready. Refer to
 {ref}`the batch alternative <batch-stt-migration>` if retaining batch speech.
 
 In tea's worker YAML, replace `voice_gate_yaml: voice_gate.always-on.yaml` with
@@ -287,7 +300,9 @@ retain ungated speech. The alternate file is removed; keeping its path loads
 the package's batch-STT defaults.
 
 (voice-sample-conversation-defaults)=
-The four voice samples select `conversation`. Say
+Simple VLM, Conversation, lab monitoring, tea making, and XR render select
+`conversation`. Procedure capture and guidance uses `always_on` for commands
+and narration. For a conversation-mode sample, say
 `Hey agent, let's start talking` after connecting and
 `Hey agent, let's stop talking` to close the conversation.
 Select `wake_only` for addressed turns, `hybrid` for addressed turns alongside
@@ -359,7 +374,9 @@ directly and depend on the earlier defaults, set them in your YAML:
 ### Shared model-stack speaker filtering
 
 (batch-stt-migration)=
-The four voice samples use speaker ASR and omit batch STT on port 8103.
+Simple VLM, Conversation, lab monitoring, tea making, and XR render use
+speaker ASR and omit batch STT on port 8103. Procedure capture and guidance
+keeps batch STT for narration without speaker enrollment.
 Replace unconditional worker `make_stt` calls with `VoiceAgent.from_models`,
 passing the loaded models and voice-gate settings. To retain batch STT, select
 `stt` in the sample's launcher and hardware overrides and configure the worker's

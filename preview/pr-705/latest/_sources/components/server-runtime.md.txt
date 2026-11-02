@@ -5,10 +5,14 @@
 
 # Server runtime
 
-The `services/device-io-hub/` package hosts the **DeviceIOHub** — the single process
-clients connect to and agents fan out from. It owns the internal LiveKit
-transport, the shared-memory + ZMQ IPC boundary to agents, the per-participant
-return path, and the same-origin `wss://` proxy that fronts LiveKit signaling.
+## Overview
+
+DeviceIOHub receives camera, microphone, and data input from supported clients
+and delivers agent responses to the originating participant. Several agents
+can share the same session while each participant's media and responses stay
+separate.
+
+## Run DeviceIOHub
 
 From the repository root, run it as one process:
 
@@ -37,6 +41,9 @@ For where the hub sits in the wider system, refer to
 {doc}`Architecture </overview/architecture>`.
 
 ## DeviceIOHub
+
+The `services/device-io-hub/` package uses LiveKit internally, with shared-memory
+and ZMQ IPC to agents and a same-origin `wss://` proxy for LiveKit signaling.
 
 The hub is one hub, many clients, many agents. A single instance fans the
 inbound media stream out to every connected agent and routes any return

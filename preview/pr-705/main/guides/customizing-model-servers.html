@@ -470,14 +470,21 @@
 -->
 <section id="customizing-model-servers">
 <h1>Customizing model servers<a class="headerlink" href="#customizing-model-servers" title="Link to this heading">#</a></h1>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">#</a></h2>
+<p>Change a sample’s model selection, GPU placement, or inference endpoints to
+suit your application and hardware. Keep the model-server settings and worker
+profile aligned, and stop the relevant services before applying deployment
+changes.</p>
+</section>
+<section id="existing-services">
+<h2>Existing services<a class="headerlink" href="#existing-services" title="Link to this heading">#</a></h2>
 <p>Each agent sample has a <code class="docutils literal notranslate"><span class="pre">model-servers/</span></code> convenience launcher that brings up
 only its required local inference servers. It waits for readiness and returns;
 the servers remain running while you start, stop, or develop the agent sample.
 These launchers are editable development presets. Applications can also use
 compatible services launched individually or independently operated endpoints.
 Refer to <a class="reference internal" href="deploying-with-nim.html"><span class="doc">Deploying samples with NIM endpoints</span></a> for external NIM endpoints.</p>
-<section id="existing-services">
-<h2>Existing services<a class="headerlink" href="#existing-services" title="Link to this heading">#</a></h2>
 <p>Inspect the selected services’ configured ports before invoking a model
 launcher. Server identities are shared across samples, but reuse checks differ:</p>
 <ul class="simple">
@@ -502,32 +509,36 @@ unchanged or obtain permission from their operator to replace them.</p>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p>Simple VLM</p></td>
+<tr class="row-even"><td><p>Conversation example</p></td>
+<td><p>Speaker ASR, Pocket TTS, Nemotron Omni, Cosmos VLM, Clef router</p></td>
+</tr>
+<tr class="row-odd"><td><p>Simple VLM (legacy)</p></td>
 <td><p>speaker ASR, Pocket TTS, Cosmos VLM</p></td>
 </tr>
-<tr class="row-odd"><td><p>Lab instrument monitoring</p></td>
+<tr class="row-even"><td><p>Lab instrument monitoring</p></td>
 <td><p>Speaker ASR, TTS, Nemotron Omni, Cosmos VLM</p></td>
 </tr>
-<tr class="row-even"><td><p>Tea making</p></td>
+<tr class="row-odd"><td><p>Tea making</p></td>
 <td><p>Speaker ASR, TTS, Nemotron Omni, Nemotron embedding</p></td>
 </tr>
-<tr class="row-odd"><td><p>XR render demo</p></td>
+<tr class="row-even"><td><p>XR render demo</p></td>
 <td><p>Speaker ASR, TTS, Nemotron Omni, Cosmos VLM</p></td>
 </tr>
-<tr class="row-even"><td><p>Procedure capture and guide</p></td>
+<tr class="row-odd"><td><p>Procedure capture and guide</p></td>
 <td><p>Batch STT, Pocket TTS, Nemotron Omni, Cosmos VLM</p></td>
 </tr>
 </tbody>
 </table>
 </div>
-<p>Tea making uses Omni for both language and vision. Its RAG service needs
+<p>The conversation example uses Omni for language and Clef for turn routing.
+Tea making uses Omni for both language and vision; its RAG service needs
 embeddings. XR rendering uses one Omni server for its LLM roles and does not
 need embeddings. Hubs, workers, RAG, scene, and rendering processes remain in
 the agent launcher; the model launcher brings up inference servers only.</p>
-<p>The Simple VLM, lab monitoring, tea making, and XR render workers require
-speaker ASR on port 8102. They do not contain a batch-STT model role or
-automatically fall back to the batch server on 8103. Procedure capture and guide
-uses batch STT on port 8103 with speaker selection disabled.
+<p>The conversation example, Simple VLM, lab monitoring, tea making, and XR render
+workers require speaker ASR on port 8102. They do not contain a batch-STT model
+role or automatically fall back to the batch server on 8103. Procedure capture
+and guide uses batch STT on port 8103 with speaker selection disabled.
 For explicit batch speech, replace <code class="docutils literal notranslate"><span class="pre">speaker-stt</span></code> with <code class="docutils literal notranslate"><span class="pre">stt</span></code> in the sample’s
 launcher service list and every selected hardware YAML, add the existing
 batch adapter under <code class="docutils literal notranslate"><span class="pre">models.stt</span></code> in the worker profile, and disable
@@ -537,7 +548,10 @@ retain both servers and a real batch client. Refer to
 </section>
 <section id="start-develop-and-stop">
 <h2>Start, develop, and stop<a class="headerlink" href="#start-develop-and-stop" title="Link to this heading">#</a></h2>
-<p>Run these commands from <code class="docutils literal notranslate"><span class="pre">agent-samples/simple-vlm-example/</span></code>:</p>
+<p>The following commands use deprecated Simple VLM as a legacy worked example.
+For new voice-and-vision applications, start with
+<a class="reference internal" href="../reference/conversation-example.html"><span class="doc">Conversation example</span></a>. Run the example commands from
+<code class="docutils literal notranslate"><span class="pre">agent-samples/simple-vlm-example/</span></code>:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-servers<span class="w"> </span>simple_vlm_example_model_servers
 uv<span class="w"> </span>run<span class="w"> </span>simple_vlm_example
 </pre></div>
@@ -778,6 +792,7 @@ and NIM configuration.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#existing-services">Existing services</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#required-local-servers">Required local servers</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#start-develop-and-stop">Start, develop, and stop</a></li>

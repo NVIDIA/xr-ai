@@ -470,17 +470,18 @@
 -->
 <section id="ai-inference-servers">
 <h1>AI inference servers<a class="headerlink" href="#ai-inference-servers" title="Link to this heading">#</a></h1>
-<p>Read this when calling or operating an inference server. For the
-orchestrator pattern that wires servers into a sample, refer to
-<a class="reference internal" href="../guides/adding-a-sample.html"><span class="doc">Adding a new sample</span></a>. For an end-to-end procedure covering custom
-shared server defaults, sample GPU overrides, and consumer model configuration, refer to
-<a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a>.</p>
-<p>Multiple reusable inference and typed capability services are available as
-launchable peers of <code class="docutils literal notranslate"><span class="pre">services/device-io-hub/</span></code>. Model HTTP is encapsulated by
-the typed factories in <code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code>; workers must not add vendor SDKs or
-hand-written HTTP clients. Reference services cover vision-language reasoning,
-speech recognition, text-to-speech, embeddings, large language models,
-recorded video, and document retrieval.</p>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">#</a></h2>
+<p>Build your application’s speech, vision, and reasoning capabilities using the
+shared inference services. Your workers call these services through model
+interfaces, allowing you to choose supported models and local or hosted
+endpoints as your application develops.</p>
+</section>
+<section id="available-services">
+<h2>Available services<a class="headerlink" href="#available-services" title="Link to this heading">#</a></h2>
+<p>Launch these inference and typed capability services alongside
+<code class="docutils literal notranslate"><span class="pre">services/device-io-hub/</span></code>. Model HTTP stays inside <code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code>; workers must
+not add vendor SDKs or hand-written HTTP clients.</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Server</p></th>
@@ -566,12 +567,16 @@ recorded video, and document retrieval.</p>
 </tbody>
 </table>
 </div>
+<p>For model configuration and the launch workflow, refer to
+<a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a>. For the orchestrator pattern, refer to
+<a class="reference internal" href="../guides/adding-a-sample.html"><span class="doc">Adding a new sample</span></a>.</p>
 <p>Launcher-managed local model artifacts land in the service’s <code class="docutils literal notranslate"><span class="pre">model_cache</span></code> directory, set per
 YAML and resolved relative to the YAML file. Operators configure self-hosted
 NIM caches for their optimized engines and weights; hosted endpoints keep no
 weights in this repository. Every <code class="docutils literal notranslate"><span class="pre">models/</span></code> tree is excluded from version
 control. The model-servers profiles share <code class="docutils literal notranslate"><span class="pre">models/</span></code> at the repository root;
 the exact layout per launch style is below.</p>
+</section>
 <section id="ocr-serving">
 <span id="id1"></span><h2>OCR serving<a class="headerlink" href="#ocr-serving" title="Link to this heading">#</a></h2>
 <p>The reusable <code class="docutils literal notranslate"><span class="pre">services/ocr-server</span></code> provides multilingual Nemotron OCR v2 in
@@ -1047,14 +1052,15 @@ Either way vLLM keeps running after the orchestrator exits.</p>
 its persistent process with <code class="docutils literal notranslate"><span class="pre">start_new_session=True</span></code>, reuses a healthy server
 that survived a previous stack run, and is stopped by the sample’s model
 command with <code class="docutils literal notranslate"><span class="pre">--stop</span></code> when selected in that stack.</p>
-<p>Each sample’s model-server list selects speaker ASR. The launcher waits for
-model loading, decoder warmup and HTTP readiness
-before reporting readiness, and reuses warm instances with matching configuration.
-Configuration changes require stopping and restarting the service. <code class="docutils literal notranslate"><span class="pre">--stop</span></code>
-stops only the sample’s explicitly selected server list, using its configured
-ports and the existing process-ownership guards. The speaker service listens
-on port 8102 and supports streaming audio
-over a private WebSocket.
+<p>Most shipped model-server profiles that include voice select speaker ASR;
+<code class="docutils literal notranslate"><span class="pre">procedure-capture-guide</span></code> selects batch STT for narration without speaker
+enrollment. When selected, the speaker STT launcher waits for model loading,
+decoder warmup, and HTTP readiness before reporting ready, then reuses a warm
+instance with matching configuration. Configuration changes require stopping
+and restarting the service. <code class="docutils literal notranslate"><span class="pre">--stop</span></code> stops only the sample’s explicitly
+selected server list, using its configured ports and the existing
+process-ownership guards. The speaker service listens on port 8102 and supports
+streaming audio over a private WebSocket.
 Native NIM speech uses independently deployed Riva endpoints rather than this
 local model stack. Refer to <a class="reference internal" href="../guides/deploying-with-nim.html"><span class="doc">Deploying samples with NIM endpoints</span></a> and
 <a class="reference internal" href="../reference/agent-sdk-voice.html"><span class="doc">xr-ai-voice</span></a> for worker backend selection and enrollment.</p>
@@ -1432,6 +1438,8 @@ consume the resulting endpoints through their models JSON.</p></li>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#available-services">Available services</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#ocr-serving">OCR serving</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#speaker-conditioned-stt">Speaker-conditioned STT</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#two-huggingface-cache-roots">Two HuggingFace cache roots</a></li>
