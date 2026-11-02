@@ -5,6 +5,15 @@
 
 # Launcher and process model
 
+## Overview
+
+An XR AI application runs a hub, agent workers, and any additional services it
+needs. The launcher starts those processes in dependency order, waits for
+readiness, and stops the application stack if a monitored process exits. Use
+it to make your application repeatable to launch and operate.
+
+## Declare the application stack
+
 Application samples own their DeviceIOHub and worker processes. Model services may
 instead be declared with `launch_mode="reuse"` and started separately through the
 sample's separate `model-servers/` convenience launcher.

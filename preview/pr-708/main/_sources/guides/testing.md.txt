@@ -5,6 +5,14 @@
 
 # Testing
 
+## Overview
+
+Run the repository's test suites and documentation checks when changing shared
+packages, services, or samples. The sections below distinguish CPU checks from
+tests that require GPU hardware or additional services.
+
+## Prepare the test environment
+
 The `tests/` project exercises SDKs, utilities, service wrappers, sample
 behavior, generated documentation invariants, and the DeviceIOHub IPC path.
 Most tests are CPU-only and run without Docker or LiveKit. Node.js 24 is also

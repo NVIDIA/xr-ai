@@ -4,6 +4,17 @@
 Sample configuration reference
 ==============================
 
+Overview
+--------
+
+Checked-in YAML and JSON configuration for samples and model services,
+including example values and field comments. Use the catalog to locate
+settings before editing them; the operational guides explain when and how to
+apply changes.
+
+Configuration catalog
+---------------------
+
 This reference is generated directly from configuration files under each
 top-level sample's ``yaml/`` and ``model-servers/yaml/`` directories in
 ``agent-samples/``, and from configuration files beside a direct capability
