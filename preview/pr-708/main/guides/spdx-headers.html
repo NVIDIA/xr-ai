@@ -470,10 +470,10 @@
 -->
 <section id="spdx-license-headers">
 <h1>SPDX license headers<a class="headerlink" href="#spdx-license-headers" title="Link to this heading">#</a></h1>
-<p>The hard rule lives in <code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code>: every new repository source file gets the
-SPDX header at the top. Application-owned files under the top-level <code class="docutils literal notranslate"><span class="pre">apps/</span></code>
-directory are outside this policy. This file documents comment-style choices
-and edge cases.</p>
+<p>New repository source files require the SPDX header at the top, as specified
+in <a class="reference internal" href="contributing-and-conventions.html"><span class="doc">Contributing and conventions</span></a>. Application-owned files under the
+top-level <code class="docutils literal notranslate"><span class="pre">apps/</span></code> directory are outside this policy. This file documents
+comment-style choices and edge cases.</p>
 <section id="the-header">
 <h2>The header<a class="headerlink" href="#the-header" title="Link to this heading">#</a></h2>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">SPDX</span><span class="o">-</span><span class="n">FileCopyrightText</span><span class="p">:</span> <span class="n">Copyright</span> <span class="p">(</span><span class="n">c</span><span class="p">)</span> <span class="mi">2026</span> <span class="n">NVIDIA</span> <span class="n">CORPORATION</span> <span class="o">&amp;</span> <span class="n">AFFILIATES</span><span class="o">.</span> <span class="n">All</span> <span class="n">rights</span> <span class="n">reserved</span><span class="o">.</span>
@@ -522,7 +522,9 @@ and files that aren’t ours to license: <code class="docutils literal notransla
 Gradle <code class="docutils literal notranslate"><span class="pre">*.lockfile</span></code>, binary assets (e.g. <code class="docutils literal notranslate"><span class="pre">*.gif</span></code>), <code class="docutils literal notranslate"><span class="pre">.gitkeep</span></code> markers,
 Xcode-managed files (<code class="docutils literal notranslate"><span class="pre">*.pbxproj</span></code>, <code class="docutils literal notranslate"><span class="pre">*.xcworkspacedata</span></code>), and third-party Gradle
 wrapper files (<code class="docutils literal notranslate"><span class="pre">gradlew</span></code>, <code class="docutils literal notranslate"><span class="pre">gradlew.bat</span></code>,
-<code class="docutils literal notranslate"><span class="pre">gradle/wrapper/gradle-wrapper.properties</span></code>).</p>
+<code class="docutils literal notranslate"><span class="pre">gradle/wrapper/gradle-wrapper.properties</span></code>). The checker skips all <code class="docutils literal notranslate"><span class="pre">.txt</span></code> files
+except <code class="docutils literal notranslate"><span class="pre">requirements.txt</span></code>, which retains its <code class="docutils literal notranslate"><span class="pre">#</span></code> header. Omit headers in LLM
+prompt <code class="docutils literal notranslate"><span class="pre">.txt</span></code> files because they would become prompt content.</p>
 </section>
 <section id="enforcement">
 <h2>Enforcement<a class="headerlink" href="#enforcement" title="Link to this heading">#</a></h2>

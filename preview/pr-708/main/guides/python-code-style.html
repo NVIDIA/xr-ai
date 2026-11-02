@@ -472,9 +472,10 @@
 <h1>Python code style<a class="headerlink" href="#python-code-style" title="Link to this heading">#</a></h1>
 <section id="overview">
 <h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">#</a></h2>
-<p>Python conventions for the repository’s SDK, utilities, services, samples, and
-tests. These rules govern public interfaces, error handling, and module
-layout. Application-owned code under <code class="docutils literal notranslate"><span class="pre">apps/</span></code> is outside their scope.</p>
+<p>Python conventions for contributions to NVIDIA/xr-ai’s SDK, utilities,
+services, samples, and tests. These rules govern public interfaces, error
+handling, and module layout. Application-owned code under <code class="docutils literal notranslate"><span class="pre">apps/</span></code> is outside
+their scope.</p>
 </section>
 <section id="scope-and-conventions">
 <h2>Scope and conventions<a class="headerlink" href="#scope-and-conventions" title="Link to this heading">#</a></h2>
@@ -485,8 +486,10 @@ conventions that keep them consistent.</p>
 follow them is brought into line by cleanup changes and tracked outside this
 reference. Making a supported public name conform to a rule is a breaking
 change: keep the code working in every merged state, update every use in the
-repository, and add a migration entry. Until then the name keeps working as it
-is, and an unrelated change is not asked to rename it.</p>
+repository, and add a migration entry for released behavior. Until a scoped
+change addresses it, the name keeps working as it is; an unrelated change is
+not asked to rename it. Refer to <a class="reference internal" href="contributing-and-conventions.html#migration-release-rollover"><span class="std std-ref">Migration entries and release rollover</span></a> for entry
+scope.</p>
 <p>A package that other projects import, such as everything under <code class="docutils literal notranslate"><span class="pre">agent-sdk/</span></code> and
 <code class="docutils literal notranslate"><span class="pre">utils/</span></code> and any library a service or sample publishes, follows every section.
 A runnable service, orchestrator, or sample worker publishes no API: keep its
@@ -538,10 +541,10 @@ generated from “each enrolled module’s literal <code class="docutils literal
 are enrolled. The repository’s
 <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/main/AGENTS.md#architecture-boundaries"><code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code></a>
 requires that LiveKit not appear in agent APIs and that workers use public SDK
-packages, and its change contract places public API documentation in
-<code class="docutils literal notranslate"><span class="pre">__all__</span></code> and co-located docstrings, and it keeps private imports inside their
-owning packages or implementation tests. The private-module docstring is a
-<strong>repository convention</strong>.</p>
+packages, and keeps private imports inside their owning packages or
+implementation tests. The <a class="reference internal" href="contributing-and-conventions.html"><span class="doc">Contributing and conventions</span></a> change contract
+places public API documentation in <code class="docutils literal notranslate"><span class="pre">__all__</span></code> and co-located docstrings. The
+private-module docstring is a <strong>repository convention</strong>.</p>
 </section>
 <section id="exports">
 <h2>Exports<a class="headerlink" href="#exports" title="Link to this heading">#</a></h2>
@@ -770,6 +773,8 @@ exactly once, the log-once rule (rule 5), and the greppable
 <section id="api-design">
 <h2>API design<a class="headerlink" href="#api-design" title="Link to this heading">#</a></h2>
 <ul class="simple">
+<li><p>Follow <a class="reference internal" href="contributing-and-conventions.html#resource-lifecycle"><span class="std std-ref">Resource lifecycle</span></a> for ownership, thread cancellation, and
+shutdown budgets.</p></li>
 <li><p>Do not model a behavior with a boolean flag plus an optional argument. Use one
 typed choice. Use an <code class="docutils literal notranslate"><span class="pre">Enum</span></code> or <code class="docutils literal notranslate"><span class="pre">Literal</span></code> instead of a string for a kind or
 state.</p></li>
@@ -798,7 +803,7 @@ Fowler’s <a class="reference external" href="https://martinfowler.com/bliki/Fl
 which prefers separate, explicit calls because they “communicate more clearly
 what my intention is”. The second-way rule restates the repository’s own
 <code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code>
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/main/AGENTS.md#change-contract">change contract</a>:
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/main/AGENTS.md#engineering-guidance">engineering guidance</a>:
 “Do not add an abstraction until two concrete use cases need it.” The callback,
 <code class="docutils literal notranslate"><span class="pre">try_*</span></code>, idempotent <code class="docutils literal notranslate"><span class="pre">stop()</span></code>, and constructor-policy rules, and the preference
 for <code class="docutils literal notranslate"><span class="pre">Enum</span></code> or <code class="docutils literal notranslate"><span class="pre">Literal</span></code>, are <strong>repository conventions</strong>.</p>
@@ -816,7 +821,7 @@ limits comments to non-obvious invariants and failure modes. The tags are a
 <section id="structuring-a-change">
 <h2>Structuring a change<a class="headerlink" href="#structuring-a-change" title="Link to this heading">#</a></h2>
 <ul class="simple">
-<li><p>Keep one concern per pull request, ideally under 300 changed lines.</p></li>
+<li><p>Follow the upstream <a class="reference internal" href="contributing-and-conventions.html#pull-request-scope"><span class="std std-ref">Pull request scope and descriptions</span></a> rules.</p></li>
 <li><p>Do not mix a file move with an edit. Put the move in its own commit so
 <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">diff</span> <span class="pre">-M</span></code> shows it as a pure rename.</p></li>
 <li><p>When splitting a module, keep the old import path working through a
@@ -831,10 +836,9 @@ must not change behavior passes the existing tests unmodified.</p></li>
 <a class="reference external" href="https://google.github.io/eng-practices/review/developer/small-cls.html">small changes</a>
 say the right size is “one self-contained change” and that refactorings
 belong in a separate change from bug fixes, with “moving and renaming a class”
-as the example. The migration entry is required by the <code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code> change
-contract; refer to <a class="reference internal" href="contributing-and-conventions.html#migration-release-rollover"><span class="std std-ref">Migration entries and release rollover</span></a> for baseline verification
-and entry scope. The 300-line guideline and the re-export step are <strong>repository
-conventions</strong>.</p>
+as the example. The migration entry is required by the contributing guide’s
+change contract; refer to <a class="reference internal" href="contributing-and-conventions.html#migration-release-rollover"><span class="std std-ref">Migration entries and release rollover</span></a> for baseline
+verification and entry scope. The re-export step is a <strong>repository convention</strong>.</p>
 </section>
 </section>
 

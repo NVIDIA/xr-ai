@@ -471,7 +471,8 @@
 <section id="documentation-style">
 <h1>Documentation style<a class="headerlink" href="#documentation-style" title="Link to this heading">#</a></h1>
 <p>This reference is the authoritative house style for customer-facing Markdown
-and reStructuredText. Match the surrounding document and keep edits scoped.
+and reStructuredText contributed to NVIDIA/xr-ai. Match the surrounding document
+and keep edits scoped.
 When maintainers adopt a repository-wide convention, update this reference in
 the same change. Document scoped exceptions in the affected content.</p>
 <section id="opening-overviews">
@@ -501,9 +502,10 @@ pages are also exempt; judge catalog pages by their rendered length.</p>
 “see.” Prefer MyST <code class="docutils literal notranslate"><span class="pre">{doc}</span></code> links in Markdown and <code class="docutils literal notranslate"><span class="pre">:doc:</span></code> or <code class="docutils literal notranslate"><span class="pre">:ref:</span></code> roles in
 reStructuredText. Use a descriptive Markdown link when the target is source
 code or an external resource, and link directly to the authoritative target
-rather than through a thin redirect page. Treat published URL fragments as
-stable. When rewording a heading, preserve its previous fragment with an
-explicit compatibility anchor.</p>
+rather than through a thin redirect page. Treat URL fragments shipped in a
+published release as stable. When rewording such a heading, preserve its
+previous fragment with an explicit compatibility anchor. Headings first added
+since the latest release need no compatibility anchor or redirect.</p>
 </section>
 <section id="migration-guides">
 <h2>Migration guides<a class="headerlink" href="#migration-guides" title="Link to this heading">#</a></h2>
@@ -531,6 +533,16 @@ executable code.</p>
 “This workflow,” or “This reference” instead of “This page” or “This guide.”
 Keep article usage consistent within a procedure. Hyphenate compound adjectives
 when they precede a noun.</p>
+<p>Keep each explanation in one canonical location across <code class="docutils literal notranslate"><span class="pre">docs/source/</span></code>, READMEs,
+and YAML comments; link to it from other pages.
+Field-level guidance belongs beside the configuration and is rendered in the
+generated reference.</p>
+</section>
+<section id="factual-accuracy">
+<h2>Factual accuracy<a class="headerlink" href="#factual-accuracy" title="Link to this heading">#</a></h2>
+<p>For both repository and consumer work, check claims in docs, comments, and
+docstrings against the implementation, including configuration conditions,
+failure and shutdown paths, and retention limits.</p>
 </section>
 <section id="requirement-strength">
 <h2>Requirement strength<a class="headerlink" href="#requirement-strength" title="Link to this heading">#</a></h2>
@@ -544,6 +556,9 @@ softer wording such as <strong>can</strong> or <strong>recommended</strong> for 
 em-dash style for an aside; do not use a narrative <code class="docutils literal notranslate"><span class="pre">--</span></code>. Keep code markup out
 of headings when it makes the table of contents or navigation harder to scan.
 In reStructuredText, make title underlines span the full title.</p>
+<p>Match the file’s existing line wrapping. In a hard-wrapped file, rewrap each
+edited paragraph to its surrounding width, avoiding stub lines and mixed
+wrapping. Use straight quotation marks and apostrophes in new prose.</p>
 </section>
 </section>
 
@@ -602,6 +617,7 @@ In reStructuredText, make title underlines span the full title.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#slashes-in-prose">Slashes in prose</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#terminology">Terminology</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#clarity-and-consistency">Clarity and consistency</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#factual-accuracy">Factual accuracy</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#requirement-strength">Requirement strength</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#punctuation-and-headings">Punctuation and headings</a></li>
 </ul>
