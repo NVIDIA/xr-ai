@@ -222,6 +222,41 @@ class TestRejectedHFToken:
         monkeypatch.setattr(_creds, "_hf_token_rejected", lambda _token: pytest.fail("validated"))
         _creds.require_credentials("HF_TOKEN", allow_missing=True)
 
+    @pytest.mark.parametrize("value", ["1", "true", "YES", "on"])
+    def test_offline_mode_skips_validation_without_http(self, fake_creds_dir, monkeypatch, value):
+        monkeypatch.undo()  # exercise the real _hf_token_rejected
+        monkeypatch.setenv("HF_HUB_OFFLINE", value)
+        monkeypatch.setenv("HF_TOKEN", "bad")
+
+        def fail_urlopen(*_a, **_k):
+            pytest.fail("contacted the Hub in offline mode")
+        monkeypatch.setattr(_creds.urllib.request, "urlopen", fail_urlopen)
+        _creds.require_credentials("HF_TOKEN")
+
+    def test_unsetting_env_does_not_help_when_saved_token_is_rejected(
+            self, fake_creds_dir, monkeypatch, capsys):
+        creds_file, hf_file = fake_creds_dir
+        creds_file.write_text(json.dumps({"HF_TOKEN": "stale"}))
+        hf_file.write_text("good")
+        monkeypatch.setenv("HF_TOKEN", "bad")
+        monkeypatch.setattr(_creds, "_hf_token_rejected", lambda token: token != "good")
+        with pytest.raises(SystemExit):
+            _creds.require_credentials("HF_TOKEN")
+        err = capsys.readouterr().err
+        assert "will not help" in err
+        assert str(creds_file) in err
+
+    def test_stale_saved_token_shadows_valid_login_token(self, fake_creds_dir, monkeypatch, capsys):
+        creds_file, hf_file = fake_creds_dir
+        creds_file.write_text(json.dumps({"HF_TOKEN": "stale"}))
+        hf_file.write_text("good")
+        monkeypatch.setattr(_creds, "_hf_token_rejected", lambda token: token == "stale")
+        with pytest.raises(SystemExit):
+            _creds.require_credentials("HF_TOKEN")
+        err = capsys.readouterr().err
+        assert "takes priority" in err
+        assert "Update or remove HF_TOKEN there" in err
+
     @pytest.mark.parametrize(("outcome", "expected"), [
         (urllib.error.HTTPError("u", 401, "Unauthorized", {}, None), True),
         (urllib.error.HTTPError("u", 503, "Unavailable", {}, None), False),

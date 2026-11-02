@@ -133,8 +133,12 @@ token is absent. Local model-stack launchers require `HF_TOKEN`.
 is valid and exits with an explanatory error if the Hub answers HTTP 401. An
 invalid token otherwise fails silently: downloads proceed unauthenticated and
 only the Hub warns about it. Because the environment takes priority, a stale
-exported `HF_TOKEN` shadows a valid saved token. If the Hub is unreachable or
-answers anything other than 401, the check is skipped.
+exported `HF_TOKEN` shadows a valid saved token. The saved
+`~/.config/xr-ai/credentials.json` token in turn outranks the
+`huggingface-cli login` token, so a stale entry there also needs updating or
+removing; unsetting `HF_TOKEN` alone is not enough. If the Hub is unreachable,
+answers anything other than 401, or `HF_HUB_OFFLINE=1` is set, the check is
+skipped.
 
 ## Managing saved tokens
 

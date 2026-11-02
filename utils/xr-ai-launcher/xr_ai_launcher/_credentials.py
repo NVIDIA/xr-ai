@@ -127,6 +127,11 @@ def warn_if_missing(*names: str) -> None:
         print("  See docs/source/getting_started/credentials.md.", file=sys.stderr)
 
 
+def _hf_offline() -> bool:
+    """True when the user explicitly opted out of Hub traffic (HF_HUB_OFFLINE)."""
+    return os.environ.get("HF_HUB_OFFLINE", "").upper() in {"1", "ON", "YES", "TRUE"}
+
+
 def _hf_token_rejected(token: str) -> bool:
     """True only when the Hub answers 401 for *token*; any other outcome is unknown.
 
@@ -151,6 +156,8 @@ def _reject_invalid_hf_token(from_env: bool) -> None:
     A rejected token is otherwise silent: huggingface_hub downgrades to
     anonymous requests and the Hub only logs "unauthenticated requests".
     """
+    if _hf_offline():
+        return
     token = os.environ["HF_TOKEN"]
     if not _hf_token_rejected(token):
         return
@@ -161,10 +168,24 @@ def _reject_invalid_hf_token(from_env: bool) -> None:
           file=sys.stderr)
     print(f"  It came from {source}; it is likely revoked or expired. "
           "Downloads would silently run unauthenticated.", file=sys.stderr)
-    file_token = _read_hf_token_file()
-    if from_env and file_token and file_token != token and not _hf_token_rejected(file_token):
-        print(f"  The token in {_HF_TOKEN_FILE} is valid, but the environment variable "
-              "takes priority. Unset or update HF_TOKEN to use it.", file=sys.stderr)
+    saved_token = _read().get("HF_TOKEN", "")
+    login_token = _read_hf_token_file()
+    # credentials.json outranks the Hugging Face login file, so that is what
+    # unsetting HF_TOKEN would fall through to.
+    fallback, fallback_file = ((saved_token, _CREDS_FILE) if saved_token
+                               else (login_token, _HF_TOKEN_FILE))
+    if from_env and fallback and fallback != token:
+        if _hf_token_rejected(fallback):
+            print(f"  Unsetting HF_TOKEN will not help: the token in {fallback_file} "
+                  f"is rejected too. Create a new token at {url} and update it there.",
+                  file=sys.stderr)
+        else:
+            print(f"  The token in {fallback_file} is valid, but the environment variable "
+                  "takes priority. Unset or update HF_TOKEN to use it.", file=sys.stderr)
+    elif (not from_env and saved_token and login_token and login_token != saved_token
+          and not _hf_token_rejected(login_token)):
+        print(f"  The token in {_HF_TOKEN_FILE} is valid, but {_CREDS_FILE} takes "
+              "priority. Update or remove HF_TOKEN there.", file=sys.stderr)
     else:
         print(f"  Create a new token at {url}, then update it.", file=sys.stderr)
     sys.exit(2)
