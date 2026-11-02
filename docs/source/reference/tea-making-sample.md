@@ -3,50 +3,28 @@
   SPDX-License-Identifier: Apache-2.0
 -->
 
-# Tea-making guidance — building deterministic visual workflows
+# Tea-making guidance with independent Python flows
 
 ## Overview
 
-Use this reference for procedural assistants that combine spoken guidance with
-visual checks of task progress. Tea making is the example: the application
-controls the steps and completion rules, while models interpret observations
-and answer questions. Adapt the workflow and its tools to guide other
-procedures.
+This sample separates SOP controls/execution from conversation. A control-only
+SOP runner coordinates ordinary Python async functions; an SDK conversation agent
+answers questions using context supplied by the runner. The SDK router dispatches
+between these two destinations. There is no per-step agent, foreground supervisor,
+YAML execution language or separate workflow engine.
 
-To run the sample, refer to the
-{doc}`quickstart </getting_started/quickstart>`.
-
-For speech deployment and explicit batch-STT selection, refer to
-{doc}`/guides/customizing-model-servers`.
-
-YAML declares the procedure, evidence criteria, tool arguments, and allowed state
-updates. Omni owns visual observation and label identity extraction.
-Clef makes bounded choices from those descriptions and from the current user
-request. Code owns confirmation counts, arithmetic, timestamps, and guarded
-state commits. The language model generates answers and summaries; it receives
-no state-write tool.
-
-The focused SOP destination owns its execution engine, managed context, request
-handling, and guidance notice delivery. The tea guide is one focused destination
-on its top-level `AgentRouter`, like
-the conversation sample's note-taking destination. Steps are data, not agents.
-There are no routers inside a step.
+Omni observes images. Clef judges those observations against supplied completion
+criteria. Python owns confirmation windows, lifecycle, timers, defaults and step
+transitions. Application YAML supplies prompts/settings to Python arguments; no
+reusable flow reads YAML.
 
 ## What to copy
 
-Reusable patterns include:
-
-- a focused workflow agent with state-scoped admission choices;
-- a guided procedure whose evidence comes from current visual observations;
-- sparse typed state updated through one controlled commit boundary;
-- automatic progression after confirmation, with a manual advancement option;
-- independent, opt-in visual, transcript, and video background tasks;
-- bounded background facts available to foreground questions;
-- typed events consumed separately by speech, files, or a customer backend.
-
-Tea names, temperatures, timers, and step prompts are sample-specific. The
-workflow state machine, foreground routing, observation loop, background-agent
-ownership, and event composition are reusable.
+Start with the independent async functions in `tea_making_worker.flows`, then
+read `agents/sop/agent.py::_procedure` for the explicit tea procedure. The
+application's Pydantic identity/quantity models live in `agents/sop/_settings.py`.
+There is no common flow base class; a little duplication keeps the three functions
+independently understandable and usable without the SOP runner.
 
 ## Quick start
 
@@ -74,8 +52,9 @@ then try:
 Help me make tea.
 What is the current step?
 What do you see?
-Start watching for spills.
-Start recording the transcript.
+How much time is left?
+Skip this step.
+Stop tea making.
 ```
 
 Pass `--expose-web-events` to bind the unauthenticated live event viewer to all
@@ -100,245 +79,194 @@ is only a bounded view of the current worker process.
 
 ## Architecture
 
-YAML declares the workflow steps and state contract. A VLM describes each
-current view, and the observation LLM judges that caption and selects native
-tools. Application code validates the resulting state proposal and counts any
-required consecutive confirmations. The model does not choose which workflow
-is active, mutate arbitrary state, or advance a step implicitly.
-
 ```text
-camera frames ──> ParticipantImageAgent ──> SOP agent
-                                             ├─ execution engine + WorkflowStore
-speech / typed query ────────────────────────> ├─ foreground request handling
-                                             ├─ ContextManager + compaction
-                                             └─ guidance notice delivery
-                                                        │
-                  independent background observers      │
-                               │                        v
-                               └──────────────> typed runtime events
-                                                 ├─> FileOutputAgent
-                                                 ├─> TeaWebEventsAgent
-                                                 └─> customer backend
+VoiceAgent -> SDK AgentRouter
+                |-- controls -> SOP runner -> independent async flows
+                |                   ^                |
+                |                   +-- full state --+
+                |                   |
+                |                   +-- SOP context -> SDK ContextManager
+                |                                            |
+                +-- questions -> SDK Conversation <----------+
 ```
 
-`VoiceAgent` publishes participant-scoped queries, transcripts, and lifecycle
-events. The runtime fans typed events out to peer agents. Agents call peer
-tools directly, and each background agent owns its participant tasks.
-The worker uses native `xr_ai_runtime` agents and `xr_ai_tools` instances; it
-does not use NVIDIA Agent Toolkit, PydanticAI, MCP clients, or MCP servers.
-The sample accepts speech without a wake phrase during an active conversation;
-callers can enable its configured wake phrases. Every spoken response is also
-sent to the connection client on `agent.response` so the client can render
-accessible text alongside audio.
-Streamed responses are finalized there as soon as their content completes, and
-combined updates as soon as their rewrite completes. An urgent barge-in can
-still stop audio after the full intended utterance has reached the client.
+The router owns turn scheduling, interruption and participant lifecycle. Starting
+an SOP launches a runner-owned procedure task that outlives the initiating turn.
+A question or voice interruption cancels answer work, not that procedure.
+Stop/reset cancels and drains the runner's work. Explicit skip cancels the current
+step; ordinary next cannot bypass an unconfirmed step.
 
-## Agent responsibilities
-
-| Agent | Owns | Does not own |
-|---|---|---|
-| `ParticipantImageAgent` | Image registry, current-frame selection, participant cleanup | VLM prompts or workflow state |
-| `SOPAgent` | Execution engine, managed context, foreground request handling, and notice delivery | Model service or image-source lifetime |
-| `BackgroundContextAgent` | A bounded participant-local set of recent background facts | Background scheduling |
-| `ChangeWatchAgent` | Focused visual-change task and deduplication | Foreground routing |
-| `TranscriptAgent` | Opt-in transcript records and periodic summaries | Voice gating or STT transport |
-| `VideoLogAgent` | Periodic captions and material deltas | Workflow state |
-| `FileOutputAgent` | Participant session files and JSONL records | Agent policy |
-| `TeaWebEventsAgent` | Explicit compact projections for the generic live viewer | Durable storage or file polling |
-| `WebEventsAgent` | Bounded HTTP presentation grouped by participant and topic | Application event selection |
-
-The runtime delivers events but does not absorb application state or
-concurrency. Moving a task to another agent also means moving its cancellation,
-locks, and participant cleanup.
+The runner owns latest labeled state per flow. A flow intentionally spanning
+several steps keeps its own active label until its Python scope ends. Completed,
+skipped and previous-run data are labeled separately from active evidence. Flows
+do not import conversation, recording, the runner or application configuration.
 
 ## Sample-local APIs and prompt ownership
 
-Import `SOPAgent`, `Workflow`, and `load_workflow` from `tea_making_worker`.
-`SOPAgent` implements the SDK routing destination contract and subscribes to
-guidance notices. The application creates one top-level SDK `AgentRouter` and
-registers its `runtime_subscriber()`. The agent and its owned execution/state/tools
-and run-context projection live in `agents/sop/`. The existing `sop` package keeps
-the workflow-loading exports; reusable evidence flows remain independent in `flows/`.
+Import `SOPAgent`, `SOPConfig`, `VisualInstructions`, `TeaIdentity`,
+`BrewingSettings`, `TemperatureSetting` and `DurationSetting` from
+`tea_making_worker`. These are sample-local APIs, not SDK promotion.
 
-The SDK `Agent` owns tools/state and can subscribe to runtime events. Its separate
-`RoutableAgent` contract handles admission, answers and focus. `SOPAgent` fills both
-roles: it is one focused destination and receives guidance notices. Its private
-`_WorkflowEngine` is an ordinary helper, not a second runtime agent. Workflow steps
-also remain ordinary reusable flows, rather than independent agents.
+Import `run_identification_flow`, `run_visual_verification_flow` and
+`run_timer_flow` from `tea_making_worker.flows`. Supply all dependencies,
+inputs, wording, limits and the optional asynchronous `on_state` callback in
+the call, and await its result. Each flow owns its local loop and propagates
+cancellation after its awaited operations end. Callbacks run in that same task;
+a callback failure propagates to the owner.
 
-Existing watcher, transcript, journal, background-context and I/O runtime agents
-live under `agents/`. Small optional routed agents in `agents/_destinations.py`
-receive explicit services/tools/policy and the existing answer/output callbacks;
-they do not use the SOP as a dependency container. Shared answer, semantic-choice
-and compaction-recording helpers remain in `conversation/`. There is one top-level
-router and no additional agent hierarchy or conversation supervisor.
+### Identification and settings
 
-`tea_making_worker.flows` exports `VisualValidationStep`, `VisualCheck`,
-`IdentityResolutionStep`, `ObservationPolicy`, and `Observation`. Visual validation
-accepts a question, policy, configured observer, typed services and tools. Its
-`observe`, `evaluate`, and `check` methods return evidence without owning frame
-acquisition, confirmation counts, state mutation, or storage. Identity resolution
-accepts established fields and configured retrieval/fallback policy. Optional
-identity event recording is supplied by the caller. These modules depend on typed
-model/tool APIs rather than tea configuration or the SOP execution engine.
+The identification function accepts Python/Pydantic models for identity and
+settings, the typed image and retrieval tools, LLM service, a Python retrieval-query
+function, prompts and bounds. Settings fields must default to `None`; application
+defaults belong to the runner.
 
-Task-specific wording remains in external `workflow.yaml`: visual questions under
-`trigger.arguments.question`, extraction or judgment instructions under
-`observation`, retrieval/fallback instructions under `observation.lookup`, and
-step dialogue under `voice.prompt`. JSON shapes, parsing, unit normalization,
-provenance verification, native transitions, and context-channel authority remain
-implementation contracts.
+It observes fresh frames until identity validation succeeds, retrieves relevant
+passages, extracts supported fields and generates only missing settings.
+Retrieved fields require an existing source passage and an exact quote. Python
+validates field types/units. These checks establish provenance structure; they do
+not prove that model interpretation of a passage or image is correct.
 
-Generic model behavior can also need tuning. Keep that tuning with its owner:
+Validated partial results are published before subsequent calls. If identification
+is skipped, the runner retains those values and defaults only missing fields,
+keeping each source labeled as retrieved, generated or default.
 
-| Owner | Configuration | Tunable behavior |
-|---|---|---|
-| Shared conversation | Worker `foreground_prompt` | Shared response style and grounding, applied to both general and active conversation |
-| Active workflow conversation | `task.foreground.active_prompt` | Workflow role, response detail, spoken style and length; appended to shared and step instructions |
-| Shared camera interpretation | Worker `current_view_prompt` | Camera viewpoint, visual detail and evidence description; shared by observation and immediate camera tools |
-| Focused change captions | Worker `change_watch_caption_prompt` | Detail and focus for the user-requested watcher |
-| Change judgment and summary | Worker `change_watch_decision`; `change_watch_event_prompt` | What counts as a relevant transition and how accepted changes are described |
-| Visual journal captions | Worker `video_caption_prompt` | Scene detail, readable identifiers and uncertainty |
-| Journal judgment and summary | Worker `video_delta_decision`; `video_delta_prompt` | Material-change criteria and accepted delta wording |
-| Background transcript summary | Worker `transcript_summary_prompt` | Retained facts, attribution and summary detail |
+### Visual observation loop
 
-All application-level model instructions and background decision mappings are
-inline in `yaml/tea_making_worker.yaml`. There is no separate prompt directory,
-prompt-file option, or Python prompt fallback. Literal YAML blocks preserve the
-model-facing text and line breaks. Start a custom worker configuration by copying
-the complete main YAML; it must supply its prompt text and decision policies.
+Visual verification owns fresh-frame acquisition, one Omni observation followed
+by one Clef judgment, bounded state updates, and the confirmation window.
+The supplied criteria have `positive`, `negative` and `unknown` labels.
 
-Without `--config`, the source worker reads that checked-in YAML. An installed
-worker started from the documented sample directory reads `yaml/tea_making_worker.yaml`
-there; otherwise provide its path with `--config`. Paths resolve relative to the
-selected YAML. Workflow-specific questions, criteria, RAG/fallback instructions,
-and voice policies remain in the external `workflow.yaml` selected by
-`workflow_config`. The default spoken style is declared there as well.
+For two positives within four decidable observations:
 
-Background transcript summaries are separate from dialogue/run compaction.
-`ContextManager` continues using its existing SDK compaction defaults; its
-recording adapter does not redefine summarization policy. Background prompts stay
-at application scope rather than being copied into each SOP step.
+| Evidence | Outcome |
+|---|---|
+| positive, positive | Complete immediately |
+| positive, negative, negative, positive | Complete |
+| positive, negative, negative, negative, positive | Continue; latest four contain one positive |
+| positive, unreadable, positive | Complete; unreadable evidence consumes no slot |
+
+Duplicate/older frames on the same track do not count again. Unknown observations
+are retained as context but consume no positive/negative window slot. Clear
+negatives consume a slot rather than resetting every prior positive.
+
+Water presence, tea-water contact and target temperature use the same function.
+The runner constructs temperature wording from the resolved target. Current
+temperature must be distinguished from a setpoint and have an explicit unit;
+the configured criteria account for Celsius/Fahrenheit. This semantic comparison
+requires model qualification and is not the former native numeric evaluator.
+
+### Native timer
+
+`run_timer_flow` starts timing when executed, uses monotonic elapsed time, and
+publishes duration, wall-clock start/deadline, sample time, elapsed/remaining time
+and completion. The update interval is configurable. Completion is not delayed by
+an update interval longer than the remaining duration. There are no model calls
+or timer-specific question formatters.
+
+### Full, bounded state context
+
+Each function returns its terminal state and publishes full snapshots while
+running. The runner stores those snapshots directly; it does not rebuild flow
+progress from events. Visual and identification states retain the last few
+original observations with time/frame labels, judgments, goals and useful source
+evidence. Identification also retains passages/provenance; timer state carries
+native operational facts.
+
+History count, optional age, observation text size and retrieval passage limits
+are configurable. Truncation is explicit. Current goals, resolved settings and
+confirmation progress remain separate from history eviction. Unknown evidence
+remains useful context without becoming a confirmation.
+
+The runner replaces one SOP context topic in the SDK ContextManager; standard SDK
+Conversation owns dialogue/history/compaction. All active flow states have distinct
+labels, and completed/skipped states remain clearly historical. Reset clears live
+SOP state and keeps a concise labeled prior-run summary; dialogue remains owned
+by Conversation. The SOP topic budget is configurable independently of dialogue.
+The checked-in SOP topic budget is 64 KB; history retains up to eight observations
+with at most 1,500 characters each. These are independent configurable limits,
+not a guarantee that every worst-case combination fits. Adjust them together
+for unusually verbose evidence or custom parallel work; ContextManager explicitly
+clips an oversized source. Current facts/progress precede historical flow context.
+
+### Sequential and scoped parallel execution
+
+Await a flow directly for sequential work. The runner's Python procedure can
+schedule the same async functions in an `asyncio.TaskGroup` when work should
+span several steps. Bind each state callback to a distinct flow label. At the
+scope end, await a needed result or cancel an unneeded still-running task and
+let the group drain it. Normal task-group exit waits; it does not implicitly
+cancel an indefinite flow. Required task failures propagate; no scheduler or
+optional-flow policy language is introduced.
+
+## Controls and progression
+
+The two routed destinations are `workflow` and `conversation`. Clef control
+classification and exact-intent authorization run before native actions. Negated,
+quoted, reported and hypothetical controls are questions/discussion, not execution
+requests. The conversation agent has no state-write tools.
+
+The runner's explicit Python sequence is identify -> water -> temperature ->
+tea-water contact -> timer. `sop.advancement: automatic` is the default.
+Use `manual` to wait for next after a flow completes. Next does not bypass an
+incomplete step; skip is the explicit bypass. Skipping tea-water contact detection
+also skips its associated timer because no steeping start was established. Stop ends execution; reset also
+clears current progress. Restart creates a fresh run.
 
 ## Source map
 
-| File | Purpose | Typical adaptation |
-|---|---|---|
-| `app.py` | Constructs services and registers agents | Add a backend or another observer |
-| `events.py` | Typed application topics and payloads | Define domain facts, notices, or records |
-| `agents/sop/_spec.py` | Validates the workflow YAML contract | Extend declarative workflow metadata |
-| `agents/sop/_state.py` | Typed sparse state, evidence, transitions, rendering | Change deterministic state policy |
-| `agents/sop/_tools.py` | Current view, RAG, clock, temperature, and native workflow controls | Add domain tools |
-| `agents/sop/agent.py` | Focused SOP destination, native control admission, common answer path and run context | Compose a different procedure |
-| `agents/sop/_context.py` | Per-run state/evidence/event channels and historical handoff | Configure context ownership |
-| `conversation/_capture.py` | Participant-scoped compaction recording | Record asynchronous context work |
-| `agents/sop/_engine.py` | Internal execution engine (`_WorkflowEngine`), sessions and observation loop | Add another trigger or evidence source |
-| `flows/_visual.py` | Reusable, read-only visual observation/evaluation | Configure semantic or numeric validation |
-| `flows/_identity.py` | Identity-to-reference settings resolution with explicit fallback provenance | Configure another identification-and-lookup flow |
-| `conversation/_answer.py` | Shared message assembly and SDK read-only tool loop | Change answer instructions |
-| `agents/_destinations.py` | Explicit adapters for the existing background, camera and reference capabilities | Configure application behavior |
-| `_cleanup.py` | Original-generation producer acknowledgments after SDK-owned departure | Preserve file/image cleanup ordering |
-| `conversation/_routing.py` | Bounded semantic choice and exact-operation authorization | Tune configured criteria |
-| `flows/_observations.py` | Typed extraction, choice evidence, unit normalization, and deterministic evaluation | Adapt observation policy |
-| `agents/images.py` | Shared participant image acquisition | Add another image selector |
-| `agents/background_context.py` | Recent-fact store and query tool | Change foreground and background context policy |
-| `agents/change_watch.py` | Focused visual observer | Build another event-oriented monitor |
-| `agents/transcript.py` | Transcript recording and summarization | Forward or classify laboratory dialogue |
-| `agents/video_log.py` | Periodic caption and delta observer | Build a visual journal |
-| `agents/file_output.py` | Participant JSONL artifacts | Replace files with backend persistence |
-| `agents/web_events.py` | Explicit typed event-to-view projections | Select or reshape live presentation topics |
-| `yaml/tea_making_worker.yaml` | Inline app-level model instructions and background decision policies | Tune generic conversation, perception and summaries |
-| `yaml/workflow.yaml` | Five-step procedure and evidence contract | Define a different guided task |
-| `rag-documents/` | Sample retrieval corpus | Replace with domain documents or a backend |
-
-Refer to the generated {doc}`configuration <configuration>` and
-{doc}`command-line <command-line>` references for configuration fields and
-command syntax.
+| File | Responsibility |
+|---|---|
+| `app.py` | Compose services, SDK Conversation/context/router and runtime producers |
+| `config.py` | Adapt complete application YAML into Python arguments |
+| `agents/sop/agent.py` | Controls, explicit procedure, owned tasks, latest flow state and SOP context |
+| `agents/sop/_settings.py` | Tea application models and Python policy arguments |
+| `flows/_visual.py` | Independent Omni/Clef verification loop and window |
+| `flows/_identity.py` | Independent visual identity, retrieval and missing-only resolution |
+| `flows/_timer.py` | Native timer and periodic state |
+| `_capture.py` | Flow-scoped structured images/model/evidence recording |
+| `_cleanup.py` | SDK departure to original-generation producer acknowledgments |
+| `agents/images.py` | Shared participant image acquisition and image ownership |
+| `agents/file_output.py`, `agents/web_events.py` | Typed record consumers |
+| Other `agents/` modules | Existing opt-in background native tools/producers |
 
 ## SOP run capture
 
-The worker records an SOP bundle on every launch under
-`artifacts/runs/<UTC timestamp>-<run ID>/`. `capture.enabled: true` in
-`yaml/tea_making_worker.yaml` enables structured attempt and image capture by
-default. Set it to `false` to disable those records; the run manifest,
-configuration snapshots, participant JSONL and supplemental Relay log remain.
-No model-server restart is needed when changing this worker setting.
+Every launch creates `artifacts/runs/<UTC timestamp>-<run ID>/`. With
+`capture.enabled: true`, the runner records each flow's initial/final state,
+full state callbacks, acquired frame metadata and actual model requests/results.
+The existing typed service wrappers save exact consumed image bytes before
+inference, addressed by SHA256. The flow functions have no capture dependency.
 
 ```text
 runs/<run>/
   manifest.json
-  config/
-    worker.json
-    workflow.json
-    resolved_workflow.json
-    models.json
-    voice_gate.json
+  config/worker.json
+  config/models.json
+  config/voice_gate.json
   attempts.jsonl
   images/<SHA256>.jpg
-  participants/<participant>/steps/<YAML step>/<channel>/<attempt>/events.jsonl
-  participants/<participant>/applications/<channel>/<attempt>/events.jsonl
+  participants/<participant>/steps/<step>/flow/<attempt>/events.jsonl
   <participant-session>/guidance.jsonl
-  <participant-session>/foreground.jsonl
   relay-events.jsonl
 ```
 
-Each observer attempt belongs to the current YAML step ID. Participant and step
-path components include a short hash to avoid collisions and unsafe filesystem
-names; the original IDs remain in every record. Foreground turns belong to the
-step active when the turn starts, or to `applications` when no step is active.
-Independent watchers and journals also use `applications`. Attempt IDs remain
-unique across reconnects and procedure resets within a worker run.
+The manifest identifies the Python procedure's steps and source/config hashes.
+There is no workflow YAML or resolved-interpreter snapshot. Custom foreground
+and router capture scopes are removed; SDK Relay tracing remains supplemental.
+Existing recorded runs are untouched.
 
-Routing attempts retain SDK destination selection, admission and exact-operation
-authorization decisions. The existing router processing/idle hook opens and
-closes recording inside the SDK-owned task, using its public Relay metadata for
-the original request ID. This hook does not supervise or cancel work. Routing
-and direct-answer attempts share that request ID; both retain explicit failure
-and cancellation status.
+Known credentials are redacted and headers omitted. Inference images are local
+participant data; runs are not automatically deleted. `capture.enabled: false`
+disables structured attempts/images while retaining manifest/config/participant
+logs. Continuous media recording is separately opt-in below.
 
-
-`attempts.jsonl` is the run index: each entry contains participant, step, channel,
-request and attempt IDs, plus the relative event-file path. Attempt event files
-contain the initial state, revision and evidence count; original frame metadata;
-visual question and system instructions; model responses; Clef inputs,
-criteria and output probabilities; native trigger and commit results; final
-state; and completion, error or cancellation status. Generative answers and
-their input messages are recorded separately from visual judgments. Model
-revisions are retained when the service reports them; a configured endpoint
-alone does not prove which deployed checkpoint served a request.
-
-Image files contain the encoded bytes passed to the vision service, saved before
-dispatch. SHA256 addressing deduplicates identical bytes within a run. References
-in `vision.started` identify those files, their size and hash; associated frame
-metadata retains source track, sequence, capture time and dimensions. No image
-bytes are inserted into Relay events or client messages. This records consumed
-inference images rather than every camera frame, and does not require
-`--session-recording`.
-
-Configuration snapshots include the source workflow structure and resolved
-policies/prompts. The manifest stores their hashes and worker-source hashes.
-Known credential fields are redacted and request headers are omitted. The
-bundle remains local and includes participant images and utterances. Runs are
-never automatically deleted or overwritten; manage disk space and remove
-unneeded runs explicitly.
-
-Use the exact attempt ID when recording review notes, for example an
-`annotations.jsonl` file beside the run index with entries such as
-`{"attempt_id":"...","expected_evidence":"rejected","note":"empty cup"}`.
-This keeps human ground truth separate from model output. Review the image and
-YAML snapshot before attributing a failure to captioning, semantic judgment,
-source selection or native state handling. An attempt with no finish event, or a
-manifest still marked `running` after process loss, is incomplete.
-
-Recording uses serialized file writes outside the event loop. Cancellation
-drains writes already started before cleanup; streamed answers retain partial
-text and an explicit incomplete flag. Normal shutdown closes attempt records
-before finalizing the manifest. File errors surface through worker/model-boundary
-errors rather than silently claiming successful image capture. Saving the input
-adds disk latency before inference; no extra model calls or GPU models are
-introduced. Relay traces remain supplemental and are not required to recover
-the SOP evidence/state record.
+Writes are serialized outside the event loop and drained before cancellation
+propagates. Input-image write failures prevent inference; incomplete runs remain
+identifiable by missing finish records or a running manifest after process loss.
+Recording adds disk latency but no models. For annotations, put expected judgments
+and notes beside the attempt index, keyed by attempt ID; do not replace actual
+model output.
 
 ## Opt-in continuous session capture
 
@@ -369,288 +297,41 @@ raw bundle separately.
 
 ## Configuration
 
-Run and edit the sample from `agent-samples/tea-making-sample/`. The
-orchestrator reads the checked-in files on every start and materializes a
-temporary worker configuration with absolute paths. Edit the files under
-`yaml/`, not the temporary copy named in the logs.
+All application prompts and settings live in `yaml/tea_making_worker.yaml`.
+The `sop` mapping supplies arguments to the runner; it does not define a graph,
+state-write bindings or tool dispatch. There is no per-flow YAML, packaged
+prompt directory or hidden prompt fallback. Copy the complete main YAML for a
+custom configuration. Reusable flow functions can be called entirely from Python.
 
-| File | Owns |
+The launcher materializes absolute paths for models, voice gate and artifacts.
+Relative paths resolve against the selected worker YAML. Source startup finds
+the checked-in YAML; an installed worker started from the sample directory finds
+`yaml/tea_making_worker.yaml` there. Otherwise pass an explicit `--config`.
+
+| File | Responsibility |
 |---|---|
-| `yaml/tea_making_worker.yaml` | Inline app-level prompts and decision policies, subordinate configuration paths, timeouts, background cadence, VAD, output directory, and event viewer |
-| `yaml/workflow.yaml` | Typed state, steps, triggers, evidence, tool access, transitions, and user messages |
-| `yaml/voice_gate.yaml` | Interaction mode, conversation controls and optional wake phrases |
-| `yaml/rag_service.yaml` | Document path, model configuration, cache, chunking, embedding dimensions, and score threshold |
-| `yaml/models.local.json` | Model adapters and shared endpoints, including RAG embeddings |
-| `yaml/device_io_hub.yaml` | LiveKit room and ports, web and token servers, and network behavior |
+| `yaml/tea_making_worker.yaml` | SOP prompts/criteria/defaults/bounds, conversation instructions, existing background policy and worker services |
+| `yaml/models.local.json` | Typed model adapters/shared endpoints |
+| `yaml/voice_gate.yaml` | Conversation/wake addressing |
+| `yaml/rag_service.yaml` | Retrieval documents, embedding/cache/chunking/threshold |
+| `yaml/device_io_hub.yaml` | Transport, room and client configuration |
+| `yaml/media_capture.yaml` | Opt-in continuous media recording |
 
-Set the interaction mode directly in `voice_gate.yaml`; `voice_gate_yaml` in
-`tea_making_worker.yaml` selects that file. Change observation and summary frequency in that
-worker file, retrieval behavior in `rag_service.yaml`, and the procedure itself
-in `workflow.yaml`. Relative paths declared in each configuration file resolve
-from that file's directory. Workflow state and step references are validated at
-startup, so an invalid contract fails before a participant session begins.
-
-Restart `tea_making_sample` after an edit; configuration is not hot-reloaded.
-The `--expose-web-events` option intentionally overrides `web_events_host` in
-the runtime copy. Changing `models.local.json` changes the endpoints used by
-the worker and RAG service but not the persistent servers. Refer to
-{doc}`/guides/customizing-model-servers` for a server-side model, GPU, port, or
-memory change, then restart the sample's model stack.
-
-The local embedding server uses `nvidia/Nemotron-3-Embed-1B-BF16`, served as
-`embed` on port 8109. RAG retains its native 2048-dimensional vectors. The
-external NIM profile uses `nvidia/nemotron-3-embed-1b` with the same dimension;
-refer to {doc}`/guides/deploying-with-nim` for endpoint configuration.
-
-Refer to the generated {doc}`configuration <configuration>` reference for exact
-fields, checked-in values, and adjacent YAML comments.
-
-<a id="deterministic-foreground-routing"></a>
-
-## Focused foreground routing
-
-The existing `AgentRouter` runs only at the top level. It selects the tea
-workflow, ordinary conversation, a current-camera question, reference retrieval,
-or one of the existing background applications. Routing descriptions come from
-`task.foreground` in `workflow.yaml`.
-
-Starting guidance returns `focus`. The workflow then receives the participant's
-next request first. Its direct Clef question offers only the focused guide's
-controls, conversation, or handoff. Informational questions share one conversation
-path; there is no per-step source classifier or separate answer/check branch.
-The language model receives managed context and the read-only tools declared in
-`voice.tools`, using the standard SDK tool loop. Workflow mutation tools are
-excluded from that loop.
-
-Code maps bounded control labels to the existing native operations and their
-arguments; YAML supplies semantic instructions and criteria. It does not define
-an arbitrary tool-execution language. Mutating
-controls also require a separate decision about the current user's authorization
-of that exact operation and target. The positive authorization score must exceed
-the combined negative and unknown scores; a minority positive cannot authorize
-a mutation merely by winning the three-way classification. Requests about capabilities, quoted or
-reported instructions, and negated commands do not authorize execution.
-`WorkflowStore` still decides whether an authorized advance is ready.
-
-A request for another application declines only the current turn. The router
-hands it to the ordinary destination while retaining tea focus, just as a side
-question can be answered during focused note taking. Explicit exit or completion
-releases focus. Router focus does not replace workflow state or stop the
-independent observation task.
-
-The SOP agent owns a persistent dialogue `ContextManager` and run-owned managers
-for live snapshots and execution history. Live and historical blocks are supplied
-in separate prompt messages. It does not create a `Conversation`
-agent. Each run has a unique ID. Its context contains:
-
-| Channel | Contents | Update policy |
-|---|---|---|
-| `sop.execution` | Run and revision, active step, established state, native operation readings | Latest replacement snapshot |
-| `sop.evidence` | Current-step evidence, with frame and observation time; cleared on step transition | Latest replacement snapshot |
-| `sop.events` | Meaningful step/run events | Append and compact older events |
-| Dialogue | Completed user requests and assistant responses | Append and compact older exchanges |
-| `sop.handoff` | Historical context exported when a run closes | Persistent historical updates, compacted independently |
-
-Before generating any answer, the execution engine samples the YAML-declared
-native `context` projections. The timer is an `active_operation` projection
-using `clock__timer`; its elapsed and remaining values are recalculated for
-every question while that operation is present. This does not depend on matching
-question wording. Visual observations continue on the background cadence; they
-are timestamped evidence, not automatically fresh camera readings. The model
-may request a fresh camera observation through its ordinary read-only tools.
-Current source snapshots override historical assistant claims. Response quality
-remains a model responsibility; no timer-specific answer template is used.
-
-A run closes on explicit finish, reset or restart. Its final state and bounded
-context are handed off as historical reference before its manager and compaction
-tasks close. A new run receives a fresh manager, state and evidence. Dialogue
-survives this rollover. The final response input explicitly identifies whether
-execution is active, so a historical timer is not presented as a running one.
-Participant departure clears both managers after draining producers. Detailed
-run bundles remain available independently of bounded conversational context.
-
-Replacement channels are the existing SDK's `summary_context_topics`: the name
-describes retaining the latest source state, not asking an LLM to summarize live
-values. History channels use `incremental_context_topics`. The configured context
-budget assigns half to dialogue and divides the remainder between execution,
-evidence, event history and historical handoff. No SDK clear API is added.
-
-Every visual request sends one image through the existing image tools and Omni
-adapter. Clef receives text decisions in this sample; no separate visual model
-is introduced. The `llm` and `vlm` roles continue to share the Omni endpoint.
-
-Completed response text is retained in router history for follow-up admission
-and in managed context for response generation. The fresh state projection and
-requested live result override compacted historical facts. Detailed frame checks
-and model calls remain in the run bundle rather than flooding conversation
-context. Participant departure drains response and observation producers before
-clearing history; shutdown also drains context compaction.
-The router owns admission, focus, cancellation, and handoff; agents own their
-application state and background tasks.
-The sample does not maintain another user-turn task registry or buffer destination
-output for later republication. Destinations use SDK `ResponseOutputs` directly;
-completed dialogue is recorded only after the reply terminator is delivered.
-Initialization and participant cleanup use the router's existing hooks.
-
-The sample's left-event adapter is deliberately separate from the router's
-runtime subscriber: it calls public `router.participant_left()` to drain owned
-work, then acknowledges the foreground and guidance producers using the original
-left event's generation. It is the sole adapter for that event, so a second
-late departure cannot reset a concurrent rejoin. The bridge retains the existing
-file/image cleanup protocol; it does not supervise turns or implement routing.
-
-
-## Workflow contract
-
-`yaml/workflow.yaml` declares:
-
-- typed state fields and initial values;
-- ordered steps and explicit next-step IDs;
-- which state each step may read and write;
-- a periodic trigger and evidence rule;
-- typed observation fields or accepted, rejected, and unknown choice criteria;
-- deterministic evaluation tools and code-bound arguments;
-- state patches applied only after confirmed evidence;
-- current-step read-only tools, native context projections and generation instructions;
-- completion conditions and skip values;
-- enter, complete, and skip messages.
-
-`WorkflowStore` enforces the contract. An observation can update only fields
-listed in the active step's `writes`. Updates are atomic, validated against
-their declared types, and ignored after the step is complete. Completion emits
-a notice but never moves to the next step. Only explicit start, next, skip,
-reset, or restart controls change the participant's position.
-
-Models never propose an arbitrary state patch. An `observation` declares one of
-three execution kinds:
-
-- `choice`: Omni supplies a description and Clef chooses accepted, rejected, or
-  unknown from YAML criteria.
-- `extract`: Omni returns only declared JSON fields. Code validates their types,
-  normalizes declared units, and optionally executes a native evaluation tool.
-- `result`: code evaluates a typed trigger result, such as a timer's `expired`
-  boolean, without calling a model.
-
-`updates` contains literals or explicit bindings from `$observation`, `$state`,
-or `$clock.now_us`. The parser rejects unwritable fields and unknown bindings.
-A clock binding is evaluated by code only after confirmation. Temperature
-conversion and duration conversion use code, not language-model arithmetic.
-
-Identity must come from legible current-view evidence. `visual_fields` limits
-the image request to identity fields; `retain` commits those validated fields
-independently before retrieval, under the execution revision guard. Configured
-unavailable labels normalize to missing evidence rather than becoming identity.
-Unreadable later frames cannot erase retained identity. Restart clears it.
-
-The identity-resolution step performs actual RAG retrieval using the configured
-query. A text-only model extracts supported settings, with a source-passage
-index and verbatim quote for each field. Code checks the quote and normalizes
-units. The YAML can permit tea-type references when an exact product reference
-is unavailable. Missing settings alone go through `fallback_instructions`;
-unresolved identities are never generated. Each resolved setting has explicit
-retrieved or generated provenance through `source_fields`. Supported partial
-settings and provenance survive retries for unresolved fields. Generated values
-are recommendations, never represented as package or retrieved facts. Ranges
-without a single recommendation remain unavailable to extraction. Document
-relevance and recommendation quality still require model qualification.
-
-### Adapting an existing workflow YAML
-
-Replace the former observation `agent.prompt` and `agent.tools` block with an
-`observation` policy. Keep control semantics, `reads`, `writes`, confirmation
-counts, advancement policy, skip values, and messages. Declare scoped
-foreground control decisions under `task.foreground`, read-only tools under
-`voice.tools`, and native source projections under `context`. `voice.prompt` now describes how to answer
-from supplied facts rather than how to select tools.
-
-An extracted field with `units` returns `{value: number, unit: label}`. Each
-unit declares a scale and optional offset; code computes `(value + offset) *
-scale` and validates the normalized result before it can enter state. State
-continues to contain canonical scalar values.
-
-## Visual observation loop
-
-`SOPAgent` owns an internal execution engine with one observation task per
-connected participant. While a
-workflow step is active, the task:
-
-1. Executes the step's deterministic trigger, such as `current_view` or
-   `clock__timer`.
-2. Runs the declared choice, extraction, or native-result policy.
-3. Counts accepted evidence against the declared confirmation rule.
-4. Applies the declared patch atomically only after the required confirmations.
-5. Publishes typed records and completion notices.
-
-The same source frame cannot count twice toward visual confirmation. Failed
-inference can retry that frame; a valid decision consumes it once. Unknown
-evidence preserves the existing confirmation count, while a clear negative
-resets it. No new evidence-age timeout is imposed.
-
-Configured choice observations return `observable` and `description`. An
-explicitly unobservable view becomes unknown without a Clef call; an empty
-vessel can still be observable. Clef receives the description and criteria,
-without unrelated progress flags or brewing targets. Water and tea immersion
-each use one semantic question; immersion requires an explicit contact
-relationship. Numeric temperature comparisons and elapsed timers use code.
-The heating step compares the observed unit-bearing reading with the resolved
-brewing target using `temperature__verify`. Readings must reach or exceed the
-target on two distinct frames before `temperature_ready` is confirmed. A reading
-that is rising but below target does not complete the step. Missing readings or
-units remain unknown; an explicit below-target reading resets confirmation.
-No tolerance band or upper-temperature bound is inferred.
-
-Each observation already supplies step-specific VLM context: choice steps have
-visual descriptions; extraction steps have typed observed facts such as the
-current temperature and unit. This is not a separate whole-scene caption call.
-Live visual evidence belongs to the active step and clears when the step changes.
-Completed-step observations remain in run history and historical handoffs;
-confirmed workflow state persists for subsequent steps. The timer receives its
-native operation context without carrying a prior step's visual evidence into
-its live context.
-
-`VisualValidationStep` accepts a question, parsed policy, shared services and
-tools. `check(frame, expected=...)` returns evidence and frame identity without
-mutating confirmation or workflow state. The execution engine owns cadence,
-duplicate-frame rejection, confirmation and guarded commits. Its staged
-observation/evaluation methods also support retaining identity before fallible
-settings resolution. These flow APIs are public within the sample; they are not SDK APIs.
-
-Unavailable frames, invalid observations, and service failures record an error
-and retry on a later tick. They do not kill the participant session. A leave
-event cancels the task and releases the session.
-
-By default, a confirmed completion atomically advances to the next step and
-combines the completion notice with its instruction. Set `task.advancement` to
-`manual` to pause completed steps until the user says next. `manual_advance_message`
-in the task YAML supplies that reminder. Explicit next remains guarded by step
-readiness in both modes; skip remains an explicit override. Trigger and
-model I/O run outside the participant state lock; the resulting commit is
-accepted only when the captured step and revision still match. Reset, restart,
-status, and advance controls therefore remain responsive during slow inference.
-
-To use audio, sensor, or backend evidence, add another deterministic trigger
-that returns a typed result. Keep observation, semantic judgment, and guarded
-state mutation separate so the same workflow rules remain testable without the
-live source. Regex matching may guard the internal judgment token, but should
-not be the primary interpreter of natural-language captions.
+Restart the worker after configuration changes. Worker prompt/flow changes do
+not require restarting model services. A server/profile change follows
+{doc}`/guides/customizing-model-servers`. The local embedding role is
+`nvidia/Nemotron-3-Embed-1B-BF16` on port 8109 with native 2048-dimensional vectors;
+the external NIM profile uses `nvidia/nemotron-3-embed-1b`. See
+{doc}`/guides/deploying-with-nim`.
 
 ## Independent background agents
 
-Background applications expose participant-bound start, stop, and status tools
-to the foreground agent:
-
-- `ChangeWatchAgent` captions a current frame with Omni, uses Clef to select
-  material changes, and generates a concise summary only for an accepted change.
-- `TranscriptAgent` consumes the built-in pre-gate transcript topic and
-  summarizes only unsummarized turns on its interval.
-- `VideoLogAgent` records Omni captions, compares them with a five-caption
-  window through Clef, and generates a delta only for an accepted transition.
-
-Each publishes its durable record topic. Important compact results also become
-`BackgroundFact` events. `BackgroundContextAgent` retains a bounded,
-participant-local window and exposes `application_context__query` to the
-foreground. Thus background work can inform a later question without becoming
-conversation history or taking ownership of the response.
+Existing watcher, transcript and journal agents remain opt-in runtime producers
+with participant-bound native tools. They are not extra routed SOP destinations.
+Applications that need them invoke their tools explicitly in Python.
+`BackgroundContextAgent` stores bounded facts; these producers do not mutate
+SOP progress. Image/file/event agents remain infrastructure, not conversational
+or workflow coordinators.
 
 ## Live inspection and durable output
 
@@ -702,71 +383,6 @@ guidance records, background facts, transcripts, or video deltas independently.
 If it runs in another process, expose the boundary through a typed msgpack over
 ZMQ service rather than bypassing the repository's service model.
 
-## Adapting the sample
-
-### Replace tea making with another procedure
-
-1. Define the new state fields and steps in `workflow.yaml`.
-2. Give every step the smallest possible `reads`, `writes`, and tool set.
-3. Put calculations and external facts behind deterministic tools.
-4. Declare factual Omni extraction or caption prompts, bounded Clef criteria,
-   native evaluations, and allowed updates in YAML. Keep domain rules out of
-   the observation executor.
-5. Choose `task.advancement: automatic` or `manual` for the product's progression policy.
-6. Add state and routing tests before tuning prompts.
-
-If the workflow needs a different state-machine rule, change
-`agents/sop/_state.py`; do not encode the rule only in prose for the model.
-
-### Add a domain tool
-
-Implement a native `Tool` or `AsyncTool`, then list it only on the workflow
-steps that need it. Keep participant identity in a closure or runtime metadata,
-not in a model-selected request field. Execute peer-agent tools through their
-public `execute()` boundary so validation and Relay tracing are preserved.
-
-### Add another background observer
-
-Follow the same contract as the three existing applications: an agent-owned
-task per participant, idempotent start, stop, and status tools, cancellation on
-leave, a typed durable record topic, and optional compact `BackgroundFact`
-output. Decide explicitly whether to speak the result; do not make every
-background record a voice message.
-
-### Replace files with production persistence
-
-Subscribe to the existing topics from a backend agent. Preserve participant and
-correlation metadata from `RuntimeContext`. Define retry, buffering, ordering,
-and failure behavior in that integration agent rather than blocking perception
-or voice by accident.
-
-### Change voice policy
-
-The SOP agent delegates notice delivery to its internal `GuidanceVoiceAgent`
-component. Add, suppress, batch, or redirect notices there. Background applications remain
-text and event producers unless a dedicated voice subscriber chooses otherwise.
-Foreground answers are replies to the user's query, and guidance notices are
-unprompted updates, both published through `ResponseOutputs` to
-`VOICE_OUTPUT_TOPIC`. `VoiceAgent` owns when they are spoken: it combines
-updates that arrive while the participant is being spoken to, and a new query supersedes prior output. The response text reaches the connection client's Agent panel as
-soon as that response or combined update is complete.
-
-## Lifecycle invariants
-
-- Participant join starts a fresh workflow and output session.
-- Participant leave cancels foreground, observation, and background tasks
-  before image resources are released.
-- Record-producing agents publish cleanup-complete events after cancellation;
-  `FileOutputAgent` closes the session only after every producer has finished.
-- A superseding query cancels the participant's prior foreground turn.
-- Each participant has independent workflow state and locks.
-- Agent tasks fork the Relay context for traceable native tool execution.
-- Cancellation propagates through model and tool calls.
-- Background facts are bounded and cleared on participant lifecycle changes.
-
-Preserve these rules when extracting or replacing agents. State ownership and
-cleanup are one design decision, not separate implementation details.
-
 ## Safety
 
 This sample demonstrates agent composition; it is not a safety controller.
@@ -774,58 +390,57 @@ Keep hot vessels stable, follow appliance and tea-package instructions, and do
 not use visual inference as the sole protection against burns, spills, or
 electrical hazards.
 
+## Lifecycle invariants
+
+- SDK routing owns turn tasks; the runner owns the separate SOP procedure and flow tasks.
+- General questions and speech interruption do not implicitly cancel SOP execution.
+- Explicit stop/reset drains all owned work; skip stops only the current step.
+- Session/run/task identity guards discard late state from stopped or replaced executions.
+- Participant departure closes admission before draining tasks and releasing images.
+- Producer acknowledgments retain the original departure generation; reconnect gets fresh state.
+- State callbacks are awaited in the flow task. No callback is detached.
+- Flow errors/cancellation propagate. The runner reports participant-procedure failures explicitly.
+- No model is given a workflow mutation tool.
+
 ## Validation strategy
 
-Test deterministic behavior separately from model quality:
+CPU tests exercise the actual public async flows, runner procedure, SDK router,
+SDK Conversation request messages, source provenance, partial skip/defaults,
+window unknown/duplicate rules, timer timing, callback bounds, scoped parallel
+flow state, stop supersession, departure/rejoin and exact consumed-image capture.
 
-1. Validate workflow YAML, field types, readable and writable sets, and step links.
-2. Unit-test atomic commits, evidence counts, automatic/manual advancement, skips,
-   resets, and no mutation after completion.
-3. Test root-versus-active tool visibility and the absence of conversation
-   history.
-4. Test background lifecycle, deduplication, summary windows, and cancellation.
-5. Add routing evals for prompt-controlled tool choices.
-6. Run the live pipeline to evaluate visual evidence and model prompts.
+Tests of the deleted workflow interpreter and foreground preparation paths are
+replaced with these behavior tests; retaining old import shims would preserve
+the architecture being removed.
 
-The live-model eval uses the production SDK router, destinations, native SOP
-controls and answer request assembly. External background effects and camera
-inputs are fixtures. Setup executes the native start control to establish actual
-focus; populating workflow state alone is not a focused-agent test.
-The suite checks selected capabilities, fixed skip arguments, generation scope,
-and response constraints. Caption fixtures check extraction, not physical-camera
-accuracy. The normal acceptance floor remains 80 percent; inspect every unsafe
-control miss independently of that aggregate.
-
-Start the sample's model stack so Omni on port 8108 and Clef on port 8120 are
-healthy. Run from `agent-samples/tea-making-sample/`:
+From `agent-samples/tea-making-sample/`, replay existing healthy model endpoints:
 
 ```bash
 uv run --project worker python eval/eval.py
-uv run --project worker python eval/eval.py --cases eval/focused-cases.yaml
+uv run --project worker python eval/eval.py --cases eval/qualification-cases.yaml --output /tmp/tea-routing.jsonl
 ```
 
-Use `--output <path>` to retain JSONL results and per-call timings. These timings
-exclude microphone processing, camera acquisition, visual inference for dry-run
-camera actions, TTS, and client playback. They do not measure audible-response
-latency. Check a real camera session before proposing a deployment.
+The evaluator uses production runner, router and Conversation with camera
+acquisition unavailable. It checks control-vs-Q&A routing and authorization, not
+physical image accuracy or audible latency. The original eight held-out wordings
+are retained, with expectations updated for the two-agent contract; the old
+background-control routing result is not directly comparable.
 
-The standalone model launcher adds Clef to the existing speaker STT, Pocket TTS,
-Omni, and embedding services. That is one additional checkpoint and service;
-sharing Omni for language and vision still loads only one Omni checkpoint.
-Existing KV and utilization settings are retained. Qualify peak memory and
-concurrent load on the selected GPU profile rather than treating per-service
-utilization as a total-memory cap.
+Qualify the visual pipeline on real/recorded images, including below-target,
+at-target, Fahrenheit, unreadable units, empty vessels and occluded tea contact.
+Source/quote checks and CPU tests do not establish model accuracy.
 
-When debugging, inspect the workflow, background, foreground, and Relay JSONL
-files as separate stages. This shows whether the problem came from evidence,
-tool selection, state policy, event delivery, or presentation.
+The model launcher reuses speech, Pocket TTS, Omni and embedding roles and includes
+Clef. Sharing Omni for language and vision still loads one Omni checkpoint.
+Concurrent flow calls reuse those clients but may contend for inference/KV
+capacity. No new GPU memory/latency qualification is claimed; measure peak load
+on the chosen profile.
 
 <a id="what-should-become-shared"></a>
 
 ## What belongs in shared code
 
-Reuse public SDK blocks directly when they already express the contract:
-`VoiceAgent`, `AgentRuntime`, `run_tool_loop`, `CurrentFrameTool`,
-`ImageQueryTool`, `RAGTools`, and typed topics. Keep the workflow schema,
-evidence rules, background-fact policy, and user-facing notices sample-local
-until another concrete application requires the same contract.
+Keep the independent Python flow APIs in the sample until concrete consumers
+justify SDK promotion. Reuse SDK routing, context, conversation, typed tools and
+services now. The tea procedure, defaults, prompts and connections are application
+code; no generic execution framework is needed to express them.

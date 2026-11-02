@@ -1,474 +1,646 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Compose one focused SOP destination with SDK-managed routing and conversation.
+"""Run an explicit Python SOP; route general questions to SDK Conversation.
 
-Read ``app.run_app`` first for service wiring. The router calls ``admit`` to
-classify a turn, then ``answer`` to execute an authorized control or generate a
-read-only reply. ``agents.sop._engine`` owns observation scheduling and native state;
-``flows`` only returns evidence. Conversation context is a projection of that
-state, never an alternative source of workflow authority.
-
-The SDK router owns user-turn cancellation. This module owns the SOP resources,
-request-correlated recording, and the handoff between run context and dialogue.
+Read _procedure() for the five-step connection. Independent async flow functions
+own recognition/timing and report full state; this agent stores the latest
+labeled snapshots, owns controls/tasks/transitions, records evidence, and supplies
+one SOP-context source to the separate conversation agent. No YAML step language
+or separate workflow engine participates in execution.
 """
 
 from __future__ import annotations
 
+import asyncio
+import json
+import logging
 import time
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable, Coroutine
+from dataclasses import dataclass, field, replace
+from functools import partial
+from typing import Any, Literal
+from uuid import uuid4
 
-from xr_ai_conversation import ContextManager
+from xr_ai_conversation import ContextManager, ConversationContextUpdate
+from xr_ai_hub import FrameUnavailable
 from xr_ai_interaction import ResponseOutputs
-from xr_ai_models import DecisionService, LLMService, VLMService
+from xr_ai_models import DecisionQuestion, DecisionService, LLMService
 from xr_ai_routing import Admission, AgentTurn, DestinationResult, RoutingAid
-from xr_ai_runtime import Agent, AgentRuntime, RuntimeClosedError, RuntimeContext, subscribe
-from xr_ai_tools import ToolSet
+from xr_ai_runtime import Agent, AgentRuntime, RuntimeClosedError
+from xr_ai_tools.current_frame import CurrentFrameRequest
 from xr_ai_tools.rag import RAGTools
-from xr_ai_tools.vision import ImageQueryTool, StreamingImageQueryTool
+from xr_ai_tools.vision import ImageQueryTool
 from xr_ai_voice import VOICE_OUTPUT_TOPIC
 
-from ..._capture import _attempt, _event
-from ...conversation._answer import _answer
-from ...conversation._capture import _CompactionLanguage, _context_owner
-from ...conversation._routing import _authorized, _choose
-from ...events import FOREGROUND_RECORD_TOPIC, GUIDANCE_NOTICE_TOPIC, ForegroundRecord, GuidanceNotice
+from ..._capture import _attempt, _event, _frame, _json
+from ...events import GUIDANCE_NOTICE_TOPIC, GUIDANCE_RECORD_TOPIC, GuidanceNotice, GuidanceRecord
+from ...flows import (
+    IdentificationState,
+    run_identification_flow,
+    run_timer_flow,
+    run_visual_verification_flow,
+)
 from ..images import ParticipantImageAgent
-from ._context import _HANDOFF, _RunContexts
-from ._engine import _WorkflowEngine
-from ._spec import Workflow
-from ._state import WorkflowEvent, WorkflowSession
+from ._settings import BrewingSettings, SOPConfig, TeaIdentity
 
-_CONTEXT_EVENTS = {
-    "step.enter",
-    "step.commit",
-    "step.ready",
-    "workflow.reset",
-    "workflow.complete",
-    "workflow.skipped",
-    "workflow.run_closed",
-}
-_CONTROLS = {
-    "start": ("workflow__start", {}),
-    "status": ("workflow__status", {}),
-    "advance": ("workflow__advance", {"skip": False}),
-    "skip": ("workflow__advance", {"skip": True}),
-    "restart": ("workflow__restart", {}),
-    "reset": ("workflow__reset", {}),
-}
+SOP_CONTEXT_SOURCE = "tea-making.sop-context"
+_STEP_IDS = ("identify", "fill_water", "heat_water", "start_steeping", "steep_timer")
+_LOGGER = logging.getLogger(__name__)
+
+
+@dataclass(slots=True)
+class _Session:
+    """Runner-owned participant state; flow internals arrive only through snapshots."""
+
+    participant_id: str
+    run_id: str | None = None
+    status: Literal["idle", "running", "completed", "stopped", "failed"] = "idle"
+    revision: int = 0
+    step_index: int = -1
+    connected: bool = True
+    procedure: asyncio.Task[None] | None = None
+    active_tasks: dict[str, asyncio.Task[Any]] = field(default_factory=dict)
+    flow_states: dict[str, Any] = field(default_factory=dict)
+    flow_statuses: dict[str, str] = field(default_factory=dict)
+    advance_requested: asyncio.Event = field(default_factory=asyncio.Event)
+    ready: bool = False
+    skipping: bool = False
+    last_run: dict[str, Any] | None = None
+    issue: str = ""
 
 
 class SOPAgent(Agent):
-    """A RoutableAgent-compatible procedure with native state and managed context.
+    """Control-only SOP runner and owner of flow state supplied to conversation.
 
-    Load ``workflow`` from YAML and inject existing typed services/tools. Register
-    this agent for guidance notices, bind its runtime, and use it as the workflow
-    destination of an SDK AgentRouter. The router calls participant initialization
-    and departure hooks and owns turn cancellation; stop the router before this
-    agent. No conversation agent or independent user-turn supervisor is created.
+    Args:
+        config: Ordinary Python application arguments for the explicit tea procedure.
+        llm: Settings extraction/generation service.
+        decisions: Semantic control authorization and visual judgment service.
+        images: Existing participant image owner; owns image lifetime, not this agent.
+        image_query: Omni image tool shared by the independent flow calls.
+        rag: Existing typed retrieval tools.
+        context: SDK context manager shared with the separate Conversation destination.
+        runtime: Started/stopped by application composition.
     """
 
     def __init__(
         self,
         *,
-        workflow: Workflow,
+        config: SOPConfig,
         llm: LLMService,
         decisions: DecisionService,
         images: ParticipantImageAgent,
-        vlm: VLMService,
-        rag: RAGTools,
         image_query: ImageQueryTool,
-        application_tools: Callable[[str], ToolSet],
-        prompt: str,
-        current_view_prompt: str,
-        context_budget_bytes: int = 12000,
-        compaction_input_budget_bytes: int = 12000,
-        vlm_timeout_s: float = 15,
+        rag: RAGTools,
+        context: ContextManager,
+        runtime: AgentRuntime,
     ) -> None:
-        """Initialize SOP execution, persistent dialogue and run-scoped context.
-
-        Args:
-            workflow: Validated external task and step policy, including foreground policy.
-            llm: Language service for answers, extraction and context compaction.
-            decisions: Bounded semantic-choice service for admission and evidence.
-            images: Participant frame source shared with the visual tools.
-            vlm: Vision service for streaming current-view answers.
-            rag: Retrieval tools used by configured workflow steps.
-            image_query: Visual observer with its configured system prompt.
-            application_tools: Participant-specific optional background tool catalog.
-            prompt: Application-level conversation instructions from worker YAML.
-            current_view_prompt: Instructions for streaming current-view answers.
-            context_budget_bytes: Budget divided between dialogue and context topics.
-            compaction_input_budget_bytes: Input bound for SDK context compaction.
-            vlm_timeout_s: Timeout used for visual inference.
-        """
-        if workflow.foreground is None:
-            raise ValueError("SOP routing requires task.foreground")
+        super().__init__()
+        self.config = config
         self._llm = llm
         self._decisions = decisions
-        self._policy = workflow.foreground
         self._images = images
-        self._vlm = vlm
+        self._image_query = image_query
         self._rag = rag
-        self._prompt = prompt.strip()
-        self._view_prompt = current_view_prompt.strip()
-        if not self._view_prompt:
-            raise ValueError("current_view_prompt must not be empty")
-        self._background_tools = application_tools
-        self._vlm_timeout_s = vlm_timeout_s
-        self._vision = StreamingImageQueryTool(images=images.images, vlm=vlm, system_prompt=self._view_prompt)
-        super().__init__((self._vision,))
-        # Dialogue outlives a workflow run. Execution history and current readings
-        # use separate run-owned managers so a reset cannot retain live evidence.
-        self._context = ContextManager(
-            _CompactionLanguage(llm),
-            incremental_context_topics=(_HANDOFF,),
-            dialogue_budget_bytes=context_budget_bytes // 2,
-            topic_budget_bytes=max(1, context_budget_bytes // 8),
-            compaction_input_budget_bytes=compaction_input_budget_bytes,
-        )
-        self._workflow_engine = _WorkflowEngine(
-            workflow=workflow,
-            llm=llm,
-            decisions=decisions,
-            current_frame=images.get_current_frame,
-            image_query=image_query,
-            rag=rag,
-            vlm_timeout_s=vlm_timeout_s,
-            record_event=self._remember_event,
-        )
-        self._run_contexts = _RunContexts(
-            llm,
-            self._context,
-            budget=max(1, context_budget_bytes // 8),
-            compaction_budget=compaction_input_budget_bytes,
-        )
-        self._pending = {}
-        self._closing = False
-        self._runtime = None
-
-    def bind_runtime(self, runtime: AgentRuntime) -> None:
-        """Bind output publication and native observation tools before routing starts."""
+        self._context = context
         self._runtime = runtime
         self._responses = ResponseOutputs(
-            runtime, VOICE_OUTPUT_TOPIC, source="sop", closed_errors=(RuntimeClosedError,),
+            runtime,
+            VOICE_OUTPUT_TOPIC,
+            source="sop",
+            closed_errors=(RuntimeClosedError,),
         )
-        self._workflow_engine.bind_runtime(runtime)
+        self._sessions: dict[str, _Session] = {}
+        self._pending: dict[str, tuple[str, _Session, int, str | None, str]] = {}
+        self._closing = False
+        self._participant_locks: dict[str, asyncio.Lock] = {}
 
     async def participant_joined(self, participant_id: str) -> None:
-        """Initialize native participant state and its observation monitor."""
-        await self._workflow_engine._join_participant(participant_id)
+        """Admit a new participant; late callbacks retain their old session identity."""
+        async with self._participant_locks.setdefault(participant_id, asyncio.Lock()):
+            if not self._closing and participant_id not in self._sessions:
+                session = _Session(participant_id)
+                self._sessions[participant_id] = session
+                await self._publish_context(session)
 
     async def participant_left(self, participant_id: str) -> None:
-        """Drain native work, then close run context and persistent dialogue."""
-        self._pending.pop(participant_id, None)
-        try:
-            await self._workflow_engine._leave_participant(participant_id)
-        finally:
-            await self._run_contexts.clear(participant_id)
+        """Close admission before draining owned flow work and clearing context."""
+        async with self._participant_locks.setdefault(participant_id, asyncio.Lock()):
+            session = self._sessions.pop(participant_id, None)
+            if session is None:
+                return
+            session.connected = False
+            self._pending.pop(participant_id, None)
+            await self._stop_run(session)
             await self._context.clear(participant_id)
 
     def routing_aid(self, participant_id: str) -> RoutingAid:
-        """Describe current workflow eligibility without creating participant state."""
-        session = self._workflow_engine.store.find(participant_id)
+        """Describe controls without taking focus over general SOP questions."""
+        session = self._sessions.get(participant_id)
         return RoutingAid(
-            "workflow", self._policy.workflow_description,
-            eligibility="active procedure" if session and session.active else "idle; explicit start required",
+            "workflow",
+            self.config.workflow_description,
+            eligibility=session.status if session else "participant not admitted",
         )
 
     async def admit(self, turn: AgentTurn, *, focused: bool) -> Admission:
-        """Classify and authorize a turn without executing its proposed control.
-
-        The saved admission includes session identity and revision. ``answer`` rechecks
-        those values after any intervening observer work or reset.
-
-        Args:
-            turn: SDK-owned request and recent interaction history.
-            focused: Whether the router currently focuses this workflow destination.
-
-        Returns:
-            An admission decision; accepted turns retain a request-correlated proposal.
-        """
-        self._pending.pop(turn.participant_id, None)
-        workflow_session = self._workflow_engine.store.get(turn.participant_id)
-        admitted_revision = workflow_session.revision
-        routing_state = {
-            "active": workflow_session.active,
-            "workflow": self._workflow_engine.workflow.name,
-            "destination": {"name": "workflow", "focused": focused},
-        }
-        admission_question = self._policy.idle_question
-        if workflow_session.active and workflow_session.step_id is not None:
-            active_step = self._workflow_engine.workflow.step(workflow_session.step_id)
-            routing_state.update(
-                step={"title": active_step.title, "complete": active_step.is_complete(workflow_session.state)},
-                known=self._workflow_engine.workflow.project(active_step, workflow_session.state),
-            )
-            admission_question = self._policy.active_question
-        selected_action = await _choose(self._decisions, admission_question, turn, routing_state)
-        if selected_action in {"handoff", "other"}:
+        """Recognize an explicit control and retain a revision-bound authorized proposal."""
+        del focused
+        session = self._sessions.get(turn.participant_id)
+        if self._closing or session is None or not session.connected:
             return Admission("decline")
-        if selected_action in _CONTROLS and selected_action != "status":
-            operation_name, operation_arguments = _CONTROLS[selected_action]
-            if not await _authorized(
-                self._decisions,
-                self._policy,
-                turn,
-                operation=operation_name,
-                description=admission_question.criteria[selected_action],
-                arguments=operation_arguments,
-                target=self._workflow_engine.workflow.name,
-            ):
-                return Admission("decline")
-        self._pending[turn.participant_id] = (turn.turn_id, workflow_session, admitted_revision, selected_action)
+        revision = session.revision
+        admitted_run_id = session.run_id
+        response = await self._decisions.decide(
+            {"request": turn.query, "status": session.status, "step": self._step_id(session), "ready": session.ready},
+            {"control": self.config.control_question},
+        )
+        control = response.answers["control"].choice
+        if control == "none":
+            return Admission("decline")
+        if control not in self.config.control_question.criteria:
+            raise ValueError("invalid SOP control")
+        authorization = await self._decisions.decide(
+            {
+                "request": turn.query,
+                "proposed_action": {
+                    "operation": control,
+                    "target": "tea making",
+                    "description": self.config.control_question.criteria[control],
+                },
+            },
+            {"authorization": self.config.authorization_question},
+        )
+        answer = authorization.answers["authorization"]
+        command_probability = answer.probabilities["command"]
+        if answer.choice != "command" or command_probability <= sum(
+            probability for label, probability in answer.probabilities.items() if label != "command"
+        ):
+            return Admission("decline")
+        if (
+            self._sessions.get(turn.participant_id) is not session
+            or not session.connected
+            or asyncio.current_task().cancelling()
+        ):
+            return Admission("decline")
+        self._pending[turn.participant_id] = (turn.turn_id, session, revision, admitted_run_id, control)
         return Admission("accept")
 
-    async def answer(self, turn: AgentTurn, *, started) -> DestinationResult:
-        """Execute a still-current admission or answer through read-only conversation.
-
-        Args:
-            turn: The same SDK turn previously admitted by this destination.
-            started: SDK callback marking response execution as started.
-
-        Returns:
-            Focus while the native procedure remains active, otherwise release.
-        """
+    async def answer(self, turn: AgentTurn, *, started: Callable[[], Awaitable[None]]) -> DestinationResult:
+        """Apply only a still-current admitted control, then publish its native acknowledgment."""
         pending_admission = self._pending.pop(turn.participant_id, None)
-
-        async def produce(reply):
-            # Recording/output setup can await before this callback runs. Read the
-            # session here, rather than trusting state captured during admission.
-            workflow_session = self._workflow_engine.store.find(turn.participant_id)
-            if pending_admission is None:
-                response_text, executed_tool_names = self._policy.stale_message, []
+        if pending_admission is None or pending_admission[0] != turn.turn_id:
+            return DestinationResult("answer")
+        _, session, admitted_revision, admitted_run_id, control = pending_admission
+        async with self._participant_locks.setdefault(turn.participant_id, asyncio.Lock()):
+            if (
+                self._sessions.get(turn.participant_id) is not session
+                or session.run_id != admitted_run_id
+                or (control in {"next", "skip"} and session.revision != admitted_revision)
+            ):
+                response_text = self.config.messages["changed"]
             else:
-                admitted_turn_id, admitted_session, admitted_revision, admitted_action = pending_admission
-                if (
-                    admitted_turn_id != turn.turn_id
-                    or workflow_session is not admitted_session
-                    or (admitted_action in _CONTROLS and workflow_session.revision != admitted_revision)
-                ):
-                    response_text, executed_tool_names = self._policy.stale_message, []
-                elif admitted_action in _CONTROLS:
-                    operation_name, operation_arguments = _CONTROLS[admitted_action]
-                    available_tools = (
-                        self._workflow_engine.active_tools(turn.participant_id)
-                        or self._workflow_engine.root_tools(turn.participant_id)
-                    )
-                    selected_tool = available_tools.get(operation_name)
-                    if selected_tool is None:
-                        response_text, executed_tool_names = self._policy.stale_message, []
-                    else:
-                        await started()
-                        await _event("tool.started", name=operation_name, arguments=operation_arguments)
-                        control_result = await selected_tool.execute(
-                            selected_tool.request_model.model_validate(operation_arguments)
-                        )
-                        await _event("tool.finished", name=operation_name, result=control_result)
-                        response_text, executed_tool_names = control_result.message, [operation_name]
-                else:
-                    response_text, executed_tool_names, _ = await self._generate_answer(
-                        turn.query, turn.participant_id, workflow_context=True
-                    )
-            await reply.send(response_text)
-            return response_text, executed_tool_names
-
-        response_text = await self._respond(turn, started, produce)
-        workflow_session = self._workflow_engine.store.find(turn.participant_id)
-        return DestinationResult(
-            "focus" if workflow_session and workflow_session.active else "release",
-            text=response_text,
-        )
-
-    async def release(self, participant_id: str) -> None:
-        """Discard unconsumed admission without stopping an active procedure."""
-        self._pending.pop(participant_id, None)
-
-    def _snapshot(self, participant_id):
-        """Copy native execution state for recording without projecting dialogue."""
-        workflow_session = self._workflow_engine.store.find(participant_id)
-        return {
-            "state": dict(workflow_session.state),
-            "step_id": workflow_session.step_id,
-            "revision": workflow_session.revision,
-            "run_id": workflow_session.run_id,
-            "active": workflow_session.active,
-            "evidence_hits": workflow_session.evidence_hits,
-        } if workflow_session else {}
-
-    async def _respond(self, turn, started, produce):
-        """Publish one SDK reply and record only an exchange actually delivered.
-
-        The reply context owns completion/cancellation signaling. History and foreground
-        records are appended after its delivery check, so interrupted output cannot become
-        a completed assistant exchange.
-        """
-        workflow_session = self._workflow_engine.store.find(turn.participant_id)
-        async with _attempt(
-            turn.participant_id,
-            "foreground",
-            step_id=workflow_session.step_id if workflow_session else None,
-            snapshot=lambda: self._snapshot(turn.participant_id),
-            request_id=turn.turn_id,
-        ):
-            await _event("query.received", text=turn.query, timestamp_us=turn.timestamp_us)
+                await started()
+                # Once admitted, finish this native state transition even if a
+                # newer utterance cancels its spoken acknowledgment. The SDK
+                # still owns the turn; this task owns only the committed control.
+                control_task = asyncio.create_task(self._control(session, control))
+                try:
+                    response_text = await asyncio.shield(control_task)
+                except asyncio.CancelledError:
+                    while not control_task.done():
+                        try:
+                            await asyncio.shield(control_task)
+                        except asyncio.CancelledError:
+                            continue
+                    control_task.result()
+                    raise
             async with self._responses.reply(
                 turn.participant_id,
                 request_id=turn.turn_id,
                 timestamp_us=turn.timestamp_us,
                 started=started,
             ) as reply:
-                response_text, executed_tool_names = await produce(reply)
-            # Delivery is established by the SDK reply context, including its
-            # terminator. Do not remember a cancelled/undelivered answer as history.
-            if reply.delivered:
-                self._remember_exchange(turn.participant_id, turn.query, response_text, turn.turn_id)
-                await _event("answer.produced", response=response_text, tools=executed_tool_names)
-                await self._runtime.publish(
-                    FOREGROUND_RECORD_TOPIC,
-                    ForegroundRecord(
-                        timestamp_us=turn.timestamp_us if turn.timestamp_us is not None else time.time_ns() // 1000,
-                        query=turn.query,
-                        response=response_text,
-                        tools=executed_tool_names,
-                    ),
-                    participant_id=turn.participant_id,
-                    source="sop",
-                )
-            return response_text
+                await reply.send(response_text)
+        return DestinationResult("answer", response_text)
 
-    def _remember_exchange(self, participant_id, query, response, exchange_id):
-        """Attribute the delivered dialogue exchange to its participant for compaction."""
-        with _context_owner(participant_id):
-            self._context.record_exchange(
-                participant_id,
-                query,
-                response,
-                timestamp_us=time.time_ns() // 1000,
-                exchange_id=exchange_id,
-            )
-
-    def _question_tools(self, participant_id):
-        """Expose only the current step's configured read-only voice tools."""
-        workflow_session = self._workflow_engine.store.find(participant_id)
-        if workflow_session is None or not workflow_session.active or workflow_session.step_id is None:
-            return ToolSet(())
-        allowed_tool_names = self._workflow_engine.workflow.step(workflow_session.step_id).voice.tools
-        available_tools = self._workflow_engine.active_tools(participant_id)
-        return ToolSet({name: tool for name, tool in available_tools.items() if name in allowed_tool_names})
-
-    async def _generate_answer(self, query, participant_id, *, workflow_context=False, observation=None):
-        """Refresh source-owned context and assemble the common live answer request.
-
-        Workflow questions use the active step's policy and read-only tool allowlist.
-        Other questions use application conversation policy; both use the same SDK tool
-        loop and the same separation of historical and current context.
-        """
-        await self._refresh_conversation_context(participant_id)
-        workflow_session = self._workflow_engine.store.find(participant_id)
-        workflow_specification = self._workflow_engine.workflow
-        has_active_step = (
-            workflow_context
-            and workflow_session is not None
-            and workflow_session.active
-            and workflow_session.step_id is not None
-        )
-        projected_state = {}
-        instructions = self._prompt + "\n\n" + self._policy.conversation_prompt
-        if has_active_step:
-            active_step = workflow_specification.step(workflow_session.step_id)
-            step_sequence = ", then ".join(item.title for item in workflow_specification.steps.values())
-            next_step_title = (
-                workflow_specification.step(active_step.next_step).title
-                if active_step.next_step else "finish the guide"
-            )
-            instructions = "\n".join((
-                self._prompt,
-                workflow_specification.foreground_prompt,
-                f"Guide order: {step_sequence}. Current step: {active_step.title}. Next: {next_step_title}.",
-                active_step.voice.prompt,
-                self._policy.active_prompt,
-            ))
-            projected_state = workflow_specification.project(active_step, workflow_session.state)
-        response_text, executed_tool_names = await _answer(
-            self._llm,
-            query,
-            instructions=instructions,
-            history=self._context_blocks(participant_id),
-            current=self._current_context_blocks(participant_id),
-            state=projected_state,
-            execution={
-                "active": bool(workflow_session and workflow_session.active),
-                "run_id": workflow_session.run_id if workflow_session else None,
-            },
-            tools=self._question_tools(participant_id) if has_active_step else ToolSet(()),
-            observation=observation,
-            capabilities=None if has_active_step else {
-                "workflow": self._policy.workflow_description,
-                **{name: item.description for name, item in self._policy.destinations.items()},
-            },
-        )
-        await _event("conversation.tools", calls=executed_tool_names)
-        return response_text, executed_tool_names, False
-
-    @subscribe(GUIDANCE_NOTICE_TOPIC)
-    async def notify(self, notice: GuidanceNotice, ctx: RuntimeContext) -> None:
-        """Forward guidance only while the participant and this agent remain live."""
-        participant_id = ctx.metadata.participant_id
-        if not self._closing and participant_id in self._workflow_engine._connected:
-            # Guidance updates are not replies to an admitted query. Bind outputs
-            # to the notice's runtime context, retaining its original routing metadata.
-            outputs = ResponseOutputs(ctx, VOICE_OUTPUT_TOPIC)
-            await outputs.update(participant_id, notice.text, timestamp_us=notice.timestamp_us)
-
-    async def _remember_event(self, session: WorkflowSession, event: WorkflowEvent) -> None:
-        """Project relevant events only from the current native participant session."""
-        if (
-            self._closing
-            or self._workflow_engine.store.find(session.participant_id) is not session
-            or event.event not in _CONTEXT_EVENTS
-        ):
-            return
-        await self._run_contexts.event(session.participant_id, event, current_run=session.run_id)
-
-    async def _refresh_conversation_context(self, participant_id: str) -> None:
-        """Refresh native context, retrying snapshots rejected by the run-context guard.
-
-        Snapshot acquisition and manager rollover can race an observation or reset.
-        The callback checks session identity and revision before the run-context update;
-        if rejected, the loop obtains a new authoritative snapshot.
-        """
-        while not self._closing:
-            snapshot = await self._workflow_engine.context_snapshot(participant_id)
-
-            def valid():
-                current_session = self._workflow_engine.store.find(participant_id)
-                return (
-                    not self._closing
-                    and current_session is not None
-                    and current_session.run_id == snapshot.get("run_id")
-                    and current_session.revision == snapshot.get("revision")
-                )
-
-            if self._workflow_engine.store.find(participant_id) is None:
-                return
-            if await self._run_contexts.refresh(participant_id, snapshot, valid=valid):
-                return
-
-    def _context_blocks(self, participant_id: str):
-        """Combine persistent dialogue with the active run's historical event context."""
-        return (*self._context.blocks(participant_id), *self._run_contexts.history_blocks(participant_id))
-
-    def _current_context_blocks(self, participant_id: str):
-        """Return only replaceable live execution/evidence context."""
-        return self._run_contexts.current_blocks(participant_id)
+    async def release(self, _participant_id: str) -> None:
+        """Routing focus changes do not cancel the independently running SOP."""
 
     async def stop(self) -> None:
-        """Close SOP resources after the caller has stopped the SDK router."""
+        """Close admission and drain every participant's owned procedure."""
         self._closing = True
-        await self._workflow_engine.stop()
-        await self._run_contexts.close()
-        await self._context.close()
+        for participant_id in tuple(self._sessions):
+            await self.participant_left(participant_id)
+        self._pending.clear()
+
+    async def _control(self, session: _Session, control: str) -> str:
+        """Keep next/skip distinct and defaults outside the independent flow functions."""
+        if control in {"start", "restart"}:
+            if control == "start" and session.status == "running":
+                return self.config.messages["already_running"]
+            await self._stop_run(session)
+            if session.run_id:
+                session.last_run = self._run_summary(session)
+            session.run_id = uuid4().hex
+            session.revision += 1
+            session.status = "running"
+            session.step_index = -1
+            session.flow_states.clear()
+            session.flow_statuses.clear()
+            session.issue = ""
+            session.procedure = asyncio.create_task(self._supervise(session), name=f"sop:{session.participant_id}")
+            await self._publish_context(session)
+            return self.config.messages["start"]
+        if control in {"stop", "reset"}:
+            await self._stop_run(session)
+            session.last_run = self._run_summary(session)
+            session.status = "idle" if control == "reset" else "stopped"
+            session.revision += 1
+            if control == "reset":
+                session.run_id = None
+                session.step_index = -1
+                session.flow_states.clear()
+                session.flow_statuses.clear()
+            await self._publish_context(session)
+            return self.config.messages[control]
+        if control in {"next", "skip"}:
+            if session.status != "running":
+                return self.config.messages["not_running"]
+            if control == "next" and not session.ready:
+                return self.config.messages["not_ready"]
+            if control == "skip":
+                session.skipping = True
+                # Signal this step before awaiting cancellation; the procedure
+                # may already enter its next step while the child drains.
+                session.advance_requested.set()
+                active_step = self._step_id(session)
+                step_task = session.active_tasks.get(active_step)
+                if step_task is not None:
+                    step_task.cancel()
+                    await self._drain(step_task)
+            else:
+                session.advance_requested.set()
+            return self.config.messages[control]
+        raise ValueError("unknown SOP control")
+
+    async def _supervise(self, session: _Session) -> None:
+        """Surface a procedure failure without abandoning its sibling tasks or latest state."""
+        try:
+            await self._procedure(session)
+        except asyncio.CancelledError:
+            raise
+        except Exception as error:
+            # isolation boundary: this participant's background procedure is the
+            # unit of work; expose its failure rather than silently restarting it.
+            _LOGGER.exception("SOP failed for participant %s", session.participant_id)
+            session.status = "failed"
+            session.issue = str(error)
+            if self._step_id(session) is not None:
+                session.flow_statuses[self._step_id(session)] = "failed"
+            if self._sessions.get(session.participant_id) is session:
+                await self._publish_context(session)
+        finally:
+            owned_flow_tasks = tuple(session.active_tasks.values())
+            for flow_task in owned_flow_tasks:
+                flow_task.cancel()
+            # Drain every child, including spanning flows, before releasing the
+            # run. This is cleanup, not an exception-swallowing execution policy:
+            # normal required work is awaited or owned by its TaskGroup.
+            drain = asyncio.gather(*owned_flow_tasks, return_exceptions=True)
+            cancelled_during_cleanup = False
+            while not drain.done():
+                try:
+                    await asyncio.shield(drain)
+                except asyncio.CancelledError:
+                    cancelled_during_cleanup = True
+            drain.result()
+            for flow_id, status in tuple(session.flow_statuses.items()):
+                if status == "running":
+                    session.flow_statuses[flow_id] = "stopped"
+            session.active_tasks.clear()
+            if cancelled_during_cleanup:
+                raise asyncio.CancelledError
+
+    async def _procedure(self, session: _Session) -> None:
+        """Read the actual tea procedure front to back: ordinary Python calls and results."""
+        flow_arguments = self._observation_arguments(session)
+        await self._run_step(
+            session,
+            0,
+            run_identification_flow(
+                **flow_arguments,
+                llm=self._llm,
+                retrieval=self._rag.retrieve,
+                identity_model=TeaIdentity,
+                settings_model=BrewingSettings,
+                identification_question=self.config.identification_question,
+                extraction_instructions=self.config.extraction_instructions,
+                fallback_instructions=self.config.fallback_instructions,
+                retrieval_query=lambda identity: identity.tea_name + " " + self.config.retrieval_query_suffix,
+                max_retrieved_passages=self.config.max_retrieved_passages,
+                retrieved_text_limit=self.config.retrieved_text_limit,
+                on_state=partial(self._flow_state, session, session.run_id, "identify"),
+            ),
+        )
+
+        # Skip defaults are applied here, after preserving validated partial
+        # values reported by identification. They are never flow-internal guesses.
+        resolved_settings = self._resolved_settings(session)
+        await self._run_step(session, 1, self._verify(session, "fill_water", self.config.water))
+
+        # Only this application builds tea-specific wording. The visual function
+        # receives an ordinary completed question/DecisionQuestion.
+        target_temperature_c = resolved_settings["temperature_c"]
+        temperature = self.config.temperature
+        replacements = {
+            "target_temperature_c": f"{target_temperature_c:g}",
+            "target_temperature_f": f"{target_temperature_c * 9 / 5 + 32:g}",
+        }
+        temperature = replace(
+            temperature,
+            question=temperature.question.format_map(replacements),
+            completion=DecisionQuestion(
+                temperature.completion.instructions.format_map(replacements),
+                {
+                    label: criterion.format_map(replacements)
+                    for label, criterion in temperature.completion.criteria.items()
+                },
+            ),
+        )
+        await self._run_step(session, 2, self._verify(session, "heat_water", temperature))
+        steeping_confirmation = await self._run_step(
+            session,
+            3,
+            self._verify(session, "start_steeping", self.config.tea_bag),
+        )
+        if steeping_confirmation is not None:
+            await self._run_step(
+                session,
+                4,
+                run_timer_flow(
+                    duration_seconds=resolved_settings["duration_seconds"],
+                    update_interval_seconds=self.config.timer_update_interval_seconds,
+                    on_state=partial(self._flow_state, session, session.run_id, "steep_timer"),
+                ),
+            )
+        else:
+            # Explicitly skipping tea-water detection does not establish a
+            # steeping start time. Preserve the existing associated-timer skip.
+            session.flow_statuses["steep_timer"] = "skipped"
+        session.status = "completed"
+        session.revision += 1
+        await self._publish_context(session)
+        await self._notice(session, self.config.messages["complete"])
+
+    def _verify(self, session, flow_id, instructions):
+        """Supply only this visual check's question, criteria and runtime inputs."""
+        return run_visual_verification_flow(
+            **self._observation_arguments(session),
+            decisions=self._decisions,
+            question=instructions.question,
+            completion=instructions.completion,
+            required_positives=self.config.required_positives,
+            window_size=self.config.confirmation_window_size,
+            on_state=partial(self._flow_state, session, session.run_id, flow_id),
+        )
+
+    def _observation_arguments(self, session: _Session) -> dict[str, Any]:
+        """Share ordinary call arguments without introducing a flow configuration interpreter."""
+        return {
+            "frame_source": partial(self._acquire_frame, session),
+            "observer": self._image_query,
+            "poll_interval_seconds": self.config.poll_interval_seconds,
+            "timeout_seconds": self.config.inference_timeout_seconds,
+            "history_limit": self.config.history_limit,
+            "observation_text_limit": self.config.observation_text_limit,
+            "history_max_age_seconds": self.config.history_max_age_seconds,
+        }
+
+    async def _acquire_frame(self, session: _Session):
+        """Record acquisition at the runner boundary, keeping flows independent of capture."""
+        try:
+            frame = await self._images.get_current_frame.execute(
+                CurrentFrameRequest(participant_id=session.participant_id)
+            )
+        except FrameUnavailable:
+            return None
+        await _frame(frame)
+        return frame
+
+    async def _run_step(self, session: _Session, step_index: int, execution: Coroutine[Any, Any, Any]):
+        """Own one step task and close even an execution cancelled before task creation."""
+        step_id = _STEP_IDS[step_index]
+        flow_task = None
+        session.step_index = step_index
+        session.revision += 1
+        session.ready = False
+        session.skipping = False
+        session.advance_requested.clear()
+        session.flow_statuses[step_id] = "running"
+        try:
+            await self._publish_context(session)
+            await self._notice(session, self.config.messages[step_id].format_map(self._resolved_settings(session)))
+            async with _attempt(
+                session.participant_id,
+                "flow",
+                step_id=step_id,
+                snapshot=lambda: self.context_snapshot(session.participant_id),
+            ):
+                flow_task = asyncio.create_task(execution, name=f"sop:{session.participant_id}:{step_id}")
+                session.active_tasks[step_id] = flow_task
+                try:
+                    result = await flow_task
+                except asyncio.CancelledError:
+                    current_task = asyncio.current_task()
+                    if current_task is not None and current_task.cancelling():
+                        raise
+                    if not session.skipping:
+                        raise
+                    result = None
+                session.flow_statuses[step_id] = "skipped" if session.skipping else "completed"
+                session.ready = True
+                await self._publish_context(session)
+                await _event("step.finished", skipped=session.skipping, result=result)
+                if self.config.advancement == "manual" and not session.skipping:
+                    await session.advance_requested.wait()
+                return result
+        finally:
+            # Entry publication/capture can fail before create_task takes ownership.
+            if flow_task is None:
+                execution.close()
+            elif not flow_task.done():
+                flow_task.cancel()
+                await self._drain(flow_task)
+            session.active_tasks.pop(step_id, None)
+
+    async def _flow_state(self, session: _Session, run_id: str | None, flow_id: str, state: Any) -> None:
+        """Store complete labeled state only while this exact participant/run still owns it."""
+        if (
+            self._sessions.get(session.participant_id) is not session
+            or not session.connected
+            or session.run_id != run_id
+            or session.status != "running"
+        ):
+            return
+        reporting_task = asyncio.current_task()
+        if reporting_task is None or reporting_task.cancelling():
+            return
+        owned_task = session.active_tasks.get(flow_id)
+        if owned_task is not None and owned_task is not reporting_task:
+            return
+        if session.flow_statuses.get(flow_id) in {"skipped", "stopped"}:
+            return
+        if reporting_task is not session.procedure:
+            session.active_tasks[flow_id] = reporting_task
+        session.flow_statuses[flow_id] = state.status
+        session.flow_states[flow_id] = state
+        await _event("flow.state", flow_id=flow_id, state=state)
+        if self._sessions.get(session.participant_id) is not session or session.run_id != run_id:
+            return
+        await self._publish_context(session)
+        if (
+            self._sessions.get(session.participant_id) is not session
+            or not session.connected
+            or session.run_id != run_id
+            or reporting_task.cancelling()
+        ):
+            return
+        await self._runtime.publish(
+            GUIDANCE_RECORD_TOPIC,
+            GuidanceRecord(
+                run_id=run_id,
+                timestamp_us=time.time_ns() // 1000,
+                event="flow.state",
+                step_id=flow_id,
+                message="",
+                state=_json(state),
+            ),
+            participant_id=session.participant_id,
+        )
+
+    def _resolved_settings(self, session: _Session) -> dict[str, Any]:
+        """Use valid partial results and label only missing values as runner defaults."""
+        identification = session.flow_states.get("identify")
+        settings = identification.settings if isinstance(identification, IdentificationState) else BrewingSettings()
+        sources = identification.sources if isinstance(identification, IdentificationState) else {}
+        identity = identification.identity if isinstance(identification, IdentificationState) else None
+        return {
+            "tea_name": identity.tea_name if identity is not None else self.config.default_tea_name,
+            "temperature_c": (
+                settings.temperature.celsius if settings.temperature is not None else self.config.default_temperature_c
+            ),
+            "duration_seconds": (
+                settings.steep_duration.seconds
+                if settings.steep_duration is not None
+                else self.config.default_duration_seconds
+            ),
+            "sources": {
+                "temperature": _json(sources["temperature"]) if "temperature" in sources else {"kind": "default"},
+                "steep_duration": _json(sources["steep_duration"])
+                if "steep_duration" in sources
+                else {"kind": "default"},
+            },
+        }
+
+    def context_snapshot(self, participant_id: str) -> dict[str, Any]:
+        """Build read-only SOP context with active and completed flows clearly separated."""
+        session = self._sessions.get(participant_id)
+        if session is None:
+            return {"status": "idle", "active_flows": {}}
+        return {
+            "run_id": session.run_id,
+            "status": session.status,
+            "current_step": self._step_id(session),
+            "step_ready": session.ready,
+            "advancement": self.config.advancement,
+            "procedure_steps": {step_id: self.config.messages[step_id] for step_id in _STEP_IDS},
+            "resolved_settings": self._resolved_settings(session),
+            "flow_outcomes": dict(session.flow_statuses),
+            "active_flows": {
+                flow_id: _json(state)
+                for flow_id, state in session.flow_states.items()
+                if session.flow_statuses.get(flow_id) == "running" and session.status == "running"
+            },
+            "completed_or_skipped_flows": {
+                flow_id: {"outcome": session.flow_statuses.get(flow_id), "state": _json(state)}
+                for flow_id, state in session.flow_states.items()
+                if session.flow_statuses.get(flow_id) != "running"
+            },
+            "issue": session.issue,
+            "historical_previous_run": session.last_run,
+        }
+
+    async def _publish_context(self, session: _Session) -> None:
+        """Replace the SDK SOP-status source; the conversation agent owns its dialogue."""
+        if self._sessions.get(session.participant_id) is not session or not session.connected:
+            return
+        await self._context.update(
+            session.participant_id,
+            SOP_CONTEXT_SOURCE,
+            ConversationContextUpdate(
+                text=json.dumps(self.context_snapshot(session.participant_id), ensure_ascii=False)
+            ),
+            mode="summary",
+            timestamp_us=time.time_ns() // 1000,
+        )
+
+    async def _notice(self, session: _Session, text: str) -> None:
+        """Publish native step instructions without involving conversation generation."""
+        if self._sessions.get(session.participant_id) is session and session.connected:
+            timestamp_us = time.time_ns() // 1000
+            await self._responses.update(session.participant_id, text, timestamp_us=timestamp_us)
+            await self._runtime.publish(
+                GUIDANCE_NOTICE_TOPIC,
+                GuidanceNotice(timestamp_us=timestamp_us, text=text),
+                participant_id=session.participant_id,
+            )
+
+    async def _stop_run(self, session: _Session) -> None:
+        """Drain owned work before replacing a run or releasing participant images."""
+        if session.status == "running":
+            session.status = "stopped"
+        if session.procedure is not None and not session.procedure.done():
+            session.procedure.cancel()
+            await self._drain(session.procedure)
+        session.procedure = None
+        if session.status == "running":
+            session.status = "stopped"
+        for flow_id in session.active_tasks:
+            session.flow_statuses[flow_id] = "stopped"
+        session.active_tasks.clear()
+
+    @staticmethod
+    async def _drain(task: asyncio.Task[Any]) -> None:
+        """Wait for child cleanup while preserving cancellation directed at this owner."""
+        try:
+            await asyncio.shield(task)
+        except asyncio.CancelledError:
+            owner = asyncio.current_task()
+            if owner is not None and owner.cancelling():
+                # Cleanup must finish even when the owner receives cancellation.
+                while not task.done():
+                    try:
+                        await asyncio.shield(task)
+                    except asyncio.CancelledError:
+                        continue
+                raise
+            if not task.cancelled():
+                raise
+
+    @staticmethod
+    def _step_id(session: _Session) -> str | None:
+        return _STEP_IDS[session.step_index] if 0 <= session.step_index < len(_STEP_IDS) else None
+
+    def _run_summary(self, session: _Session) -> dict[str, Any]:
+        """Keep the prior run explicitly historical without retaining every frame twice."""
+        return {
+            "run_id": session.run_id,
+            "status": session.status,
+            "settings": self._resolved_settings(session),
+            "last_step": self._step_id(session),
+        }
 
 
 __all__ = ["SOPAgent"]

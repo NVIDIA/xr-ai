@@ -1,50 +1,52 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Additional held-out wording, frozen after the structured-input correction.
+# Original eight held-out wordings; expectations now match two SOP-facing agents.
 - name: fresh-passive-possibility
+  setup_requests:
+  - Start tea making.
   query: Would it be possible for this walkthrough to begin again?
-  route: active
-  step: fill_water
-  expected_tool: null
+  expected_destination: conversation
+  expected_control: null
 - name: fresh-addressed-restart
+  setup_requests:
+  - Start tea making.
   query: Would you start the walkthrough over now?
-  route: active
-  step: heat_water
-  expected_tool: workflow__restart
+  expected_destination: workflow
+  expected_control: restart
 - name: fresh-reported-skip
+  setup_requests:
+  - Start tea making.
   query: A coworker recommended we skip this instruction.
-  route: active
-  step: fill_water
-  expected_tool: null
+  expected_destination: conversation
+  expected_control: null
 - name: fresh-quoted-exit
+  setup_requests:
+  - Start tea making.
   query: '"Exit the guide" is a command someone might use.'
-  route: active
-  step: heat_water
-  expected_tool: null
+  expected_destination: conversation
+  expected_control: null
 - name: fresh-background-owner
+  setup_requests:
+  - Start tea making.
   query: Please stop the visual diary and keep tea guidance running.
-  route: active
-  step: fill_water
-  expected_tool: video_log__stop
-  expected_workflow_scope: false
+  expected_destination: conversation
+  expected_control: null
 - name: fresh-advice-not-command
+  setup_requests:
+  - Start tea making.
   query: Would starting over be better?
-  route: active
-  step: fill_water
-  expected_tool: null
+  expected_destination: conversation
+  expected_control: null
 - name: fresh-known-temperature
+  setup_requests:
+  - Start tea making.
   query: I need to know the water target, rather than inspect the display.
-  route: active
-  step: heat_water
-  expected_tool: null
-  expected_workflow_scope: true
+  expected_destination: conversation
+  expected_control: null
 - name: fresh-current-position
+  setup_requests:
+  - Start tea making.
   query: Leave my progress as it is and explain our position in the procedure.
-  route: active
-  step: fill_water
-  expected_tool: null
-  accepted_tools:
-  - []
-  - - workflow__status
-  expected_workflow_scope: true
+  expected_destination: conversation
+  expected_control: null

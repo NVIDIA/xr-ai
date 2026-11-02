@@ -3,8 +3,8 @@
 
 """Record replayable SOP runs without taking ownership of execution.
 
-The application activates one run bundle; routing, foreground and observation
-attempts attach request/step identity through context variables. Model wrappers
+The application activates one run bundle; runner-owned flow attempts attach
+participant/step identity through context variables. Model wrappers
 record the actual requests and responses, while image blobs are content-addressed
 and configuration snapshots preserve the effective YAML for later analysis.
 
@@ -20,7 +20,6 @@ import base64
 import hashlib
 import json
 import re
-import sys
 import time
 from collections.abc import Callable
 from contextlib import asynccontextmanager
@@ -31,13 +30,11 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-import nemo_relay
 import yaml
 from pydantic import BaseModel
 
 _ACTIVE: ContextVar[_SOPCapture | None] = ContextVar("sop_capture", default=None)
 _ATTEMPT: ContextVar[_Attempt | None] = ContextVar("sop_attempt", default=None)
-_ROUTING_ATTEMPT: ContextVar[Any] = ContextVar("sop_routing_attempt", default=None)
 
 
 def _json(value: Any) -> Any:
@@ -123,12 +120,13 @@ class _SOPCapture:
                 write_task.result()
                 raise
 
-    async def start(self, config, workflow, *, source_revision: str | None = None) -> None:
+    async def start(self, config, *, workflow_name: str, steps: tuple[str, ...],
+                    source_revision: str | None = None) -> None:
         """Create the manifest and snapshot effective configuration plus source hashes.
 
-        The effective worker snapshot includes all inline prompts. Workflow YAML and its
-        resolved form are both retained so replay can distinguish source policy from its
-        validated representation.
+        The effective worker snapshot includes all inline prompts and Python argument
+        configuration. The manifest names the application procedure and its steps;
+        source hashes identify the actual Python connections.
         """
         self._manifest = {
             "schema_version": 1,
@@ -137,13 +135,11 @@ class _SOPCapture:
             "status": "running",
             "capture_enabled": self.enabled,
             "source_revision": source_revision,
-            "workflow": {"name": workflow.name, "steps": list(workflow.steps)},
+            "workflow": {"name": workflow_name, "steps": list(steps)},
         }
         await self.io(_write_json, self.directory / "manifest.json", self._manifest)
         snapshots = {
             "worker": _json(config),
-            "workflow": yaml.safe_load(config.workflow_config.read_text()),
-            "resolved_workflow": _json(workflow),
             "models": json.loads(config.models_config.read_text()),
             "voice_gate": yaml.safe_load(config.voice_gate_yaml.read_text()),
         }
@@ -255,10 +251,10 @@ async def _attempt(
 
     Args:
         participant: Participant owning this observation or request.
-        channel: Kind of attempt, such as routing, foreground or observer.
+        channel: Kind of runner-owned attempt, such as flow.
         step_id: Active workflow step when this attempt belongs to one.
         snapshot: Optional synchronous native-state reader used at both boundaries.
-        request_id: SDK request identity shared by routing and its foreground answer.
+        request_id: Optional external request identity, when the caller has one.
 
     Yields:
         Control to the caller with this attempt active for model/frame/event recording.
@@ -295,31 +291,6 @@ async def _attempt(
                 attempt.finished = True
     finally:
         _ATTEMPT.reset(token)
-
-
-async def _record_routing(status: str, participant: str, *, snapshot: Callable[[str], dict]) -> None:
-    """Record SDK turn decisions using its public status hook and Relay metadata.
-
-    The processing/idle calls occur inside the same SDK-owned turn context. Keep only
-    a recording scope, never a second task lifecycle. The SDK's final idle call closes
-    that scope with its original cancellation/failure information.
-    """
-    if status == "processing":
-        capture = _ACTIVE.get()
-        if capture is None or not capture.enabled:
-            return
-        metadata = nemo_relay.scope.get_handle().metadata or {}
-        recording_scope = _attempt(participant, "routing", request_id=metadata["message_id"],
-                         snapshot=lambda: snapshot(participant))
-        await recording_scope.__aenter__()
-        _ROUTING_ATTEMPT.set(recording_scope)
-    elif status == "idle":
-        recording_scope = _ROUTING_ATTEMPT.get()
-        if recording_scope is not None:
-            _ROUTING_ATTEMPT.set(None)
-            # The SDK calls idle in its turn's finally block. Preserve failure
-            # and cancellation while closing recording; no task is owned here.
-            await recording_scope.__aexit__(*sys.exc_info())
 
 
 async def _event(kind: str, **data) -> None:

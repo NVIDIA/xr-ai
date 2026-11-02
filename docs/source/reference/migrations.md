@@ -30,98 +30,45 @@ point for new voice-and-vision applications. Its routed conversation and
 visual-question behavior differs from Simple VLM; migrating application code
 requires reviewing that composition rather than only renaming the launcher.
 
-### Tea model instructions are inline YAML
+### Tea sample uses independent Python flows and two routed agents
 
-The tea worker now keeps all app-level model instructions and background decision
-policies in `yaml/tea_making_worker.yaml`. The packaged prompt directory and file
-fallbacks are removed. Copy the complete main YAML when creating a custom worker
-configuration; missing prompt text or decision mappings are rejected. Replace
-`*_prompt_file` options with the corresponding inline text value.
+Tea guidance now composes a control-only `SOPAgent` and SDK `Conversation`
+behind the existing SDK router. General questions go to conversation; explicit
+start/stop/next/skip/reset/restart controls go to the runner. A question or voice
+interruption does not cancel the independently owned procedure. The runner alone
+provides read-only SOP context from labeled flow states.
 
-Source/default sample startup reads the checked-in worker YAML. An installed
-worker outside the sample directory must receive `--config` pointing to that
-file or its complete custom copy. Workflow/step-specific prompts remain in the
-external `workflow.yaml`; no prompt wording or model settings changed. New run
-bundles retain the complete effective instructions in their worker/workflow
-snapshots, without separate prompt-file copies. Existing run bundles are intact.
+Replace prototype `Workflow`/`load_workflow` and class-based flow imports with
+sample-local Python `SOPConfig` and `run_identification_flow`,
+`run_visual_verification_flow`, `run_timer_flow` APIs. The separate workflow
+YAML, expression bindings, observation interpreter and combined foreground
+capture path are removed. Update private imports; no SDK API is changed.
 
-### Tea routing uses SDK-owned turn lifecycle
+The complete main `yaml/tea_making_worker.yaml` owns application instructions
+and `sop` arguments. Remove `workflow_config` and `*_prompt_file` options.
+Reusable flows do not read YAML. Custom workers must supply complete inline
+instructions/configuration. Outside the sample directory pass `--config`.
 
-`SOPAgent` is now the focused routing destination rather than a foreground
-supervisor containing its own router. The application configures the SDK
-`AgentRouter` runtime subscriber and initialization/cleanup hooks. Destinations
-publish SDK `ResponseOutputs` directly. Stop the router before the SOP agent.
-A small original-generation left-event adapter delegates departure to the router
-and preserves existing file/image producer acknowledgments.
+Use `sop.advancement: automatic` (default) or `manual`. Ordinary next requires
+completion; explicit skip retains validated partial identification settings and
+the runner defaults only missing values. Context retains per-value provenance.
 
-Under `task.foreground`, replace each `active_question.actions` and
-`idle_question.actions` mapping with `criteria`, mapping the existing labels to
-their criterion text. Do the same for watcher/transcript/journal control questions.
-Immediate camera/reference/history destinations require only their description.
-Remove execution fields such as `tool`, `arguments`, `generate`, `authorize` and
-`observation`: concrete handlers own the existing operations and bindings.
-The unused `unavailable_message` field is removed. Semantic instructions and
-criterion wording are unchanged. No SDK API is added.
+Visual completion uses configurable positives within the latest decidable
+distinct-frame window. Unknown/unreadable observations consume no slot; a clear
+negative consumes a slot rather than resetting all positives. Completion occurs
+immediately at threshold. Temperature uses the generic Omni/Clef visual flow
+with the resolved target, replacing the old native evaluator; qualify numeric
+and unit interpretation on the intended model.
 
-### Tea sample-local API and prompt organization
-
-Tea composition imports `SOPAgent`, `Workflow`, and `load_workflow` from
-`tea_making_worker`; reusable visual/identity flows are in
-`tea_making_worker.flows`. Execution and conversation implementation modules have
-moved under `sop/` and `conversation/`; update any prototype imports of their old
-private paths. No SDK API is introduced.
-
-The worker uses inline `current_view_prompt` for a shared camera policy.
-`foreground_prompt` applies to active guidance as well as general conversation. Tune active voice behavior in
-`task.foreground.active_prompt`; the unused `guidance_voice.txt` policy and
-separate hard-coded active style are removed. Background prompt policies are
-inline in the main worker YAML. Refer to {doc}`tea-making-sample` for ownership
-and loading rules.
-
-### Tea guidance uses focused routing and declared observations
-
-The tea sample requires a Clef decision endpoint in addition to its existing
-Omni, speech, TTS, and embedding services. The sample-owned model launcher now
-includes Clef. Qualify its additional GPU memory within the selected profile's
-existing budgets before launching the updated stack.
-
-Custom tea workflows replace `agent.prompt` and `agent.tools` observation blocks
-with typed `observation` policies. Add scoped decisions under `task.foreground`
-and read-only conversation tools under `voice.tools`. Replace any prototype
-`voice.choices` or answer/check action split with one informational answer action.
-Declare cheap live source projections under each step's `context`; the timer
-example uses `clock__timer` with state-bound start and duration arguments.
-Extracted unit-bearing fields
-return a value and unit; code normalizes them before updating scalar state.
-Refer to {doc}`tea-making-sample` for the schema and ownership rules.
-
-Tea guidance is one focused top-level destination. Side requests can be answered
-by other existing destinations without ending guidance. Explicit reset releases
-focus. Language-model generation no longer receives workflow state-write tools,
-and simultaneous voice updates are joined rather than rewritten by a model.
-Dialogue persists across runs. Finishing/resetting/restarting closes the outgoing
-run manager after a historical handoff; a new run has fresh execution state and
-evidence. Completed native workflow state now returns to initial values after
-the final state is recorded.
-
-### Tea progression and target verification
-
-The tea sample now defaults to `task.advancement: automatic`. Confirmed steps
-advance immediately and announce the next instruction; use `manual` to retain
-the explicit-next interaction. Completion messages no longer contain a baked-in
-next request; `task.manual_advance_message` supplies that reminder in manual mode.
-
-The heating step now verifies the resolved brewing target rather than a fixed
-heating-underway threshold. The progress field is `temperature_ready`, replacing
-`heating_started`. Update custom workflow references and state fixtures. Two
-unit-bearing frame readings must reach or exceed the target. Live visual evidence clears on each step transition. Completed-step observations
-remain in run history and historical handoffs.
+New SOP bundles snapshot complete application configuration plus Python procedure
+metadata and source hashes, not a workflow interpreter. Consumed images remain
+recorded under runner-owned flow attempts. Prior bundles are unchanged.
 
 ### Tea SOP run bundles retain inference images
 
 Tea worker launches now write separate bundles under `artifacts/runs/<run>/`,
-including configuration snapshots and structured SOP attempts grouped by YAML
-step ID. Consumed inference images are recorded by default; set
+including configuration snapshots and structured SOP attempts grouped by Python
+step identity. Consumed inference images are recorded by default; set
 `capture.enabled: false` in the worker YAML to disable structured attempts and
 image storage. Existing participant JSONL files and the supplemental Relay log
 move inside each run directory. Previous artifacts are preserved.

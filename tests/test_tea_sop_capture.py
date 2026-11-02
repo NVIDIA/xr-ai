@@ -25,16 +25,17 @@ from xr_ai_tools.vision import ImageQueryTool
 _SAMPLE = Path(__file__).resolve().parents[1] / "agent-samples/tea-making-sample"
 sys.path.insert(0, str(_SAMPLE / "worker"))
 
-from tea_making_worker._capture import (  # noqa: E402
+from tea_making_worker._capture import (  # noqa: E402  # noqa: E402
     _attempt,
+    _event,
+    _frame,
     _RecordedDecisions,
     _RecordedLanguage,
     _RecordedVision,
     _SOPCapture,
 )
-from tea_making_worker.agents.sop._engine import _WorkflowEngine  # noqa: E402
 from tea_making_worker.config import load_config  # noqa: E402
-from tea_making_worker.sop import load_workflow  # noqa: E402
+from tea_making_worker.flows import run_visual_verification_flow  # noqa: E402
 
 
 def _image():
@@ -53,10 +54,13 @@ def _records(capture):
 
 async def _capture(tmp_path, *, enabled=True):
     config = load_config(_SAMPLE / "yaml/tea_making_worker.yaml")
-    workflow = load_workflow(config.workflow_config)
     capture = _SOPCapture(tmp_path, enabled=enabled)
-    await capture.start(config, workflow)
-    return capture, workflow
+    await capture.start(
+        config,
+        workflow_name="tea making",
+        steps=("identify", "fill_water", "heat_water", "start_steeping", "steep_timer"),
+    )
+    return capture, config.sop
 
 
 def _decision(choice="accepted"):
@@ -71,77 +75,87 @@ def _decision(choice="accepted"):
 
 @pytest.mark.asyncio
 async def test_sop_capture_records_exact_images_decisions_and_confirmed_state(tmp_path):
-    capture, workflow = await _capture(tmp_path)
+    capture, config = await _capture(tmp_path)
     snapshot = json.loads((capture.directory / "config/worker.json").read_text())
-    selected = load_config(_SAMPLE / "yaml/tea_making_worker.yaml")
-    assert snapshot["foreground_prompt"] == selected.foreground_prompt
-    assert snapshot["current_view_prompt"] == selected.current_view_prompt
-    assert snapshot["change_watch_decision"]["instructions"] == selected.change_watch_decision.instructions
+    assert snapshot["sop"]["water"]["question"] == config.water.question
     assert not (capture.directory / "config/prompts").exists()
     data = _image()
     registry = ImageRegistry()
-    reference = registry.put(data)
-    frame = ImageFrame(
-        image=reference,
-        participant_id="tester",
-        track_id="source-camera",
-        sequence=1,
-        timestamp_us=100,
-        width=6,
-        height=4,
-    )
+    image_reference = registry.put(data)
+    frames = [
+        ImageFrame(
+            image=image_reference,
+            participant_id="tester",
+            track_id="camera",
+            sequence=index,
+            timestamp_us=index * 1000,
+            width=6,
+            height=4,
+        )
+        for index in (1, 2)
+    ]
     vision = SimpleNamespace(
         ask_images=AsyncMock(
             return_value=ChatResponse(
-                '{"observable":true,"description":"A clear water surface is visible inside the pot."}',
-                None, None, "stop", {"model": "fixture-omni"}
+                "A clear water surface is visible inside the pot.",
+                None,
+                None,
+                "stop",
+                {},
             )
         )
     )
-    decisions = SimpleNamespace(decide=AsyncMock(return_value=_decision()))
-    guidance = _WorkflowEngine(
-        workflow=workflow,
-        llm=SimpleNamespace(chat=AsyncMock(side_effect=AssertionError("unexpected generation"))),
-        decisions=_RecordedDecisions(decisions),
-        current_frame=SimpleNamespace(execute=AsyncMock(return_value=frame)),
-        image_query=ImageQueryTool(images=registry, vlm=_RecordedVision(vision)),
-        rag=SimpleNamespace(),
+    decision_service = SimpleNamespace(
+        decide=AsyncMock(
+            return_value=DecisionResponse(
+                {"completion": DecisionAnswer("positive", 1, {"positive": 1, "negative": 0, "unknown": 0})},
+                "fixture",
+                {},
+                {},
+            )
+        )
     )
-    session = guidance.store.get("tester")
-    guidance.store.start(session)
-    guidance.store.advance(session, skip=True)
+    states = []
+
+    async def acquire():
+        frame = frames.pop(0)
+        await _frame(frame)
+        return frame
+
+    async def receive(state):
+        states.append(state)
+        await _event("flow.state", state=state)
+
     async with capture.activate():
-        await guidance._tick(session)
-        session.next_tick = 0
-        guidance._current_frame.execute.return_value = frame.model_copy(update={"sequence": 2, "timestamp_us": 200})
-        await guidance._tick(session)
+        async with _attempt("tester", "flow", step_id="fill_water"):
+            await run_visual_verification_flow(
+                frame_source=acquire,
+                observer=ImageQueryTool(images=registry, vlm=_RecordedVision(vision)),
+                decisions=_RecordedDecisions(decision_service),
+                question=config.water.question,
+                completion=config.water.completion,
+                required_positives=2,
+                window_size=4,
+                poll_interval_seconds=0.001,
+                history_limit=8,
+                observation_text_limit=1000,
+                timeout_seconds=1,
+                on_state=receive,
+            )
     entries = _records(capture)
-    assert len(entries) == 2
-    first, second = entries[0][1], entries[1][1]
-    assert entries[0][0]["step_id"] == "fill_water"
-    assert "steps/fill_water" in entries[0][0]["path"]
-    assert first[0]["before"]["state"]["water_filled"] is False
-    assert first[-1]["after"]["evidence_hits"] == 1
-    assert second[-1]["after"]["state"]["water_filled"] is True
-    assert second[-1]["after"]["revision"] > first[0]["before"]["revision"]
-    visual = next(row for row in first if row["kind"] == "vision.started")
-    assert visual["frame"]["track_id"] == "source-camera"
-    assert visual["frame"]["timestamp_us"] == 100
-    image = visual["images"][0]
-    assert (capture.directory / image["path"]).read_bytes() == data
-    assert image["sha256"] == hashlib.sha256(data).hexdigest()
+    assert len(entries) == 1 and entries[0][0]["step_id"] == "fill_water"
+    rows = entries[0][1]
+    calls = [row for row in rows if row["kind"] == "vision.started"]
+    assert [call["frame"]["sequence"] for call in calls] == [1, 2]
+    assert (capture.directory / calls[0]["images"][0]["path"]).read_bytes() == data
+    assert calls[0]["images"][0]["sha256"] == hashlib.sha256(data).hexdigest()
     assert len(list((capture.directory / "images").iterdir())) == 1
-    vision.ask_images.assert_awaited()
-    assert vision.ask_images.call_args.args[0] == [data]
-    judged = next(row for row in first if row["kind"] == "decision.started")
-    assert judged["state"]["observation"] == "A clear water surface is visible inside the pot."
-    assert judged["questions"]["evidence"]["criteria"] == dict(workflow.step("fill_water").observation.criteria)
-    decision = next(row for row in first if row["kind"] == "decision.finished")
-    assert decision["response"]["answers"]["evidence"]["probabilities"]["accepted"] == 1
-    assert decision["response"]["raw"]["model_revision"] == "fixture-revision"
-    assert any(row["kind"] == "observation.judged" and row["evidence"] == "accepted" for row in second)
+    decisions = [row for row in rows if row["kind"] == "decision.started"]
+    assert decisions[0]["questions"]["completion"]["criteria"] == dict(config.water.completion.criteria)
+    assert [state.positives_in_window for state in states] == [1, 2]
+    assert states[-1].status == "completed"
+    assert [row["state"]["status"] for row in rows if row["kind"] == "flow.state"] == ["running", "completed"]
     assert json.loads((capture.directory / "manifest.json").read_text())["status"] == "completed"
-    assert json.loads((capture.directory / "config/workflow.json").read_text())["steps"][1]["id"] == "fill_water"
 
 
 @pytest.mark.asyncio
@@ -339,7 +353,7 @@ async def test_sop_capture_is_active_in_real_worker_composition(tmp_path, monkey
 
     class Voice(Agent):
         async def run(self, runtime):
-            async with _attempt("startup-check", "foreground", request_id="startup"):
+            async with _attempt("startup-check", "flow", request_id="startup"):
                 await _RecordedLanguage(clients).chat([])
 
     monkeypatch.setattr(app, "VoiceAgent", SimpleNamespace(from_models=lambda **_kwargs: Voice()))
@@ -398,39 +412,3 @@ async def test_sop_capture_path_is_frozen_to_the_saved_bytes_before_dispatch(tmp
     rows = _records(capture)[0][1]
     image = next(row for row in rows if row["kind"] == "vision.started")["images"][0]
     assert (capture.directory / image["path"]).read_bytes() == original
-
-
-@pytest.mark.asyncio
-async def test_context_compaction_records_a_separate_attempt_after_the_scheduling_turn(tmp_path):
-    from tea_making_worker.conversation._capture import _CompactionLanguage, _context_owner
-    from xr_ai_conversation import ContextManager
-
-    capture, _ = await _capture(tmp_path)
-    started = asyncio.Event()
-
-    async def summarize(*_args, **_kwargs):
-        started.set()
-        return ChatResponse("Earlier discussion about preparing a drink.", None, None, "stop", {})
-
-    service = SimpleNamespace(chat=AsyncMock(side_effect=summarize))
-    context = ContextManager(
-        _CompactionLanguage(_RecordedLanguage(service)), dialogue_budget_bytes=512,
-        compaction_input_budget_bytes=1024,
-    )
-    async with capture.activate():
-        async with _attempt("tester", "foreground"):
-            with _context_owner("tester"):
-                for index in range(8):
-                    context.record_exchange(
-                        "tester", "Explain the procedure. " * 10, "Use the current instructions. " * 10,
-                        timestamp_us=index, exchange_id=index,
-                    )
-        await asyncio.wait_for(started.wait(), 2)
-        await context.close()
-    records = _records(capture)
-    foreground = [events for entry, events in records if entry["channel"] == "foreground"]
-    compactions = [events for entry, events in records if entry["channel"] == "context"]
-    assert foreground and compactions
-    assert not any(event["kind"] == "language.started" for event in foreground[0])
-    assert all(events[-1]["kind"] == "attempt.finished" for events in compactions)
-    assert any(event["kind"] == "language.started" for events in compactions for event in events)

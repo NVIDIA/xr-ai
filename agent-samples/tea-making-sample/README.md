@@ -5,21 +5,14 @@
 
 # Tea-making guidance
 
-This sample demonstrates a guided, evidence-aware workflow. A foreground tea
-guide answers questions and applies explicit workflow controls, while
-independent background agents can record transcripts, watch for visual
-changes, and produce periodic video observations.
+This sample composes a control-only SOP runner and an SDK conversation agent.
+The runner executes independent Python async identification, visual-verification
+and timer flows; conversation answers from runner-supplied context. Application
+YAML supplies prompts and arguments. Automatic progression is the default; use
+`sop.advancement: manual` in `yaml/tea_making_worker.yaml` for explicit next.
 
-The focused SOP agent owns execution, managed dialogue context and compaction,
-using YAML-owned Clef control choices and native state commits. Active runs have
-separate context channels and hand off historical context when they close.
-Omni supplies all visual descriptions and typed package readings; code owns
-confirmations, arithmetic, timers, and advancement. Progression is automatic by
-default; set `task.advancement: manual` in `yaml/workflow.yaml` to require next. The sample reuses
-speaker STT, Pocket TTS, Omni, Clef, and embedding endpoints from its local
-model stack. Refer to the
-[sample architecture](https://nvidia.github.io/xr-ai/latest/reference/tea-making-sample.html)
-for focus, observation, and model-memory qualification.
+Read the [sample architecture](https://nvidia.github.io/xr-ai/latest/reference/tea-making-sample.html)
+for Python APIs, context, recording and model qualification.
 
 ## Configure
 
@@ -29,7 +22,6 @@ automatically:
 | File | Common changes |
 |---|---|
 | `yaml/tea_making_worker.yaml` | Selected configuration files, observation cadence, VAD, timeouts, artifacts, and event viewer |
-| `yaml/workflow.yaml` | Workflow state, steps, evidence rules, tools, and messages |
 | `yaml/voice_gate.yaml` | Interaction mode, conversation controls and optional wake phrases |
 | `yaml/rag_service.yaml` | Documents, embedding role, cache, chunking, and retrieval threshold |
 | `yaml/models.local.json` | Reused model adapters and endpoint addresses |

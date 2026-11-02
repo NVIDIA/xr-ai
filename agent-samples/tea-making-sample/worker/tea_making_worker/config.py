@@ -4,13 +4,14 @@
 """Load the complete worker YAML into validated application configuration.
 
 Worker YAML owns application prompts, background decisions, service paths and
-budgets. The separate workflow YAML owns task/step policy. Relative paths resolve
+budgets. The SOP configuration supplies Python arguments; the runner owns step connections. Relative paths resolve
 against the selected worker YAML; prompt text has no hidden Python/file fallback.
 This module reads files only when ``load_config`` is called.
 """
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -18,7 +19,7 @@ from typing import Any
 import yaml
 from xr_ai_models import DecisionQuestion
 
-from .flows import ObservationPolicy
+from .agents.sop._settings import SOPConfig, VisualInstructions
 
 _PACKAGE = Path(__file__).resolve().parent
 
@@ -28,16 +29,16 @@ class WorkerConfig:
     """Resolved application settings loaded from the worker YAML.
 
     Prompt and decision fields are explicit configuration, not generated defaults.
-    Workflow policy is loaded separately from ``workflow_config`` during composition.
+    The SOP runner receives ordinary Python policy, not a workflow-expression schema.
     """
 
     models_config: Path
-    workflow_config: Path
+    sop: SOPConfig
     voice_gate_yaml: Path
     artifacts_dir: Path
     rag_endpoint: str
-    foreground_prompt: str
     current_view_prompt: str
+    conversation_system_prompt: str
     change_watch_decision: DecisionQuestion
     video_delta_decision: DecisionQuestion
     change_watch_caption_prompt: str
@@ -62,6 +63,7 @@ class WorkerConfig:
     web_events_max_events: int
     capture_enabled: bool = True
     context_budget_bytes: int = 12000
+    sop_context_budget_bytes: int = 64000
     compaction_input_budget_bytes: int = 12000
 
 
@@ -97,18 +99,124 @@ def _prompt(data: dict[str, Any], name: str) -> str:
 def _positive(data: dict[str, Any], name: str, default: float) -> float:
     """Read a strictly positive numeric setting, using its non-prompt default."""
     value = float(data.get(name, default))
-    if value <= 0:
+    if not math.isfinite(value) or value <= 0:
         raise ValueError(f"{name} must be positive")
     return value
 
 
 def _decision(data: dict[str, Any], name: str) -> DecisionQuestion:
-    """Validate an inline three-outcome decision using the shared observation schema."""
+    """Validate application instructions and criteria for the existing SDK choice type."""
     decision_configuration = data.get(name)
     if not isinstance(decision_configuration, dict):
         raise ValueError(f"{name} requires instructions and choice criteria in worker YAML")
-    policy = ObservationPolicy.model_validate({"kind": "choice", "updates": {}, **decision_configuration})
-    return DecisionQuestion(policy.instructions, policy.criteria)
+    if set(decision_configuration) != {"instructions", "criteria"}:
+        raise ValueError(f"{name} requires only instructions and criteria")
+    instructions = decision_configuration["instructions"]
+    criteria = decision_configuration["criteria"]
+    if (
+        not isinstance(instructions, str)
+        or not instructions.strip()
+        or not isinstance(criteria, dict)
+        or len(criteria) < 2
+        or any(
+            not isinstance(key, str) or not key.strip() or not isinstance(value, str) or not value.strip()
+            for key, value in criteria.items()
+        )
+    ):
+        raise ValueError(f"{name} has invalid choice instructions/criteria")
+    return DecisionQuestion(instructions.strip(), criteria)
+
+
+def _sop(data: dict[str, Any]) -> SOPConfig:
+    """Translate application YAML into ordinary Python constructor arguments."""
+    configuration = data.get("sop")
+    if not isinstance(configuration, dict):
+        raise ValueError("sop application configuration is required")
+    expected = set(SOPConfig.__dataclass_fields__)
+    if set(configuration) != expected:
+        raise ValueError(f"sop configuration keys differ: {sorted(set(configuration) ^ expected)}")
+    arguments = dict(configuration)
+    for name in ("water", "temperature", "tea_bag"):
+        visual = arguments[name]
+        if not isinstance(visual, dict) or set(visual) != {"question", "completion"}:
+            raise ValueError(f"sop.{name} requires question and completion")
+        decision = _decision({"completion": visual["completion"]}, "completion")
+        if set(decision.criteria) != {"positive", "negative", "unknown"}:
+            raise ValueError(f"sop.{name} completion requires positive/negative/unknown")
+        arguments[name] = VisualInstructions(_prompt(visual, "question"), decision)
+    for name in ("control_question", "authorization_question"):
+        arguments[name] = _decision(configuration, name)
+    if set(arguments["control_question"].criteria) != {"start", "stop", "next", "skip", "reset", "restart", "none"}:
+        raise ValueError("sop control choices are fixed native controls")
+    if set(arguments["authorization_question"].criteria) != {"command", "not_command", "unknown"}:
+        raise ValueError("sop authorization requires command/not_command/unknown")
+    if arguments["advancement"] not in {"automatic", "manual"}:
+        raise ValueError("sop.advancement must be automatic or manual")
+    for name in (
+        "poll_interval_seconds",
+        "inference_timeout_seconds",
+        "required_positives",
+        "confirmation_window_size",
+        "history_limit",
+        "observation_text_limit",
+        "max_retrieved_passages",
+        "retrieved_text_limit",
+        "timer_update_interval_seconds",
+        "default_temperature_c",
+        "default_duration_seconds",
+    ):
+        if not isinstance(arguments[name], (float, int)) or isinstance(arguments[name], bool) or arguments[name] <= 0:
+            raise ValueError(f"sop.{name} must be positive")
+    for name in (
+        "required_positives",
+        "confirmation_window_size",
+        "history_limit",
+        "observation_text_limit",
+        "max_retrieved_passages",
+        "retrieved_text_limit",
+    ):
+        if type(arguments[name]) is not int:
+            raise ValueError(f"sop.{name} must be an integer")
+    if arguments["required_positives"] > arguments["confirmation_window_size"]:
+        raise ValueError("sop positive threshold cannot exceed its window")
+    if arguments["max_retrieved_passages"] > 20:
+        raise ValueError("sop retrieval count cannot exceed 20")
+    if arguments["history_max_age_seconds"] is not None and arguments["history_max_age_seconds"] <= 0:
+        raise ValueError("sop history age must be positive or null")
+    for name in (
+        "identification_question",
+        "extraction_instructions",
+        "fallback_instructions",
+        "retrieval_query_suffix",
+        "workflow_description",
+        "conversation_description",
+        "conversation_instructions",
+        "default_tea_name",
+    ):
+        arguments[name] = _prompt(configuration, name)
+    required_messages = {
+        "start",
+        "stop",
+        "reset",
+        "restart",
+        "next",
+        "skip",
+        "already_running",
+        "not_running",
+        "not_ready",
+        "changed",
+        "complete",
+        "identify",
+        "fill_water",
+        "heat_water",
+        "start_steeping",
+        "steep_timer",
+    }
+    if not isinstance(arguments["messages"], dict) or set(arguments["messages"]) != required_messages:
+        raise ValueError("sop.messages must define all native control/step messages")
+    if any(not isinstance(value, str) or not value.strip() for value in arguments["messages"].values()):
+        raise ValueError("sop messages must be nonblank text")
+    return SOPConfig(**arguments)
 
 
 def load_config(path: Path | None) -> WorkerConfig:
@@ -155,14 +263,17 @@ def load_config(path: Path | None) -> WorkerConfig:
         or not isinstance(capture_configuration.get("enabled", True), bool)
     ):
         raise ValueError("capture requires an enabled boolean")
+    unknown_keys = set(configuration) - (set(WorkerConfig.__dataclass_fields__) - {"capture_enabled"} | {"capture"})
+    if unknown_keys:
+        raise ValueError(f"unsupported worker settings: {sorted(unknown_keys)}; use inline application SOP arguments")
     return WorkerConfig(
         models_config=_resolve(path, str(configuration.get("models_config", "models.local.json"))),
-        workflow_config=_resolve(path, str(configuration.get("workflow_config", "workflow.yaml"))),
+        sop=_sop(configuration),
         voice_gate_yaml=_resolve(path, str(configuration.get("voice_gate_yaml", "voice_gate.yaml"))),
         artifacts_dir=_resolve(path, str(configuration.get("artifacts_dir", "../artifacts"))),
         rag_endpoint=str(configuration.get("rag_endpoint", "tcp://127.0.0.1:8340")),
-        foreground_prompt=_prompt(configuration, "foreground_prompt"),
         current_view_prompt=_prompt(configuration, "current_view_prompt"),
+        conversation_system_prompt=_prompt(configuration, "conversation_system_prompt"),
         change_watch_decision=_decision(configuration, "change_watch_decision"),
         video_delta_decision=_decision(configuration, "video_delta_decision"),
         change_watch_caption_prompt=_prompt(configuration, "change_watch_caption_prompt"),
@@ -187,7 +298,8 @@ def load_config(path: Path | None) -> WorkerConfig:
         web_events_max_events=web_events_max_events,
         capture_enabled=capture_configuration.get("enabled", True),
         context_budget_bytes=int(_positive(configuration, "context_budget_bytes", 12000)),
-        compaction_input_budget_bytes=int(_positive(configuration, "compaction_input_budget_bytes", 12000)),
+        compaction_input_budget_bytes=int(_positive(configuration, "compaction_input_budget_bytes", 40000)),
+        sop_context_budget_bytes=int(_positive(configuration, "sop_context_budget_bytes", 64000)),
     )
 
 

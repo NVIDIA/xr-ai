@@ -15,30 +15,28 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from functools import partial
 from pathlib import Path
 
 import nemo_relay
 from loguru import logger
+from xr_ai_conversation import ContextManager, Conversation
 from xr_ai_logging import setup_logging
 from xr_ai_models import load_models_config, make_decision, make_llm, make_tts, make_vlm
-from xr_ai_routing import AgentRouter
+from xr_ai_routing import AgentRouter, RoutingAid
 from xr_ai_runtime import AgentRuntime
-from xr_ai_tools import ToolSet
 from xr_ai_tools.rag import RAGTools
 from xr_ai_tools.vision import ImageQueryTool
 from xr_ai_voice import VOICE_OUTPUT_TOPIC, HubVoiceTransport, VadConfig, VoiceAgent
 from xr_ai_voicegate import load_voice_gate_config
 from xr_ai_web_events import WebEventsAgent
 
-from ._capture import _record_routing, _RecordedDecisions, _RecordedLanguage, _RecordedVision, _SOPCapture
+from ._capture import _RecordedDecisions, _RecordedLanguage, _RecordedVision, _SOPCapture
 from ._cleanup import _CleanupAcks
-from .agents._destinations import _destinations
 from .agents.background_context import BackgroundContextAgent
 from .agents.change_watch import ChangeWatchAgent
 from .agents.file_output import FileOutputAgent
 from .agents.images import ParticipantImageAgent
-from .agents.sop.agent import SOPAgent
+from .agents.sop.agent import SOP_CONTEXT_SOURCE, SOPAgent
 from .agents.transcript import TranscriptAgent
 from .agents.video_log import VideoLogAgent
 from .agents.web_events import TeaWebEventsAgent
@@ -49,7 +47,6 @@ from .events import (
     PARTICIPANT_LEFT_TOPIC,
     USER_QUERY_TOPIC,
 )
-from .sop import load_workflow
 
 _CLIENT_TEXT_TOPIC = "agent.response"
 
@@ -156,9 +153,13 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
 
     # Snapshot the complete effective configuration before any agent produces
     # evidence. All later model calls inherit this capture scope.
-    workflow = load_workflow(config.workflow_config)
     capture = _SOPCapture(config.artifacts_dir, enabled=config.capture_enabled)
-    await capture.start(config, workflow)
+    await capture.start(
+        config,
+        workflow_name="tea making",
+        steps=("identify", "fill_water", "heat_water", "start_steeping", "steep_timer"),
+    )
+    conversation_llm = llm
     llm = _RecordedLanguage(llm)
     decisions = _RecordedDecisions(decisions)
     vlm = _RecordedVision(vlm)
@@ -189,7 +190,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
                 frame_timeout_s=config.frame_timeout_s,
             ),
         )
-        background_context = runtime.register(
+        runtime.register(
             "background-context",
             BackgroundContextAgent(capacity=config.background_history_size),
         )
@@ -229,55 +230,52 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
                 history_size=5,
             ),
         )
-        def application_tools(participant_id: str) -> ToolSet:
-            """Collect the existing participant-scoped tools without owning their agents."""
-            return ToolSet(
-                tool
-                for provider in (background_context, change_watch, transcript, video_log)
-                for _, tool in provider.participant_tools(participant_id).items()
-            )
-
-        # Compose the focused SOP from existing services. Background capabilities
-        # provide participant-scoped tools; they do not own workflow transitions.
+        # Conversation owns dialogue. Only the runner supplies the replaceable
+        # SOP source; independent flows never connect to this manager.
+        context = ContextManager(
+            conversation_llm,
+            summary_context_topics=(SOP_CONTEXT_SOURCE,),
+            dialogue_budget_bytes=config.context_budget_bytes,
+            topic_budget_bytes=config.sop_context_budget_bytes,
+            compaction_input_budget_bytes=config.compaction_input_budget_bytes,
+        )
+        runtime.register("sop-conversation-context", context.subscriber())
+        conversation = Conversation(
+            conversation_llm,
+            context=context,
+            system_prompt=config.conversation_system_prompt,
+            instructions=config.sop.conversation_instructions,
+            routing=RoutingAid("conversation", config.sop.conversation_description),
+            runtime=runtime,
+            output_topic=VOICE_OUTPUT_TOPIC,
+        )
         sop = runtime.register(
             "sop",
             SOPAgent(
+                config=config.sop,
                 llm=llm,
                 decisions=decisions,
                 images=images,
-                vlm=vlm,
+                image_query=ImageQueryTool(
+                    images=images.images,
+                    vlm=vlm,
+                    system_prompt=config.current_view_prompt,
+                ),
                 rag=rag,
-                workflow=workflow,
-                image_query=ImageQueryTool(images=images.images, vlm=vlm, system_prompt=config.current_view_prompt),
-                context_budget_bytes=config.context_budget_bytes,
-                compaction_input_budget_bytes=config.compaction_input_budget_bytes,
-                application_tools=application_tools,
-                prompt=config.foreground_prompt,
-                current_view_prompt=config.current_view_prompt,
-                vlm_timeout_s=config.vlm_timeout_s,
+                context=context,
+                runtime=runtime,
             ),
         )
-        sop.bind_runtime(runtime)
         router = AgentRouter(
-            _destinations(
-                sop,
-                policy=workflow.foreground,
-                decisions=decisions,
-                llm=llm,
-                participant_tools=application_tools,
-                respond=sop._respond,
-                generate_answer=sop._generate_answer,
-                current_frame=images.get_current_frame,
-                vision=sop.tools[0],
-                rag=rag,
-                vlm_timeout_s=config.vlm_timeout_s,
-            ),
+            {"workflow": sop, "conversation": conversation},
             decisions,
-            query_topic=USER_QUERY_TOPIC, output_topic=VOICE_OUTPUT_TOPIC,
+            query_topic=USER_QUERY_TOPIC,
+            output_topic=VOICE_OUTPUT_TOPIC,
             participant_joined_topic=PARTICIPANT_JOINED_TOPIC,
             interrupted_topic=INTERRUPTED_TOPIC,
-            initialize_participant=sop.participant_joined, cleanup_participant=sop.participant_left,
-            set_status=partial(_record_routing, snapshot=sop._snapshot),
+            initialize_participant=sop.participant_joined,
+            cleanup_participant=sop.participant_left,
+            set_status=transport.endpoint.set_status,
         )
         runtime.register("routing", router.runtime_subscriber())
         runtime.register("sop-cleanup", _CleanupAcks(router))
@@ -297,6 +295,8 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
                     finally:
                         await router.stop()
                         await sop.stop()
+                        await conversation.close()
+                        await context.close()
                         await change_watch.stop()
                         await transcript.stop()
                         await video_log.stop()
