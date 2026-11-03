@@ -3,3 +3,7 @@
 
 # Advance only as part of a repository-wide dependency qualification change.
 exclude-newer = "2026-10-22T21:39:43Z"
+
+# Pipecat 1.14 permits the Pillow 13 security release in voice environments.
+[exclude-newer-package]
+pipecat-ai = "2026-10-24T01:24:20.438725Z"

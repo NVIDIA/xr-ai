@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import importlib.util
 import os.path
+import re
 import sys
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -316,6 +317,7 @@ def test_embedding_profiles_retain_fractional_memory_budget() -> None:
 
 
 _SAMPLES = {
+    "conversation-example": ("speaker-stt", "tts", "omni", "vlm", "clef"),
     "procedure-capture-guide": ("stt", "tts", "omni", "vlm"),
     "simple-vlm-example": ("speaker-stt", "tts", "vlm"),
     "lab-instrument-monitoring": ("speaker-stt", "tts", "omni", "vlm"),
@@ -398,7 +400,15 @@ def test_default_stop_needs_no_gpu_or_credentials(monkeypatch, sample, services)
     stopped = []
     monkeypatch.setattr(_stack, "stop_persistent_servers", lambda targets: stopped.extend(targets) or True)
     run_model_stack(base, services, stop=True)
-    expected_ports = {"stt": 8103, "speaker-stt": 8102, "tts": 8105, "omni": 8108, "vlm": 8100, "embedding": 8109}
+    expected_ports = {
+        "stt": 8103,
+        "speaker-stt": 8102,
+        "tts": 8105,
+        "omni": 8108,
+        "vlm": 8100,
+        "clef": 8120,
+        "embedding": 8109,
+    }
     assert stopped == [(service, expected_ports[service]) for service in services]
 
 
@@ -529,6 +539,17 @@ def test_all_shipped_vllm_images_track_dispatcher_default() -> None:
 
     assert configured_images
     assert set(configured_images.values()) == {_nano.DEFAULT_IMAGE}
+
+
+def test_workflow_vllm_images_track_dispatcher_default() -> None:
+    images = {
+        path: re.findall(r"nvcr\.io/nvidia/vllm:[\w.-]+(?:@sha256:[0-9a-f]+)?", path.read_text())
+        for path in (_REPO_ROOT / ".github" / "workflows").glob("*.yml")
+    }
+    assert any(images.values()), "Expected a vLLM image in the workflows"
+    for path, references in images.items():
+        for image in references:
+            assert image == _nano.DEFAULT_IMAGE, path
 
 
 def test_repository_yaml_paths_exclude_apps_and_virtual_environments(

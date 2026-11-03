@@ -1,0 +1,65 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+name: sbom
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    paths:
+      - 'dependency-manifest/**'
+      - 'uv.toml'
+      - '.github/scripts/generate_sbom.py'
+      - 'tests/test_sbom.py'
+      - '.github/workflows/sbom.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sbom-${{ github.event_name }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@caf0cab7a618c569241d31dcd442f54681755d39 # v3.2.4
+
+      - name: Test SBOM generation
+        run: uv run --no-project --with 'pytest>=8.0' pytest --noconftest -p no:cacheprovider tests/test_sbom.py
+
+      - name: Install Syft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TOOLS: ${{ runner.temp }}/sbom-tools
+        run: |
+          mkdir -p "$TOOLS"
+          gh release download v1.55.0 --repo anchore/syft \
+            --pattern syft_1.55.0_linux_amd64.tar.gz --dir "$TOOLS"
+          cd "$TOOLS"
+          echo 'bb65249542db5fedeeb4d3f9b018b75e7264dbfbbb10486f044581a92f90490d  syft_1.55.0_linux_amd64.tar.gz' | sha256sum --check
+          tar -xzf syft_1.55.0_linux_amd64.tar.gz syft
+          echo "$TOOLS" >> "$GITHUB_PATH"
+
+      - name: Generate and check dependency SBOMs
+        run: uv run --script .github/scripts/generate_sbom.py
+
+      - name: Validate SPDX document
+        run: uv run --no-project --with 'spdx-tools==0.8.3' pyspdxtools --infile dist/sbom/xr-ai.spdx.json
+
+      - name: Upload SBOMs and provenance
+        uses: actions/upload-artifact@v4
+        with:
+          name: xr-ai-sbom-${{ github.sha }}
+          path: dist/sbom/
+          if-no-files-found: error
+          retention-days: 90

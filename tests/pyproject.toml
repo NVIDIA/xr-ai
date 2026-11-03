@@ -14,8 +14,8 @@ dependencies = [
     # Pulled in via editable installs of the workspace packages.
     "xr-ai-agent-runtime",
     "xr-ai-interaction",
-    "xr-ai-routing",
     "xr-ai-conversation",
+    "xr-ai-routing",
     "xr-ai-hub-client",
     "xr-ai-models[riva]",
     "xr-ai-tools[frames,image-editing,marker-tracking,services,vision]",
@@ -44,7 +44,7 @@ dependencies = [
     "audioop-lts; python_version >= '3.13'",
     # Local-first model resolution tests run the real Hub cache lookup.
     "huggingface-hub>=0.32.0",
-    "Pillow>=10.0",
+    "Pillow>=13.0.0",
     "python-multipart>=0.0.9",
     "pyyaml>=6.0",
 ]

@@ -5,9 +5,17 @@
 
 # Agent SDK
 
-The SDK is split by dependency boundary. Directory names match the Python
-imports developers use; distribution names remain stable for package
-installation.
+## Overview
+
+The Agent SDK helps you build applications that respond to what users see and
+say. It provides reusable support for device input, model calls, tools,
+conversation, and voice output, so you can focus on the behavior specific to
+your application.
+
+## Packages
+
+Packages separate dependency and ownership boundaries. The table maps source
+directories to Python imports; use distribution names for installation.
 
 | Directory | Import | Responsibility |
 |---|---|---|
@@ -48,14 +56,17 @@ connectivity, deployment ownership, credentials, and model-specific wire
 details remain inside that package. Refer to {doc}`ai-services` for deployment and
 operational guidance.
 
-`VoiceAgent` owns readiness, hub transport, voice gating, its private media
-pipeline, signal handling, and cleanup. It publishes final pre-gate transcripts
-separately from gate-accepted user queries, optionally publishes typed
-participant lifecycle events, and consumes typed voice output. Join and leave
-publication stays non-blocking for the media pipeline while preserving order per
-participant. Application agents subscribe to the events they own and clean up
-their own participant state. Pipecat and the media session remain implementation
-details.
+When given the worker's ready file, `VoiceAgent` signals process readiness
+after its private media transport initializes; DeviceIOHub separately owns
+client readiness. `VoiceAgent` also owns hub transport, voice gating, its
+private media pipeline, signal handling, and cleanup. Its transcript
+publication follows the active mode and ASR backend's policy, so only selected
+final pre-gate transcripts are published separately from gate-accepted user
+queries. It can also publish typed participant lifecycle events and consumes
+typed voice output. Join and leave publication stays non-blocking for the
+media pipeline while preserving order per participant. Application agents
+subscribe to the events they own and clean up their own participant state.
+Pipecat and the media session remain implementation details.
 
 Applications may publish selected compact payloads to `WEB_EVENT_TOPIC` for a
 `WebEventsAgent` to display. The viewer owns only a bounded live history and a
@@ -63,24 +74,14 @@ loopback HTTP listener by default. It is not persistence, does not inspect every
 runtime topic, and does not enter model, voice, media, or hub authentication
 paths. The application explicitly selects which typed events to forward.
 
-Applications with multiple speech producers may place
-`VoiceAggregationAgent` before `VoiceAgent`. Producers publish candidate
-finite or incremental responses to `voice.contribution`; the aggregator owns
-participant-scoped ordering, preserves a lone stream, coalesces simultaneous
-finite updates through the configured `LLMService`, publishes completed raw or
-rewritten text immediately, then reserves a bounded, open-loop estimate of its
-spoken duration only for scheduling subsequent speech. Consequently the
-client's completed-response data echo does not wait for playback pacing.
-Pending work is capacity-bounded with a
-priority-aware drop policy: routine work never displaces an alert, while a new
-alert replaces the oldest pending routine update or, if necessary, the oldest
-alert. Urgent output bypasses coalescing and rewriting, retains displaced
-routine work encountered during coalescing or rewrite for a later batch, and
-interrupts active speech. Interrupted stream IDs remain quarantined through
-their terminator or idle expiry, and the agent enforces its rewrite deadline
-independently of the model transport. This
-policy remains outside the private media pipeline so applications opt in
-explicitly and retain ownership of which events become speech.
+Several agents may publish speech to the same `VoiceAgent`. Each declares its
+output as a reply to a request or an unprompted update, and `VoiceAgent` owns
+when each is spoken: it orders replies per request, drops output for superseded
+requests, lets urgent updates cut current speech, and speaks pending updates
+together when the bot falls silent, using playback state from the media output.
+An optional `combiner` such as `llm_update_combiner(llm)` rewrites pending
+updates into one utterance. This policy stays inside the voice consumer so
+producers never manage stream identifiers or interruption flags.
 
 `ProcessorEndpoint` is the minimal agent-side hub boundary. It receives data,
 audio, frame signals, and participant events and sends participant-routed return

@@ -195,3 +195,39 @@ def test_cancellation_restores_handlers_after_cleanup(monkeypatch, tmp_path):
     with pytest.raises(SystemExit, match="143"):
         stack.run_stack([stack.Process("worker", ".", "worker", launch_mode="persist")], tmp_path)
     assert {sig: signal.getsignal(sig) for sig in original} == original
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX signals")
+@pytest.mark.parametrize("operation", ["set", "clear"])
+def test_cancellation_does_not_reenter_readiness_lock(tmp_path, operation):
+    program = """
+import os
+import signal
+import sys
+from contextlib import contextmanager
+from pathlib import Path
+import xr_ai_launcher._stack as stack
+stack.load_credentials = lambda: None
+original = stack.stack_health
+@contextmanager
+def stack_health(*args):
+    with original(*args) as initialized:
+        method = getattr(initialized, sys.argv[1])
+        def interrupt():
+            # Deliver repeated signals while an Event method owns its lock.
+            with initialized._cond:
+                os.kill(os.getpid(), signal.SIGTERM)
+                os.kill(os.getpid(), signal.SIGINT)
+            method()
+        setattr(initialized, sys.argv[1], interrupt)
+        yield initialized
+stack.stack_health = stack_health
+stack.run_stack([], Path.cwd(), exit_after_ready=True)
+"""
+    env = {**os.environ, "PYTHONPATH": os.pathsep.join(sys.path)}
+    result = subprocess.run(
+        [sys.executable, "-c", program, operation],
+        cwd=tmp_path, env=env, capture_output=True, timeout=5,
+    )
+    assert result.returncode == (143 if operation == "set" else 0), result.stderr.decode()

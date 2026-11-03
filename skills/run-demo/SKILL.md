@@ -33,6 +33,10 @@ host to choose local or hosted model inference.
 
 ## Prepare and launch
 
+Before starting the sample, follow the ONNX Runtime telemetry guidance in
+`docs/source/getting_started/networking.md`. If outbound telemetry is unwanted,
+apply its environment opt-out before launching the process.
+
 Before launch, follow `docs/source/guides/customizing-model-servers.md` for
 existing services, reuse requirements, replacement behavior, and shutdown
 scope. Reuse a compatible running demo; obtain permission before replacing

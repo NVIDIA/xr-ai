@@ -719,7 +719,7 @@ class TestContainerHelpers:
 
         monkeypatch.setattr(_docker.subprocess, "run", _run)
 
-        image = "nvcr.io/nvidia/vllm:26.09-py3"
+        image = "nvcr.io/nvidia/vllm:test"
         _docker._maybe_ngc_login(image)
 
         assert calls == 1

@@ -13,6 +13,11 @@ from typing import Any
 
 from PIL import Image
 
+
+class InputTooLongError(ValueError):
+    """A request needs more model input than the configured ``max_length`` allows."""
+
+
 _PREFIXES = {"data:image/jpeg;base64,": "JPEG", "data:image/png;base64,": "PNG"}
 
 
@@ -54,7 +59,7 @@ def decode_images(images: list[str], *, max_length: int, limits: _ImageLimits) -
     """
     # Even tiny images consume the processor's minimum resized pixel area.
     if len(images) > max_length // limits.min_image_tokens:
-        raise ValueError("too many images for max_length")
+        raise InputTooLongError("too many images for max_length")
     decoded: list[Image.Image] = []
     remaining_pixels = max_length * limits.pixels_per_token
     try:
@@ -66,7 +71,7 @@ def decode_images(images: list[str], *, max_length: int, limits: _ImageLimits) -
                 with Image.open(io.BytesIO(raw), formats=[expected_format]) as source:
                     remaining_pixels -= source.width * source.height
                     if remaining_pixels < 0:
-                        raise ValueError("images exceed the aggregate source-pixel budget for max_length")
+                        raise InputTooLongError("images exceed the aggregate source-pixel budget for max_length")
                     source.load()
                     rgb = source.convert("RGB")
                     cleanup.callback(rgb.close)
@@ -74,5 +79,7 @@ def decode_images(images: list[str], *, max_length: int, limits: _ImageLimits) -
             # Ownership transfers only after the complete list has decoded.
             cleanup.pop_all()
         return decoded
+    except InputTooLongError:
+        raise
     except (OSError, ValueError, SyntaxError, Image.DecompressionBombError) as exc:
         raise ValueError(f"invalid images: {exc}") from exc

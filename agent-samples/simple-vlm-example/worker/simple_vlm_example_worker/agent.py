@@ -7,11 +7,10 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
-from contextlib import suppress
 
 import nemo_relay
 from xr_ai_hub import FrameUnavailable
-from xr_ai_interaction import Interrupted, ParticipantLeft, ResponseOutput, UserQuery
+from xr_ai_interaction import Interrupted, ParticipantLeft, ResponseOutputs, UserQuery
 from xr_ai_runtime import (
     Agent,
     RuntimeClosedError,
@@ -114,15 +113,15 @@ class SimpleVlmAgent(Agent):
         request: UserQuery,
         ctx: RuntimeContext,
     ) -> None:
-        response_id = ctx.metadata.message_id
         participant_id = ctx.metadata.participant_id
         if participant_id is None:
             raise ValueError("simple VLM queries require a participant")
-        first = True
-        opened = False
-        cancelled = False
-        processing = False
-        try:
+        outputs = ResponseOutputs(ctx, VOICE_OUTPUT_TOPIC, closed_errors=(RuntimeClosedError,))
+        async with outputs.reply(
+            participant_id,
+            request_id=ctx.metadata.message_id,
+            timestamp_us=request.timestamp_us,
+        ) as reply:
             if self._vision is None or self._frames is None:
                 self._frames, self._vision = self._vision_factory()
             try:
@@ -131,54 +130,20 @@ class SimpleVlmAgent(Agent):
                 )
             except FrameUnavailable as exc:
                 unavailable = str(exc)
-                await ctx.publish(
-                    VOICE_OUTPUT_TOPIC,
-                    ResponseOutput(
-                        text=unavailable,
-                        response_id=response_id,
-                        final=False,
-                        interrupt=True,
-                        timestamp_us=request.timestamp_us,
-                    ),
-                )
-                opened = True
+                await reply.send(unavailable)
                 return
             await self._set_status("processing", participant_id)
-            processing = True
-            stream = self._vision.stream(ImageQueryRequest(image=frame.image, query=request.text))
             try:
-                async for chunk in stream:
-                    await ctx.publish(
-                        VOICE_OUTPUT_TOPIC,
-                        ResponseOutput(
-                            text=chunk.text,
-                            response_id=response_id,
-                            final=False,
-                            interrupt=first,
-                            timestamp_us=request.timestamp_us,
-                        ),
-                    )
-                    first = False
-                    opened = True
+                stream = self._vision.stream(ImageQueryRequest(image=frame.image, query=request.text))
+                try:
+                    async for chunk in stream:
+                        await reply.send(chunk.text)
+                finally:
+                    close = getattr(stream, "aclose", None)
+                    if close is not None:
+                        await close()
             finally:
-                close = getattr(stream, "aclose", None)
-                if close is not None:
-                    await close()
-        except asyncio.CancelledError:
-            cancelled = True
-            raise
-        finally:
-            if processing:
                 await self._set_status("idle", participant_id)
-            if opened and not cancelled:
-                with suppress(RuntimeClosedError):
-                    await ctx.publish(
-                        VOICE_OUTPUT_TOPIC,
-                        ResponseOutput(
-                            response_id=response_id,
-                            timestamp_us=request.timestamp_us,
-                        ),
-                    )
 
     async def _cancel(self, participant_id: str) -> None:
         task = self._tasks.pop(participant_id, None)

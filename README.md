@@ -38,7 +38,7 @@ For multilingual OCR with local Hugging Face inference or an external NIM endpoi
 
 Build an application in the XR AI source tree so its unpublished SDK
 dependencies resolve from their repository paths. Start from
-`agent-samples/simple-vlm-example/`, copy it to `apps/<your-app>/`, keep only
+`agent-samples/conversation-example/`, copy it to `apps/<your-app>/`, keep only
 the SDK layers and services the application needs, and follow the
 [build-your-application guide](https://nvidia.github.io/xr-ai/latest/guides/building-your-app.html)
 through scaffolding, startup, and hardware-free verification.
@@ -50,6 +50,7 @@ through scaffolding, startup, and hardware-free verification.
 | Model servers beside each agent sample | Convenience launchers for each sample’s required local models; refer to the [workflow](https://nvidia.github.io/xr-ai/latest/guides/customizing-model-servers.html) |
 | [NIM endpoints](deployment/nim/README.md) | Configure and validate independently deployed models |
 | [`simple-vlm-example`](agent-samples/simple-vlm-example/README.md) | Voice and text questions about the current camera frame |
+| [`conversation-example`](agent-samples/conversation-example/README.md) | Routed conversation, current-view questions, one-shot visual alerts, and note-taking |
 | [`procedure-capture-guide`](agent-samples/procedure-capture-guide/README.md) | Capture narrated demonstrations and follow approved guides with step verification |
 | [`lab-instrument-monitoring`](agent-samples/lab-instrument-monitoring/README.md) | Marker-associated visual monitoring with a foreground voice agent |
 | [`tea-making-sample`](agent-samples/tea-making-sample/README.md) | Guided workflow with visual evidence and background observations |

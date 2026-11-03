@@ -152,3 +152,19 @@ def test_bundled_license_index_is_complete_and_links_exist() -> None:
     for target in re.findall(r"\]\(([^)]+)\)", section):
         assert target.startswith("third_party_licenses/"), target
         assert (_ROOT / target).is_file(), f"Broken license index link: {target}"
+
+
+# Upgrading these packages requires reviewing their bundled native notices.
+_VOICE_IMAGE_AUDITED_VERSIONS = {
+    "pillow": "13.0.0",
+    "onnxruntime": "1.31.0",
+    "pipecat-ai": "1.14.0",
+}
+
+
+@pytest.mark.parametrize("package", sorted(_VOICE_IMAGE_AUDITED_VERSIONS))
+def test_voice_image_refresh_has_current_license_record(package: str) -> None:
+    """Flag version changes that require refreshing the artifact audit."""
+    version = _VOICE_IMAGE_AUDITED_VERSIONS[package]
+    assert _LOCK_VERSIONS[package] == {version}
+    assert f"third_party_licenses/{package}-{version}/" in _NOTICES

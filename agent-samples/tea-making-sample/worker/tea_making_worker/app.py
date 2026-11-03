@@ -12,13 +12,12 @@ from pathlib import Path
 
 import nemo_relay
 from loguru import logger
-from xr_ai_interaction import ParticipantLeft
 from xr_ai_logging import setup_logging
 from xr_ai_models import load_models_config, make_llm, make_tts, make_vlm
-from xr_ai_runtime import AgentRuntime, RuntimeContext, subscribe
+from xr_ai_runtime import AgentRuntime
 from xr_ai_tools.rag import RAGTools
 from xr_ai_tools.vision import ImageQueryTool
-from xr_ai_voice import HubVoiceTransport, VadConfig, VoiceAgent, VoiceAggregationAgent
+from xr_ai_voice import HubVoiceTransport, VadConfig, VoiceAgent, llm_update_combiner
 from xr_ai_voicegate import load_voice_gate_config
 from xr_ai_web_events import WebEventsAgent
 
@@ -45,20 +44,6 @@ _CLIENT_TEXT_TOPIC = "agent.response"
 _CURRENT_VIEW_PROMPT = (
     Path(__file__).resolve().parent / "prompts" / "current_view.txt"
 ).read_text(encoding="utf-8").strip()
-
-
-class _ParticipantVoiceAggregationAgent(VoiceAggregationAgent):
-    """Release sample-scoped aggregation state with its voice participant."""
-
-    @subscribe(PARTICIPANT_LEFT_TOPIC)
-    async def participant_left(
-        self,
-        _event: ParticipantLeft,
-        ctx: RuntimeContext,
-    ) -> None:
-        participant_id = ctx.metadata.participant_id
-        if participant_id is not None:
-            await self.release(participant_id)
 
 
 @asynccontextmanager
@@ -145,6 +130,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
         participant_left_topic=PARTICIPANT_LEFT_TOPIC,
         interrupted_topic=INTERRUPTED_TOPIC,
         interrupt_on_supersede=True,
+        combiner=llm_update_combiner(llm),
     )
 
     runtime = AgentRuntime()
@@ -241,10 +227,6 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
         ),
     )
     runtime.register("guidance-voice", GuidanceVoiceAgent())
-    voice_aggregation = runtime.register(
-        "voice-aggregation",
-        _ParticipantVoiceAggregationAgent(llm=llm),
-    )
     runtime.register("voice", voice)
 
     logger.info("file outputs → {}", config.artifacts_dir)
@@ -267,7 +249,6 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
                     await video_log.stop()
                     await images.stop()
                     await files.stop()
-                    await voice_aggregation.stop()
     logger.info("tea-making stopped")
 
 

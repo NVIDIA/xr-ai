@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from typing import TypeAlias
 
@@ -24,6 +24,7 @@ class VoiceQuery:
 
 VoiceInputSink: TypeAlias = Callable[[VoiceQuery], Awaitable[None]]
 VoiceResponse: TypeAlias = str | AsyncIterator[str]
+UpdateCombiner: TypeAlias = Callable[[Sequence[str]], Awaitable[str]]
 
 
-__all__ = ["VoiceInputSink", "VoiceQuery", "VoiceResponse"]
+__all__ = ["UpdateCombiner", "VoiceInputSink", "VoiceQuery", "VoiceResponse"]

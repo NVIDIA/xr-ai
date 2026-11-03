@@ -78,7 +78,8 @@ def foreground(monkeypatch):
     return spawn, process
 
 
-def test_stack_exposes_startup_ready_failure_and_shutdown_states(foreground, monkeypatch, tmp_path, listener):
+@pytest.mark.parametrize("stop", ["exit", "signal"])
+def test_stack_exposes_startup_ready_failure_and_shutdown_states(foreground, monkeypatch, tmp_path, listener, stop):
     # Use an OS-assigned port while exercising the actual run_stack integration.
     original = stack.stack_health
 
@@ -96,10 +97,13 @@ def test_stack_exposes_startup_ready_failure_and_shutdown_states(foreground, mon
     def wait_ready(*_args):
         assert status() == 503
 
-    def monitor(_processes, _initialized):
+    def monitor(_processes, cancellation):
         assert status() == 200
-        process.poll.return_value = 1
-        assert status() == 503
+        if stop == "signal":
+            cancellation._request(stack.signal.SIGTERM, None)
+        else:
+            process.poll.return_value = 1
+            assert status() == 503
 
     def shutdown(*_args, **_kwargs):
         process.poll.return_value = None
@@ -204,25 +208,20 @@ def test_health_routes_head_and_host_validation(listener, caplog):
 
 
 @pytest.mark.parametrize("sig", [stack.signal.SIGINT, stack.signal.SIGTERM])
-def test_monitor_marks_unready_in_signal_handler(listener, monkeypatch, sig):
+def test_monitor_returns_on_signal(monkeypatch, sig):
     handlers = {}
     monkeypatch.setattr(stack.signal, "getsignal", lambda _sig: None)
     monkeypatch.setattr(stack.signal, "signal", lambda number, handler: handlers.__setitem__(number, handler))
     process = Mock()
     process.poll.return_value = None
-    with health.stack_health({"worker": process}, 0) as initialized:
-        initialized.set()
-        port = listener[0].server_address[1]
 
-        def interrupt(_seconds):
-            assert response(port)[0] == 200
-            handlers[sig](sig, None)
-            assert not initialized.is_set()
-            assert response(port)[0] == 503
+    def interrupt(_seconds):
+        handlers[sig](sig, None)
 
-        monkeypatch.setattr(stack.time, "sleep", interrupt)
-        with stack._Cancellation(initialized) as cancellation:
-            assert stack._monitor({"worker": process}, cancellation) is None
+    monkeypatch.setattr(stack.time, "sleep", interrupt)
+    with stack._Cancellation() as cancellation:
+        assert stack._monitor({"worker": process}, cancellation) is None
+        assert cancellation.signum == sig
 
 
 def test_stack_health_is_disabled_by_default(foreground, monkeypatch, tmp_path, listener):

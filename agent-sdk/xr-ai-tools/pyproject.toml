@@ -17,15 +17,15 @@ dependencies = [
 
 [project.optional-dependencies]
 relay = ["xr-ai-models"]
-frames = ["numpy>=1.24", "Pillow>=10.0", "xr-ai-hub-client"]
+frames = ["numpy>=1.24", "Pillow>=13.0.0", "xr-ai-hub-client"]
 capture = ["xr-ai-hub-client"]
-image-editing = ["Pillow>=10.0"]
+image-editing = ["Pillow>=13.0.0"]
 vision = ["xr-ai-models"]
 marker-tracking = [
     "numpy>=1.24",
     "opencv-contrib-python-headless>=4.8,<5",
     "zxing-cpp>=2.3,<4",
-    "Pillow>=10.0",
+    "Pillow>=13.0.0",
     "xr-ai-hub-client",
 ]
 services = ["msgpack>=1.0", "pyzmq>=27.0"]

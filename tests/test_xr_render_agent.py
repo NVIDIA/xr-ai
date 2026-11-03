@@ -180,10 +180,12 @@ async def test_render_agent_publishes_voice_output() -> None:
         await asyncio.wait_for(output.final.wait(), 1.0)
 
     chunks = [chunk for chunk, _metadata in output.events]
-    assert [chunk.text for chunk in chunks] == ["hello"]
-    assert [chunk.final for chunk in chunks] == [True]
-    assert [chunk.timestamp_us for chunk in chunks] == [1]
-    assert chunks[0].response_id is not None
+    assert [chunk.text for chunk in chunks] == ["hello", ""]
+    assert [chunk.final for chunk in chunks] == [False, True]
+    assert [chunk.timestamp_us for chunk in chunks] == [1, 1]
+    assert {chunk.kind for chunk in chunks} == {"reply"}
+    assert chunks[0].request_id and len({chunk.request_id for chunk in chunks}) == 1
+    assert chunks[0].response_id is not None and chunks[0].response_id == chunks[1].response_id
 
 
 async def test_render_agent_supersedes_a_participant_turn() -> None:

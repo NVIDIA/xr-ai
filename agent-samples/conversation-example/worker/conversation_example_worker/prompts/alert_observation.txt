@@ -1,0 +1,1 @@
+Describe only visible evidence relevant to the requested alert condition. Say when evidence is absent, unclear, or obscured. Use this single current still image only. Do not infer motion, an event, a change over time, a previous state, or anything outside this image. Be concise and factual.

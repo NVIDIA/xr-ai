@@ -103,6 +103,9 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   sample resolves unbounded and may install newer versions. An exact transitive
   pin published after the cutoff fails the resolve rather than floating.
 
+For machine-readable SPDX and CycloneDX inventories of the committed snapshots,
+refer to [Software bill of materials](docs/source/guides/sbom.md).
+
 ## Generated Python project inventory
 
 <!-- BEGIN GENERATED PYTHON DEPENDENCY MAP -->
@@ -203,15 +206,15 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
     - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
   - `frames`:
     - `numpy>=1.24`
-    - `Pillow>=10.0`
+    - `Pillow>=13.0.0`
     - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
   - `image-editing`:
-    - `Pillow>=10.0`
+    - `Pillow>=13.0.0`
   - `marker-tracking`:
     - `numpy>=1.24`
     - `opencv-contrib-python-headless>=4.8,<5`
     - `zxing-cpp>=2.3,<4`
-    - `Pillow>=10.0`
+    - `Pillow>=13.0.0`
     - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
   - `relay`:
     - `xr-ai-models` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
@@ -238,7 +241,8 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `xr-ai-models[speaker]` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
   - `xr-ai-vad` → [`xr-ai-vad`](utils/xr-ai-vad/) (local, editable)
   - `xr-ai-voicegate` → [`xr-ai-voicegate`](utils/xr-ai-voicegate/) (local, editable)
-  - `pipecat-ai>=1.6`
+  - `pipecat-ai>=1.14.0`
+  - `Pillow>=13.0.0`
   - `nltk!=3.10.1`
   - `numpy>=1.24`
   - `scipy>=1.11`
@@ -308,7 +312,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Runtime dependencies:
   - `numpy>=1.24`
   - `silero-vad>=5.1`
-  - `onnxruntime>=1.17`
+  - `onnxruntime>=1.31.0`
   - `torch>=2.0`
 - Optional dependency groups: none
 - Commands: none
@@ -411,7 +415,9 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `urllib3>=2.8.0`
   - `pyjwt>=2.15.1`
   - `transformers>=5.17.0`
-  - `vllm>=0.30.0`
+  - `vllm==0.31.0`
+  - `protobuf>=7.36.2; platform_machine != 's390x'`
+  - `protobuf==7.36.1; platform_machine == 's390x'`
   - `mcp>=2.2.0`
   - `pillow>=13.0.0`
   - `pyyaml>=6.0`
@@ -458,7 +464,9 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `urllib3>=2.8.0`
   - `pyjwt>=2.15.1`
   - `transformers>=5.17.0`
-  - `vllm>=0.30.0`
+  - `vllm==0.31.0`
+  - `protobuf>=7.36.2; platform_machine != 's390x'`
+  - `protobuf==7.36.1; platform_machine == 's390x'`
   - `mcp>=2.2.0`
   - `pillow>=13.0.0`
   - `pyyaml>=6.0`
@@ -480,7 +488,9 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `urllib3>=2.8.0`
   - `pyjwt>=2.15.1`
   - `transformers>=5.17.0`
-  - `vllm>=0.30.0`
+  - `vllm==0.31.0`
+  - `protobuf>=7.36.2; platform_machine != 's390x'`
+  - `protobuf==7.36.1; platform_machine == 's390x'`
   - `mcp>=2.2.0`
   - `pillow>=13.0.0`
   - `pyyaml>=6.0`
@@ -599,7 +609,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
   - `xr-ai-tools[services]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
   - `numpy>=1.24`
-  - `Pillow>=10.0`
+  - `Pillow>=13.0.0`
   - `PyNvVideoCodec>=2.2`
   - `pyyaml>=6.0`
 - Optional dependency groups: none
@@ -616,7 +626,9 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `urllib3>=2.8.0`
   - `pyjwt>=2.15.1`
   - `transformers>=5.17.0`
-  - `vllm>=0.30.0`
+  - `vllm==0.31.0`
+  - `protobuf>=7.36.2; platform_machine != 's390x'`
+  - `protobuf==7.36.1; platform_machine == 's390x'`
   - `mcp>=2.2.0`
   - `pillow>=13.0.0`
   - `pyyaml>=6.0`
@@ -629,6 +641,52 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `vlm_server` → `vlm_server.__main__:run`
 
 ### Agent samples
+
+#### `conversation-example` — [`agent-samples/conversation-example/`](agent-samples/conversation-example/)
+
+- Python: `>=3.11,<3.15`
+- Build dependencies:
+  - `hatchling`
+- Runtime dependencies:
+  - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
+  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
+- Optional dependency groups: none
+- Commands:
+  - `conversation_example` → `main:run`
+
+#### `conversation-example-model-servers` — [`agent-samples/conversation-example/model-servers/`](agent-samples/conversation-example/model-servers/)
+
+- Python: `>=3.11,<3.15`
+- Build dependencies:
+  - `hatchling`
+- Runtime dependencies:
+  - `xr-ai-model-server-stack` → [`xr-ai-model-server-stack`](utils/xr-ai-model-server-stack/) (local, editable)
+- Optional dependency groups: none
+- Commands:
+  - `conversation_example_model_servers` → `main:run`
+
+#### `conversation-example-worker` — [`agent-samples/conversation-example/worker/`](agent-samples/conversation-example/worker/)
+
+- Python: `>=3.11,<3.15`
+- Build dependencies:
+  - `hatchling`
+- Runtime dependencies:
+  - `nemo-relay>=0.10.0,<0.11`
+  - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
+  - `xr-ai-conversation` → [`xr-ai-conversation`](agent-sdk/xr-ai-conversation/) (local, editable)
+  - `xr-ai-routing[runtime]` → [`xr-ai-routing`](agent-sdk/xr-ai-routing/) (local, editable)
+  - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
+  - `xr-ai-interaction` → [`xr-ai-interaction`](agent-sdk/xr-ai-interaction/) (local, editable)
+  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
+  - `xr-ai-models[riva]` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
+  - `xr-ai-tools[frames,vision]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
+  - `xr-ai-voice` → [`xr-ai-voice`](agent-sdk/xr-ai-voice/) (local, editable)
+  - `xr-ai-voicegate` → [`xr-ai-voicegate`](utils/xr-ai-voicegate/) (local, editable)
+  - `loguru>=0.7`
+  - `pyyaml>=6.0`
+- Optional dependency groups: none
+- Commands:
+  - `conversation_example_worker` → `conversation_example_worker.__main__:run`
 
 #### `lab-instrument-monitoring` — [`agent-samples/lab-instrument-monitoring/`](agent-samples/lab-instrument-monitoring/)
 
@@ -659,7 +717,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
-  - `Pillow>=10.1.0`
+  - `Pillow>=13.0.0`
   - `nemo-relay>=0.10.0,<0.11`
   - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
   - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
@@ -906,8 +964,8 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Runtime dependencies:
   - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
   - `xr-ai-interaction` → [`xr-ai-interaction`](agent-sdk/xr-ai-interaction/) (local, editable)
-  - `xr-ai-routing` → [`xr-ai-routing`](agent-sdk/xr-ai-routing/) (local, editable)
   - `xr-ai-conversation` → [`xr-ai-conversation`](agent-sdk/xr-ai-conversation/) (local, editable)
+  - `xr-ai-routing` → [`xr-ai-routing`](agent-sdk/xr-ai-routing/) (local, editable)
   - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
   - `xr-ai-models[riva]` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
   - `xr-ai-tools[frames,image-editing,marker-tracking,services,vision]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
@@ -932,7 +990,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `numpy>=1.24`
   - `audioop-lts; python_version >= '3.13'`
   - `huggingface-hub>=0.32.0`
-  - `Pillow>=10.0`
+  - `Pillow>=13.0.0`
   - `python-multipart>=0.0.9`
   - `pyyaml>=6.0`
 - Optional dependency groups: none
@@ -1074,8 +1132,6 @@ Keep non-obvious fan-out in the same change:
   from `xr-ai-vllm` internals.
 - `agent-sdk/xr-ai-hub/` depends only on `pyzmq` and `msgpack`; it has no
   server-side packages.
-- `agent-sdk/xr-ai-interaction/` depends only on `pydantic`, so routing,
-  conversation, and non-voice front ends share its messages without voice media.
 - `agent-sdk/xr-ai-models/` depends only on `xr-ai-logging`, `httpx`, and
   `pyyaml`. In-tree backends use typed OpenAI-compatible HTTP rather than vendor
   SDKs, with one scoped exception: the optional `riva` extra adds

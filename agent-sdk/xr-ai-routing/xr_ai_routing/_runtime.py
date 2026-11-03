@@ -108,7 +108,10 @@ class _RuntimeRouting:
             nemo_relay.ScopeType.Agent,
             metadata={"destination": source},
         ):
-            await state.context.publish(self._output_topic, ResponseOutput(text=text, timestamp_us=turn.timestamp_us))
+            await state.context.publish(
+                self._output_topic,
+                ResponseOutput(kind="reply", text=text, request_id=turn.turn_id, timestamp_us=turn.timestamp_us),
+            )
 
 
 class _RouterRuntimeAgent(Agent):

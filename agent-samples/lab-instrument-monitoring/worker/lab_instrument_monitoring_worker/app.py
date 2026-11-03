@@ -12,11 +12,10 @@ from threading import Lock
 
 import nemo_relay
 from loguru import logger
-from xr_ai_interaction import ParticipantLeft
 from xr_ai_logging import setup_logging
 from xr_ai_models import load_models_config, make_llm, make_tts, make_vlm
-from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, subscribe
-from xr_ai_voice import HubVoiceTransport, VadConfig, VoiceAgent, VoiceAggregationAgent
+from xr_ai_runtime import AgentRuntime
+from xr_ai_voice import HubVoiceTransport, VadConfig, VoiceAgent, llm_update_combiner
 from xr_ai_voicegate import load_voice_gate_config
 from xr_ai_web_events import WebEventsAgent
 
@@ -35,22 +34,6 @@ from .instrument_monitor import InstrumentMonitorAgent
 from .instruments import LabInstrumentAgent
 from .monitor import MonitorAgent
 from .web_events import WebEventsAdapterAgent
-
-
-class _VoiceAggregationLifecycleAgent(Agent):
-    def __init__(self, voice_aggregation: VoiceAggregationAgent) -> None:
-        super().__init__()
-        self._voice_aggregation = voice_aggregation
-
-    @subscribe(PARTICIPANT_LEFT_TOPIC)
-    async def participant_left(
-        self,
-        _event: ParticipantLeft,
-        ctx: RuntimeContext,
-    ) -> None:
-        participant_id = ctx.metadata.participant_id
-        if participant_id is not None:
-            await self._voice_aggregation.release(participant_id)
 
 
 @asynccontextmanager
@@ -110,6 +93,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
         participant_left_topic=PARTICIPANT_LEFT_TOPIC,
         interrupted_topic=INTERRUPTED_TOPIC,
         interrupt_on_supersede=True,
+        combiner=llm_update_combiner(llm),
     )
 
     runtime = AgentRuntime()
@@ -180,14 +164,6 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
             prompt=config.foreground_prompt,
         ),
     )
-    voice_aggregation = runtime.register(
-        "voice-aggregation",
-        VoiceAggregationAgent(llm=llm),
-    )
-    runtime.register(
-        "voice-aggregation-lifecycle",
-        _VoiceAggregationLifecycleAgent(voice_aggregation),
-    )
     runtime.register("voice", voice)
 
     logger.info("file outputs → {}", config.artifacts_dir)
@@ -205,7 +181,6 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
                     await instrument_monitor.stop()
                     await monitor.stop()
                     await images.stop()
-                    await voice_aggregation.stop()
     logger.info("lab-instrument-monitoring stopped")
 
 

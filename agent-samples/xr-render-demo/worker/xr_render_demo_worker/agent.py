@@ -10,7 +10,7 @@ from collections.abc import Callable
 
 import nemo_relay
 from loguru import logger
-from xr_ai_interaction import Interrupted, ParticipantLeft, ResponseOutput, UserQuery
+from xr_ai_interaction import Interrupted, ParticipantLeft, ResponseOutputs, UserQuery
 from xr_ai_runtime import Agent, RuntimeContext, Topic, subscribe
 from xr_ai_voice import VOICE_OUTPUT_TOPIC
 
@@ -84,14 +84,14 @@ class RenderAgent(Agent):
 
     async def _run_turn(self, query: UserQuery, ctx: RuntimeContext) -> None:
         participant_id = ctx.metadata.participant_id
-        response_id = ctx.metadata.message_id
+        request_id = ctx.metadata.message_id
         try:
             reply = await self._supervisor.handle(
                 SceneRequest(
                     transcript=query.text,
                     participant_id=participant_id,
                     timestamp_us=query.timestamp_us,
-                    trace_id=response_id or "",
+                    trace_id=request_id,
                 )
             )
             text = reply.response
@@ -101,14 +101,12 @@ class RenderAgent(Agent):
             logger.exception("xr-render turn failed for {}: {!r}", participant_id, error)
             text = "Something went wrong. Please try again."
         try:
-            await ctx.publish(
-                VOICE_OUTPUT_TOPIC,
-                ResponseOutput(
-                    text=text,
-                    response_id=response_id,
-                    timestamp_us=query.timestamp_us,
-                ),
-            )
+            async with ResponseOutputs(ctx, VOICE_OUTPUT_TOPIC).reply(
+                participant_id,
+                request_id=request_id,
+                timestamp_us=query.timestamp_us,
+            ) as answer:
+                await answer.send(text)
         except asyncio.CancelledError:
             raise
         except Exception:

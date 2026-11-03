@@ -20,6 +20,8 @@ def test_sample_command_catalog_matches_top_level_projects() -> None:
     commands = {command.program: command for command in load_cli_catalog(_ROOT)}
 
     assert set(commands) == {
+        "conversation_example",
+        "conversation_example_model_servers",
         "lab_instrument_monitoring",
         "simple_vlm_example_model_servers",
         "lab_instrument_monitoring_model_servers",
@@ -37,10 +39,16 @@ def test_sample_command_catalog_matches_top_level_projects() -> None:
         ("--hub-config",),
         ("--health-port",),
     ]
-    for sample in ("simple-vlm-example", "lab-instrument-monitoring", "tea-making-sample", "xr-render-demo"):
+    for sample in (
+        "conversation-example", "simple-vlm-example", "lab-instrument-monitoring", "tea-making-sample", "xr-render-demo"
+    ):
         command = commands[sample.replace("-", "_") + "_model_servers"]
         assert [argument.flags for argument in command.arguments] == [("--stop",), ("--gpu-profile",)]
         assert command.project_dir == Path("agent-samples") / sample / "model-servers"
+    assert [argument.flags for argument in commands["conversation_example"].arguments] == [
+        ("--session-recording",),
+    ]
+    assert commands["conversation_example"].project_dir == Path("agent-samples/conversation-example")
     assert [argument.flags for argument in commands["simple_vlm_example"].arguments] == [
         ("--session-recording",),
         ("--hub-config",),

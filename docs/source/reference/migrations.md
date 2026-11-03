@@ -5,17 +5,47 @@
 
 # Release migration
 
+## Overview
+
+Required changes when upgrading from `v0.3.0-beta` to `v0.4.0-beta`. Apply the
+entries relevant to your application's SDK usage, configuration, clients, and
+services.
+
 ## Changes since v0.3.0-beta
 
-The development version on `main` is unreleased. These instructions cover
-changes from `v0.3.0-beta` to that version. If upgrading from an older release,
-first apply {doc}`migration-history/through-v0.3.0-beta`, then apply the changes
+If upgrading from an older release, first apply
+{doc}`migration-history/through-v0.3.0-beta`, then apply the changes
 below. Refer to {doc}`migration-history` for completed migration guides.
 
 Stop running model services with the old checkout's commands and configuration
 before updating the checkout. Start the updated services before restarting
 workers; launchers can reuse a running service whose identity matches even when
 its application code predates the update.
+
+### Simple VLM example deprecation
+
+The {doc}`simple-vlm-example` sample is deprecated. Existing demo and launch
+commands remain available. Use {doc}`conversation-example` as the starting
+point for new voice-and-vision applications. Its routed conversation and
+visual-question behavior differs from Simple VLM; migrating application code
+requires reviewing that composition rather than only renaming the launcher.
+
+### vLLM 0.31 security update
+
+The four vLLM service environments pin `vllm==0.31.0`. Their standalone YAMLs
+and the shared Docker default now use `nvcr.io/nvidia/vllm:26.10.pre1-py3` in
+place of `nvcr.io/nvidia/vllm:26.09-py3`. The NGC preview supports Linux
+x86_64 and aarch64 with CUDA 13.4 and NVIDIA vLLM `0.31.0+88641915`. Qualify
+this preview on the target GPU and model workload before deployment.
+Refresh pip environments with
+`uv --config-file uv.toml sync --project <service-directory>`.
+
+Per-request `mm_processor_kwargs` and `media_io_kwargs` overrides are rejected
+by default. Move trusted processor settings into server configuration; do not
+enable `--trust-request-mm-kwargs` for untrusted clients. Custom image overrides
+must include the fixes for CVE-2026-114050 and CVE-2026-114055 independently of
+the host Python environment. Refer to {doc}`/components/ai-services` for runtime
+selection and container replacement.
 
 ### Interaction messages move to xr-ai-interaction
 
@@ -32,8 +62,9 @@ them from the new `xr-ai-interaction` package under their new names, and add
 | `VoiceParticipantLeft` | `ParticipantLeft` |
 | `VoiceInterrupted` | `Interrupted` |
 
-Fields, validation rules, and the `voice.output` and `voice.transcript` topics are
-unchanged; `VOICE_OUTPUT_TOPIC`, `VoiceTranscript`, and `VoiceAgent` stay in
+Apart from the `ResponseOutput` fields described under *Voice output declares
+reply or update*, fields, validation rules, and the `voice.output` and
+`voice.transcript` topics are unchanged; `VOICE_OUTPUT_TOPIC`, `VoiceTranscript`, and `VoiceAgent` stay in
 `xr_ai_voice`.
 
 Two validation error messages now say `response output` instead of `voice
@@ -83,6 +114,49 @@ to `version = 4`. Custom Relay tool execution intercepts now receive
 LLM execution intercepts must accept the new codec context parameter. Refer to the
 [Relay 0.10.0 migration notes](https://github.com/NVIDIA/NeMo-Relay/releases/tag/0.10.0)
 for the configuration and intercept changes.
+
+### Voice output declares reply or update
+
+`ResponseOutput` replaces `interrupt` with `kind`, `request_id`, and `urgent`.
+`kind` is required: a `reply` answers `request_id`, and an `update` is unprompted
+and may set `urgent=True` to cut current speech. Updates are finite and have no
+`response_id`. `VoiceAgent` now decides when each message is spoken, so
+`VoiceAggregationAgent` and `VOICE_CONTRIBUTION_TOPIC` are removed. Publish
+updates straight to `VOICE_OUTPUT_TOPIC`, and pass
+`combiner=llm_update_combiner(llm)` to `VoiceAgent` to have pending updates
+rewritten into one utterance. `ResponseOutputs`, exported from
+`xr_ai_interaction`, builds these messages and frames streamed replies. A
+producer whose queued updates became stale can drop them with
+`outputs.withdraw(participant_id)`, which publishes `kind="withdraw"`.
+
+```python
+# Before
+from xr_ai_voice import VOICE_CONTRIBUTION_TOPIC, VoiceAggregationAgent, VoiceOutput
+
+runtime.register("voice-aggregation", VoiceAggregationAgent(llm=llm))
+await ctx.publish(VOICE_CONTRIBUTION_TOPIC, VoiceOutput(text="Timer done.", interrupt=True))
+
+# After
+from xr_ai_interaction import ResponseOutputs
+from xr_ai_voice import VOICE_OUTPUT_TOPIC, VoiceAgent, llm_update_combiner
+
+voice = VoiceAgent(..., combiner=llm_update_combiner(llm))
+outputs = ResponseOutputs(ctx, VOICE_OUTPUT_TOPIC)
+await outputs.update(participant_id, "Timer done.", urgent=True)
+async with outputs.reply(participant_id, request_id=query_id) as reply:
+    await reply.send("Here is the answer.")
+```
+
+The aggregation tuning parameters have no replacement: coalescing follows real
+playback state, and `llm_update_combiner` takes only `prompt`, `max_tokens`,
+and `timeout_s`.
+
+Scheduling changes too. A reply for a different request than the one being
+spoken now cuts that reply and flushes queued audio; a playing update is never
+cut by a reply and finishes first. Non-urgent updates wait while the
+participant is speaking, and speech that is cut is never replayed. A streamed reply that publishes no
+fragment for 15 seconds is closed and its later fragments are dropped; set
+`stream_idle_timeout_s` on `VoiceAgent` for producers that pause longer.
 
 ### Persistent services after startup failure
 
@@ -214,10 +288,10 @@ speaker:
   base_url: http://127.0.0.1:8102
 ```
 
-A retained YAML without a `speaker` mapping selects batch STT. The new sample
-profiles omit the `stt` role, so this configuration raises `KeyError` during
-worker construction. With the mapping above, workers wait for `speaker-stt`
-before reporting ready. Refer to
+A retained YAML without a `speaker` mapping selects batch STT. The
+speaker-ASR sample profiles omit the `stt` role, so this configuration raises
+`KeyError` during worker construction. With the mapping above, workers wait for
+`speaker-stt` before reporting ready. Refer to
 {ref}`the batch alternative <batch-stt-migration>` if retaining batch speech.
 
 In tea's worker YAML, replace `voice_gate_yaml: voice_gate.always-on.yaml` with
@@ -226,7 +300,9 @@ retain ungated speech. The alternate file is removed; keeping its path loads
 the package's batch-STT defaults.
 
 (voice-sample-conversation-defaults)=
-The four voice samples select `conversation`. Say
+Simple VLM, Conversation, lab monitoring, tea making, and XR render select
+`conversation`. Procedure capture and guidance uses `always_on` for commands
+and narration. For a conversation-mode sample, say
 `Hey agent, let's start talking` after connecting and
 `Hey agent, let's stop talking` to close the conversation.
 Select `wake_only` for addressed turns, `hybrid` for addressed turns alongside
@@ -298,7 +374,9 @@ directly and depend on the earlier defaults, set them in your YAML:
 ### Shared model-stack speaker filtering
 
 (batch-stt-migration)=
-The four voice samples use speaker ASR and omit batch STT on port 8103.
+Simple VLM, Conversation, lab monitoring, tea making, and XR render use
+speaker ASR and omit batch STT on port 8103. Procedure capture and guidance
+keeps batch STT for narration without speaker enrollment.
 Replace unconditional worker `make_stt` calls with `VoiceAgent.from_models`,
 passing the loaded models and voice-gate settings. To retain batch STT, select
 `stt` in the sample's launcher and hardware overrides and configure the worker's

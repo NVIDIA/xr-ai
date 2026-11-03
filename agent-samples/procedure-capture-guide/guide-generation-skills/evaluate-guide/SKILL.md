@@ -104,7 +104,7 @@ Preserve each version's output directory:
 
 The camera endpoint and typed user inputs are simulated. The guide agent,
 execution backend, prompts, model adapters, current-frame and vision tools,
-aggregation and clock run their production code. Hub IPC, LiveKit, browser,
+and clock run their production code. Hub IPC, LiveKit, browser,
 microphone, STT, TTS audio and human compliance are excluded; this is not a
 full audiovisual end-to-end test.
 

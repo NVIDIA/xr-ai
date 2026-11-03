@@ -78,6 +78,8 @@ class _Session:
         self.changed = asyncio.Event()
         self.closed = False
         self.queries: list[tuple[str, str, int | None]] = []
+        self.update_sources: list[str | None] = []
+        self.withdrawn: list[tuple[str, str]] = []
 
     @property
     def is_running(self) -> bool:
@@ -96,25 +98,41 @@ class _Session:
         self.started.set()
         await asyncio.Event().wait()
 
-    async def enqueue_response(
+    async def enqueue_reply(
         self,
         participant_id: str,
         response: str | AsyncIterator[str],
         *,
-        interrupt: bool = False,
+        request_id: str,
         pts_us: int | None = None,
     ) -> None:
         if isinstance(response, str):
-            self.responses.append((participant_id, response, interrupt, pts_us))
+            self.responses.append((participant_id, response, request_id, pts_us))
             self.changed.set()
             return
 
         async def consume() -> None:
             chunks = [chunk async for chunk in response]
-            self.responses.append((participant_id, "".join(chunks), interrupt, pts_us))
+            self.responses.append((participant_id, "".join(chunks), request_id, pts_us))
             self.changed.set()
 
         self.response_tasks.append(asyncio.create_task(consume()))
+
+    async def enqueue_update(
+        self,
+        participant_id: str,
+        text: str,
+        *,
+        source: str,
+        urgent: bool = False,
+        pts_us: int | None = None,
+    ) -> None:
+        self.responses.append((participant_id, text, "urgent" if urgent else "update", pts_us))
+        self.update_sources.append(source)
+        self.changed.set()
+
+    async def withdraw_updates(self, participant_id: str, *, source: str) -> None:
+        self.withdrawn.append((participant_id, source))
 
     async def enqueue_query(
         self,
@@ -644,20 +662,20 @@ async def test_voice_agent_accepts_output_from_multiple_publishers() -> None:
     async with _running_voice(runtime, voice, session):
         await runtime.publish(
             VOICE_OUTPUT_TOPIC,
-            ResponseOutput(text="Careful.", interrupt=True),
+            ResponseOutput(kind="update", text="Careful.", urgent=True),
             participant_id="alice",
             source="safety-monitor",
         )
         await runtime.publish(
             VOICE_OUTPUT_TOPIC,
-            ResponseOutput(text="The timer is done."),
+            ResponseOutput(kind="update", text="The timer is done."),
             participant_id="alice",
             source="tea-timer",
         )
 
-    assert [(pid, text, interrupt) for pid, text, interrupt, _ in session.responses] == [
-        ("alice", "Careful.", True),
-        ("alice", "The timer is done.", False),
+    assert [(pid, text, tag) for pid, text, tag, _ in session.responses] == [
+        ("alice", "Careful.", "urgent"),
+        ("alice", "The timer is done.", "update"),
     ]
 
 
@@ -677,19 +695,19 @@ async def test_voice_agent_records_one_summary_for_finite_and_streamed_output() 
         async with _running_voice(runtime, voice, session):
             await runtime.publish(
                 VOICE_OUTPUT_TOPIC,
-                ResponseOutput(text="Finite answer."),
+                ResponseOutput(kind="reply", request_id="r1", text="Finite answer."),
                 participant_id="alice",
                 source="finite-agent",
             )
             await runtime.publish(
                 VOICE_OUTPUT_TOPIC,
-                ResponseOutput(text="Streamed ", response_id="turn-1", final=False),
+                ResponseOutput(kind="reply", request_id="r1", text="Streamed ", response_id="turn-1", final=False),
                 participant_id="alice",
                 source="stream-agent",
             )
             await runtime.publish(
                 VOICE_OUTPUT_TOPIC,
-                ResponseOutput(text="answer.", response_id="turn-1"),
+                ResponseOutput(kind="reply", request_id="r1", text="answer.", response_id="turn-1"),
                 participant_id="alice",
                 source="stream-agent",
             )
@@ -853,20 +871,20 @@ async def test_incremental_responses_are_isolated_by_participant_and_source() ->
         for source, text in (("observer-a", "alpha "), ("observer-b", "beta ")):
             await runtime.publish(
                 VOICE_OUTPUT_TOPIC,
-                ResponseOutput(text=text, response_id="shared", final=False),
+                ResponseOutput(kind="reply", request_id="r1", text=text, response_id="shared", final=False),
                 participant_id="alice",
                 source=source,
             )
         for source, text in (("observer-b", "two"), ("observer-a", "one")):
             await runtime.publish(
                 VOICE_OUTPUT_TOPIC,
-                ResponseOutput(text=text, response_id="shared"),
+                ResponseOutput(kind="reply", request_id="r1", text=text, response_id="shared"),
                 participant_id="alice",
                 source=source,
             )
         await asyncio.wait_for(session.wait_for(2), 1.0)
 
-    assert sorted(text for _pid, text, _interrupt, _pts in session.responses) == [
+    assert sorted(text for _pid, text, _tag, _pts in session.responses) == [
         "alpha one",
         "beta two",
     ]
@@ -889,7 +907,7 @@ async def test_cancelled_response_stream_releases_blocked_publishers() -> None:
         async with _running_voice(runtime, agent, session):
             await runtime.publish(
                 VOICE_OUTPUT_TOPIC,
-                ResponseOutput(text="one", response_id="turn", final=False),
+                ResponseOutput(kind="reply", request_id="r1", text="one", response_id="turn", final=False),
                 participant_id="alice",
                 source="observer",
             )
@@ -900,7 +918,7 @@ async def test_cancelled_response_stream_releases_blocked_publishers() -> None:
             await asyncio.wait_for(
                 runtime.publish(
                     VOICE_OUTPUT_TOPIC,
-                    ResponseOutput(text="two", response_id="turn", final=False),
+                    ResponseOutput(kind="reply", request_id="r1", text="two", response_id="turn", final=False),
                     participant_id="alice",
                     source="observer",
                 ),
@@ -908,7 +926,7 @@ async def test_cancelled_response_stream_releases_blocked_publishers() -> None:
             )
             await runtime.publish(
                 VOICE_OUTPUT_TOPIC,
-                ResponseOutput(response_id="turn"),
+                ResponseOutput(kind="reply", request_id="r1", response_id="turn"),
                 participant_id="alice",
                 source="observer",
             )
@@ -923,6 +941,37 @@ async def test_cancelled_response_stream_releases_blocked_publishers() -> None:
     ) == 1
 
 
+async def test_terminator_for_a_stream_the_floor_closed_is_not_warned() -> None:
+    session = _Session()
+    runtime = AgentRuntime()
+    agent = _voice_agent(session, text_input=False)
+    runtime.register("voice", agent)
+    messages: list[str] = []
+    handler_id = logger.add(messages.append, format="{message}", level="WARNING")
+
+    try:
+        async with _running_voice(runtime, agent, session):
+            await runtime.publish(
+                VOICE_OUTPUT_TOPIC,
+                ResponseOutput(kind="reply", request_id="r1", text="one", response_id="turn", final=False),
+                participant_id="alice",
+                source="observer",
+            )
+            await asyncio.sleep(0)
+            # A barge-in cancels the stream before the producer's terminator.
+            session.response_tasks[0].cancel()
+            await asyncio.gather(*session.response_tasks, return_exceptions=True)
+            await runtime.publish(
+                VOICE_OUTPUT_TOPIC,
+                ResponseOutput(kind="reply", request_id="r1", response_id="turn"),
+                participant_id="alice",
+                source="observer",
+            )
+    finally:
+        logger.remove(handler_id)
+    assert messages == []
+
+
 async def test_reused_finalized_response_id_is_ignored_and_warned_once() -> None:
     session = _Session()
     runtime = AgentRuntime()
@@ -935,7 +984,7 @@ async def test_reused_finalized_response_id_is_ignored_and_warned_once() -> None
         async with _running_voice(runtime, voice, session):
             await runtime.publish(
                 VOICE_OUTPUT_TOPIC,
-                ResponseOutput(text="first response", response_id="turn"),
+                ResponseOutput(kind="reply", request_id="r1", text="first response", response_id="turn"),
                 participant_id="alice",
                 source="observer",
             )
@@ -943,14 +992,14 @@ async def test_reused_finalized_response_id_is_ignored_and_warned_once() -> None
             for text in ("second", "third"):
                 await runtime.publish(
                     VOICE_OUTPUT_TOPIC,
-                    ResponseOutput(text=text, response_id="turn"),
+                    ResponseOutput(kind="reply", request_id="r1", text=text, response_id="turn"),
                     participant_id="alice",
                     source="observer",
                 )
     finally:
         logger.remove(handler_id)
 
-    assert [text for _pid, text, _interrupt, _pts in session.responses] == [
+    assert [text for _pid, text, _tag, _pts in session.responses] == [
         "first response"
     ]
     assert sum(
@@ -971,7 +1020,7 @@ async def test_reused_streamed_response_id_is_ignored_and_warned_once() -> None:
             for text, final in (("first ", False), ("response", True)):
                 await runtime.publish(
                     VOICE_OUTPUT_TOPIC,
-                    ResponseOutput(text=text, response_id="turn", final=final),
+                    ResponseOutput(kind="reply", request_id="r1", text=text, response_id="turn", final=final),
                     participant_id="alice",
                     source="observer",
                 )
@@ -979,14 +1028,14 @@ async def test_reused_streamed_response_id_is_ignored_and_warned_once() -> None:
             for text in ("second", "third"):
                 await runtime.publish(
                     VOICE_OUTPUT_TOPIC,
-                    ResponseOutput(text=text, response_id="turn"),
+                    ResponseOutput(kind="reply", request_id="r1", text=text, response_id="turn"),
                     participant_id="alice",
                     source="observer",
                 )
     finally:
         logger.remove(handler_id)
 
-    assert [text for _pid, text, _interrupt, _pts in session.responses] == [
+    assert [text for _pid, text, _tag, _pts in session.responses] == [
         "first response"
     ]
     assert sum(
@@ -1008,26 +1057,26 @@ async def test_closed_response_keys_are_evicted_in_insertion_order(monkeypatch) 
             for response_id in ("first", "second", "third"):
                 await runtime.publish(
                     VOICE_OUTPUT_TOPIC,
-                    ResponseOutput(text=response_id, response_id=response_id),
+                    ResponseOutput(kind="reply", request_id="r1", text=response_id, response_id=response_id),
                     participant_id="alice",
                     source="observer",
                 )
             await runtime.publish(
                 VOICE_OUTPUT_TOPIC,
-                ResponseOutput(text="first again", response_id="first"),
+                ResponseOutput(kind="reply", request_id="r1", text="first again", response_id="first"),
                 participant_id="alice",
                 source="observer",
             )
             await runtime.publish(
                 VOICE_OUTPUT_TOPIC,
-                ResponseOutput(text="third again", response_id="third"),
+                ResponseOutput(kind="reply", request_id="r1", text="third again", response_id="third"),
                 participant_id="alice",
                 source="observer",
             )
     finally:
         logger.remove(handler_id)
 
-    assert [text for _pid, text, _interrupt, _pts in session.responses] == [
+    assert [text for _pid, text, _tag, _pts in session.responses] == [
         "first",
         "second",
         "third",
@@ -1051,12 +1100,12 @@ async def test_voice_output_preserves_originating_query_timestamp() -> None:
     async with _running_voice(runtime, voice, session):
         await runtime.publish(
             VOICE_OUTPUT_TOPIC,
-            ResponseOutput(text="answer", timestamp_us=123),
+            ResponseOutput(kind="reply", request_id="r1", text="answer", timestamp_us=123),
             participant_id="alice",
             source="observer",
         )
 
-    assert session.responses == [("alice", "answer", False, 123)]
+    assert session.responses == [("alice", "answer", "r1", 123)]
 
 
 async def test_blocked_stream_does_not_block_unrelated_output() -> None:
@@ -1065,19 +1114,19 @@ async def test_blocked_stream_does_not_block_unrelated_output() -> None:
             super().__init__()
             self.held: list[AsyncIterator[str]] = []
 
-        async def enqueue_response(
+        async def enqueue_reply(
             self,
             participant_id: str,
             response: str | AsyncIterator[str],
             *,
-            interrupt: bool = False,
+            request_id: str,
             pts_us: int | None = None,
         ) -> None:
             if isinstance(response, str):
-                await super().enqueue_response(
+                await super().enqueue_reply(
                     participant_id,
                     response,
-                    interrupt=interrupt,
+                    request_id=request_id,
                     pts_us=pts_us,
                 )
             else:
@@ -1096,14 +1145,14 @@ async def test_blocked_stream_does_not_block_unrelated_output() -> None:
     async with _running_voice(runtime, voice, session):
         await runtime.publish(
             VOICE_OUTPUT_TOPIC,
-            ResponseOutput(text="one", response_id="held", final=False),
+            ResponseOutput(kind="reply", request_id="r1", text="one", response_id="held", final=False),
             participant_id="alice",
             source="observer",
         )
         blocked = asyncio.create_task(
             runtime.publish(
                 VOICE_OUTPUT_TOPIC,
-                ResponseOutput(text="two", response_id="held", final=False),
+                ResponseOutput(kind="reply", request_id="r1", text="two", response_id="held", final=False),
                 participant_id="alice",
                 source="observer",
             )
@@ -1113,7 +1162,7 @@ async def test_blocked_stream_does_not_block_unrelated_output() -> None:
         await asyncio.wait_for(
             runtime.publish(
                 VOICE_OUTPUT_TOPIC,
-                ResponseOutput(text="independent"),
+                ResponseOutput(kind="reply", request_id="r1", text="independent"),
                 participant_id="bob",
                 source="other",
             ),
@@ -1122,8 +1171,8 @@ async def test_blocked_stream_does_not_block_unrelated_output() -> None:
         await session.held[0].aclose()  # type: ignore[attr-defined]
         await asyncio.wait_for(blocked, 1.0)
 
-    assert [(pid, text, interrupt) for pid, text, interrupt, _ in session.responses] == [
-        ("bob", "independent", False)
+    assert [(pid, text, tag) for pid, text, tag, _ in session.responses] == [
+        ("bob", "independent", "r1")
     ]
 
 
@@ -1133,7 +1182,7 @@ async def test_open_response_streams_are_bounded(monkeypatch) -> None:
             super().__init__()
             self.held: list[AsyncIterator[str]] = []
 
-        async def enqueue_response(self, _participant_id, response, **_kwargs) -> None:
+        async def enqueue_reply(self, _participant_id, response, **_kwargs) -> None:
             self.held.append(response)
 
     monkeypatch.setattr(voice_runtime_module, "_OPEN_STREAM_CAPACITY", 1)
@@ -1146,7 +1195,7 @@ async def test_open_response_streams_are_bounded(monkeypatch) -> None:
         for response_id in ("first", "second"):
             await runtime.publish(
                 VOICE_OUTPUT_TOPIC,
-                ResponseOutput(text=response_id, response_id=response_id, final=False),
+                ResponseOutput(kind="reply", request_id="r1", text=response_id, response_id=response_id, final=False),
                 participant_id="alice",
                 source="observer",
             )
@@ -1158,7 +1207,7 @@ async def test_open_response_streams_are_bounded(monkeypatch) -> None:
 
 async def test_failed_stream_enqueue_does_not_register_response() -> None:
     class FailingSession(_Session):
-        async def enqueue_response(self, *_args, **_kwargs) -> None:
+        async def enqueue_reply(self, *_args, **_kwargs) -> None:
             raise RuntimeError("session stopped")
 
     session = FailingSession()
@@ -1170,7 +1219,7 @@ async def test_failed_stream_enqueue_does_not_register_response() -> None:
         with pytest.raises(ExceptionGroup, match="event publication"):
             await runtime.publish(
                 VOICE_OUTPUT_TOPIC,
-                ResponseOutput(text="first", response_id="turn", final=False),
+                ResponseOutput(kind="reply", request_id="r1", text="first", response_id="turn", final=False),
                 participant_id="alice",
                 source="observer",
             )
@@ -1179,7 +1228,37 @@ async def test_failed_stream_enqueue_does_not_register_response() -> None:
     assert voice._response_traces == {}  # noqa: SLF001
 
 
-async def test_midstream_interrupt_is_rejected() -> None:
+async def test_voice_agent_maps_updates_and_replies_to_the_session() -> None:
+    session = _Session()
+    runtime = AgentRuntime()
+    voice = _voice_agent(session, text_input=False)
+    runtime.register("voice", voice)
+
+    async with _running_voice(runtime, voice, session):
+        for output in (
+            ResponseOutput(kind="update", text="Timer.", timestamp_us=3),
+            ResponseOutput(kind="update", text="Alarm.", urgent=True, timestamp_us=4),
+            ResponseOutput(kind="reply", text="Answer.", request_id="r7", timestamp_us=5),
+            ResponseOutput(kind="reply", text="Streamed.", request_id="r8", response_id="s", final=False),
+            ResponseOutput(kind="reply", request_id="r8", response_id="s"),
+        ):
+            await runtime.publish(
+                VOICE_OUTPUT_TOPIC,
+                output,
+                participant_id="alice",
+                source="observer",
+            )
+        await asyncio.gather(*session.response_tasks)
+
+    assert session.responses == [
+        ("alice", "Timer.", "update", 3),
+        ("alice", "Alarm.", "urgent", 4),
+        ("alice", "Answer.", "r7", 5),
+        ("alice", "Streamed.", "r8", session.responses[3][3]),
+    ]
+
+
+async def test_voice_agent_maps_withdraw_to_the_producers_updates() -> None:
     session = _Session()
     runtime = AgentRuntime()
     voice = _voice_agent(session, text_input=False)
@@ -1188,24 +1267,38 @@ async def test_midstream_interrupt_is_rejected() -> None:
     async with _running_voice(runtime, voice, session):
         await runtime.publish(
             VOICE_OUTPUT_TOPIC,
-            ResponseOutput(text="first", response_id="turn", final=False),
+            ResponseOutput(kind="update", text="Timer."),
             participant_id="alice",
-            source="observer",
+            source="guide",
         )
-        with pytest.raises(ExceptionGroup, match="event publication") as raised:
-            await runtime.publish(
-                VOICE_OUTPUT_TOPIC,
-                ResponseOutput(
-                    text="second",
-                    response_id="turn",
-                    final=False,
-                    interrupt=True,
-                ),
-                participant_id="alice",
-                source="observer",
-            )
+        await runtime.publish(
+            VOICE_OUTPUT_TOPIC,
+            ResponseOutput(kind="withdraw"),
+            participant_id="alice",
+            source="guide",
+        )
 
-    assert "only the first chunk" in str(raised.value.exceptions[0])
+    assert session.update_sources == ["guide"]
+    assert session.withdrawn == [("alice", "guide")]
+
+
+async def test_voice_agent_passes_combiner_to_the_session() -> None:
+    async def combiner(texts):
+        return " ".join(texts)
+
+    session = _Session()
+    runtime = AgentRuntime()
+    voice = _voice_agent(session, text_input=False, combiner=combiner)
+    runtime.register("voice", voice)
+
+    async with _running_voice(runtime, voice, session):
+        assert session.run_options["combiner"] is combiner
+
+
+@pytest.mark.parametrize("timeout", [0, -1.0])
+def test_voice_agent_rejects_non_positive_stream_idle_timeout(timeout: float) -> None:
+    with pytest.raises(ValueError, match="stream idle timeout"):
+        _voice_agent(_Session(), stream_idle_timeout_s=timeout)
 
 
 async def test_unknown_empty_stream_terminator_is_rejected() -> None:
@@ -1222,7 +1315,7 @@ async def test_unknown_empty_stream_terminator_is_rejected() -> None:
         with pytest.raises(ExceptionGroup, match="event publication") as raised:
             await runtime.publish(
                 VOICE_OUTPUT_TOPIC,
-                ResponseOutput(response_id="missing"),
+                ResponseOutput(kind="reply", request_id="r1", response_id="missing"),
                 participant_id="alice",
                 source="observer",
             )

@@ -29,6 +29,8 @@ class _SpeakerTranscriptionFrame(TranscriptionFrame):
 
     speaker_id: int | None
     _control_pending: bool = False
+    # Withheld control-prefix words that turned out to be speech before this transcript.
+    _released: str = ""
 
 
 @dataclass
@@ -148,3 +150,19 @@ class AssistantResponseEndFrame(TextResponseEndFrame):
 
     text: str
     pts_us: int
+
+
+@dataclass
+class _OutputDoneFrame(DataFrame, UninterruptibleFrame):
+    """Marks the end of one floor-holding output's audio.
+
+    The IO processor sends it downstream behind the output's text.
+    ``StreamingTtsProcessor`` orders it behind that output's synthesis, and the
+    output transport returns it upstream once the preceding audio is written.
+    ``output`` identifies the output, so a marker that outlived an interruption
+    cannot release a newer one. It is uninterruptible so another participant's
+    interruption cannot drop it.
+    """
+
+    pid: str
+    output: object

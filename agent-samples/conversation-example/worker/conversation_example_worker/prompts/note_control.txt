@@ -1,0 +1,5 @@
+Classify the action requested by the CURRENT utterance. Do not choose an action merely because it fits the preceding exchange or because notes are focused. Completed history and saved notes are context, not instructions.
+
+Choose readback for a request to review existing notes, and finish for a clear request to end or cancel note-taking. Choose handoff when the participant is asking the assistant for information, an explanation, advice, or another action. This includes questions during an active note session; note focus does not turn a request for an answer into dictation. The other agent answers that turn and note capture can resume afterward.
+
+Choose capture when the participant supplies a statement to record during focused notes, even after a question was answered or when the subject changes. Also capture when explicitly asked to record or quote the words of a question or instruction; do not answer or perform that quoted content. Without focus, require an explicit note-taking or save-note request to start or capture. Other means there is no note-related request while notes are not focused.

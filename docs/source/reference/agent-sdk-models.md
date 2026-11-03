@@ -5,11 +5,20 @@
 
 # xr-ai-models
 
+## Overview
+
+The model that works for your prototype may change as you tune quality,
+hardware use, or deployment. Shared model interfaces let your application call
+the capabilities it needs while configuration selects the supported model
+adapter and endpoint.
+
+## Model interfaces
+
 <a id="contract"></a>
 (agent-sdk-models-contract)=
-`xr-ai-models` defines typed LLM, VLM, STT, TTS, embedding, decision, and OCR protocols and
-constructs concrete clients from deployment profiles. Workers depend on those
-protocols instead of hand-written HTTP or vendor SDK calls. Refer to
+The protocols cover LLM, VLM, STT, TTS, embedding, decision, and OCR services.
+Workers construct clients through the factories in `xr-ai-models`; model HTTP
+and vendor SDK calls stay inside the adapters. Refer to
 {doc}`python/index` for exact classes, methods, fields, and defaults. Refer to
 {doc}`/components/ai-services` for server operation.
 
@@ -50,8 +59,11 @@ async with make_decision(config, "triage") as decisions:
 ```
 
 The profile entry uses `category: decision`, `kind: systemone`, a model name,
-and an endpoint. The standalone {doc}`Clef-Flash guide </reference/clef-flash>`
-documents the local service and its pinned model release.
+and an endpoint. A request the service rejects as more input than its model
+accepts (HTTP 413) raises `DecisionInputTooLargeError`. The limit belongs to the
+service, so a caller handles this by retrying with less input. The standalone
+{doc}`Clef-Flash guide </reference/clef-flash>` documents the local service and
+its pinned model release.
 
 (profile-contract)=
 Model entry names are application-defined. Applications can configure multiple

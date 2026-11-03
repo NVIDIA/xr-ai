@@ -5,6 +5,13 @@
 
 # Simple VLM example
 
+> **Deprecated:** Use the
+> [conversation example](../conversation-example/README.md) as the starting
+> point for new voice-and-vision applications. Simple VLM remains available
+> for the browser demo and existing integrations. Refer to the
+> [Simple VLM reference](https://nvidia.github.io/xr-ai/latest/reference/simple-vlm-example.html)
+> for its design and operational details.
+
 This sample is the smallest complete voice-and-vision application in the
 repository. A participant can ask a spoken or typed question about the current
 camera view. The worker uses an existing live video frame when the client is

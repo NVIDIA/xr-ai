@@ -35,6 +35,7 @@ from pipecat.frames.frames import (
     OutputAudioRawFrame,
     TextFrame,
     TranscriptionFrame,
+    TTSAudioRawFrame,
     TTSStoppedFrame,
     UserStartedSpeakingFrame,
     UserStoppedSpeakingFrame,
@@ -54,6 +55,7 @@ from xr_ai_voice._frames import (
     ParticipantJoinedFrame,
     ParticipantLeftFrame,
     TextResponseEndFrame,
+    _OutputDoneFrame,
 )
 from xr_ai_voice._processors import (
     _VoiceIOProcessor,
@@ -1657,9 +1659,10 @@ class _StringAssistant(_VoiceIOProcessor):
 
     async def handle(self, query: VoiceQuery) -> None:
         self.handle_calls.append((query.participant_id, query.text))
-        await self.enqueue_response(
+        await self.enqueue_reply(
             query.participant_id,
             f"answer: {query.text}",
+            request_id=query.text,
             pts_us=query.timestamp_us,
         )
 
@@ -1680,9 +1683,10 @@ class _IterAssistant(_VoiceIOProcessor):
                 self.cancelled = True
                 raise
 
-        await self.enqueue_response(
+        await self.enqueue_reply(
             query.participant_id,
             _gen(),
+            request_id=query.text,
             pts_us=query.timestamp_us,
         )
 
@@ -1763,8 +1767,8 @@ async def test_interrupting_response_does_not_cancel_query_delivery() -> None:
     await asyncio.wait_for(query_started.wait(), 1.0)
     input_task = next(iter(assistant._input_tasks))  # noqa: SLF001
 
-    await assistant.enqueue_response("pid-1", "answer", interrupt=True)
-    await asyncio.wait_for(assistant._inflight["pid-1"], 1.0)  # noqa: SLF001
+    await assistant.enqueue_update("pid-1", "answer", source="producer", urgent=True)
+    await asyncio.wait_for(assistant._floor["pid-1"].task, 1.0)  # noqa: SLF001
 
     assert not input_task.cancelled()
     release_query.set()
@@ -1799,8 +1803,8 @@ async def test_failed_response_iterator_is_closed() -> None:
         return None
 
     assistant.push_frame = capture  # type: ignore[method-assign]
-    await assistant.enqueue_response("pid-1", stream)
-    await asyncio.wait_for(assistant._inflight["pid-1"], 1.0)  # noqa: SLF001
+    await assistant.enqueue_reply("pid-1", stream, request_id="r1")
+    await asyncio.wait_for(assistant._floor["pid-1"].task, 1.0)  # noqa: SLF001
 
     assert stream.closed is True
 
@@ -1821,8 +1825,8 @@ async def test_external_response_stream_uses_normal_assistant_output_frames() ->
         frames.append(frame)
 
     assistant.push_frame = capture  # type: ignore[method-assign]
-    await assistant.enqueue_response("pid-1", chunks(), pts_us=42)
-    task = assistant._inflight["pid-1"]  # noqa: SLF001
+    await assistant.enqueue_reply("pid-1", chunks(), pts_us=42, request_id="r1")
+    task = assistant._floor["pid-1"].task  # noqa: SLF001
     _ = await task
 
     assert [frame.text for frame in frames if isinstance(frame, TextFrame)] == [
@@ -1853,8 +1857,8 @@ async def test_external_response_preserves_chunks_before_iterator_failure() -> N
         frames.append(frame)
 
     assistant.push_frame = capture  # type: ignore[method-assign]
-    await assistant.enqueue_response("pid-1", chunks(), pts_us=42)
-    await assistant._inflight["pid-1"]  # noqa: SLF001
+    await assistant.enqueue_reply("pid-1", chunks(), pts_us=42, request_id="r1")
+    await assistant._floor["pid-1"].task  # noqa: SLF001
 
     end = next(frame for frame in frames if isinstance(frame, AssistantResponseEndFrame))
     assert end.text == "Partial response."
@@ -1880,17 +1884,22 @@ async def test_external_responses_preserve_participant_fifo() -> None:
         _direction: FrameDirection = FrameDirection.DOWNSTREAM,
     ) -> None:
         frames.append(frame)
+        if isinstance(frame, _OutputDoneFrame):
+            # No audio is queued here, so the output transport would return it at once.
+            await assistant.process_frame(
+                _OutputDoneFrame(pid=frame.pid, output=frame.output), FrameDirection.UPSTREAM,
+            )
 
     assistant.push_frame = capture  # type: ignore[method-assign]
-    await assistant.enqueue_response("pid-1", first_response())
+    await assistant.enqueue_reply("pid-1", first_response(), request_id="r1")
     await asyncio.sleep(0)
-    await assistant.enqueue_response("pid-1", "second")
+    await assistant.enqueue_reply("pid-1", "second", request_id="r1")
 
-    assert len(assistant._queued["pid-1"]) == 1  # noqa: SLF001
+    assert len(assistant._queued_replies["pid-1"]) == 1  # noqa: SLF001
     release_first.set()
     async def wait_until_idle() -> None:
-        while assistant._inflight:  # noqa: SLF001
-            await asyncio.gather(*tuple(assistant._inflight.values()))  # noqa: SLF001
+        while tasks := [o.task for o in assistant._floor.values() if not o.task.done()]:  # noqa: SLF001
+            await asyncio.gather(*tasks)
 
     await asyncio.wait_for(wait_until_idle(), 1.0)
 
@@ -1994,10 +2003,10 @@ async def test_voice_io_closes_cancelled_response_stream() -> None:
         return None
 
     assistant.push_frame = capture  # type: ignore[method-assign]
-    await assistant.enqueue_response("pid-1", stream)
-    task = assistant._inflight["pid-1"]  # noqa: SLF001
+    await assistant.enqueue_reply("pid-1", stream, request_id="r1")
+    task = assistant._floor["pid-1"].task  # noqa: SLF001
     await asyncio.wait_for(started.wait(), 1.0)
-    await assistant._cancel_pid("pid-1")  # noqa: SLF001
+    await assistant._barge_in("pid-1")  # noqa: SLF001
     await asyncio.gather(task, return_exceptions=True)
 
     assert stream.closed is True
@@ -2056,7 +2065,7 @@ async def test_replacement_query_reports_consumer_aborted_output() -> None:
         return None
 
     assistant.push_frame = capture  # type: ignore[method-assign]
-    await assistant.enqueue_response("pid-1", response())
+    await assistant.enqueue_reply("pid-1", response(), request_id="r1")
     await asyncio.wait_for(response_started.wait(), 1.0)
     await assistant.enqueue_query("pid-1", "replacement", pts_us=9)
     await asyncio.wait_for(query_received.wait(), 1.0)
@@ -2106,7 +2115,7 @@ async def test_assistant_cancels_inflight_turn_on_pipeline_shutdown():
     )
 
     # _run_chain drains with an EndFrame; the turn must be torn down by then.
-    assert assistant._inflight == {}          # noqa: SLF001
+    assert assistant._floor == {}          # noqa: SLF001
     assert assistant.cancelled, "the in-flight handler task must be cancelled"
 
 
@@ -2543,8 +2552,8 @@ async def test_incremental_voice_output_flushes_one_final_partial_chunk():
 
     async def drive() -> None:
         await asyncio.sleep(0.05)
-        await io_processor.enqueue_response("alice", response_chunks(), pts_us=7)
-        await io_processor._inflight["alice"]  # noqa: SLF001
+        await io_processor.enqueue_reply("alice", response_chunks(), pts_us=7, request_id="r1")
+        await io_processor._floor["alice"].task  # noqa: SLF001
         await asyncio.sleep(0.1)
         await worker.queue_frame(EndFrame())
 
@@ -3349,9 +3358,10 @@ class _EchoAssistant(_VoiceIOProcessor):
         super().__init__(self.handle)
 
     async def handle(self, query: VoiceQuery) -> None:
-        await self.enqueue_response(
+        await self.enqueue_reply(
             query.participant_id,
             f"echo {query.text}.",
+            request_id=query.text,
             pts_us=query.timestamp_us,
         )
 
@@ -3704,8 +3714,8 @@ async def test_streaming_tts_publishes_capture_caption_before_first_pcm():
     ]
     assert [type(frame) for frame in capture_frames] == [
         _CaptureTtsCaptionFrame,
-        OutputAudioRawFrame,
-        OutputAudioRawFrame,
+        TTSAudioRawFrame,
+        TTSAudioRawFrame,
     ]
     assert capture_frames[0].text == "Spoken sentence."
     assert capture_frames[0].transport_destination == "alice"

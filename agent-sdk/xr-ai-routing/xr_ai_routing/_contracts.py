@@ -153,7 +153,7 @@ class RoutableAgent(Protocol):
         self,
         turn: AgentTurn,
         *,
-        started: Callable[[], Awaitable[bool]],
+        started: Callable[[], Awaitable[None]],
     ) -> DestinationResult:
         """Answer a turn after admission or as the configured default fallback.
 
@@ -170,11 +170,11 @@ class RoutableAgent(Protocol):
         Await ``started()`` immediately before the first meaningful output or
         application action. It suppresses an acknowledgment that is not yet
         committed, waits until a committed one is delivered, supplies the
-        first-response timing sample, and returns whether the response
-        leads the turn's output: ``False`` means router control text such as a
-        preamble or acknowledgment already started this turn, so the response
-        should follow it instead of interrupting it. Repeated calls return the
-        same result, and calls after ``answer()`` returns have no effect.
+        first-response timing sample. Repeated calls wait for the same
+        delivery, and calls after ``answer()`` returns have no effect.
+        Output published with the turn's ``turn_id`` as its request ID plays in
+        order after the router's own control text; the destination never
+        chooses interruption.
         Completion and focus still use the return value, with optional response
         context in ``DestinationResult.text`` for the router's history.
         Destinations own output publication and stream finalization. A failure

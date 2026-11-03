@@ -53,12 +53,13 @@ the pointers below to the answers.
   in documentation URLs; the site landing page can fall back to `main`. If the
   selector prints no tag, remain on `main` and tell the user that no release tag
   was found.
-- **Working contract:** read `AGENTS.md` first. Every change must satisfy it,
-  and its canonical-references table routes deeper topics.
+- **Working contract:** read `AGENTS.md` for shared engineering guidance,
+  workflow routing, and canonical references.
 - **Docs:** `docs/source/`; published versioned site at
   <https://nvidia.github.io/xr-ai/>.
-- **Reference sample:** `agent-samples/simple-vlm-example/`, the one to study
-  and copy.
+- **Reference sample:** `agent-samples/conversation-example/`, the one to study
+  and copy for new voice-and-vision applications. The separate `run-demo`
+  workflow still uses the deprecated Simple VLM browser demo.
 - **Building your application:** `docs/source/guides/building-your-app.md`, the
   consumer path for choosing SDK layers, copying the reference, and verifying
   without hardware.

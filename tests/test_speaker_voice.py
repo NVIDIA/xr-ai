@@ -15,7 +15,14 @@ import httpx
 import pytest
 import uvicorn
 import yaml
-from pipecat.frames.frames import CancelFrame, InputAudioRawFrame, InterruptionFrame, TextFrame, TranscriptionFrame
+from pipecat.frames.frames import (
+    CancelFrame,
+    InputAudioRawFrame,
+    InterruptionFrame,
+    TextFrame,
+    TranscriptionFrame,
+    UserStoppedSpeakingFrame,
+)
 from pipecat.processors.frame_processor import FrameDirection
 from speaker_stt.__main__ import _build_app, _Server
 from speaker_stt._selection import _Selection
@@ -32,7 +39,7 @@ from xr_ai_voice._pipeline import _build_voice_pipeline
 from xr_ai_voice._processors.io import _VoiceIOProcessor
 from xr_ai_voice._processors.speaker_stt import _SpeakerSttProcessor
 from xr_ai_voice._processors.vad_stt import VadConfig, VadSttProcessor
-from xr_ai_voice._processors.voice_gate import VoiceGateProcessor
+from xr_ai_voice._processors.voice_gate import _STOP_ACK_TEXT, VoiceGateProcessor
 from xr_ai_voice._speaker_client import _select_speaker_asr, _SpeakerClient
 from xr_ai_voice._transport import HubVoiceTransport
 from xr_ai_voicegate import load_voice_gate_config
@@ -349,6 +356,31 @@ async def test_early_stop_never_runs_for_unenrolled_voice_or_control_prefix():
     processor.push_frame.reset_mock()
     await processor._event("a", {"kind": "partial", "text": "stop"})
     assert not processor.push_frame.called
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("end", ["released", "reset", "local_reset"])
+async def test_enrollment_ending_mid_utterance_stops_the_utterance(end):
+    """Speech events are dropped once enrollment ends, so the processor closes
+    the open utterance itself; otherwise the participant stays speaking downstream."""
+    processor = _SpeakerSttProcessor(cfg=_SpeakerConfig())
+    processor.push_frame = AsyncMock()
+    await processor._event("a", {"kind": "enrolled"})
+    await processor._event("a", {"kind": "speech_start"})
+    processor.push_frame.reset_mock()
+
+    if end == "local_reset":
+        await processor._reset("a")
+    else:
+        await processor._event("a", {"kind": end})
+    await processor._event("a", {"kind": "speech_stop"})
+
+    stops = [
+        call.args[0] for call in processor.push_frame.call_args_list
+        if isinstance(call.args[0], UserStoppedSpeakingFrame)
+    ]
+    assert len(stops) == 1
+    assert stops[0].transport_source == "a"
 
 
 @pytest.mark.asyncio
@@ -822,17 +854,37 @@ async def test_same_conversation_workflow_through_both_asr_paths(tmp_path, monke
 
         await speak("what is that")
         assert len(accepted) == (0 if require_wake else 1)
-        # A wake phrase split from an ordinary command retains its follow-up window.
+        # A wake phrase split from an ordinary command leads the next transcript,
+        # as if spoken unsplit. When wake phrases are required, it opens only its
+        # follow-up window instead.
+        query = "describe this" if require_wake else "hey agent describe this"
         await speak("hey agent")
         await speak("describe this")
-        assert accepted[-1].text == "describe this"
+        assert accepted[-1].text == query
         count = len(accepted)
+        if require_wake:
+            await speak("hey agent")
+            gate.gate.forget("a")  # Its follow-up window elapses.
+            await speak("describe this")
+            assert len(accepted) == count
+        # A wake phrase split across fragments is still one wake phrase.
+        for part in ("hey", "agent", "describe this"):
+            await speak(part)
+        assert len(accepted) == count + 1 and accepted[-1].text == query
+        count += 1
+        # Released words lead a query, but a STOP is judged on its own utterance.
+        responses = []
+        gate._emit_text_response = AsyncMock(side_effect=lambda pid, text: responses.append(text))
+        await speak("Hey.")
+        await speak("stop")
+        assert responses == [_STOP_ACK_TEXT] and len(accepted) == count
         await speak("hey agent")
         await speak("let's stop talking")
         assert "a" not in gate._conversation_active and len(accepted) == count
         await speak("do not send this")
         assert len(accepted) == count
-        assert [call.args[1] for call in captions.await_args_list] == ["what is that", "describe this"]
+        captioned = [call.args[1] for call in captions.await_args_list]
+        assert captioned == ["what is that", query, *(["describe this"] if require_wake else []), query, "stop"]
         messages = [call.args[0] for call in display.await_args_list]
         assert len(messages) == len(accepted)
         label = "Speaker 7" if use_speaker else "User"

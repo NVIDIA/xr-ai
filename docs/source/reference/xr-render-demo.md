@@ -5,7 +5,14 @@
 
 # xr-render-demo — architecture
 
-This architecture reference describes the xr-render-demo sample. Refer to
+## Overview
+
+Use this reference for spatial assistants that let users inspect and edit an
+XR scene through conversation. It coordinates specialized agents and scene
+tools while a separate process owns and renders the scene, providing a
+structure you can adapt to other spatial tasks.
+
+Refer to
 {doc}`/getting_started/quickstart` to run the sample. For inference-server
 mechanics shared with other samples, refer to
 {doc}`/components/ai-services`.
@@ -304,8 +311,9 @@ voice.output topic (final response)
 triggers `ReturnAudioFlush`, so the hub clears the LiveKit audio queue for that
 participant. Its interruption callback also cancels the participant's active
 render-agent task without waiting on its cleanup in the media processor. Each
-turn publishes one complete `voice.output` message; a superseded turn is
-cancelled before its reply is published, so no partial stream is left open.
+turn publishes one complete reply to its request on `voice.output`; a superseded
+turn is cancelled before its reply is published, so no partial stream is left open.
+An XR display start failure is spoken as an update.
 
 ## Agent runtime and voice topology
 

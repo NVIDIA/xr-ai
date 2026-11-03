@@ -5,26 +5,23 @@
 
 # Tea-making guidance — building deterministic visual workflows
 
-The tea-making sample is a reference for applications that combine a guided
-procedure, visual evidence, foreground questions, independent background
-observers, and voice output. Refer to the
-{doc}`quickstart </getting_started/quickstart>` to run the sample. This
-architecture reference explains how to adapt the sample to another procedure
-rather than merely changing model settings.
+## Overview
+
+Use this reference for procedural assistants that combine spoken guidance with
+visual checks of task progress. Tea making is the example: the application
+controls the steps and completion rules, while models interpret observations
+and answer questions. Adapt the workflow and its tools to guide other
+procedures.
+
+To run the sample, refer to the
+{doc}`quickstart </getting_started/quickstart>`.
 
 For speech deployment and explicit batch-STT selection, refer to
 {doc}`/guides/customizing-model-servers`.
 
-The defining pattern is a deterministic workflow around an agentic core. YAML
-declares the steps and state contract. A VLM describes each current view, and
-the observation LLM judges that natural-language caption and selects native
-tools. Application code validates the resulting state proposal and counts any
-required consecutive confirmations. The model does not choose which workflow
-is active, mutate arbitrary state, or advance a step implicitly.
-
 ## What to copy
 
-Use this sample when your application needs one or more of these patterns:
+Reusable patterns include:
 
 - a foreground agent that changes its tool catalog based on explicit state;
 - a guided procedure whose evidence comes from current visual observations;
@@ -90,6 +87,12 @@ is only a bounded view of the current worker process.
 
 ## Architecture
 
+YAML declares the workflow steps and state contract. A VLM describes each
+current view, and the observation LLM judges that caption and selects native
+tools. Application code validates the resulting state proposal and counts any
+required consecutive confirmations. The model does not choose which workflow
+is active, mutate arbitrary state, or advance a step implicitly.
+
 ```text
 camera frames ────────────────> ParticipantImageAgent
                                       │
@@ -105,7 +108,7 @@ accepted speech or typed query         ├─> GuidanceAgent observation loop
                                       │
                                       v
                                 typed runtime events
-                                      ├─> GuidanceVoiceAgent ─> voice aggregation
+                                      ├─> GuidanceVoiceAgent ─> voice updates
                                       ├─> BackgroundContextAgent
                                       ├─> FileOutputAgent ─────> JSONL
                                       ├─> TeaWebEventsAgent ───> live browser
@@ -121,11 +124,9 @@ The sample accepts speech without a wake phrase during an active conversation;
 callers can enable its configured wake phrases. Every spoken response is also
 sent to the connection client on `agent.response` so the client can render
 accessible text alongside audio.
-Raw streamed responses are finalized there as soon as their content completes,
-and batched responses are finalized as soon as their rewrite completes. The
-voice aggregator's playback reservation affects only subsequent speech
-scheduling, not when the text appears. An urgent barge-in can still stop audio
-after the full intended utterance has reached the client.
+Streamed responses are finalized there as soon as their content completes, and
+combined updates as soon as their rewrite completes. An urgent barge-in can
+still stop audio after the full intended utterance has reached the client.
 
 ## Agent responsibilities
 
@@ -139,7 +140,6 @@ after the full intended utterance has reached the client.
 | `TranscriptAgent` | Opt-in transcript records and periodic summaries | Voice gating or STT transport |
 | `VideoLogAgent` | Periodic captions and material deltas | Workflow state |
 | `GuidanceVoiceAgent` | Which guidance notices are spoken | Workflow decisions |
-| `VoiceAggregationAgent` | Participant speech pacing, ordering, and coalescing | Workflow decisions |
 | `FileOutputAgent` | Participant session files and JSONL records | Agent policy |
 | `TeaWebEventsAgent` | Explicit compact projections for the generic live viewer | Durable storage or file polling |
 | `WebEventsAgent` | Bounded HTTP presentation grouped by participant and topic | Application event selection |
@@ -443,19 +443,19 @@ or voice by accident.
 `GuidanceVoiceAgent` is intentionally separate from `GuidanceAgent`. Add,
 suppress, batch, or redirect notices there. Background applications remain
 text and event producers unless a dedicated voice subscriber chooses otherwise.
-Foreground responses and guidance notices publish to `VoiceAggregationAgent`,
-which combines non-urgent output produced during an active utterance before it
-reaches `VoiceAgent`. The response text reaches the connection client's Agent
-panel as soon as that raw or rewritten response is complete; the aggregator's
-open-loop playback estimate remains private scheduling state.
+Foreground answers are replies to the user's query, and guidance notices are
+unprompted updates, both published through `ResponseOutputs` to
+`VOICE_OUTPUT_TOPIC`. `VoiceAgent` owns when they are spoken: it combines
+updates that arrive while the participant is being spoken to, using the
+`llm_update_combiner` passed to it in `app.py`, and a new query supersedes
+prior output. The response text reaches the connection client's Agent panel as
+soon as that response or combined update is complete.
 
 ## Lifecycle invariants
 
 - Participant join starts a fresh workflow and output session.
 - Participant leave cancels foreground, observation, and background tasks
   before image resources are released.
-- Participant leave also releases queued voice-aggregation state, so a later
-  connection reusing the participant ID cannot inherit stale speech.
 - Record-producing agents publish cleanup-complete events after cancellation;
   `FileOutputAgent` closes the session only after every producer has finished.
 - A superseding query cancels the participant's prior foreground turn.

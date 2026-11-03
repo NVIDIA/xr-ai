@@ -426,7 +426,7 @@ async def test_quiet_includes_speech_during_image_switch(runtime_evaluator, tmp_
             injected = True
             await runtime.publish(
                 module.runtime.VOICE_OUTPUT_TOPIC,
-                module.runtime.ResponseOutput(text="Obsolete completion"),
+                module.runtime.ResponseOutput(kind="update", text="Obsolete completion"),
                 participant_id=module.runtime._PID,
             )
 
