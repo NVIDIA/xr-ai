@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Literal, Protocol
+from typing import Generic, Literal, Protocol, TypeVar
 
 
 @dataclass(frozen=True, slots=True)
@@ -202,3 +202,32 @@ class RoutableAgent(Protocol):
         A destination can clear active resources here while retaining completed
         participant data; use the optional departure hook for stronger cleanup.
         """
+
+
+AgentT = TypeVar("AgentT", bound=RoutableAgent)
+
+
+@dataclass(frozen=True)
+class ParticipantAgentFactory(Generic[AgentT]):
+    """Create a dedicated routed agent for each participant connection lifetime.
+
+    Both created instances and shared destinations use ``RoutableAgent``. The
+    router initializes every configured factory before selecting a route, and
+    retains each returned instance until its close callback succeeds. A factory
+    must clean up allocations if creation fails before returning an instance.
+
+    Args:
+        create: Async callback receiving the participant ID and returning a fully
+            initialized, dedicated instance. Shared model clients may be borrowed.
+        close: Retryable async disposer for that instance. It must stop and drain
+            independent background work before returning, without closing borrowed
+            application resources. This replaces the optional ``participant_left``
+            departure hook for factory-created instances; focus release still
+            calls ``release`` normally.
+    """
+
+    create: Callable[[str], Awaitable[AgentT]]
+    """Create a fully initialized dedicated agent, cleaning any unreturned partial allocations."""
+
+    close: Callable[[AgentT], Awaitable[None]]
+    """Retryable disposer that drains this instance before dependent application cleanup."""
