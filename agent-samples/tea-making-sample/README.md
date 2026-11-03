@@ -28,6 +28,9 @@ automatically:
 | `yaml/media_capture.yaml` | Opt-in session recording output, NVENC, audio, captions, and retention |
 | `yaml/device_io_hub.yaml` | Room, ports, web client, and network behavior |
 
+The default uses batch Parakeet STT with `Agent` / `Hey Agent` wake phrases
+and a five-second follow-up window. Speaker STT and diarization are disabled.
+
 For example, accept wake-addressed one-off questions as well as natural
 conversations by changing this line in `yaml/voice_gate.yaml`:
 

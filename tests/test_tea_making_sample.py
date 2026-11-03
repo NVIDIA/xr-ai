@@ -55,6 +55,30 @@ def test_omni_supplies_both_language_and_vision() -> None:
     assert "cosmos" not in json.dumps(models).lower()
 
 
+def test_wake_only_batch_stt_configuration_matches_model_stack() -> None:
+    """The sample can start without a speaker-ASR service on every GPU profile."""
+    from xr_ai_voicegate.config import load_voice_gate_config
+
+    gate = load_voice_gate_config(_SAMPLE / "yaml/voice_gate.yaml")
+    gate_yaml = yaml.safe_load((_SAMPLE / "yaml/voice_gate.yaml").read_text())
+    assert gate_yaml["mode"] == "wake_only"
+    assert set(gate.magic_phrases) == {"agent", "hey agent"}
+    assert gate_yaml["speaker"]["enabled"] is False
+    models = json.loads((_SAMPLE / "yaml/models.local.json").read_text())["models"]
+    assert models["stt"]["adapter"]["preset"] == "parakeet_stt"
+    assert models["stt"]["endpoint"]["base_url"] == "http://localhost:8103"
+
+    server_path = _SAMPLE / "model-servers/main.py"
+    spec = importlib.util.spec_from_file_location("tea_model_servers", server_path)
+    assert spec and spec.loader
+    servers = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(servers)
+    assert "stt" in servers._SERVICES and "speaker-stt" not in servers._SERVICES
+    for profile_path in (_SAMPLE / "model-servers/yaml").glob("*.yaml"):
+        profile = yaml.safe_load(profile_path.read_text())
+        assert "stt" in profile and "speaker-stt" not in profile
+
+
 def test_materialized_config_stays_inside_runtime_dir(tmp_path: Path) -> None:
     sample_main = _load_main()
     runtime_dir = tmp_path / "runtime"
