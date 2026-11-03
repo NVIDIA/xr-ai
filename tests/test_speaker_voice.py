@@ -542,6 +542,130 @@ async def test_voice_client_uses_actual_service_health_and_stream_contract():
 
 
 @pytest.mark.asyncio
+async def test_queued_audio_coalesces_after_slow_inference_without_resetting_enrollment():
+    processor = _SpeakerSttProcessor(cfg=_SpeakerConfig())
+    received = asyncio.Queue()
+    release = asyncio.Event()
+
+    async def feed(pid, audio, pts_us):
+        await received.put((audio, pts_us))
+        await release.wait()
+        return []
+
+    processor._client = SimpleNamespace(_feed=feed, _forget=AsyncMock(), _close=AsyncMock())
+    processor.push_frame = AsyncMock()
+
+    async def submit(data, pts_us):
+        frame = InputAudioRawFrame(audio=data, sample_rate=16000, num_channels=1)
+        frame.transport_source, frame.pts = "wearer", pts_us * 1000
+        await processor.process_frame(frame, FrameDirection.DOWNSTREAM)
+
+    try:
+        await processor.process_frame(ParticipantJoinedFrame("wearer"), FrameDirection.DOWNSTREAM)
+        processor._enrolled.add("wearer")
+        await submit(bytes(320), 1_000_000)
+        # A lone frame is sent without waiting to fill a batch.
+        assert await asyncio.wait_for(received.get(), 1) == (bytes(320), 1_000_000)
+        packets = [bytes([i]) * 320 for i in range(1, 13)]
+        for i, packet in enumerate(packets):
+            await submit(packet, 1_010_000 + i * 10_000)
+        release.set()
+        assert await asyncio.wait_for(received.get(), 1) == (b"".join(packets), 1_010_000)
+        assert processor._queued_bytes["wearer"] == 0
+        assert processor._queued_frames["wearer"] == 0
+        assert "wearer" in processor._enrolled
+        processor._client._forget.assert_not_awaited()
+        assert not [c for c in processor.push_frame.await_args_list
+                    if isinstance(c.args[0], _SpeakerEnrollmentFrame)]
+    finally:
+        await processor.cleanup()
+
+
+@pytest.mark.asyncio
+async def test_audio_coalescing_retains_oversized_next_frame_in_order_and_in_backlog():
+    processor = _SpeakerSttProcessor(cfg=_SpeakerConfig())
+    received, permits = asyncio.Queue(), asyncio.Queue()
+
+    async def feed(pid, audio, pts_us):
+        await received.put((audio, pts_us))
+        await permits.get()
+        return []
+
+    processor._client = SimpleNamespace(_feed=feed, _forget=AsyncMock(), _close=AsyncMock())
+    processor.push_frame = AsyncMock()
+
+    async def submit(data, pts_us):
+        frame = InputAudioRawFrame(audio=data, sample_rate=16000, num_channels=1)
+        frame.transport_source, frame.pts = "wearer", pts_us * 1000
+        await processor.process_frame(frame, FrameDirection.DOWNSTREAM)
+
+    packets = [(b"a" * 320, 1_010_000), (b"b" * 32000, 1_020_000),
+               (b"c" * 320, 2_020_000), (b"d" * 4800, 2_030_000),
+               (b"e" * 320, 2_180_000)]
+    expected = [(packets[0], 37440, 4), (packets[1], 5440, 3),
+                ((packets[2][0] + packets[3][0], 2_020_000), 320, 1),
+                (packets[4], 0, 0)]
+    try:
+        await processor.process_frame(ParticipantJoinedFrame("wearer"), FrameDirection.DOWNSTREAM)
+        processor._enrolled.add("wearer")
+        await submit(bytes(320), 1_000_000)
+        await asyncio.wait_for(received.get(), 1)
+        for packet, pts_us in packets:
+            await submit(packet, pts_us)
+        for request, queued_bytes, queued_frames in expected:
+            permits.put_nowait(None)
+            assert await asyncio.wait_for(received.get(), 1) == request
+            assert processor._queued_bytes["wearer"] == queued_bytes
+            assert processor._queued_frames["wearer"] == queued_frames
+        assert "wearer" in processor._enrolled
+        processor._client._forget.assert_not_awaited()
+    finally:
+        await processor.cleanup()
+
+
+@pytest.mark.asyncio
+async def test_overload_frame_limit_includes_frame_retained_for_next_batch():
+    processor = _SpeakerSttProcessor(cfg=_SpeakerConfig())
+    received, permits = asyncio.Queue(), asyncio.Queue()
+
+    async def feed(pid, audio, pts_us):
+        await received.put(audio)
+        await permits.get()
+        return []
+
+    processor._client = SimpleNamespace(_feed=feed, _forget=AsyncMock(), _close=AsyncMock())
+    processor.push_frame = AsyncMock()
+
+    async def submit(size):
+        frame = InputAudioRawFrame(audio=bytes(size), sample_rate=16000, num_channels=1)
+        frame.transport_source = "wearer"
+        await processor.process_frame(frame, FrameDirection.DOWNSTREAM)
+
+    try:
+        await processor.process_frame(ParticipantJoinedFrame("wearer"), FrameDirection.DOWNSTREAM)
+        processor._enrolled.add("wearer")
+        await submit(320)
+        await asyncio.wait_for(received.get(), 1)
+        await submit(320)
+        await submit(5120)
+        permits.put_nowait(None)
+        assert await asyncio.wait_for(received.get(), 1) == bytes(320)
+        # The next 160 ms frame was removed from the queue, but is still pending.
+        for _ in range(199):
+            await submit(2)
+        assert processor._queues["wearer"].qsize() == 199
+        assert processor._queued_frames["wearer"] == 200
+        assert processor._queued_bytes["wearer"] == 5518
+        assert "wearer" in processor._enrolled
+        await submit(2)
+        assert "wearer" not in processor._enrolled
+        assert "wearer" not in processor._tasks
+        assert "wearer" not in processor._queued_frames
+    finally:
+        await processor.cleanup()
+
+
+@pytest.mark.asyncio
 async def test_web_audio_queue_allows_two_seconds_before_reset():
     processor = _SpeakerSttProcessor(cfg=_SpeakerConfig())
     started = asyncio.Event()

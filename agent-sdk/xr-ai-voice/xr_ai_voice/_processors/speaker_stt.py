@@ -32,6 +32,8 @@ from .._frames import (
 )
 from .._speaker_client import _SpeakerClient
 
+_COALESCED_AUDIO_BYTES = 5120  # 160 ms of signed 16-bit mono PCM at 16 kHz.
+
 
 class _SpeakerSttProcessor(FrameProcessor):
     def __init__(self, *, cfg: _SpeakerConfig, on_partial_transcript=None, on_final_transcript=None) -> None:
@@ -47,6 +49,8 @@ class _SpeakerSttProcessor(FrameProcessor):
         self._queues: dict[str, asyncio.Queue] = {}
         self._tasks: dict[str, asyncio.Task] = {}
         self._queued_bytes: dict[str, int] = {}
+        # Counts include a dequeued frame retained for the next bounded batch.
+        self._queued_frames: dict[str, int] = {}
         self._retry_after: dict[str, float] = {}
         self._closed = False
         self._participants: set[str] = set()
@@ -119,25 +123,44 @@ class _SpeakerSttProcessor(FrameProcessor):
                 queue = asyncio.Queue(maxsize=200)
                 self._queues[pid] = queue
                 self._queued_bytes[pid] = 0
+                self._queued_frames[pid] = 0
                 self._tasks[pid] = asyncio.create_task(self._run(pid, queue), name=f"speaker-stt-{pid}")
             # Bound both frame count and duration. Replaying delayed control
             # phrases after overload could enroll or release the wrong session.
-            if queue.full() or self._queued_bytes[pid] + len(frame.audio) > 64000:
+            if self._queued_frames[pid] >= 200 or self._queued_bytes[pid] + len(frame.audio) > 64000:
                 logger.warning("speaker ASR overloaded; enrollment reset pid={!r}", pid)
                 await self._replace_worker(pid, retry=True)
                 return
             self._queued_bytes[pid] += len(frame.audio)
+            self._queued_frames[pid] += 1
             queue.put_nowait((frame.audio, pts_us))
             return
         await self.push_frame(frame, direction)
 
     async def _run(self, pid: str, queue: asyncio.Queue) -> None:
         task = asyncio.current_task()
+        pending = None
         try:
             while True:
-                audio, pts_us = await queue.get()
-                self._queued_bytes[pid] -= len(audio)
-                for event in await self._client._feed(pid, audio, pts_us):
+                audio, pts_us = pending if pending is not None else await queue.get()
+                pending = None
+                parts = [audio]
+                size = len(audio)
+                # Native inference can outlast several hub packets. Drain ready
+                # PCM without introducing a batching timer or losing continuity.
+                while size < _COALESCED_AUDIO_BYTES:
+                    try:
+                        next_audio, next_pts = queue.get_nowait()
+                    except asyncio.QueueEmpty:
+                        break
+                    if size + len(next_audio) > _COALESCED_AUDIO_BYTES:
+                        pending = (next_audio, next_pts)
+                        break
+                    parts.append(next_audio)
+                    size += len(next_audio)
+                self._queued_bytes[pid] -= size
+                self._queued_frames[pid] -= len(parts)
+                for event in await self._client._feed(pid, b"".join(parts), pts_us):
                     if self._closed or pid not in self._participants or self._tasks.get(pid) is not task:
                         return
                     await self._event(pid, event)
@@ -161,6 +184,7 @@ class _SpeakerSttProcessor(FrameProcessor):
                 if self._queues.get(pid) is queue:
                     self._queues.pop(pid, None)
                     self._queued_bytes.pop(pid, None)
+                    self._queued_frames.pop(pid, None)
 
     async def _cancel_worker(self, pid: str) -> None:
         task = self._tasks.get(pid)

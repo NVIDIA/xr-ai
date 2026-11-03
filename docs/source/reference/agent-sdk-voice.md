@@ -395,9 +395,13 @@ inference process shares model weights across workers. The private model adapter
 opens one WebSocket at `/v1/audio/transcriptions/stream` per participant. The
 connection owns that participant's enrollment and closes when the participant
 leaves or its audio worker resets. After one configuration and audio-origin
-message, the worker sends ordered 16 kHz mono signed-16 PCM frames and waits for
-each event response before sending the next frame. The service derives timestamps
-from accepted sample counts; reconnecting starts a fresh timeline and clears
+message, the worker sends ordered 16 kHz mono signed-16 PCM and waits for
+each event response before sending the next request. It combines already queued
+short frames into batches of at most 160 ms without waiting for more audio;
+larger valid input frames pass through unchanged. This reduces request overhead
+while preserving sample order, the live speaker session, and enrollment.
+The service derives timestamps from accepted sample counts;
+reconnecting starts a fresh timeline and clears
 temporary turn permissions and any enrollment. Conversation mode requires
 enrollment again. Other voices contribute to
 diarization and interference conditioning, but by default are not transcribed after
