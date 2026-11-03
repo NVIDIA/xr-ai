@@ -94,7 +94,7 @@ def test_stack_exposes_startup_ready_failure_and_shutdown_states(foreground, mon
     def status():
         return response(listener[0].server_address[1])[0]
 
-    def wait_ready(*_args):
+    def wait_ready(*_args, ready_processes_may_exit, launched):
         assert status() == 503
 
     def monitor(_processes, cancellation):
@@ -137,7 +137,7 @@ def test_startup_failure_closes_health_listener(foreground, monkeypatch, tmp_pat
 
     monkeypatch.setattr(stack, "stack_health", bind)
 
-    def fail(*_args):
+    def fail(*_args, ready_processes_may_exit, launched):
         raise KeyboardInterrupt
 
     monkeypatch.setattr(stack, "_wait_ready", fail)
@@ -160,7 +160,7 @@ def test_occupied_health_port_fails_before_spawn(foreground, tmp_path):
 
 
 def test_exit_after_ready_does_not_start_health(foreground, monkeypatch, tmp_path, listener):
-    monkeypatch.setattr(stack, "_wait_ready", lambda *_args: None)
+    monkeypatch.setattr(stack, "_wait_ready", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(stack, "_shutdown", lambda *_args, **_kwargs: None)
     stack.run_stack([stack.Process("model", ".", "model", launch_mode="persist")],
                     tmp_path, exit_after_ready=True, health_port=8093)
@@ -225,7 +225,7 @@ def test_monitor_returns_on_signal(monkeypatch, sig):
 
 
 def test_stack_health_is_disabled_by_default(foreground, monkeypatch, tmp_path, listener):
-    monkeypatch.setattr(stack, "_wait_ready", lambda *_args: None)
+    monkeypatch.setattr(stack, "_wait_ready", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(stack, "_monitor", lambda *_args: None)
     monkeypatch.setattr(stack, "_shutdown", lambda *_args, **_kwargs: None)
     stack.run_stack([stack.Process("worker", ".", "worker")], tmp_path)

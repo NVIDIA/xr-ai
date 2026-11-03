@@ -101,13 +101,26 @@ def test_real_foreground_runtime_exit_prints_summary_and_stays_nonzero(
     monkeypatch, tmp_path, capsys, gated_output_forwarders
 ):
     _clear_log_dir(monkeypatch)
+    release = tmp_path / "exit-runtime"
+    monitor = _stack._monitor
+
+    def release_at_runtime(*args):
+        release.touch()
+        return monitor(*args)
+
+    monkeypatch.setattr(_stack, "_monitor", release_at_runtime)
     _write_module(
         tmp_path,
         "runtime_failure",
         "import sys\n"
+        "import time\n"
         "from pathlib import Path\n"
         "ready = Path(sys.argv[sys.argv.index('--ready-file') + 1])\n"
         "ready.touch()\n"
+        "deadline = time.monotonic() + 10\n"
+        f"while not Path({str(release)!r}).exists():\n"
+        "    assert time.monotonic() < deadline, 'monitor never started'\n"
+        "    time.sleep(0.01)\n"
         "print('runtime stopped unexpectedly', file=sys.stderr, flush=True)\n"
         "raise SystemExit(9)\n",
     )
@@ -226,7 +239,8 @@ def test_parallel_readiness_detects_member_exit_before_group_ready(
             [
                 ("failed", dead_ready, failed),
                 ("sibling", sibling_ready, sibling),
-            ]
+            ],
+            ready_processes_may_exit=set(), launched={"failed": failed, "sibling": sibling},
         )
 
     assert excinfo.value.name == "failed"
@@ -252,7 +266,7 @@ def test_parallel_readiness_allows_ready_persist_wrapper_zero_exit(
             ("persist", persist_ready, persist),
             ("sibling", sibling_ready, sibling),
         ],
-        {"persist"},
+        ready_processes_may_exit={"persist"}, launched={"persist": persist, "sibling": sibling},
     )
 
 
@@ -266,7 +280,7 @@ def test_parallel_readiness_rejects_ready_persist_wrapper_nonzero_exit(tmp_path)
     with pytest.raises(_stack._ReadinessFailure) as excinfo:
         _stack._wait_ready_parallel(
             [("persist", persist_ready, persist)],
-            {"persist"},
+            ready_processes_may_exit={"persist"}, launched={"persist": persist},
         )
 
     assert excinfo.value.name == "persist"
@@ -333,3 +347,137 @@ def test_output_reader_drain_errors_do_not_escape(error):
 @pytest.mark.parametrize("returncode,status", [(0, 1), (-15, 143), (-9, 137)])
 def test_failure_exit_status_is_nonzero_and_maps_signals(returncode, status):
     assert _failure.failure_exit_status(returncode) == status
+
+
+@pytest.mark.parametrize("earlier_parallel", [False, True])
+@pytest.mark.parametrize("later_parallel", [False, True])
+@pytest.mark.parametrize("later_ready", [False, True])
+@pytest.mark.parametrize(
+    "predecessor_mode,returncode,exit_after_ready",
+    [("persist", 0, True), ("persist", 7, True), ("own", 0, True), ("persist", 0, False)],
+)
+def test_startup_supervises_predecessor_during_later_readiness(
+    monkeypatch, tmp_path, capsys, caplog, earlier_parallel, later_parallel,
+    later_ready, predecessor_mode, returncode, exit_after_ready,
+):
+    caplog.set_level("DEBUG", logger=_stack.__name__)
+    children = {}
+    ready_files = {}
+    shutdown = Mock()
+    banner = Mock()
+
+    def spawn(proc, base, ready_file, **kwargs):
+        child = Mock(returncode=None)
+        child.poll.side_effect = lambda: child.returncode
+        children[proc.name] = child
+        ready_files[proc.name] = ready_file
+        kwargs["failure_contexts"][proc.name] = _failure.FailureContext(
+            proc.name, (proc.command,), base, None
+        )
+        kwargs["output_readers"][proc.name] = ()
+        if proc.name == "first" or later_ready:
+            ready_file.touch()
+        if proc.name == "last" and later_ready:
+            children["first"].returncode = returncode
+        return child
+
+    def advance(_seconds):
+        assert children["first"].returncode is None, "wait ignored the dead predecessor"
+        children["first"].returncode = returncode
+        if returncode == 0:
+            ready_files["last"].touch()
+
+    monkeypatch.setattr(_stack, "load_credentials", lambda: None)
+    monkeypatch.setattr(_stack, "_spawn", spawn)
+    monkeypatch.setattr(_stack, "_shutdown", shutdown)
+    monkeypatch.setattr(_stack, "_print_ready_banner", banner)
+    monkeypatch.setattr(_stack.time, "sleep", advance)
+    first = _stack.Process("first", ".", "first", launch_mode=predecessor_mode)
+    last = _stack.Process("last", ".", "last")
+
+    items = [
+        _stack.Parallel([first]) if earlier_parallel else first,
+        _stack.Parallel([last]) if later_parallel else last,
+    ]
+    if returncode or predecessor_mode == "own" or not exit_after_ready:
+        with pytest.raises(SystemExit) as excinfo:
+            _stack.run_stack(items, tmp_path, exit_after_ready=exit_after_ready)
+        assert excinfo.value.code == (returncode or 1)
+        assert "Process failure: first (readiness)" in capsys.readouterr().err
+        banner.assert_not_called()
+    else:
+        _stack.run_stack(items, tmp_path, exit_after_ready=exit_after_ready)
+        banner.assert_called_once()
+    if not later_ready:
+        assert "[last] waiting..." in caplog.text
+    assert shutdown.call_args.kwargs["no_kill"] == ({"first"} if predecessor_mode == "persist" else set())
+
+
+@pytest.mark.parametrize(
+    "mode,exit_after_ready,ready,returncode,expected_reason",
+    [
+        ("persist", True, True, 0, None),
+        ("persist", True, True, 7, "after signaling ready during startup"),
+        ("persist", True, False, 0, "with no ready file present"),
+        ("persist", False, True, 0, "after signaling ready during startup"),
+        ("own", True, True, 0, "after signaling ready during startup"),
+        ("own", True, False, 0, "before signaling ready"),
+    ],
+)
+def test_serial_readiness_only_allows_successful_ready_bootstrap_exit(
+    tmp_path, caplog, mode, exit_after_ready, ready, returncode, expected_reason
+):
+    ready_file = tmp_path / "bootstrap.ready"
+    if ready:
+        ready_file.touch()
+    child = Mock()
+    child.poll.return_value = returncode
+    allowed_exits = {"bootstrap"} if mode == "persist" and exit_after_ready else set()
+
+    if expected_reason is None:
+        _stack._wait_ready(
+            "bootstrap", ready_file, child,
+            ready_processes_may_exit=allowed_exits, launched={"bootstrap": child},
+        )
+    else:
+        with pytest.raises(_stack._ReadinessFailure) as excinfo:
+            _stack._wait_ready(
+                "bootstrap", ready_file, child,
+                ready_processes_may_exit=allowed_exits, launched={"bootstrap": child},
+            )
+        assert excinfo.value.name == "bootstrap"
+        assert excinfo.value.code == (returncode or 1)
+        assert expected_reason in caplog.text
+
+
+def test_startup_checks_children_again_before_all_ready(monkeypatch, tmp_path):
+    child = Mock()
+    def poll():
+        result = child.returncode
+        child.returncode = 7
+        return result
+
+    child.returncode = None
+    child.poll.side_effect = poll
+    summary = Mock()
+    banner = Mock()
+
+    def spawn(proc, base, ready_file, **kwargs):
+        kwargs["failure_contexts"][proc.name] = Mock()
+        kwargs["output_readers"][proc.name] = ()
+        ready_file.touch()
+        return child
+
+    monkeypatch.setattr(_stack, "load_credentials", lambda: None)
+    monkeypatch.setattr(_stack, "_spawn", spawn)
+    monkeypatch.setattr(_stack, "_emit_failure_summary", summary)
+    monkeypatch.setattr(_stack, "_shutdown", Mock())
+    monkeypatch.setattr(_stack, "_print_ready_banner", banner)
+
+    with pytest.raises(SystemExit) as excinfo:
+        _stack.run_stack([_stack.Process("worker", ".", "worker")], tmp_path,
+                         exit_after_ready=True)
+
+    assert excinfo.value.code == 7
+    summary.assert_called_once()
+    banner.assert_not_called()

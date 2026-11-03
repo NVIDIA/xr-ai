@@ -5,7 +5,9 @@
 from __future__ import annotations
 
 import os
+import signal
 import socket
+import subprocess
 from unittest.mock import Mock
 
 import pytest
@@ -112,6 +114,75 @@ class TestParallelDataclass:
             group.processes = ()  # type: ignore[misc]
 
 
+@pytest.mark.parametrize("reap_delay", [0.25, None])
+def test_shutdown_escalates_all_children_with_shared_budgets(monkeypatch, reap_delay):
+    now = 0.0
+    signals = []
+    waits = []
+    events = []
+
+    class Child:
+        def __init__(self, name, exit_at=None):
+            self.name = name
+            self.exit_at = exit_at
+            self.reaped = False
+
+        def poll(self):
+            if self.exit_at is not None and now >= self.exit_at:
+                self.reaped = True
+                return 0
+            return None
+
+        def wait(self, timeout):
+            nonlocal now
+            waits.append((self.name, now, timeout))
+            events.append(("wait", self.name))
+            if self.exit_at is not None and self.exit_at <= now + timeout:
+                now = max(now, self.exit_at)
+                self.reaped = True
+                return 0
+            now += timeout
+            raise subprocess.TimeoutExpired(self.name, timeout)
+
+    def send_signal(child, sig):
+        signals.append((child.name, sig, now))
+        if sig == signal.SIGKILL:
+            events.append(("kill", child.name))
+            if reap_delay is not None:
+                child.exit_at = now + reap_delay
+
+    children = {"ordinary": Child("ordinary", exit_at=1.0)}
+    children.update({name: Child(name) for name in ("first", "second", "third", "retained")})
+    children["exited"] = Child("exited", exit_at=0.0)
+    monkeypatch.setattr(_stack.time, "monotonic", lambda: now)
+    monkeypatch.setattr(_stack, "_killpg", send_signal)
+
+    _stack._shutdown(children, no_kill={"retained"})
+
+    assert signals == [
+        (name, sig, when)
+        for sig, when, names in (
+            (signal.SIGTERM, 0.0, ("ordinary", "first", "second", "third")),
+            (signal.SIGKILL, _stack._STOP_TIMEOUT, ("first", "second", "third")),
+        )
+        for name in names
+    ]
+    assert events[:6] == [
+        ("wait", "ordinary"), ("wait", "first"),
+        ("kill", "first"), ("kill", "second"), ("kill", "third"),
+        ("wait", "first"),
+    ]
+    assert children["ordinary"].reaped
+    assert not children["retained"].reaped
+    assert not any(name == "retained" for name, _, _ in waits)
+    assert waits[:2] == [
+        ("ordinary", 0.0, _stack._STOP_TIMEOUT),
+        ("first", 1.0, _stack._STOP_TIMEOUT - 1.0),
+    ]
+    assert now == _stack._STOP_TIMEOUT + (reap_delay if reap_delay is not None else _stack._KILL_TIMEOUT)
+    assert all(children[name].reaped == (reap_delay is not None) for name in ("first", "second", "third"))
+
+
 class _FakePopen:
     """Minimal Popen stand-in: alive (poll()->None), spawned without subprocess."""
     def __init__(self, name: str, returncode: int | None = None) -> None:
@@ -175,7 +246,7 @@ class TestRunStackShutdownContract:
         self, stub_stack, tmp_path, monkeypatch, capsys,
     ):
         # Simulate Ctrl-C while waiting for the (persist) server to come up.
-        def _boom(name, ready_file, proc, cancellation):
+        def _boom(name, ready_file, proc, cancellation, *, ready_processes_may_exit, launched):
             raise KeyboardInterrupt
 
         monkeypatch.setattr(_stack, "_wait_ready", _boom)
@@ -228,7 +299,7 @@ class TestRunStackShutdownContract:
         self, stub_stack, tmp_path, monkeypatch, capsys,
     ):
         # Ready file appears immediately; no interruption.
-        monkeypatch.setattr(_stack, "_wait_ready", lambda *args: None)
+        monkeypatch.setattr(_stack, "_wait_ready", lambda *args, **kwargs: None)
 
         processes = [
             _stack.Process(
@@ -254,7 +325,7 @@ class TestRunStackShutdownContract:
     ):
         # Stacks that own no model must not probe the Hub or change the
         # Hugging Face environment their children inherit.
-        monkeypatch.setattr(_stack, "_wait_ready", lambda *args: None)
+        monkeypatch.setattr(_stack, "_wait_ready", lambda *args, **kwargs: None)
         connect = Mock(side_effect=AssertionError("run_stack opened a socket"))
         monkeypatch.setattr(socket, "create_connection", connect)
         monkeypatch.setattr(socket.socket, "connect", connect)
@@ -281,13 +352,15 @@ class TestRunStackShutdownContract:
     ):
         allowed_exits = []
 
-        def _wait(group, ready_processes_may_exit, cancellation):
+        def _wait(group, cancellation, *, ready_processes_may_exit, launched):
             allowed_exits.append(ready_processes_may_exit)
 
         monkeypatch.setattr(_stack, "_wait_ready_parallel", _wait)
+        monkeypatch.setattr(_stack, "_wait_ready", lambda *args, **kwargs: None)
 
         _stack.run_stack(
             [
+                _stack.Process("llm", ".", "llm", launch_mode="persist"),
                 _stack.Parallel(
                     [
                         _stack.Process(
@@ -304,13 +377,13 @@ class TestRunStackShutdownContract:
             exit_after_ready=True,
         )
 
-        assert allowed_exits == [{"vlm"}]
-        assert stub_stack["spawn_options"] == {"vlm": True, "worker": False}
+        assert allowed_exits == [{"llm", "vlm"}]
+        assert stub_stack["spawn_options"] == {"llm": True, "vlm": True, "worker": False}
 
     def test_runtime_summary_interrupt_preserves_exit_and_persist_ownership(
         self, stub_stack, tmp_path, monkeypatch,
     ):
-        monkeypatch.setattr(_stack, "_wait_ready", lambda *args: None)
+        monkeypatch.setattr(_stack, "_wait_ready", lambda *args, **kwargs: None)
 
         def _monitor(procs, cancellation):
             proc = procs["vlm"]
@@ -343,7 +416,7 @@ class TestRunStackShutdownContract:
     def test_unexpected_zero_runtime_exit_is_failure(
         self, stub_stack, tmp_path, monkeypatch,
     ):
-        monkeypatch.setattr(_stack, "_wait_ready", lambda *args: None)
+        monkeypatch.setattr(_stack, "_wait_ready", lambda *args, **kwargs: None)
 
         def _monitor(procs, cancellation):
             proc = procs["worker"]
@@ -376,7 +449,7 @@ class TestRunStackShutdownContract:
         monkeypatch.setattr(
             _stack,
             "_wait_ready",
-            lambda name, rf, proc, cancellation: (_ for _ in ()).throw(
+            lambda name, rf, proc, cancellation, *, ready_processes_may_exit, launched: (_ for _ in ()).throw(
                 _stack._ReadinessFailure(name, -15)
             ),
         )
