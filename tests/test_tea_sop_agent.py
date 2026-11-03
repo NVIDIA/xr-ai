@@ -1122,3 +1122,51 @@ async def test_explicit_restart_launches_new_first_inference_while_start_keeps_a
             await sop.stop()
             await conversation.close()
             await context.close()
+
+
+@pytest.mark.asyncio
+async def test_reset_then_no_tea_starts_without_previous_identity_settings_or_rag_calls():
+    previous_step_started = asyncio.Event()
+    no_tea_seen = asyncio.Event()
+    show_tea = True
+
+    async def observe(request):
+        if "Return JSON matching" in request.query:
+            if show_tea:
+                return ImageQueryResult(text='{"tea_name":"White tea","tea_type":"white tea"}')
+            no_tea_seen.set()
+            return ImageQueryResult(text='{"tea_name":null,"tea_type":null}')
+        previous_step_started.set()
+        await asyncio.Event().wait()
+
+    sop, runtime, context = _runner(observer=SimpleNamespace(execute=observe))
+    router, conversation, _language = _router(sop, runtime, context)
+    async with runtime:
+        try:
+            await router.handle(AgentTurn("p", "identified-run", "start tea making"))
+            await asyncio.wait_for(previous_step_started.wait(), 1)
+            previous_run = sop._sessions["p"].run_id
+            previous_procedure = sop._sessions["p"].procedure
+            sop._rag.retrieve.execute.assert_awaited_once()
+            sop._llm.chat.assert_awaited_once()
+
+            await router.handle(AgentTurn("p", "reset-before-empty", "reset"))
+            show_tea = False
+            await router.handle(AgentTurn("p", "no-tea-run", "start tea making"))
+            await asyncio.wait_for(no_tea_seen.wait(), 1)
+            await _until(lambda: bool(sop.context_snapshot("p")["active_flows"]["identify"]["observations"]))
+            snapshot = sop.context_snapshot("p")
+            current = snapshot["active_flows"]["identify"]
+            assert snapshot["run_id"] != previous_run and previous_procedure.done()
+            assert current["visual_data"] is None
+            assert current["resolved_data"] == {"temperature": None, "steep_duration": None}
+            assert current["sources"] == {} and "resolved_settings" not in snapshot
+            assert not current["observations"][-1]["usable"]
+            sop._rag.retrieve.execute.assert_awaited_once()
+            sop._llm.chat.assert_awaited_once()
+            assert snapshot["historical_previous_run"]["run_id"] == previous_run
+        finally:
+            await router.stop()
+            await sop.stop()
+            await conversation.close()
+            await context.close()

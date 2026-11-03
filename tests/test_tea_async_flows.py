@@ -818,7 +818,17 @@ async def test_invalid_evidence_applicability_repairs_cached_input(applicability
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("description", ["null", '{"not_tea":"laptop"}'])
+@pytest.mark.parametrize(
+    "description",
+    [
+        "null",
+        '{"tea_name":null,"tea_type":null}',
+        '{"tea_name":"  ","tea_type":"unknown"}',
+        '{"not_tea":"laptop"}',
+        '{"type":"object","properties":{"tea_type":{"type":"string"}}}',
+        '{"properties":',
+    ],
+)
 async def test_no_fallback_without_usable_visual_identity(description):
     arguments = _single_visual_input()
     arguments["observer"].execute.return_value = ImageQueryResult(text=description)
