@@ -321,7 +321,7 @@ def test_timer_request_errors(argument, value):
 
 def test_review_blocked_recipe_cannot_commit(visual):
     schema = (_REFERENCES / "packet-and-guide-schema.md").read_text()
-    recipe = re.search(r"```yaml\n(.*?)\n```", schema, re.DOTALL).group(1)
+    recipe = re.search(r"```yaml\n(evidence:.*?)\n```", schema, re.DOTALL).group(1)
     visual["steps"][0].update(yaml.safe_load(recipe))
     workflow = parse_workflow(yaml.safe_dump(visual))
     step = workflow.steps[workflow.start_step]

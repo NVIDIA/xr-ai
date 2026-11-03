@@ -19,6 +19,7 @@ import yaml
 from _procedure_guide_helpers import clef_response, stub_decisions
 from PIL import Image
 from xr_ai_models import ChatResponse, ToolCall
+from xr_ai_tools.vision import ImageQueryResult
 
 _SAMPLE = Path(__file__).resolve().parents[1] / "agent-samples/procedure-capture-guide"
 _TEST_DATA = Path(__file__).resolve().parent
@@ -159,7 +160,7 @@ def test_negative_cases_separate_recognition_and_gate(evaluator, text, available
 def test_empty_and_unavailable_runs_cannot_pass(evaluator):
     assert not evaluator.summarize([])["passed"]
     assert evaluator.summarize([{"status": "unavailable"}]) == {
-        "attempts": 1, "scored": 0, "unavailable": 1,
+        "attempts": 1, "scored": 0, "unavailable": 1, "unknown": 0,
         "recognition_scored": 0, "recognition_correct": 0, "gate_correct": 0,
         "false_accepts": 0, "false_rejects": 0, "passed": False,
     }
@@ -206,7 +207,7 @@ async def test_visual_evaluator_uses_guide_question_not_answer(evaluator, tmp_pa
             assert self.images.resolve(request.image).startswith(b"\x89PNG")
             assert request.image.uri.startswith("xr-image://")
             text = canonical[(len(requests) - 1) % len(canonical)] if correct else "UNKNOWN"
-            return SimpleNamespace(text=text, available=True)
+            return ImageQueryResult(text=text, available=True)
 
     monkeypatch.setattr(evaluator, "ImageQueryTool", FakeTool)
     output = tmp_path / "visual"
@@ -271,7 +272,7 @@ async def test_decision_failure_preserves_visual_evidence_and_finishes_run(
     monkeypatch.setattr(evaluator, "make_decision", lambda *_: decisions)
     descriptions = ["The packet reads chamomile.", "The packet reads green tea."]
     tool = SimpleNamespace(execute=AsyncMock(side_effect=[
-        SimpleNamespace(text=text, available=True) for text in descriptions
+        ImageQueryResult(text=text, available=True) for text in descriptions
     ]))
     monkeypatch.setattr(evaluator, "ImageQueryTool", lambda **_: tool)
     output = tmp_path / "results"
@@ -539,7 +540,7 @@ async def test_quiet_includes_speech_during_image_switch(runtime_evaluator, tmp_
 @pytest.mark.asyncio
 @pytest.mark.parametrize("intervening", [
     {"action": "wait_speech", "expect": "done"},
-    {"action": "observe", "answers": ["YES"]},
+    {"action": "observe", "accept": True},
     {"action": "quiet", "duration_s": 0.1},
 ])
 async def test_quiet_rejects_intervening_checks_before_model_work(runtime_evaluator, tmp_path, intervening):

@@ -3,5 +3,9 @@
 
 # Guide-only verification settings. The CLI selects the guide file; models are shared with capture.
 vision_timeout_s: 15.0
-# Bound each CLEF judgment separately from visual evidence retrieval.
+# Bound each CLEF request, including control authorization and visual judgment.
 decision_timeout_s: 15.0
+
+# Save consumed images, decisions, controls, and state transitions per guide run.
+# Relative to this YAML file. Use null to disable; retained until manually removed.
+traces_dir: ../artifacts/guide-runs

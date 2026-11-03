@@ -98,7 +98,7 @@ and completion messages; do not copy the worked example's wording.
 | `trigger` | `function`, positive `interval_s`, `arguments`, optional `result_field` |
 | `voice` | Nonempty `prompt` and allowed `tools` list for conversation |
 | `agent` | Optional for timer steps, required without a direct commit; visual steps reject it |
-| `evidence` | Visual steps require a text `condition` for CLEF; timer steps use a full-match `pattern`. Both use positive integer `consecutive` and an optional typed `commit` mapping |
+| `evidence` | Visual steps require exactly one of text `condition` for CLEF or `measurement` for native numeric checks; timer steps use a full-match `pattern`. Both use positive integer `consecutive` and an optional typed `commit` mapping |
 | `complete_when` | Nonempty typed mapping using only this step's writable fields |
 | `next` | Next step ID, or `null` for the last step |
 | `complete_on_skip` | Optional boolean, default false; true ends the run if this incomplete step is skipped |
@@ -109,16 +109,43 @@ and completion messages; do not copy the worked example's wording.
 For `current_view`, ask Cosmos for a focused description of the relevant region,
 objects, contacts, labels, and hidden details. State the completion requirements
 in `evidence.condition`. CLEF receives that condition and the description, not
-the image, conversation history, or a suggested answer. Only yes counts toward
+the image, conversation history, or a suggested answer. Only an accepted verdict counts toward
 `consecutive`. Repeated frames do not count twice, and failures break the streak.
 Do not use `pattern` or `agent` on visual steps. Unavailable or uncertain evidence
 must not be treated as success, but both models can still misinterpret a scene.
+The runtime distinguishes accepted (requirements established), rejected (visible
+contradiction), and unknown (a required fact cannot be assessed). An accepted
+choice must also outweigh rejected and unknown probabilities combined; an
+uncertain affirmative plurality cannot complete a step.
+
+For numeric displays, replace `condition` with:
+
+```yaml
+measurement:
+  prefer_current: true
+  ranges:
+    - {unit: N, minimum: 45, maximum: 55}
+```
+
+The required question identifies the relevant display(s) and asks for visible
+readings, not a readiness judgment. The runtime uses Cosmos with a JSON decoding
+schema for `readings: [{value, unit, role}]`; it never repairs malformed JSON.
+Roles are `current`, `target`, or `unlabeled`. Values must be finite numbers;
+units are exact and case-sensitive. Each range has an explicit unit and inclusive
+minimum/maximum. Declare alternative units as separate ranges, with the actual
+converted limits; code does not guess units or conversions. With
+`prefer_current: true`, any identified current readings take precedence and
+must all qualify. Otherwise any qualifying relevant reading suffices. No readable
+measurement yields unknown; a readable out-of-range or unsupported-unit value
+yields rejected. Both break the consecutive-success streak. Do not combine
+`measurement` and `condition` in one evidence block. This policy bypasses CLEF
+judgment, not runtime freshness, revision, or confirmation enforcement.
 
 `evidence.commit` uses writable fields, not a literal placeholder like
 `done_field`, and must satisfy `complete_when`. After the required confirmations,
 the runtime applies this bounded patch; CLEF cannot invent state updates.
 Approved visual steps require a commit. A review-blocked draft may omit it;
-then no decision, even yes, can complete that step. Timer `pattern` matching and
+then no decision, even accepted, can complete that step. Timer `pattern` matching and
 runtime-owned elapsed-time enforcement are unchanged. A timer without a direct
 commit may still use an observation `agent`; do not list its internal
 `workflow__commit` in `agent.tools`. Ordinary completion does not advance; messages ask the

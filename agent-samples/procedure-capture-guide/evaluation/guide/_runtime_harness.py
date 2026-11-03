@@ -31,6 +31,7 @@ from procedure_capture_guide_worker.config import load_config
 from procedure_capture_guide_worker.guide.agent import GuideAgent
 from procedure_capture_guide_worker.guide.events import PARTICIPANT_JOINED_TOPIC, USER_QUERY_TOPIC
 from procedure_capture_guide_worker.guide.guides import SelectedGuide
+from procedure_capture_guide_worker.guide.measurements import MEASUREMENT_PROMPT, make_measurement_vlm
 from xr_ai_hub import FrameData, FrameSignal, PixelFormat
 from xr_ai_interaction import ParticipantJoined, ResponseOutput, UserQuery
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, subscribe
@@ -155,6 +156,7 @@ class EvaluationContext:
     speech: Speech
     events: list[dict]
     visual_results: list[dict]
+    verification_results: list[dict]
     log: Callable[..., None]
     wait_until: Callable[..., Awaitable[None]]
     say: Callable[[str], Awaitable[TurnResult]]
@@ -191,6 +193,8 @@ async def run_evaluation(
     models = xr_ai_models.load_models_config(settings.models_config)
     llm, vlm = xr_ai_models.make_llm(models, "llm"), xr_ai_models.make_vlm(models, "vlm")
     decisions = xr_ai_models.make_decision(models, "decision")
+    measurement_vlm = (make_measurement_vlm(models) if any(
+        step.evidence and step.evidence.measurement for step in guide.workflow.steps.values()) else None)
     decide = decisions.decide
     model_origin: ContextVar[tuple[str, int | None, asyncio.Task | None]] = ContextVar(
         "model_origin", default=("unscoped", None, None),
@@ -205,7 +209,8 @@ async def run_evaluation(
     async def logged_decide(state, questions, **kwargs):
         origin, turn_id = call_origin()
         result = await decide(state, questions, **kwargs)
-        log("decision", origin=origin, turn_id=turn_id, state=state, answers={
+        log("decision", origin=origin, turn_id=turn_id, input_kind="image" if kwargs.get("images") else "caption",
+            state=state, answers={
             name: {"choice": answer.choice, "confidence": answer.confidence}
             for name, answer in result.answers.items()
         })
@@ -242,12 +247,12 @@ async def run_evaluation(
                 model_origin.reset(token)
 
     camera, images = Camera(), ImageRegistry()
-    image_sources = {}
+    selected_source: ContextVar[tuple[asyncio.Task, str] | None] = ContextVar("selected_source", default=None)
 
     class Frames(CurrentFrameTool):
         async def execute(self, request):
             result = await super().execute(request)
-            image_sources[result.image.uri] = camera.sources[result.sequence]
+            selected_source.set((asyncio.current_task(), camera.sources[result.sequence]))
             log("selected_frame", image=camera.sources[result.sequence], sequence=result.sequence,
                 timestamp_us=result.timestamp_us)
             return result
@@ -258,7 +263,9 @@ async def run_evaluation(
 
     class Vision(ImageQueryTool):
         async def execute(self, request):
-            path = image_sources[request.image.uri]
+            owner, path = selected_source.get()
+            if owner is not asyncio.current_task():
+                raise RuntimeError("caption does not belong to this task's selected frame")
             before = time.monotonic()
             result = await super().execute(request)
             item = {"image": path, "question": request.query, "answer": result.text,
@@ -275,7 +282,42 @@ async def run_evaluation(
         guide=guide, llm=llm, decisions=decisions, current_frame=frames, image_query=vision,
         vision_timeout_s=settings.guide.vision_timeout_s,
         decision_timeout_s=settings.guide.decision_timeout_s,
+        measurement_query=(ImageQueryTool(images=images, vlm=measurement_vlm, system_prompt=MEASUREMENT_PROMPT)
+                           if measurement_vlm is not None else None),
     ))
+    record_event = agent._backend.record_event
+    def traced_event(participant_id, kind, **data):
+        run_id = record_event(participant_id, kind, **data)
+        if kind == "user_control_result":
+            origin, turn_id = call_origin()
+            log("control", origin=origin, turn_id=turn_id, calls=[{
+                "name": data["tool"], "arguments": json.dumps(data["arguments"]),
+            }], response=data["response"])
+        return run_id
+    agent._backend.record_event = traced_event
+    verification_results = []
+    verify = agent._backend._verify_visual
+
+    async def traced_verify(session, step, revision, observation):
+        before = time.monotonic()
+        trace = await verify(session, step, revision, observation)
+        if trace is not None:
+            owner, path = selected_source.get()
+            if owner is not asyncio.current_task():
+                raise RuntimeError("verification does not belong to this task's selected frame")
+            item = {
+                "image": path, "step": step.id, "frame": observation.frame.model_dump(),
+                "condition": step.evidence.condition, "source": trace.source,
+                "available": trace.verdict is not None,
+                "accepted": trace.accepted, "verdict": trace.verdict,
+                "answer": trace.description, "evidence": trace.record(),
+                "latency_s": time.monotonic() - before,
+            }
+            verification_results.append(item)
+            log("verification", **item)
+        return trace
+
+    agent._backend._verify_visual = traced_verify
     tick = agent._backend._tick
 
     async def traced_tick(session):
@@ -315,7 +357,7 @@ async def run_evaluation(
         # Include notices delivered during the following image switch, even before quiet begins.
         quiet_offset = answer_index + 1
         calls = tuple(call for event in events
-                      if event["kind"] == "model" and event["origin"] == "foreground"
+                      if event["kind"] in {"model", "control"} and event["origin"] == "foreground"
                       and event["turn_id"] == timestamp for call in event["calls"])
         return TurnResult(speech.outputs[answer_index].text, timestamp, calls)
 
@@ -332,7 +374,8 @@ async def run_evaluation(
         log("guidance_snapshot", context=snapshot.context)
         return snapshot.context
 
-    context = EvaluationContext(camera, speech, events, visual_results, log, wait_until, say, quiet, guidance)
+    context = EvaluationContext(camera, speech, events, visual_results, verification_results,
+                                log, wait_until, say, quiet, guidance)
     subscription = f"guide-eval-{time.time_ns()}"
     nemo_relay.subscribers.register(subscription, relay_event)
     try:
@@ -356,6 +399,8 @@ async def run_evaluation(
         nemo_relay.subscribers.deregister(subscription)
         await llm.close()
         await vlm.close()
+        if measurement_vlm is not None:
+            await measurement_vlm.close()
         await decisions.close()
         images.clear()
         # Include SDK modules loaded lazily by model adapters and tools during execution.

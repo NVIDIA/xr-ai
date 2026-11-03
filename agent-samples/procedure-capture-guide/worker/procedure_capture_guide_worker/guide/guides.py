@@ -24,6 +24,7 @@ class SelectedGuide:
     path: Path
     sha256: str
     workflow: Workflow
+    content: bytes = b""
 
 
 def load_guide(path: Path) -> SelectedGuide:
@@ -53,7 +54,7 @@ def load_guide(path: Path) -> SelectedGuide:
         workflow = parse_workflow(content)
     except (OSError, ValueError, yaml.YAMLError) as exc:
         raise ValueError(f"Cannot load guide {path}: {exc}") from exc
-    guide = SelectedGuide(path, hashlib.sha256(content).hexdigest(), workflow)
+    guide = SelectedGuide(path, hashlib.sha256(content).hexdigest(), workflow, content)
     if not guide.workflow.runnable:
         raise ValueError(
             f"Guide {path} is a draft; review it and set task.status to approved before using guide mode."

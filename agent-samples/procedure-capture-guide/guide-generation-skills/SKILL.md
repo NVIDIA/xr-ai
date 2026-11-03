@@ -102,3 +102,9 @@ approval blockers. If evaluation was blocked, record why rather than inventing
 runtime results. Preserve consequential assumptions and confirmation questions
 for human review. Runtime completion alone does not prove physical correctness
 or generalization. Leave the guide draft for the user to review and approve.
+
+Semantic checks use CLEF; numeric display checks may use schema-constrained
+Cosmos extraction and native ranges. Keep the draft's selected policy, its
+question, the schema reference, and evaluation cases consistent through revision.
+Use recorded guide-run evidence when available to diagnose failures, but do not
+treat user skips, repeated questions, or model verdicts as ground-truth labels.

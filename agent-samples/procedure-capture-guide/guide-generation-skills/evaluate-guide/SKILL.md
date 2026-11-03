@@ -140,8 +140,14 @@ test environment, not evidence that a guide's condition is wrong.
    completion notices, and conversation responses. Do not claim internal
    evidence-hit counts or commits that the trace does not expose.
    Distinguish a declared tool from a called tool. For visual steps, the runtime
-   applies the declared `evidence.commit` only after enough CLEF yes decisions
+   applies the declared `evidence.commit` only after enough accepted verification results
    from distinct fresh frames; the conversational LLM does not judge completion.
+   For a measurement policy, inspect raw JSON readings, units, roles, and native
+   verdict separately. Test both sides of each range boundary, missing units,
+   and conflicting current/target displays. A parse failure is unavailable, not
+   a correct rejection. Unknown must reset the success streak.
+   Guide control traces include CLEF classification/authorization and the actual
+   native operation; do not require an LLM tool call when the control ran natively.
    Timer starts belong to the runtime on entry
    to the wait step, never to model-written state or a spoken acknowledgment.
 4. Check that the engine did not accept incomplete states, inherit a previous
@@ -178,7 +184,7 @@ browser, hub IPC, and LiveKit); this is not a full audiovisual end-to-end test.
 For each failure, return the selected frame IDs, question, Cosmos response,
 condition, CLEF choice, and the supported edit or concrete reason no edit can
 help. Separate question presentation from unresolved task requirements. Do not
-infer that human clarification is required just because the verifier said no.
+infer that human clarification is required just because the verifier rejected the evidence or could not assess it.
 
 Return these findings to the orchestrator without changing the guide. Within a
 guide-generation request this resumes revision in the same task, not a final

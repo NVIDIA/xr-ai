@@ -33,6 +33,7 @@ from .config import WorkerConfig
 from .guide.agent import GuideAgent
 from .guide.events import INTERRUPTED_TOPIC, PARTICIPANT_JOINED_TOPIC, PARTICIPANT_LEFT_TOPIC, USER_QUERY_TOPIC
 from .guide.guides import load_guide
+from .guide.measurements import MEASUREMENT_PROMPT, make_measurement_vlm
 
 _HUB_PUB = "ipc:///tmp/xr_hub_pub"
 _HUB_PUSH = "ipc:///tmp/xr_hub_in"
@@ -52,6 +53,9 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
     stt, tts, vlm = make_stt(models, "stt"), make_tts(models, "tts"), make_vlm(models, "vlm")
     llm = make_llm(models, "llm") if selected_guide is not None else None
     decisions = make_decision(models, "decision") if selected_guide is not None else None
+    measurement_vlm = (make_measurement_vlm(models) if selected_guide is not None
+                       and any(step.evidence and step.evidence.measurement
+                               for step in selected_guide.workflow.steps.values()) else None)
     # Capture must finish draining after voice stops. Its frame and participant
     # endpoint therefore has a lifetime controlled by this composition layer.
     endpoint = ProcessorEndpoint(sub_addr=_HUB_PUB, push_addr=_HUB_PUSH)
@@ -86,6 +90,10 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
             ),
             vision_timeout_s=config.guide.vision_timeout_s,
             decision_timeout_s=config.guide.decision_timeout_s,
+            measurement_query=(ImageQueryTool(images=images, vlm=measurement_vlm,
+                                              system_prompt=MEASUREMENT_PROMPT)
+                               if measurement_vlm is not None else None),
+            traces_dir=config.guide.traces_dir,
         ))
         guide.bind_runtime(runtime)
         probes["llm"] = llm.health
@@ -140,6 +148,8 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
             endpoint.close()
             images.clear()
             await vlm.close()
+            if measurement_vlm is not None:
+                await measurement_vlm.close()
             if llm is not None:
                 await llm.close()
             if decisions is not None:

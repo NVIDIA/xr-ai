@@ -70,12 +70,13 @@ def validate_actions(manifest: dict, cases: dict) -> None:
             count = action.get("count", 2)
             if isinstance(count, bool) or not isinstance(count, int) or count <= 0:
                 raise ValueError(f"{label}: observe count must be a positive integer")
+            if "answers" in action:
+                raise ValueError(f"{label}: observe.answers is caption-only; use accept: true/false or a defined case")
             if "case" in action:
-                if not isinstance(action["case"], str) or action["case"] not in cases or "answers" in action:
-                    raise ValueError(f"{label}: observe requires a defined case or answers, not both")
-            elif (not isinstance(action.get("answers"), list) or not action["answers"]
-                  or not all(isinstance(item, str) for item in action["answers"])):
-                raise ValueError(f"{label}: observe requires answers or a defined case")
+                if not isinstance(action["case"], str) or action["case"] not in cases or "accept" in action:
+                    raise ValueError(f"{label}: observe requires a defined case or accept, not both")
+            elif not isinstance(action.get("accept"), bool):
+                raise ValueError(f"{label}: observe requires boolean accept or a defined case")
         # Quiet measures from the last answer, not from an intervening check.
         if kind != "image":
             quiet_allowed = kind == "say"
@@ -85,7 +86,9 @@ def announcement_elapsed(events: list[dict], origin: str, completion: str) -> fl
     """Measure first announcements within the latest restart, not later paraphrases."""
     start = 0
     for index, event in enumerate(events):
-        if event["kind"] == "model" and any(call["name"] == "workflow__restart" for call in event["calls"]):
+        if event["kind"] in {"model", "control"} and any(
+            call["name"] == "workflow__restart" for call in event["calls"]
+        ):
             start = index + 1
     speeches = [event for event in events[start:] if event["kind"] == "speech"]
     first = next((index for index, event in enumerate(speeches) if re.search(origin, event["text"])), None)
@@ -127,7 +130,7 @@ async def evaluate(manifest_path: Path, output: Path) -> bool:
 
     async def exercise(run: runtime.EvaluationContext) -> bool:
         camera, speech = run.camera, run.speech
-        events, visual_results = run.events, run.visual_results
+        events, visual_results = run.events, run.verification_results
         say, wait_until, log = run.say, run.wait_until, run.log
         speech_offset = 0
         passed = True
@@ -149,16 +152,16 @@ async def evaluate(manifest_path: Path, output: Path) -> bool:
                 results = [item for item in visual_results[before:] if item["image"] == str(camera.path)]
                 if "case" in action:
                     case = cases[action["case"]]
-                    question = guide.workflow.steps[case["step"]].trigger.arguments["question"]
                     action_passed = str(camera.path) == str(fixtures[case["scene"]]) and all(
-                        item["available"] and item["question"] == question
-                        and matches_answer(case["answer"], item["answer"]) for item in results
+                        item["available"] and item["step"] == case["step"]
+                        and item["accepted"] == case["accept"]
+                        and (item["answer"] is None or matches_answer(case["answer"], item["answer"]))
+                        for item in results
                     )
                 else:
-                    action_passed = all(item["available"] and any(
-                        matches_answer(re.escape(" ".join(answer.split())), item["answer"])
-                        for answer in action["answers"]
-                    ) for item in results)
+                    action_passed = all(
+                        item["available"] and item["accepted"] == action["accept"] for item in results
+                    )
             elif kind == "say":
                 speech_offset = len(speech.outputs)
                 answer = await say(action["text"])

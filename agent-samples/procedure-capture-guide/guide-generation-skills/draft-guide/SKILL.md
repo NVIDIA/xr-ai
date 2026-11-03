@@ -127,8 +127,18 @@ For each visual step, write two distinct instructions:
   counts, locations, orientation, and distinctions such as attached versus
   held nearby. Avoid conditions that require hidden facts or a motion history.
 
+For a visible numeric measurement with a known unit and range, use
+`evidence.measurement` instead of `evidence.condition`; see the
+[measurement example](references/measurement.yaml) and
+[contract](references/packet-and-guide-schema.md). Keep the question focused on
+which display to read. Cosmos extracts schema-constrained readings; native code
+compares explicit unit-specific ranges. Include required unit alternatives and
+choose whether current measurements take precedence over targets. Derive limits
+from the procedure, never from a convenient test reading. Semantic attachment,
+identity, or contact checks still use `condition`.
+
 Use `consecutive: 2` and a typed `evidence.commit` completing the step's own
-boolean. Only CLEF's yes counts; negative, missing, failed, or cancelled decisions
+boolean. Only an accepted verdict counts; negative, missing, failed, or cancelled decisions
 break the sequence. State mandatory facts and alternatives explicitly: a
 supported alternative must not accidentally require an optional object from
 another alternative.

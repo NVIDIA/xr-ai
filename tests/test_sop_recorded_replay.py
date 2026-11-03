@@ -203,7 +203,7 @@ async def test_evaluation_attributes_overlapping_model_calls_to_their_origin(
     packets, runtime_models, tmp_path, monkeypatch, runner, wrong_foreground_call,
 ):
     from procedure_capture_guide_worker.guide.agent import GuideAgent
-    from xr_ai_models import ChatMessage, ChatResponse, ToolCall
+    from xr_ai_models import ChatMessage, ChatResponse
 
     llm, _vlm = runtime_models
     foreground_chat = llm.chat.side_effect
@@ -216,20 +216,23 @@ async def test_evaluation_attributes_overlapping_model_calls_to_their_origin(
         if payload.get("request") == "auxiliary":
             return ChatResponse("Auxiliary output.", None, None, "stop", {})
         response = await foreground_chat(messages, **kwargs)
-        if wrong_foreground_call and payload["request"] == "Next":
-            # A genuine wrong foreground call must still fail routing assertions.
-            response.tool_calls[0] = ToolCall(id="wrong", name="workflow__status", arguments="{}")
         return response
 
     async def decide(*args, **kwargs):
         nonlocal observations
         if "attribution_probe" in args[0]:
             return clef_response()
+        if "action" in args[1] or "authorization" in args[1]:
+            state = dict(args[0])
+            if wrong_foreground_call and state.get("request") == "Next":
+                state["request"] = "start guide"
+            return await scripted(state, args[1], **kwargs)
         observations += 1
         observed.set()
         return clef_response("no" if observations == 1 else "yes")
 
     decisions = stub_decisions()
+    scripted = decisions.decide.side_effect
     decisions.decide.side_effect = decide
     import xr_ai_models
     monkeypatch.setattr(xr_ai_models, "make_decision", lambda *_: decisions)
@@ -296,7 +299,7 @@ async def test_evaluation_attributes_overlapping_model_calls_to_their_origin(
     background = [event for event in events[:delivered]
                   if event["kind"] == "decision" and event["origin"] == "observation"]
     assert background and all(event.get("turn_id") is None for event in background)
-    assert background[0]["answers"]["condition_met"]["choice"] == "no"
+    assert background[0]["answers"]["condition_met"]["choice"] == "rejected"
     foreground_decision = next(event for event in events
                                if event.get("state", {}).get("attribution_probe") == "foreground")
     assert foreground_decision["origin"] == "foreground"
@@ -309,12 +312,12 @@ async def test_evaluation_attributes_overlapping_model_calls_to_their_origin(
     turns = [event for event in events if event["kind"] == "user"]
     assert len({event["turn_id"] for event in turns}) == len(turns)
     for turn in turns:
-        calls = [call["name"] for event in events if event["kind"] == "model"
+        calls = [call["name"] for event in events if event["kind"] in {"model", "control"}
                  and event["origin"] == "foreground" and event["turn_id"] == turn["turn_id"]
                  for call in event["calls"]]
         expected = ["workflow__restart"] if turn["text"] == "Start guide" else ["workflow__advance"]
         if wrong_foreground_call and turn["text"] == "Next":
-            expected = ["workflow__status"]
+            expected = ["workflow__restart"]
         assert calls == expected
 
 
