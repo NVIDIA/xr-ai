@@ -38,7 +38,7 @@ For multilingual OCR with local Hugging Face inference or an external NIM endpoi
 
 Build an application in the XR AI source tree so its unpublished SDK
 dependencies resolve from their repository paths. Start from
-`agent-samples/simple-vlm-example/`, copy it to `apps/<your-app>/`, keep only
+`agent-samples/conversation-example/`, copy it to `apps/<your-app>/`, keep only
 the SDK layers and services the application needs, and follow the
 [build-your-application guide](https://nvidia.github.io/xr-ai/latest/guides/building-your-app.html)
 through scaffolding, startup, and hardware-free verification.

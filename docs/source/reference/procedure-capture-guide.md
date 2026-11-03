@@ -6,10 +6,15 @@
 (task-capture)=
 # Procedure capture and guidance
 
-The procedure-capture-guide sample records narrated demonstrations between
-spoken commands. It saves snapshots, visual captions, and transcribed narration for review and downstream
-processing. Guide mode guides participants through a locally approved procedure
-and verifies progress with visual observations and elapsed-time checks.
+## Overview
+
+Use this reference for applications that record task demonstrations and guide
+users through approved procedures. It shows how to capture images and
+narration, author a guide from the saved evidence, and run that guide with
+spoken instructions and progress checks.
+
+Guide mode is at an early stage of development. For a more comprehensive
+example of procedural guidance, refer to the separate {doc}`tea-making-sample`.
 
 ## Run a demonstration
 
@@ -64,6 +69,10 @@ updating the checkout. If you changed ports in a GPU profile, pass the same
 
 ## Output destination
 
+Recorded procedures are saved under
+`agent-samples/procedure-capture-guide/artifacts/sessions/<session-id>/` (frames, captions,
+transcript, and summary).
+
 Choose an output root at launch without editing configuration:
 
 ```bash
@@ -102,7 +111,8 @@ and then starts rendering while the recorder remains running.
 
 `yaml/media_capture.yaml` selects `session_mode: participant` and the `demo`
 profile. It saves recordings under
-`~/.local/share/xr-ai/captures/procedure-capture-guide/`, retaining raw media and
+`~/.local/share/xr-ai/captures/procedure-capture-guide/` (not the capture
+packets in `artifacts/sessions/`), retaining raw media and
 rendering a captioned MP4 after disconnect. This option requires an NVIDIA GPU with NVENC support
 and `ffmpeg` on `PATH`. Refer to {doc}`../components/server-runtime` for the shared
 recorder's output and encoding contract.
