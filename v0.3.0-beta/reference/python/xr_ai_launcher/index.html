@@ -751,8 +751,8 @@ otherwise the child inherits the parent’s.</p>
 <dd><p>A group of processes that start simultaneously.</p>
 <p>The launcher spawns every member at once and waits for <em>all</em> of them to
 signal readiness before advancing to the next item in the stack sequence.
-A member that signals readiness remains monitored until the whole group is
-ready. An unexpected exit during that interval stops owned processes and
+Every launched child remains monitored until the whole stack is ready.
+An unexpected exit during that interval stops owned processes and
 persistent processes that have not signaled readiness. A successful
 <code class="docutils literal notranslate"><span class="pre">persist</span></code> process may exit after readiness only when
 <code class="docutils literal notranslate"><span class="pre">run_stack(...,</span> <span class="pre">exit_after_ready=True)</span></code> permits bootstrap wrappers to
@@ -867,7 +867,10 @@ before any process is launched. This is process health, not an inference
 probe, and does not check services declared with <code class="docutils literal notranslate"><span class="pre">launch_mode=&quot;reuse&quot;</span></code>.
 The JSON body reports <code class="docutils literal notranslate"><span class="pre">status</span></code>, spawned <code class="docutils literal notranslate"><span class="pre">processes</span></code> (running or exited),
 and <code class="docutils literal notranslate"><span class="pre">unchecked_reuse</span></code> process names. HEAD is also supported.</p>
-<p>After all processes are ready the launcher monitors them: if any exits,
+<p>Every launched child is supervised throughout startup. Only a <code class="docutils literal notranslate"><span class="pre">persist</span></code>
+wrapper under <code class="docutils literal notranslate"><span class="pre">exit_after_ready=True</span></code> may exit with status 0 after creating
+its ready file; all other exits abort startup.
+After all processes are ready the launcher monitors them: if any exits,
 the remaining foreground processes are terminated. The launcher preserves
 a positive child status, maps a signal to <code class="docutils literal notranslate"><span class="pre">128</span> <span class="pre">+</span> <span class="pre">signal</span></code>, and maps an
 unexpected zero exit to 1.

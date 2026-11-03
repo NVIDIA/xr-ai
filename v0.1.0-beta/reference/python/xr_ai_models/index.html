@@ -495,7 +495,10 @@ OCR uses the Nemotron v2 protocol and Riva speech uses optional gRPC.</p>
 <tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_models.ModelServiceError" title="xr_ai_models.ModelServiceError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ModelServiceError</span></code></a></p></td>
 <td><p>Base for model-service failures, including embedding identity and OCR errors.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_models.OCRResponseError" title="xr_ai_models.OCRResponseError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OCRResponseError</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_models.OCRRequestError" title="xr_ai_models.OCRRequestError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OCRRequestError</span></code></a></p></td>
+<td><p>OCR input could not be read or the HTTP request failed.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_models.OCRResponseError" title="xr_ai_models.OCRResponseError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OCRResponseError</span></code></a></p></td>
 <td><p>The OCR endpoint returned malformed JSON or invalid detection data.</p></td>
 </tr>
 </tbody>
@@ -617,13 +620,10 @@ OCR uses the Nemotron v2 protocol and Riva speech uses optional gRPC.</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_models.ThinkingSpec" title="xr_ai_models.ThinkingSpec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ThinkingSpec</span></code></a></p></td>
 <td><p>How a model endpoint switches reasoning, and its default state.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_models.OCRRequestError" title="xr_ai_models.OCRRequestError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OCRRequestError</span></code></a></p></td>
-<td><p>OCR input could not be read or the HTTP request failed.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_models.RivaSTT" title="xr_ai_models.RivaSTT"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RivaSTT</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_models.RivaSTT" title="xr_ai_models.RivaSTT"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RivaSTT</span></code></a></p></td>
 <td><p>Riva ASR client: offline (batch) recognition over gRPC.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_models.RivaTTS" title="xr_ai_models.RivaTTS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RivaTTS</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_models.RivaTTS" title="xr_ai_models.RivaTTS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RivaTTS</span></code></a></p></td>
 <td><p>Riva TTS client with buffered WAV or PCM synthesis.</p></td>
 </tr>
 </tbody>
@@ -2571,9 +2571,9 @@ names a different model role, and <code class="xref py py-class docutils literal
 adapter kind.</p>
 </dd></dl>
 
-<dl class="py class">
+<dl class="py exception">
 <dt class="sig sig-object py" id="xr_ai_models.OCRRequestError">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_models.</span></span><span class="sig-name descname"><span class="pre">OCRRequestError</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">message</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">status_code</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#xr_ai_models.OCRRequestError" title="Link to this definition">#</a></dt>
+<em class="property"><span class="pre">exception</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_models.</span></span><span class="sig-name descname"><span class="pre">OCRRequestError</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">message</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">status_code</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#xr_ai_models.OCRRequestError" title="Link to this definition">#</a></dt>
 <dd><p>OCR input could not be read or the HTTP request failed.</p>
 <p><code class="docutils literal notranslate"><span class="pre">status_code</span></code> is the HTTP failure status, or <code class="docutils literal notranslate"><span class="pre">None</span></code> for file/transport
 failures. The original exception is preserved as <code class="docutils literal notranslate"><span class="pre">__cause__</span></code>. Requests
