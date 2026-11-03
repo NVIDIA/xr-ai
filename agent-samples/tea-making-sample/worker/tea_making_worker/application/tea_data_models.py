@@ -68,9 +68,29 @@ class _TemperatureObservation(BaseModel):
     @property
     def unit(self) -> Literal["celsius", "fahrenheit"] | None:
         """Normalize only literal unit text, without inferring from the value."""
-        text = self.unit_text.strip().casefold() if self.unit_text is not None else ""
+        text = "".join(self.unit_text.split()).casefold() if self.unit_text is not None else ""
         return {"°c": "celsius", "c": "celsius", "celsius": "celsius",
                 "°f": "fahrenheit", "f": "fahrenheit", "fahrenheit": "fahrenheit"}.get(text)
+
+    @property
+    def has_other_unit(self) -> bool:
+        """An explicit non-temperature unit cannot inherit a kettle's C/F setting."""
+        return self.unit is None and self.unit_text is not None and self.unit_text.strip() not in {"", "°", "º"}
+
+
+def _temperature_assessment_issue(reading: _TemperatureObservation, declared_unit: str | None) -> str | None:
+    """Check available evidence only; completion remains the existing Clef judgment."""
+    if reading.value is None:
+        return "numeric_reading_unavailable"
+    if reading.role == "setpoint":
+        return "explicit_setpoint_not_measurement"
+    if reading.has_other_unit:
+        return "non_temperature_or_unrecognized_unit"
+    if reading.unit is not None and declared_unit is not None and reading.unit != declared_unit:
+        return "conflicting_units"
+    if (reading.unit or declared_unit) is None:
+        return "instrument_unit_unconfirmed"
+    return None
 
 
 class _RetrievedRangeRequiresRecommendation(ValueError):

@@ -43,7 +43,7 @@ from ..components import (
     run_visual_verification_flow,
 )
 from ..components.sop_run_recording import _attempt, _event, _frame, _json
-from .tea_data_models import BrewingSettings, TeaIdentity, _TemperatureObservation
+from .tea_data_models import BrewingSettings, TeaIdentity, _TemperatureObservation, _temperature_assessment_issue
 from .tea_events import GUIDANCE_NOTICE_TOPIC, GUIDANCE_RECORD_TOPIC, GuidanceNotice, GuidanceRecord
 from .tea_sop_configuration import SOPConfig
 
@@ -547,6 +547,11 @@ class SOPAgent(Agent):
             "target_temperature_c": f"{target_celsius:g}",
             "target_temperature_f": f"{target_celsius * 9 / 5 + 32:g}",
             "instrument_unit": declared_unit or "not established",
+            "comparison_minimum": (
+                f"{target_celsius * 9 / 5 + 32:g} degrees Fahrenheit" if declared_unit == "fahrenheit"
+                else f"{target_celsius:g} degrees Celsius" if declared_unit == "celsius"
+                else f"{target_celsius:g} degrees Celsius or {target_celsius * 9 / 5 + 32:g} degrees Fahrenheit, matching the normalized observed unit"
+            ),
         }
         instructions = self.config.temperature
         completion = DecisionQuestion(
@@ -555,11 +560,7 @@ class SOPAgent(Agent):
         )
 
         def can_assess(reading: _TemperatureObservation) -> bool:
-            effective_unit = reading.unit or declared_unit
-            conflict = reading.unit is not None and declared_unit is not None and reading.unit != declared_unit
-            return (reading.value is not None and reading.role == "current"
-                    and bool(reading.role_evidence and reading.role_evidence.strip())
-                    and effective_unit is not None and not conflict)
+            return _temperature_assessment_issue(reading, declared_unit) is None
 
         return run_visual_verification_flow(
             **{**self._observation_arguments(session), "observer": self._temperature_image_query},
@@ -726,7 +727,7 @@ class SOPAgent(Agent):
 
         if flow_id == "heat_water" and state.observations:
             reading = state.observations[-1].parsed
-            if isinstance(reading, _TemperatureObservation) and reading.value is not None and reading.role == "current":
+            if isinstance(reading, _TemperatureObservation) and reading.value is not None and reading.role != "setpoint" and not reading.has_other_unit:
                 conflict = reading.unit is not None and session.display_unit is not None and reading.unit != session.display_unit
                 gap = "conflicting_units" if conflict else "missing_unit" if reading.unit is None and session.display_unit is None else None
                 marker = (gap, session.temperature_context_revision)
@@ -762,6 +763,31 @@ class SOPAgent(Agent):
             },
         }
 
+    def _flow_context(self, session: _Session, flow_id: str, state: Any) -> dict[str, Any]:
+        """Supply facts and actual assessments, never model judging instructions."""
+        facts = _json(state)
+        facts.pop("goal", None)
+        facts.pop("completion_criteria", None)
+        if flow_id == "heat_water" and state.observations:
+            observation = state.observations[-1]
+            reading = observation.parsed
+            if isinstance(reading, _TemperatureObservation):
+                reason = _temperature_assessment_issue(reading, session.display_unit)
+                effective_unit = None if reason in {"non_temperature_or_unrecognized_unit", "conflicting_units"} else reading.unit or session.display_unit
+                target_celsius = self._resolved_settings(session)["temperature_c"]
+                facts["assessment"] = {
+                    "status": "not_assessed" if reason else "assessed",
+                    "judgment": "unknown" if reason else observation.judgment,
+                    "reason": reason or ("judge_unresolved" if observation.judgment == "unknown" else None),
+                    "sampled_at_us": observation.timestamp_us,
+                    "reading_value": reading.value,
+                    "effective_unit": effective_unit,
+                    "unit_source": "visible" if reading.unit is not None else "user_declared" if effective_unit else None,
+                    "minimum_value": (target_celsius * 9 / 5 + 32 if effective_unit == "fahrenheit" else target_celsius if effective_unit == "celsius" else None),
+                    "minimum_unit": effective_unit,
+                }
+        return facts
+
     def context_snapshot(self, participant_id: str) -> dict[str, Any]:
         """Expose entered steps, never turn future configuration into observed state."""
         session = self._sessions.get(participant_id)
@@ -788,7 +814,7 @@ class SOPAgent(Agent):
             "flow_outcomes": dict(session.flow_statuses),
             "active_flows": {
                 flow_id: {
-                    **_json(state),
+                    **self._flow_context(session, flow_id, state),
                     "sampled_at_utc": datetime.fromtimestamp(state.updated_at_us / 1_000_000, UTC).isoformat(
                         timespec="seconds"
                     ),
@@ -797,7 +823,7 @@ class SOPAgent(Agent):
                 if session.flow_statuses.get(flow_id) == "running" and session.status == "running"
             },
             "completed_or_skipped_flows": {
-                flow_id: {"outcome": session.flow_statuses.get(flow_id), "state": _json(state)}
+                flow_id: {"outcome": session.flow_statuses.get(flow_id), "state": self._flow_context(session, flow_id, state)}
                 for flow_id, state in session.flow_states.items()
                 if session.flow_statuses.get(flow_id) != "running"
             },
