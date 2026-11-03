@@ -13,7 +13,7 @@ import math
 import time
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import nullcontext
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import partial
 from typing import TYPE_CHECKING, Literal
 
@@ -38,6 +38,7 @@ from ._contracts import (
     AgentExchange,
     AgentTurn,
     DestinationResult,
+    ParticipantAgentFactory,
     RoutableAgent,
 )
 from ._history import (
@@ -76,6 +77,14 @@ class _TurnOutput:
 
     response: bool = False
     """The destination signaled its response start."""
+
+
+@dataclass(slots=True)
+class _ParticipantAgents:
+    """Retain exact scoped instances and dependent application cleanup ownership."""
+
+    instances: dict[str, RoutableAgent] = field(default_factory=dict)
+    application_cleanup_pending: bool = False
 
 
 class AgentRouter:
@@ -120,7 +129,10 @@ class AgentRouter:
     destination owns failure output and stream finalization. Runtime background
     failures are logged once.
 
-    :param destinations: Registered destinations keyed by their stable route names.
+    :param destinations: Shared agents or ``ParticipantAgentFactory`` descriptors keyed by stable route names.
+        Factories create dedicated instances before routing and own retryable scoped disposal.
+        An ordinary turn interruption preserves initialized instances. Departure drains them before
+        application cleanup; failed disposal retains ownership and blocks rejoin.
     :param decisions: Typed Clef decision service used to select routes.
     :param output: Async callback receiving the current ``AgentTurn``, route name, and finite control text,
         including acknowledgments, admission preambles, and clarification or release messages.
@@ -154,7 +166,7 @@ class AgentRouter:
 
     def __init__(
         self,
-        destinations: Mapping[str, RoutableAgent],
+        destinations: Mapping[str, RoutableAgent | ParticipantAgentFactory],
         decisions: DecisionService,
         *,
         output: Callable[[AgentTurn, str, str], Awaitable[None]] | None = None,
@@ -175,6 +187,13 @@ class AgentRouter:
             raise ValueError("default destination must be registered")
         self._output = output
         self._destinations = dict(destinations)
+        self._participant_factories = {
+            name: destination for name, destination in self._destinations.items()
+            if isinstance(destination, ParticipantAgentFactory)
+        }
+        if len({id(factory) for factory in self._participant_factories.values()}) != len(self._participant_factories):
+            raise ValueError("a participant factory cannot be registered under multiple route names")
+        self._participant_agents: dict[str, _ParticipantAgents] = {}
         if context_budget_bytes <= 0:
             raise ValueError("context_budget_bytes must be positive")
         if (acknowledgment_llm is None) != (acknowledgment_delay_secs is None):
@@ -437,19 +456,107 @@ class AgentRouter:
             return "participant has left; a participant-joined event is required"
         return None
 
+    def _destination(self, name: str, participant_id: str) -> RoutableAgent:
+        """Resolve one route only after its participant initialization completed."""
+        if name in self._participant_factories:
+            return self._participant_agents[participant_id].instances[name]
+        return self._destinations[name]
+
+    def _claim_participant_agent(self, participant_id: str, name: str, instance: RoutableAgent) -> None:
+        """Reject aliases without closing an instance belonging to another owner."""
+        shared = (value for value in self._destinations.values() if not isinstance(value, ParticipantAgentFactory))
+        owned = (value for participant in self._participant_agents.values() for value in participant.instances.values())
+        if any(instance is other for other in shared) or any(instance is other for other in owned):
+            raise ValueError(
+                "participant factories must return dedicated instances, not shared or already owned agents"
+            )
+        self._participant_agents[participant_id].instances[name] = instance
+
+    async def _close_participant_agents(self, participant_id: str) -> None:
+        """Attempt every independent close; retain failed instances for retry."""
+        participant = self._participant_agents.get(participant_id)
+        if participant is None:
+            return
+        errors = []
+        for name, instance in reversed(tuple(participant.instances.items())):
+            try:
+                await self._participant_factories[name].close(instance)
+            except asyncio.CancelledError as error:
+                # Waiters cannot cancel this owned cleanup operation. A disposer
+                # propagating its child's cancellation has failed to prove that
+                # its own work drained; retain it and still close other owners.
+                failure = RuntimeError(f"participant agent {name!r} close was cancelled before completion")
+                failure.__cause__ = error
+                errors.append(failure)
+            except Exception as error:  # noqa: BLE001 -- attempt independent owners before reporting cleanup failure.
+                errors.append(error)
+            else:
+                del participant.instances[name]
+        if errors:
+            raise ExceptionGroup(f"failed to close participant agents for {participant_id!r}", errors)
+
+    async def _cleanup_participant_application(self, participant_id: str) -> None:
+        """Release shared resources only after every scoped consumer has closed."""
+        participant = self._participant_agents.get(participant_id)
+        if participant is None or participant.instances:
+            return
+        if participant.application_cleanup_pending:
+            await self._call_hook(self._cleanup_participant, participant_id)
+            participant.application_cleanup_pending = False
+        del self._participant_agents[participant_id]
+
+    async def _rollback_participant_initialization(self, participant_id: str) -> None:
+        """Dispose a partial batch before another initialization may allocate it again."""
+        await self._close_participant_agents(participant_id)
+        await self._cleanup_participant_application(participant_id)
+
+    async def _drain_initialization_cleanup(self, participant_id: str) -> None:
+        """Keep rollback owned even when a replacement turn cancels its waiter."""
+        cleanup = asyncio.create_task(
+            self._rollback_participant_initialization(participant_id),
+            name=f"routing-initialization-cleanup:{participant_id}",
+            context=self._owned_context(),
+        )
+        await _drain_tasks((cleanup,))
+        cleanup.result()
+
     async def _initialize_once(self, participant_id: str, *, generation: object | None = None) -> None:
         # Only router-owned turn and join tasks initialize, so interruption can always cancel the holder.
         async with self._initialization_locks.setdefault(participant_id, asyncio.Lock()):
             if participant_id in self._initialized:
                 return
-            if self._initialize_participant is not None:
-                await self._call_hook(self._initialize_participant, participant_id)
-            task = asyncio.current_task()
-            if (task is not None and task.cancelling()) or (
-                generation is not None and self._generation.get(participant_id) is not generation
-            ):
-                raise asyncio.CancelledError
-            self._initialized.add(participant_id)
+            if self._participant_factories:
+                # A prior failed rollback still owns its exact instances or its
+                # application hook, even when all individual agents closed.
+                await self._drain_initialization_cleanup(participant_id)
+                self._participant_agents[participant_id] = _ParticipantAgents(
+                    application_cleanup_pending=self._cleanup_participant is not None,
+                )
+            try:
+                if self._initialize_participant is not None:
+                    await self._call_hook(self._initialize_participant, participant_id)
+                for name, factory in self._participant_factories.items():
+                    instance = await factory.create(participant_id)
+                    # Claim before the next await/check: cancellation-resistant
+                    # creation may return an instance after departure has begun.
+                    self._claim_participant_agent(participant_id, name, instance)
+                    task = asyncio.current_task()
+                    if (task is not None and task.cancelling()) or (
+                        generation is not None and self._generation.get(participant_id) is not generation
+                    ):
+                        raise asyncio.CancelledError
+                task = asyncio.current_task()
+                if (task is not None and task.cancelling()) or (
+                    generation is not None and self._generation.get(participant_id) is not generation
+                ):
+                    raise asyncio.CancelledError
+                self._initialized.add(participant_id)
+            except BaseException:
+                if self._participant_factories:
+                    # Rollback has its own task so repeated cancellation cannot
+                    # interrupt a disposer and abandon an owned background flow.
+                    await self._drain_initialization_cleanup(participant_id)
+                raise
 
     async def _participant_joined(self, participant_id: str) -> None:
         self._check_lifecycle_caller()
@@ -637,7 +744,16 @@ class AgentRouter:
             self._history_exchange_ids.pop(participant_id, None)
             self._first_answer_samples.pop(participant_id, None)
             errors = []
+            try:
+                await self._close_participant_agents(participant_id)
+            except Exception as error:  # noqa: BLE001 -- retain failed scoped owners and attempt independent releases.
+                errors.append(error)
             for destination_name in used:
+                if destination_name in self._participant_factories:
+                    remaining = self._participant_agents.get(participant_id)
+                    if remaining is None or destination_name not in remaining.instances:
+                        self._forget_destination(participant_id, destination_name)
+                    continue
                 try:
                     destination = self._destinations[destination_name]
                     on_departure = getattr(destination, "participant_left", destination.release)
@@ -647,9 +763,12 @@ class AgentRouter:
                     errors.append(error)
                 else:
                     self._forget_destination(participant_id, destination_name)
-            if self._cleanup_participant is not None:
+            if self._participant_factories or self._cleanup_participant is not None:
                 try:
-                    await self._call_hook(self._cleanup_participant, participant_id)
+                    if self._participant_factories:
+                        await self._cleanup_participant_application(participant_id)
+                    else:
+                        await self._call_hook(self._cleanup_participant, participant_id)
                 except Exception as error:  # noqa: BLE001 -- attempt independent cleanup owners before raising.
                     errors.append(error)
             if errors:
@@ -668,6 +787,7 @@ class AgentRouter:
             | self._locks.keys()
             | self._departure_tasks.keys()
             | self._first_answer_samples.keys()
+            | self._participant_agents.keys()
         )
         errors = []
         for participant_id in tuple(participants):
@@ -691,10 +811,10 @@ class AgentRouter:
         focused = self._focus.get(turn.participant_id)
         candidates = [focused] if focused in self._destinations else list(self._destinations)
         if focused is not None:
-            focused_route = self._destinations[focused].routing_aid(turn.participant_id)
+            focused_route = self._destination(focused, turn.participant_id).routing_aid(turn.participant_id)
             if not focused_route.eligible:
                 self._focus.pop(turn.participant_id, None)
-                await self._destinations[focused].release(turn.participant_id)
+                await self._destination(focused, turn.participant_id).release(turn.participant_id)
                 if self._generation.get(turn.participant_id) is not generation:
                     raise asyncio.CancelledError()
                 candidates = [
@@ -713,7 +833,7 @@ class AgentRouter:
                 await emit(turn, self._default_destination, text)
                 self._remember(turn, text)
                 return DestinationResult("clarify", text)
-            destination = self._destinations[destination_name]
+            destination = self._destination(destination_name, turn.participant_id)
             self._destinations_used.setdefault(turn.participant_id, set()).add(destination_name)
             admission = await destination.admit(turn, focused=(destination_name == focused))
             if self._generation.get(turn.participant_id) is not generation:
@@ -752,7 +872,7 @@ class AgentRouter:
                     candidates = [item for item in candidates if item != destination_name]
                 if not candidates or attempt == 1:
                     destination_name = self._default_destination
-                    destination = self._destinations[destination_name]
+                    destination = self._destination(destination_name, turn.participant_id)
                     default_route = destination.routing_aid(turn.participant_id)
                     if default_route.name != destination_name:
                         raise ValueError(
@@ -760,7 +880,7 @@ class AgentRouter:
                         )
                     self._trace_default_fallback(turn, "exhausted_declines", eligible=default_route.eligible)
                     if not default_route.eligible or destination_name in declined:
-                        declined_destination = self._destinations[declined_name]
+                        declined_destination = self._destination(declined_name, turn.participant_id)
                         if self._focus.get(turn.participant_id) != declined_name:
                             await declined_destination.release(turn.participant_id)
                             if self._generation.get(turn.participant_id) is not generation:
@@ -772,7 +892,7 @@ class AgentRouter:
                     # The default is about to answer; releasing it here could
                     # clear context needed by that final attempt.
                     if declined_name != self._default_destination:
-                        declined_destination = self._destinations[declined_name]
+                        declined_destination = self._destination(declined_name, turn.participant_id)
                         await declined_destination.release(turn.participant_id)
                         if self._generation.get(turn.participant_id) is not generation:
                             raise asyncio.CancelledError()
@@ -898,7 +1018,7 @@ class AgentRouter:
                 previous_focus = self._focus.get(turn.participant_id)
                 self._focus[turn.participant_id] = destination_name
                 if previous_focus is not None and previous_focus != destination_name:
-                    await self._destinations[previous_focus].release(turn.participant_id)
+                    await self._destination(previous_focus, turn.participant_id).release(turn.participant_id)
                     if self._generation.get(turn.participant_id) is not generation:
                         raise asyncio.CancelledError()
             elif result.disposition == "release":
@@ -1165,7 +1285,7 @@ class AgentRouter:
             return None
         if len(candidates) == 1:
             candidate_name = candidates[0]
-            route_aid = self._destinations[candidate_name].routing_aid(turn.participant_id)
+            route_aid = self._destination(candidate_name, turn.participant_id).routing_aid(turn.participant_id)
             if route_aid.name != candidate_name:
                 raise ValueError(
                     f"routing aid name {route_aid.name!r} does not match destination {candidate_name!r}"
@@ -1173,7 +1293,7 @@ class AgentRouter:
             return candidate_name if route_aid.eligible else None
         route_aids = []
         for candidate_name in candidates:
-            route_aid = self._destinations[candidate_name].routing_aid(turn.participant_id)
+            route_aid = self._destination(candidate_name, turn.participant_id).routing_aid(turn.participant_id)
             if route_aid.name != candidate_name:
                 raise ValueError(
                     f"routing aid name {route_aid.name!r} does not match destination {candidate_name!r}"
@@ -1224,7 +1344,7 @@ class AgentRouter:
             answer = response.answers["destination"]
             current_eligible = []
             for candidate_name in candidates:
-                route_aid = self._destinations[candidate_name].routing_aid(turn.participant_id)
+                route_aid = self._destination(candidate_name, turn.participant_id).routing_aid(turn.participant_id)
                 if route_aid.name != candidate_name:
                     raise ValueError(
                         f"routing aid name {route_aid.name!r} does not match destination {candidate_name!r}"
