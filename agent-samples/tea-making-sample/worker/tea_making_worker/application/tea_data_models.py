@@ -6,9 +6,9 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Literal, Self
+from typing import Annotated, Any, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, ValidationInfo, field_validator, model_validator
 
 
 class TeaIdentity(BaseModel):
@@ -117,9 +117,17 @@ class DurationSetting(BaseModel):
         return self.value * 60 if self.unit == "minutes" else self.value
 
 
+def _require_type_for_generated_setting(value: Any, info: ValidationInfo) -> Any:
+    """An opaque product name cannot authorize a conventional type-based setting."""
+    context = info.context or {}
+    if context.get("source_kind") == "generated" and not context.get("visual_data", {}).get("tea_type"):
+        return None
+    return value
+
+
 class BrewingSettings(BaseModel):
     """Validated partial settings; the runner supplies defaults only for missing fields."""
 
     model_config = ConfigDict(extra="forbid")
-    temperature: TemperatureSetting | None = None
-    steep_duration: DurationSetting | None = None
+    temperature: Annotated[TemperatureSetting | None, BeforeValidator(_require_type_for_generated_setting)] = None
+    steep_duration: Annotated[DurationSetting | None, BeforeValidator(_require_type_for_generated_setting)] = None

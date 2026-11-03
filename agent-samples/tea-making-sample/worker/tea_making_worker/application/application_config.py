@@ -194,6 +194,7 @@ def _sop(data: dict[str, Any]) -> SOPConfig:
         "changed",
         "complete",
         "identify",
+        "identify_pending",
         "fill_water",
         "heat_water",
         "start_steeping",

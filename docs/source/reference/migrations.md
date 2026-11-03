@@ -578,3 +578,16 @@ Unchanged visual data reuses validated resolution outcomes; malformed/invalid
 responses repair against cached inputs. Temperature observations explicitly return
 `no visible temperature` when either value or unit is unreadable. The confirmation
 threshold and polling cadence are unchanged.
+
+Tea extraction evidence now includes `applicability` (`applicable`, `unrelated`
+or `unknown`). Custom extraction prompts must follow the supplied schema;
+irrelevant/unknown evidence supplies neither values nor generation constraints.
+The main application's `sop.messages` requires `identify_pending` for actionable
+unresolved-setting guidance. Recognized tea categories can use conventional
+generated recommendations without a matching document. Unknown categories
+remain pending; defaults still require explicit skip.
+Generated settings require an explicit nonempty observed `tea_type`; a product
+name alone cannot satisfy that application prerequisite. The existing validation
+context supplies read-only `visual_data` alongside source kind/quote. Model-facing
+schemas omit default-value exemplars; `requested_fields` is a name list, with the
+sole field schema in `response_schema`. Native Python defaults remain unchanged.

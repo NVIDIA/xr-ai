@@ -70,6 +70,7 @@ class _Session:
     skipping: bool = False
     last_run: dict[str, Any] | None = None
     issue: str = ""
+    identification_pending: tuple[str, ...] | None = None
 
 
 class SOPAgent(Agent):
@@ -254,6 +255,7 @@ class SOPAgent(Agent):
             session.flow_states.clear()
             session.flow_statuses.clear()
             session.issue = ""
+            session.identification_pending = None
             session.procedure = asyncio.create_task(
                 self._supervise(session),
                 name=f"sop:{session.participant_id}",
@@ -271,6 +273,7 @@ class SOPAgent(Agent):
                 session.step_index = -1
                 session.flow_states.clear()
                 session.flow_statuses.clear()
+                session.identification_pending = None
             await self._publish_context(session)
             return self.config.messages[control]
         if control in {"next", "skip"}:
@@ -531,6 +534,28 @@ class SOPAgent(Agent):
             ),
             participant_id=session.participant_id,
         )
+
+        if (
+            flow_id == "identify"
+            and isinstance(state, VisionRAGRetrievalState)
+            and state.phase == "observing"
+            and state.visual_data is not None
+            and state.issue
+            and session.run_id == run_id
+        ):
+            missing_fields = tuple(name for name, value in state.resolved_data.model_dump().items() if value is None)
+            if missing_fields and missing_fields != session.identification_pending:
+                # Deduplicate the actual missing-setting reason, not OCR wording
+                # or product-name variants. A new run resets this bounded marker.
+                session.identification_pending = missing_fields
+                setting_labels = {"temperature": "water temperature", "steep_duration": "steeping time"}
+                await self._notice(
+                    session,
+                    self.config.messages["identify_pending"].format(
+                        tea_name=state.visual_data.tea_name or state.visual_data.tea_type,
+                        missing_settings=" and ".join(setting_labels[name] for name in missing_fields),
+                    ),
+                )
 
     def _resolved_settings(self, session: _Session) -> dict[str, Any]:
         """Use valid partial results and label only missing values as runner defaults."""

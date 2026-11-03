@@ -134,7 +134,11 @@ recent original observations and retrieved passages. The extraction/generation
 request carries visual data under the generic `visual_data` key.
 Passages carry explicit `passage_id` labels. The response schema enumerates only
 those IDs; source validation requires an exact ID and exact quote without guessing
-an index convention. Field validators receive `source_kind` and `source_quote`
+an index convention. Each proposed source also reports `applicability` as
+`applicable`, `unrelated` or `unknown` in the same extraction call. Only applicable
+evidence can supply a retrieved value or constrain missing-value generation.
+The model judges relevance; native checks enforce the declared applicability,
+source identity, quote, units and range constraints. Field validators receive `source_kind` and `source_quote`
 through standard Pydantic validation context. The tea quantity models reject a
 range-selected scalar as a literal retrieved value and constrain generated values
 to recognized, explicitly unit-bearing cited ranges. Valid range evidence and
@@ -149,6 +153,19 @@ candidates repair against the known data with bounded feedback, without rereadin
 the camera or repeating retrieval. A genuinely new visual result clears the old
 entity's partial values/evidence. Callback and service failures propagate to the
 owner; cancellation ends the observation/repair loop.
+
+For an explicitly observed tea category, application instructions allow conventional
+generated starting values when retrieval is empty or unrelated. An unfamiliar
+brand does not require another camera view. Application validation requires
+nonempty `tea_type` for generated settings and discards guesses without it;
+exact retrieved settings can resolve without a type. This depends on the vision
+model's type reading being correct. A later unreadable frame retains the
+last usable identity and partial settings within this flow; its observation is
+still labeled unusable. A genuinely different usable identity invalidates them.
+If settings remain unresolved, the runner publishes `messages.identify_pending`
+once when the missing-setting reason changes, asking for the type/instructions
+or an explicit skip. It never silently fills defaults. Camera observation can
+continue at the existing cadence, without repeating resolution for unchanged data.
 
 Validated partial results are published before subsequent calls. If identification
 is skipped, the runner retains those values and defaults only missing fields,

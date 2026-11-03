@@ -241,7 +241,7 @@ def _vision_rag_retrieval(**overrides):
             execute=AsyncMock(
                 side_effect=[
                     ImageQueryResult(text='{"tea_name":null}'),
-                    ImageQueryResult(text='{"tea_name":"Northwind White Tea"}'),
+                    ImageQueryResult(text='{"tea_name":"Northwind White Tea","tea_type":"white tea"}'),
                 ]
             )
         ),
@@ -252,7 +252,13 @@ def _vision_rag_retrieval(**overrides):
                         json.dumps(
                             {
                                 "values": {"temperature": {"value": 80, "unit": "celsius"}},
-                                "sources": {"temperature": {"passage_id": "P1", "quote": "80 degrees Celsius"}},
+                                "sources": {
+                                    "temperature": {
+                                        "applicability": "applicable",
+                                        "passage_id": "P1",
+                                        "quote": "80 degrees Celsius",
+                                    }
+                                },
                             }
                         )
                     ),
@@ -319,7 +325,13 @@ async def test_unsupported_source_quote_cannot_be_labeled_retrieved():
             json.dumps(
                 {
                     "values": {"temperature": {"value": 90, "unit": "celsius"}},
-                    "sources": {"temperature": {"passage_id": "P1", "quote": "this quote does not occur"}},
+                    "sources": {
+                        "temperature": {
+                            "applicability": "applicable",
+                            "passage_id": "P1",
+                            "quote": "this quote does not occur",
+                        }
+                    },
                 }
             )
         ),
@@ -424,7 +436,8 @@ async def test_vision_rag_retrieval_accepts_non_identity_visual_data_and_result_
                 side_effect=[
                     _chat(
                         '{"values":{"action":"Inspect the inlet."},'
-                        '"sources":{"action":{"passage_id":"P1","quote":"Inspect the inlet."}}}'
+                        '"sources":{"action":{"applicability":"applicable",'
+                        '"passage_id":"P1","quote":"Inspect the inlet."}}}'
                     ),
                     _chat('{"values":{"priority":2}}'),
                 ]
@@ -441,10 +454,15 @@ async def test_vision_rag_retrieval_accepts_non_identity_visual_data_and_result_
     fallback = json.loads(arguments["llm"].chat.await_args_list[1].args[0][1].content)
     assert extraction["visual_data"] == {"pressure_bar": 2.4, "warning_light": True}
     envelope = extraction["response_schema"]
+    assert extraction["requested_fields"] == ["action", "priority"]
+    assert envelope["properties"]["values"]["required"] == ["action", "priority"]
+    assert all("default" not in schema for schema in envelope["properties"]["values"]["properties"].values())
     assert set(envelope["required"]) == {"values", "sources"}
     assert set(envelope["properties"]["values"]["properties"]) == {"action", "priority"}
     assert envelope["properties"]["values"]["additionalProperties"] is False
-    assert envelope["properties"]["sources"]["properties"]["action"]["required"] == ["passage_id", "quote"]
+    evidence_schema = envelope["properties"]["sources"]["properties"]["action"]
+    assert set(evidence_schema["required"]) == {"passage_id", "quote", "applicability"}
+    assert set(evidence_schema["properties"]["applicability"]["enum"]) == {"applicable", "unrelated", "unknown"}
     assert set(fallback["requested_fields"]) == {"priority"}
 
 
@@ -458,7 +476,7 @@ def _resolved_point_response():
                     "steep_duration": {"value": 3, "unit": "minutes"},
                 },
                 "sources": {
-                    name: {"passage_id": "P1", "quote": quote}
+                    name: {"applicability": "applicable", "passage_id": "P1", "quote": quote}
                     for name, quote in (("temperature", "80 degrees Celsius"), ("steep_duration", "3 minutes"))
                 },
             }
@@ -495,7 +513,13 @@ async def test_source_ids_are_closed_and_invalid_ids_repair_without_reacquisitio
             json.dumps(
                 {
                     "values": {"temperature": {"value": 80, "unit": "celsius"}},
-                    "sources": {"temperature": {"passage_id": invalid_id, "quote": "80 degrees Celsius"}},
+                    "sources": {
+                        "temperature": {
+                            "applicability": "applicable",
+                            "passage_id": invalid_id,
+                            "quote": "80 degrees Celsius",
+                        }
+                    },
                 }
             )
         ),
@@ -543,8 +567,12 @@ async def test_generated_value_respects_retained_range_and_invalid_value_is_repa
                 {
                     "values": {"temperature": {"value": 80, "unit": "celsius"}, "steep_duration": None},
                     "sources": {
-                        "temperature": {"passage_id": "P1", "quote": "80 degrees Celsius"},
-                        "steep_duration": {"passage_id": "P1", "quote": "2–3 minutes"},
+                        "temperature": {
+                            "applicability": "applicable",
+                            "passage_id": "P1",
+                            "quote": "80 degrees Celsius",
+                        },
+                        "steep_duration": {"applicability": "applicable", "passage_id": "P1", "quote": "2–3 minutes"},
                     },
                 }
             )
@@ -595,7 +623,7 @@ async def test_valid_null_outcome_waits_for_changed_visual_data_without_resoluti
     arguments["frame_source"].side_effect = [_frame(number) for number in range(1, 5)]
     arguments["observer"].execute.side_effect = [
         ImageQueryResult(text='{"tea_type":"white tea"}'),
-        ImageQueryResult(text='{"tea_type":"white tea"}'),
+        ImageQueryResult(text="null"),
         ImageQueryResult(text='{"tea_type":"white tea"}'),
         ImageQueryResult(text='{"tea_type":"black tea"}'),
     ]
@@ -616,6 +644,14 @@ async def test_valid_null_outcome_waits_for_changed_visual_data_without_resoluti
     assert result.updated_at_us - result.started_at_us == 3000
     assert any(
         state.resolved_data.temperature is not None and state.resolved_data.steep_duration is None for state in states
+    )
+    assert any(
+        state.observations
+        and not state.observations[-1].usable
+        and state.visual_data is not None
+        and state.visual_data.tea_type == "white tea"
+        and state.resolved_data.temperature.celsius == 80
+        for state in states
     )
     assert all(left.updated_at_us <= right.updated_at_us for left, right in zip(states, states[1:]))
 
@@ -679,8 +715,12 @@ async def test_a_range_endpoint_is_generated_rather_than_mislabeled_as_retrieved
                         "steep_duration": {"value": 2, "unit": "minutes"},
                     },
                     "sources": {
-                        "temperature": {"passage_id": "P1", "quote": "80 degrees Celsius"},
-                        "steep_duration": {"passage_id": "P1", "quote": "2–3 minutes"},
+                        "temperature": {
+                            "applicability": "applicable",
+                            "passage_id": "P1",
+                            "quote": "80 degrees Celsius",
+                        },
+                        "steep_duration": {"applicability": "applicable", "passage_id": "P1", "quote": "2–3 minutes"},
                     },
                 }
             )
@@ -713,3 +753,110 @@ async def test_cancelling_a_cached_null_outcome_stops_further_callbacks_and_mode
     assert arguments["llm"].chat.await_count == 1
     arguments["retrieval"].execute.assert_awaited_once()
     assert received[-1].observations[-1].usable
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("applicability", ["unrelated", "unknown"])
+async def test_inapplicable_evidence_neither_supplies_values_nor_constrains_generation(applicability):
+    arguments = _single_visual_input()
+    text = "Another item requires 96–100°C and 3–5 minutes."
+    arguments["retrieval"].execute.return_value = RetrieveResult(
+        results=[RetrievedChunk(source="other.md", text=text, score=1)]
+    )
+    arguments["llm"].chat.side_effect = [
+        _chat(
+            json.dumps(
+                {
+                    "values": {"temperature": {"value": 100, "unit": "celsius"}},
+                    "sources": {
+                        "temperature": {
+                            "applicability": applicability,
+                            "passage_id": "P1",
+                            "quote": text,
+                        }
+                    },
+                }
+            )
+        ),
+        _chat('{"values":{"temperature":{"value":80,"unit":"celsius"},"steep_duration":{"value":2,"unit":"minutes"}}}'),
+    ]
+    result = await run_vision_rag_retrieval_flow(**arguments)
+    assert result.resolved_data.temperature.celsius == 80
+    assert all(source.kind == "generated" for source in result.sources.values())
+    generation = json.loads(arguments["llm"].chat.await_args_list[1].args[0][1].content)
+    assert generation["field_evidence"] == {}
+    assert arguments["llm"].chat.await_count == 2
+    arguments["retrieval"].execute.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("applicability", [None, []])
+async def test_invalid_evidence_applicability_repairs_cached_input(applicability):
+    arguments = _single_visual_input()
+    arguments["llm"].chat.side_effect = [
+        _chat(
+            json.dumps(
+                {
+                    "values": {"temperature": {"value": 80, "unit": "celsius"}},
+                    "sources": {
+                        "temperature": {
+                            "applicability": applicability,
+                            "passage_id": "P1",
+                            "quote": "80 degrees Celsius",
+                        }
+                    },
+                }
+            )
+        ),
+        _resolved_point_response(),
+    ]
+    result = await run_vision_rag_retrieval_flow(**arguments)
+    assert result.resolved_data.temperature.celsius == 80
+    assert arguments["llm"].chat.await_count == 2
+    arguments["observer"].execute.assert_awaited_once()
+    arguments["retrieval"].execute.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("description", ["null", '{"not_tea":"laptop"}'])
+async def test_no_fallback_without_usable_visual_identity(description):
+    arguments = _single_visual_input()
+    arguments["observer"].execute.return_value = ImageQueryResult(text=description)
+
+    async def receive(state):
+        if state.observations:
+            assert state.visual_data is None and not state.observations[-1].usable
+            raise asyncio.CancelledError
+
+    arguments["on_state"] = receive
+    with pytest.raises(asyncio.CancelledError):
+        await run_vision_rag_retrieval_flow(**arguments)
+    arguments["llm"].chat.assert_not_awaited()
+    arguments["retrieval"].execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_exact_retrieved_settings_do_not_require_an_observed_tea_type():
+    arguments = _single_visual_input()
+    arguments["observer"].execute.return_value = ImageQueryResult(text='{"tea_name":"Moon Orchard"}')
+    arguments["llm"].chat.side_effect = [_resolved_point_response()]
+    result = await run_vision_rag_retrieval_flow(**arguments)
+    assert result.visual_data.tea_type is None
+    assert result.resolved_data.temperature.celsius == 80
+    assert result.resolved_data.steep_duration.seconds == 180
+    assert all(source.kind == "retrieved" for source in result.sources.values())
+    arguments["llm"].chat.assert_awaited_once()
+
+
+def test_model_facing_schema_defaults_are_removed_without_deleting_named_fields():
+    from tea_making_worker.components.vision_rag_retrieval_flow import _without_schema_defaults
+
+    original = {
+        "properties": {"default": {"type": ["string", "null"], "default": None}},
+        "$defs": {"Choice": {"properties": {"value": {"type": "integer", "default": 9}}}},
+    }
+    rendered = _without_schema_defaults(original)
+    assert rendered["properties"]["default"] == {"type": ["string", "null"]}
+    assert rendered["$defs"]["Choice"]["properties"]["value"] == {"type": "integer"}
+    assert original["properties"]["default"]["default"] is None
+    assert original["$defs"]["Choice"]["properties"]["value"]["default"] == 9

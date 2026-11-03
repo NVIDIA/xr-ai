@@ -18,6 +18,7 @@ import time
 from collections import deque
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Any, Generic, Literal, TypeVar
 
 from pydantic import BaseModel, TypeAdapter, ValidationError
@@ -33,6 +34,27 @@ ResolvedData = TypeVar("ResolvedData", bound=BaseModel)
 
 class _ResolutionResponseError(ValueError):
     """A malformed model envelope can retry using already retrieved passages."""
+
+
+def _without_schema_defaults(value: Any, *, named_schemas: bool = False) -> Any:
+    """Describe legal model output without advertising defaults as answer examples.
+
+    Property/definition names are data keys, so a field literally named
+    ``default`` must survive. Python model defaults and nullability are unchanged.
+    """
+    if isinstance(value, dict):
+        return {
+            name: _without_schema_defaults(
+                child,
+                named_schemas=not named_schemas
+                and name in {"properties", "$defs", "definitions", "patternProperties", "dependentSchemas"},
+            )
+            for name, child in value.items()
+            if named_schemas or name != "default"
+        }
+    if isinstance(value, list):
+        return [_without_schema_defaults(child) for child in value]
+    return value
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,8 +125,8 @@ async def run_vision_rag_retrieval_flow(
         retrieval: Existing typed RAG tool; retrieval remains demonstrably separate.
         visual_model: Python model whose validation defines usable visual input.
         result_model: Python model with requested result fields defaulting to None.
-            Field validators receive source_kind and exact source_quote in Pydantic
-            validation context, so application quantities can enforce evidence constraints.
+            Field validators receive source_kind, exact source_quote and read-only
+            visual_data in Pydantic context to enforce application prerequisites/evidence.
         visual_question: Task wording; code appends the response schema.
         extraction_instructions: Source-extraction policy supplied by the application.
         fallback_instructions: Policy for generating recommendations for missing fields.
@@ -143,6 +165,8 @@ async def run_vision_rag_retrieval_flow(
     empty_result = result_model.model_validate({})
     if any(value is not None for value in empty_result.model_dump().values()):
         raise ValueError("result fields must default to None; caller owns application defaults")
+    visual_response_schema = _without_schema_defaults(visual_model.model_json_schema())
+    result_response_schema = _without_schema_defaults(result_model.model_json_schema())
     started_at_us = time.time_ns() // 1000
     visual_data: VisualData | None = None
     resolved_data = empty_result
@@ -193,11 +217,16 @@ async def run_vision_rag_retrieval_flow(
     async def resolve_fields(instructions, requested_fields, *, document_backed):
         """Validate individual field values and their source before publishing partial progress."""
         nonlocal resolved_data
-        output_schema = {name: result_model.model_json_schema()["properties"][name] for name in requested_fields}
+        output_schema = {name: result_response_schema["properties"][name] for name in requested_fields}
         # Keep the envelope explicit: the result model describes individual fields,
         # while values/sources are the generic protocol shared with the language model.
         response_properties = {
-            "values": {"type": "object", "properties": output_schema, "additionalProperties": False},
+            "values": {
+                "type": "object",
+                "properties": output_schema,
+                "required": requested_fields,
+                "additionalProperties": False,
+            },
         }
         if document_backed:
             response_properties["sources"] = {
@@ -212,8 +241,16 @@ async def run_vision_rag_retrieval_flow(
                                 "description": "Copy an exact passage_id from the supplied passages.",
                             },
                             "quote": {"type": "string", "minLength": 1},
+                            "applicability": {
+                                "type": "string",
+                                "enum": ["applicable", "unrelated", "unknown"],
+                                "description": (
+                                    "Does this quote support this field's value or constraint for visual_data? "
+                                    "Use unknown if it supplies no applicable value or constraint."
+                                ),
+                            },
                         },
-                        "required": ["passage_id", "quote"],
+                        "required": ["passage_id", "quote", "applicability"],
                         "additionalProperties": False,
                     }
                     for name in requested_fields
@@ -225,7 +262,7 @@ async def run_vision_rag_retrieval_flow(
             "properties": response_properties,
             "required": list(response_properties),
             "additionalProperties": False,
-            "$defs": result_model.model_json_schema().get("$defs", {}),
+            "$defs": result_response_schema.get("$defs", {}),
         }
         response = await llm.chat(
             (
@@ -235,7 +272,7 @@ async def run_vision_rag_retrieval_flow(
                     content=json.dumps(
                         {
                             "visual_data": visual_data.model_dump(mode="json"),
-                            "requested_fields": output_schema,
+                            "requested_fields": requested_fields,
                             "passages": passages,
                             "field_evidence": {
                                 name: {"source": evidence.source, "quote": evidence.quote}
@@ -288,6 +325,15 @@ async def run_vision_rag_retrieval_flow(
                     resolution_issues[name] = "The quote is not present in the cited passage."
                     valid_response = False
                     continue
+                applicability = source.get("applicability")
+                if not isinstance(applicability, str) or applicability not in {"applicable", "unrelated", "unknown"}:
+                    raise _ResolutionResponseError("Evidence must state its applicability to the visual input.")
+                if applicability != "applicable":
+                    # A quote can be copied perfectly yet belong to another
+                    # item. Only applicable evidence may constrain generation.
+                    field_evidence.pop(name, None)
+                    resolution_issues.pop(name, None)
+                    continue
                 # A valid quote remains useful evidence even when it supplies a
                 # range rather than a directly usable scalar result.
                 field_evidence[name] = FieldSource("retrieved", passage["source"], quote)
@@ -298,11 +344,19 @@ async def run_vision_rag_retrieval_flow(
             try:
                 validated_value = TypeAdapter(result_model.model_fields[name].rebuild_annotation()).validate_python(
                     value,
-                    context={"source_kind": source_kind, "source_quote": evidence.quote if evidence else ""},
+                    context={
+                        "source_kind": source_kind,
+                        "source_quote": evidence.quote if evidence else "",
+                        "visual_data": MappingProxyType(visual_data.model_dump()),
+                    },
                 )
             except ValidationError as error:
                 resolution_issues[name] = error.errors()[0]["msg"]
                 valid_response = False
+                continue
+            if validated_value is None:
+                # Application prerequisites may classify a recommendation as
+                # unavailable. Do not label a missing value as generated fact.
                 continue
             resolved_values[name] = validated_value
             resolved_data = result_model.model_validate(resolved_values)
@@ -330,14 +384,14 @@ async def run_vision_rag_retrieval_flow(
                     image=frame.image,
                     query=visual_question
                     + "\nReturn JSON matching this response schema: "
-                    + json.dumps(visual_model.model_json_schema()),
+                    + json.dumps(visual_response_schema),
                 )
             )
         issue = ""
         try:
-            visual_data = visual_model.model_validate_json(response.text) if response.available else None
+            observed_visual_data = visual_model.model_validate_json(response.text) if response.available else None
         except ValidationError as error:
-            visual_data = None
+            observed_visual_data = None
             issue = str(error)[:observation_text_limit]
         sampled_at_us = time.time_ns() // 1000
         observations.append(
@@ -345,7 +399,7 @@ async def run_vision_rag_retrieval_flow(
                 sampled_at_us,
                 (frame.track_id, frame.sequence, frame.timestamp_us),
                 response.text[:observation_text_limit],
-                visual_data is not None,
+                observed_visual_data is not None,
                 len(response.text) > observation_text_limit,
             )
         )
@@ -356,10 +410,15 @@ async def run_vision_rag_retrieval_flow(
         ):
             observations.popleft()
             omitted_count += 1
-        if visual_data is None:
+        if observed_visual_data is None:
             await report("observing", issue=issue or "Visual data does not satisfy the requested schema yet.")
             await asyncio.sleep(poll_interval_seconds)
             continue
+
+        # An unreadable intervening view does not erase an already established
+        # identity or its validated partial values. A new usable input below
+        # still invalidates evidence and settings for the previous entity.
+        visual_data = observed_visual_data
 
         if visual_data != retrieved_for:
             # Keep only one visual input's evidence. A new entity must never

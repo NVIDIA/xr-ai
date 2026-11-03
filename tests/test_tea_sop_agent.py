@@ -19,7 +19,7 @@ import pytest
 from xr_ai_conversation import ContextManager, Conversation
 from xr_ai_models import ChatResponse, ChatStreamEvent, DecisionAnswer, DecisionResponse
 from xr_ai_routing import AgentRouter, AgentTurn, RoutingAid
-from xr_ai_runtime import AgentRuntime
+from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, subscribe
 from xr_ai_tools.current_frame import CurrentFrameTool, ImageFrame
 from xr_ai_tools.image import ImageRegistry
 from xr_ai_tools.rag import RetrievedChunk, RetrieveResult
@@ -30,7 +30,11 @@ _SAMPLE = Path(__file__).resolve().parents[1] / "agent-samples/tea-making-sample
 sys.path.insert(0, str(_SAMPLE / "worker"))
 
 from tea_making_worker.application.application_config import load_config  # noqa: E402
-from tea_making_worker.application.tea_events import USER_QUERY_TOPIC  # noqa: E402
+from tea_making_worker.application.tea_events import (  # noqa: E402
+    GUIDANCE_NOTICE_TOPIC,
+    USER_QUERY_TOPIC,
+    GuidanceNotice,
+)
 from tea_making_worker.application.tea_sop_agent import (  # noqa: E402
     SOP_CONTEXT_SOURCE,
     SOPAgent,
@@ -121,7 +125,7 @@ def _runner(*, config=None, observer=None, llm=None, frames=None):
                             "steep_duration": {"value": 0.02, "unit": "seconds"},
                         },
                         "sources": {
-                            name: {"passage_id": "P1", "quote": source_text}
+                            name: {"applicability": "applicable", "passage_id": "P1", "quote": source_text}
                             for name in ("temperature", "steep_duration")
                         },
                     }
@@ -281,7 +285,13 @@ async def test_skip_retains_partial_settings_and_defaults_only_missing_fields():
                 json.dumps(
                     {
                         "values": {"temperature": {"value": 80, "unit": "celsius"}},
-                        "sources": {"temperature": {"passage_id": "P1", "quote": "80 degrees Celsius"}},
+                        "sources": {
+                            "temperature": {
+                                "applicability": "applicable",
+                                "passage_id": "P1",
+                                "quote": "80 degrees Celsius",
+                            }
+                        },
                     }
                 ),
                 None,
@@ -924,6 +934,189 @@ async def test_consecutive_timer_questions_receive_fresh_native_samples_and_life
             await router.handle(AgentTurn("p", "fresh-session", "What can you do?"))
             messages = "\n".join(message.content for message in language.messages[-1])
             assert "103 seconds remaining" not in messages and "timer-regression" not in messages
+        finally:
+            await router.stop()
+            await sop.stop()
+            await conversation.close()
+            await context.close()
+
+
+@pytest.mark.asyncio
+async def test_public_router_can_start_after_reset_and_after_each_completed_procedure():
+    """Complete real five-step runs repeatedly without clearing conversation history."""
+    sop, runtime, context = _runner()
+    router, conversation, _language = _router(sop, runtime, context)
+    async with runtime:
+        try:
+            run_ids = []
+            for number in range(3):
+                response = await router.handle(AgentTurn("p", f"start-{number}", "start tea making"))
+                assert response.text == sop.config.messages["start"]
+                await _until(lambda: sop.context_snapshot("p")["status"] == "completed")
+                session = sop._sessions["p"]
+                run_ids.append(session.run_id)
+                await _until(lambda: session.procedure.done())
+                assert not session.active_tasks
+                if number == 0:
+                    response = await router.handle(AgentTurn("p", "reset-between", "reset"))
+                    assert response.text == sop.config.messages["reset"]
+                    assert sop.context_snapshot("p")["status"] == "idle"
+            assert len(set(run_ids)) == 3
+            assert sop.context_snapshot("p")["historical_previous_run"]["run_id"] == run_ids[-2]
+        finally:
+            await router.stop()
+            await sop.stop()
+            await conversation.close()
+            await context.close()
+
+
+@pytest.mark.asyncio
+async def test_start_queued_during_active_reset_waits_for_old_inference_cleanup():
+    first_water = asyncio.Event()
+    cancellation_seen = asyncio.Event()
+    release_old_inference = asyncio.Event()
+    second_water = asyncio.Event()
+    water_calls = 0
+
+    async def observe(request):
+        nonlocal water_calls
+        if "Return JSON matching" in request.query:
+            return ImageQueryResult(text='{"tea_type":"white tea"}')
+        water_calls += 1
+        if water_calls == 1:
+            first_water.set()
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                cancellation_seen.set()
+                await release_old_inference.wait()
+            return ImageQueryResult(text="A late old-run observation.")
+        second_water.set()
+        await asyncio.Event().wait()
+
+    sop, runtime, context = _runner(observer=SimpleNamespace(execute=observe))
+    router, conversation, _language = _router(sop, runtime, context)
+    async with runtime:
+        try:
+            await router.handle(AgentTurn("p", "start-old", "start tea making"))
+            await asyncio.wait_for(first_water.wait(), 1)
+            old_run = sop._sessions["p"].run_id
+            old_procedure = sop._sessions["p"].procedure
+            resetting = asyncio.create_task(router.handle(AgentTurn("p", "reset-active", "reset")))
+            await asyncio.wait_for(cancellation_seen.wait(), 1)
+            restarting = asyncio.create_task(router.handle(AgentTurn("p", "start-new", "start tea making")))
+            release_old_inference.set()
+            await asyncio.gather(resetting, return_exceptions=True)
+            response = await asyncio.wait_for(restarting, 1)
+            await asyncio.wait_for(second_water.wait(), 1)
+            assert response.text == sop.config.messages["start"]
+            assert old_procedure.done() and sop._sessions["p"].run_id != old_run
+            assert "A late old-run observation." not in json.dumps(sop.context_snapshot("p"))
+        finally:
+            release_old_inference.set()
+            await router.stop()
+            await sop.stop()
+            await conversation.close()
+            await context.close()
+
+
+@pytest.mark.asyncio
+async def test_unresolved_identification_notifies_once_without_defaults_or_wording_spam():
+    notices = []
+    observation_calls = 0
+    all_observations_seen = asyncio.Event()
+
+    async def resolve(messages, **_kwargs):
+        payload = json.loads(messages[1].content)
+        values = (
+            {"temperature": None, "steep_duration": None}
+            if "sources" in payload["response_schema"]["properties"]
+            else {"temperature": {"value": 85, "unit": "celsius"}, "steep_duration": {"value": 3, "unit": "minutes"}}
+        )
+        return ChatResponse(json.dumps({"values": values}), None, (), "stop", {})
+
+    language = SimpleNamespace(chat=AsyncMock(side_effect=resolve))
+
+    class Capture(Agent):
+        @subscribe(GUIDANCE_NOTICE_TOPIC)
+        async def notice(self, event: GuidanceNotice, _context: RuntimeContext):
+            notices.append(event.text)
+
+    async def observe(_request):
+        nonlocal observation_calls
+        observation_calls += 1
+        if observation_calls == 1:
+            return ImageQueryResult(text="null")
+        if observation_calls == 2:
+            language.chat.assert_not_awaited()
+            return ImageQueryResult(text='{"tea_name":"Moon Orchard"}')
+        if observation_calls == 3:
+            return ImageQueryResult(text='{"tea_name":" Moon Orchard "}')
+        if observation_calls == 4:
+            return ImageQueryResult(text="null")
+        all_observations_seen.set()
+        await asyncio.Event().wait()
+
+    sop, runtime, context = _runner(observer=SimpleNamespace(execute=observe), llm=language)
+    runtime.register("notices", Capture())
+    router, conversation, _ = _router(sop, runtime, context)
+    async with runtime:
+        try:
+            await router.handle(AgentTurn("p", "start-pending", "start tea making"))
+            await asyncio.wait_for(all_observations_seen.wait(), 1)
+            pending_notices = [text for text in notices if text.startswith("I can read")]
+            assert len(pending_notices) == 1
+            assert "water temperature and steeping time" in pending_notices[0]
+            assert "skip" in pending_notices[0] and "Show the tea type" in pending_notices[0]
+            assert language.chat.await_count == 2
+            sop._rag.retrieve.execute.assert_awaited_once()
+            state = sop.context_snapshot("p")
+            assert "resolved_settings" not in state
+            assert state["active_flows"]["identify"]["visual_data"]["tea_name"] == "Moon Orchard"
+            assert state["active_flows"]["identify"]["resolved_data"]["temperature"] is None
+
+            await router.handle(AgentTurn("p", "reset-pending", "reset"))
+            observation_calls = 0
+            language.chat.reset_mock()
+            all_observations_seen.clear()
+            await router.handle(AgentTurn("p", "start-pending-again", "start tea making"))
+            await asyncio.wait_for(all_observations_seen.wait(), 1)
+            assert len([text for text in notices if text.startswith("I can read")]) == 2
+        finally:
+            await router.stop()
+            await sop.stop()
+            await conversation.close()
+            await context.close()
+
+
+@pytest.mark.asyncio
+async def test_explicit_restart_launches_new_first_inference_while_start_keeps_active_run():
+    first_inferences = []
+
+    async def observe(request):
+        first_inferences.append(request.query)
+        await asyncio.Event().wait()
+
+    sop, runtime, context = _runner(observer=SimpleNamespace(execute=observe))
+    sop._decisions.controls = {
+        **sop._decisions.controls,
+        "restart tea making": "restart",
+        "let's make tea": "start",
+    }
+    router, conversation, _language = _router(sop, runtime, context)
+    async with runtime:
+        try:
+            await router.handle(AgentTurn("p", "first", "let's make tea"))
+            await _until(lambda: len(first_inferences) == 1)
+            old_run = sop._sessions["p"].run_id
+            old_procedure = sop._sessions["p"].procedure
+            await router.handle(AgentTurn("p", "restart-first", "restart tea making"))
+            await _until(lambda: len(first_inferences) == 2)
+            new_run = sop._sessions["p"].run_id
+            assert old_procedure.done() and new_run != old_run
+            response = await router.handle(AgentTurn("p", "already-active", "let's make tea"))
+            assert response.text == sop.config.messages["already_running"]
+            assert sop._sessions["p"].run_id == new_run and len(first_inferences) == 2
         finally:
             await router.stop()
             await sop.stop()
