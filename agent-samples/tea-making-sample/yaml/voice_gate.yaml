@@ -1,13 +1,22 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-mode: wake_only
+mode: hybrid
 magic_phrases:
-  - agent
-  - hey agent
+  - hey computer
 listening_chime: true
 followup_grace_s: 5.0
 
-# Use the batch STT model; no speaker enrollment or diarization service.
+# Start once, then speak naturally until the full stop phrase.
+conversation:
+  start_phrase: "Start talking to me"
+  stop_phrase: "Stop talking to me"
+  require_wake_phrase: false  # true keeps magic_phrases and followup_grace_s
+  phrase_window_s: 6.0
+
+# The default stack supplies speaker ASR; wait for it before worker readiness.
+# For explicit batch STT, set speaker.enabled false and add an stt model entry.
 speaker:
-  enabled: false
+  enabled: true
+  backend: required
+  base_url: http://127.0.0.1:8102

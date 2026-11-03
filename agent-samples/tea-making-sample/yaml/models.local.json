@@ -1,13 +1,5 @@
 {
   "models": {
-    "stt": {
-      "adapter": {
-        "preset": "parakeet_stt"
-      },
-      "endpoint": {
-        "base_url": "http://localhost:8103"
-      }
-    },
     "llm": {
       "adapter": {
         "preset": "nemotron_omni"

@@ -28,11 +28,12 @@ automatically:
 | `yaml/media_capture.yaml` | Opt-in session recording output, NVENC, audio, captions, and retention |
 | `yaml/device_io_hub.yaml` | Room, ports, web client, and network behavior |
 
-The default uses batch Parakeet STT with `Agent` / `Hey Agent` wake phrases
-and a five-second follow-up window. Speaker STT and diarization are disabled.
+The default hybrid mode uses speaker STT. Say “Start talking to me” to begin
+a conversation and “Stop talking to me” to end it. For a one-off question,
+say “Hey Computer” followed by the question. A five-second follow-up window allows
+another utterance without repeating the wake phrase.
 
-For example, accept wake-addressed one-off questions as well as natural
-conversations by changing this line in `yaml/voice_gate.yaml`:
+This is configured in `yaml/voice_gate.yaml`:
 
 ```yaml
 mode: hybrid

@@ -63,11 +63,11 @@ IPv4 interfaces instead of loopback. Refer to the generated
 
 Speech uses the reused TTS endpoint in `yaml/models.local.json`. Voice-gate
 behavior comes from `voice_gate_yaml` in `yaml/tea_making_worker.yaml`.
-The default uses batch Parakeet STT on port 8103 with `mode: wake_only` and
-the wake phrases `Agent` and `Hey Agent`. Speaker STT and diarization are disabled.
-The configured follow-up grace period is five seconds. Set `mode: hybrid` to
-also allow an explicitly started conversation, or `mode: always_on` for
-immediate, ungated speech dispatch.
+The default `mode: hybrid` uses speaker STT. Say `Start talking to me` to begin
+a conversation, then speak naturally until `Stop talking to me`. For one-off
+questions outside a conversation, say `Hey Computer` followed by the question.
+Follow-up speech can begin within five seconds without repeating the wake phrase.
+Set `mode: always_on` for immediate, ungated speech dispatch.
 The advanced `conversation.require_wake_phrase: true` policy applies only inside an open
 conversation. Backend selection is independent of these modes. Refer to
 {ref}`voice-conversation-controls`.
