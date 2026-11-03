@@ -9,11 +9,13 @@ Build AI agents that see and hear what your users experience in XR, and respond
 in real time.
 
 :::{tip}
-Using a coding agent? Paste this to it:
+Try xr-ai with a coding agent. Paste this to run the browser demo:
 
-```{literalinclude} /_snippets/agent-setup-prompt.txt
+```{literalinclude} /_snippets/agent-demo-prompt.txt
 :language: text
 ```
+
+For development setup and other workflows, refer to {doc}`getting_started/skills`.
 :::
 
 XR AI is an open-source stack that connects web, iOS/visionOS, AR-glasses, and
@@ -40,18 +42,18 @@ It is especially useful when you need to:
 ::::{grid} 1 1 2 2
 :gutter: 3
 
-:::{grid-item-card} 🤖 Set up with your agent
+:::{grid-item-card} 🤖 Try xr-ai with your agent
 :link: getting_started/skills
 :link-type: doc
-The primary path: one pasted prompt sets a coding agent up with the xr-ai
-skills, and it does the rest.
+Launch the browser demo with `run-demo` and receive its connection link and
+verification status.
 :::
 
 :::{grid-item-card} 🚀 Get started
 :link: getting_started/quickstart
 :link-type: doc
-Run a sample in minutes: the model servers, the simple VLM agent, or the full
-xr-render demo.
+Try the recommended conversation sample, explore the legacy Simple VLM browser
+demo, or launch the full xr-render demo.
 :::
 
 :::{grid-item-card} 🧩 Architecture
@@ -66,10 +68,17 @@ How clients, DeviceIOHub, agents, models, services, and the launcher fit togethe
 The server runtime, agent SDK, AI services, and the launcher.
 :::
 
-:::{grid-item-card} 📦 Build a sample
+:::{grid-item-card} 📦 Build your application
+:link: guides/building-your-app
+:link-type: doc
+Start from the recommended conversation-example and choose the SDK layers your
+application needs.
+:::
+
+:::{grid-item-card} 🧱 Add a sample
 :link: guides/adding-a-sample
 :link-type: doc
-Wire your own agent worker into the stack.
+Prepare an application for contribution to the repository's sample collection.
 :::
 
 ::::

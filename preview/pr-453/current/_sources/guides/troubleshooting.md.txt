@@ -5,10 +5,59 @@
 
 # Troubleshooting
 
-Common issues and their fixes. If you hit something not listed here, open an
-issue on the [repository](https://github.com/NVIDIA/xr-ai).
+## Overview
+
+Diagnose setup, startup, model-service, and client-connection failures using
+process logs and the symptoms below. Start with the launcher's failure summary
+when a stack fails to start.
+
+For an issue not covered here, open an issue on the
+[repository](https://github.com/NVIDIA/xr-ai).
+
+## Investigating a failed run
+
+Start with the launcher's failure summary to identify the failed service,
+command, configuration, and exit status. Inspect that service's terminal
+output and the run-log directory printed in the summary for the underlying
+error and recovery advice. If the run-log directory is unavailable, use the
+terminal output.
+
+Refer to {doc}`../components/launcher-and-process-model` for failure behavior,
+exit codes, and process ownership.
 
 ## Setup-time issues
+
+(dgx-spark-docker-socket-permission-denied-during-model-server-cleanup)=
+### Docker socket permission denied during model-server cleanup
+
+**Symptom:** stopping the sample's model-server command prints a line like this for a selected port
+whose ownership cannot be inspected:
+
+```text
+[<service>] cannot inspect :<port> ownership — not stopping
+```
+
+It can then print `No persistent servers found running` before ending with:
+
+```text
+simple_vlm_example_model_servers: error: one or more configured model servers could not be stopped
+```
+
+**Cause:** the login session lacks Docker socket access. This can affect DGX
+Spark and other Linux model-server hosts. Cleanup checks only managed services
+in the selected deployment; startup does not sweep omitted services. When Docker
+inspection fails, the empty-result message does not establish that no servers
+are running, and cleanup aborts because ownership could not be verified.
+
+**Diagnosis:** run `docker ps` without `sudo` from the same login session. If
+it reports permission denied for `/var/run/docker.sock`, the launcher cannot
+inspect persistent containers. The ownership check includes Docker's error
+output in the launch log. These cleanup errors can have other causes; use
+that output or the direct command to confirm socket access is the problem.
+
+**Fix:** complete the Docker group setup and refresh the launch session as
+described in {ref}`docker-host-setup`. Verify that `docker ps` succeeds without
+`sudo`, then retry the model-server command.
 
 ### DGX Spark — `uv sync` fails to build a wheel
 
@@ -24,7 +73,119 @@ headers.
 sudo apt install python3-dev
 ```
 
-This applies to the `agent-samples/model-servers/yaml/spark/` profile.
+This applies to the `agent-samples/<sample>/model-servers/yaml/spark.yaml` profile.
+
+### DGX Spark — CUDA allocation fails during a vLLM cold start
+
+**Symptom:** the sample's model-server command aborts while starting a vLLM service, often the
+embedding server after the larger services have started. The traceback reaches
+`MemorySnapshot.measure()`, then ends in `torch.cuda.mem_get_info()` or
+`cudaMemGetInfo` with a CUDA out-of-memory error. Another form ends in
+`torch.AcceleratorError` and references `cudaErrorMemoryAllocation` after the
+kernel driver reports `NV_ERR_NO_MEMORY`. Docker reports that the container was
+not OOM-killed, and `htop` can still show tens of gigabytes of available memory.
+
+**Cause:** these tracebacks are not model-weight or KV-cache allocation
+failures. The CUDA driver fails to obtain immediately usable memory before or
+during initialization. The `CUDA_LAUNCH_BLOCKING=1` line in the traceback is
+generic debugging advice, not the cause.
+
+DGX Spark uses a unified memory architecture: the CPU, GPU, filesystem cache,
+and model servers share the same DRAM. Linux `MemAvailable` includes memory that
+the kernel can reclaim, while `cudaMemGetInfo` can report a smaller immediately
+free amount. NVIDIA documents this behavior in its [DGX Spark unified-memory
+guidance](https://docs.nvidia.com/dgx/dgx-spark/known-issues.html#guidance-for-reporting-memory-resources-with-unified-memory-architecture),
+and a [related vLLM issue](https://github.com/vllm-project/vllm/issues/48140)
+describes how checkpoint reads held in the filesystem page cache can trigger a
+startup failure on UMA systems.
+
+**Diagnosis:** inspect the host memory counters immediately after the failure:
+
+```bash
+grep -E '^(MemTotal|MemFree|MemAvailable|Cached|SReclaimable|SwapFree):' \
+  /proc/meminfo
+```
+
+If `MemAvailable` is much larger than `MemFree` and `Cached` is large, the
+failure is consistent with reclaimable-cache pressure rather than the next
+model being too large for the configured profile.
+
+**Fix:** every Docker-backed vLLM service resolves its Hugging Face snapshot
+before vLLM initializes CUDA. A missing snapshot is downloaded and synced at
+that point, so transfer, reconstruction, and dirty writeback allocations do not
+overlap the CUDA context allocation. The bundled `spark` profile also enables
+`spark_uma` for each of these services: if the driver allocation still fails,
+the wrapper waits for reclamation and restarts the stopped container once. Only the wrapper that launched the current
+container attempt may restart it; another wrapper that adopts the running
+container observes it without taking ownership. The retry applies only when
+Docker reports that the container was not OOM-killed and the traceback reaches
+the initial vLLM memory snapshot through `mem_get_info`; model-weight and
+KV-cache OOMs are not retried.
+
+If the retry is exhausted, first install the current DGX OS and driver updates.
+The [DGX Spark release
+notes](https://docs.nvidia.com/dgx/dgx-spark/release-notes.html) identify
+improved GB10 UMA out-of-memory handling in the July 2026 release. Stop
+unrelated memory-intensive workloads before retrying the stack.
+
+For diagnosis and recovery, NVIDIA recommends flushing clean filesystem caches
+and then restarting the application:
+
+```bash
+sudo sh -c 'sync; echo 3 > /proc/sys/vm/drop_caches'
+```
+
+The leading `sync` flushes dirty filesystem buffers. Dropping caches makes
+subsequent filesystem reads cold, so use this as a diagnostic workaround, not
+as routine launcher behavior.
+
+Do not lower `gpu_memory_utilization` solely for this traceback. That setting
+cannot be evaluated when `cudaMemGetInfo` itself fails. Lower the setting only
+for later failures that report insufficient memory for the requested
+utilization or KV cache.
+
+### Pinned vLLM KV-cache capacity and DGX Spark cold starts
+
+**Symptom:** Nemotron Omni or the Cosmos VLM reports a negative or smaller
+KV-cache capacity on its first start than on a later start with the same
+configuration. The first start can reject the configured context even while
+Linux reports substantial available memory.
+
+**Cause:** vLLM derives non-Torch usage from changes in globally available
+memory while it loads and profiles a model. On a unified-memory system, model
+downloads and checkpoint reads change the Linux filesystem page cache. vLLM
+can attribute part of that global change to the model and subtract it from the
+automatically sized KV cache. The behavior is tracked in [vLLM issue
+#35920](https://github.com/vllm-project/vllm/issues/35920).
+The model-server launcher starts these services sequentially, so concurrent
+startup is not required to trigger the page-cache accounting error.
+
+**Fix:** the bundled `spark`, `dual_48G_ada`, and `96G_blackwell` profiles set
+`kv_cache_memory_bytes` explicitly for both Nemotron Omni and Cosmos instead
+of using the fractional profiler to size their caches. Keep the fixed
+allocations when copying or modifying a profile. The values are 2 GiB for
+Omni's 32,768-token hybrid Mamba/attention cache and 1.5 GiB for Cosmos's
+8,192-token cache. The Cosmos allocation supports one maximum-length request;
+its `max_num_seqs` setting retains scheduling concurrency for shorter requests.
+vLLM reports the actual GPU KV-cache token capacity and maximum concurrency at
+startup. Requests beyond resident capacity can queue, preempt, or recompute.
+Increase the fixed cache when a deployment needs more resident capacity.
+
+These files intentionally retain `gpu_memory_utilization`. In the bundled
+vLLM versions, `kv_cache_memory_bytes` controls the cache allocation and skips
+the profiling calculation, but vLLM still evaluates `gpu_memory_utilization`
+during its initial free-memory admission check. The fraction is not a total
+memory cap in this mode. Do not remove the profile value and fall back to
+vLLM's higher default. Increasing `max_model_len` also requires recalculating
+the fixed cache, increasing it as needed, and cold-starting the full profile on
+the target hardware.
+
+Enable `spark_uma` on each Docker-backed vLLM service when copying the bundled
+settings into a custom Spark profile. Do not flush the filesystem cache
+routinely for this symptom: doing so makes the next checkpoint read cold and
+can reproduce the profiling variation. An explicit KV cache cannot bypass an
+earlier CUDA driver-allocation failure; the pre-CUDA snapshot download and
+bounded retry are separate safeguards for that stage.
 
 ### DGX Spark — LOVR auto-download is not supported
 
@@ -71,14 +232,12 @@ becomes healthy on a Blackwell-class system.
 vLLM image does not contain compatible kernels. Any first-use kernel
 compilation occurs inside the container; host NVCC is not required.
 
-**Fix:** install the NVIDIA Container Toolkit, restart Docker as its installation
-guide requires, and retain the vLLM image pinned by the reviewed hardware
-profile:
-
-[NVIDIA Container Toolkit installation guide](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
+**Fix:** follow {ref}`docker-host-setup` to verify Docker access, register the
+NVIDIA runtime if needed, and check GPU access from a container. Retain the
+vLLM image pinned by the reviewed hardware profile.
 
 This applies to the
-`agent-samples/model-servers/yaml/96G_blackwell/` profile.
+`agent-samples/<sample>/model-servers/yaml/96G_blackwell.yaml` profile.
 
 ### GPU service aborts with `cuDNN version incompatibility`
 
@@ -96,7 +255,7 @@ LD_LIBRARY_PATH contains incompatible version of cudnn.
 venv — the exact version that venv's PyTorch was compiled against — so torch
 loads the wrong runtime and aborts.
 
-**Fix:** the launcher handles this automatically — `model_servers` or
+**Fix:** the launcher handles this automatically — the sample's model-server command or
 `xr_render_demo` strip any `libcudnn`-bearing directory from each child's
 `LD_LIBRARY_PATH` before spawning (logged once as a WARNING), so the
 venv-bundled cuDNN is used. If you hit this running a service **directly**
@@ -125,7 +284,7 @@ NGC vLLM container.
 https://ngc.nvidia.com/setup/api-key and run:
 
 ```bash
-docker login nvcr.io -u '$oauthtoken' -p $NGC_API_KEY
+printf '%s' "$NGC_API_KEY" | docker login nvcr.io -u '$oauthtoken' --password-stdin
 ```
 
 The credential is cached in `~/.docker/config.json` and reused on subsequent
@@ -190,18 +349,25 @@ managed cleanup removes them.
 (vllm-backend-docker-docker-run-fails-with-could-not-select-device-driver)=
 ### `vllm_backend: docker` — the NVIDIA runtime is unavailable
 
-**Symptom:** `docker run` exits with a message that the `nvidia` runtime is
-unknown or unavailable, or with an `nvidia-container-cli` initialization error.
+**Symptom:** Docker is reachable, but container startup fails with:
 
-**Cause:** the NVIDIA Container Toolkit is not installed (or the daemon was
-not restarted and configured after install), so Docker cannot use
-`--runtime=nvidia`.
+```text
+docker: Error response from daemon: unknown or invalid runtime name: nvidia
+```
 
-**Fix:** install the toolkit and restart docker:
-https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
+**Cause:** the Docker daemon has no registered `nvidia` runtime. This can happen
+on DGX Spark even when the NVIDIA Container Toolkit is already installed.
+The model-server wrappers request `--runtime=nvidia` explicitly.
 
-Switch back to `vllm_backend: pip` in the service YAML if you only need the
-local install.
+**Fix:** follow {ref}`docker-host-setup` to install the toolkit if needed,
+register the runtime with `nvidia-ctk`, and restart Docker. Verify that
+`docker info --format '{{json .Runtimes}}'` lists `nvidia`, then run the GPU
+smoke test there before retrying the model servers.
+
+If `nvidia` is listed but startup instead reports an `nvidia-container-cli`
+initialization error, inspect that error for a driver or GPU-access problem.
+Refer to the
+[NVIDIA Container Toolkit troubleshooting guide](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/troubleshooting.html).
 
 (hub-fails-immediately-with-runtimeerror-missing-libnvcuvid-so-libnvidia-encode-so)=
 
@@ -235,6 +401,22 @@ in the sample's worker YAML (`simple_vlm_example_worker.yaml` or
 `xr_render_demo_worker.yaml`); `0` or unset keeps it disabled. The knob is
 owned by `xr_ai_voice.VoiceAgent`.
 
+(web-client-empty-response)=
+### Browser reports an empty response on the hub port
+
+**Symptom:** opening the web client reports `ERR_EMPTY_RESPONSE`, or an HTTP
+client reports an empty reply.
+
+**Cause:** plain HTTP sent to the hub's HTTPS listener can produce this error.
+HTTPS is enabled by default. Check the URL scheme against the hub's launch
+output.
+
+**Fix:** open the full URL printed by DeviceIOHub, including `https://` and the
+configured web-server port. For example, the default HTTPS listener uses
+`https://<host>:8080`. Refer to {ref}`tls-for-the-web-client` for trusting the
+development certificate on the client device. If the configured URL still
+fails, inspect the hub's log using the failed-run procedure above.
+
 ### Browser client connects but no audio or no video
 
 **Most common cause:** firewall blocking WebRTC media on UDP 7882 (LiveKit).
@@ -242,6 +424,11 @@ owned by `xr_ai_voice.VoiceAgent`.
 **Fix:** open ports per {doc}`/getting_started/networking`. The web client
 will appear to connect (signaling through the port 8080 proxy succeeds) but
 media frames are silently dropped without 7882.
+
+**Audio-only cause:** the browser's autoplay policy blocked the remote audio
+track. Use the **Connect** button to open the session. If the session is already
+connected but silent, send a message or click **Start Microphone** to retry
+playback from a user gesture.
 
 ### HTTPS web client → `ws://` mixed-content warning
 
@@ -338,6 +525,22 @@ recording mode before publishing to make that first buffer available. Stopping
 the microphone then disables prepared input while leaving output active, so the
 orange microphone indicator clears without silencing agent audio.
 
+Stopping the microphone unpublishes its audio track; starting it creates a new
+publication instead of unmuting the old one. The hub therefore observes
+`track_unsubscribed` and `track_subscribed` events, and a new audio `track_id`
+after each restart. These events are expected during manual stops and microphone
+recovery; the room connection stays open.
+
+If microphone cleanup fails while connected, the client reports that capture
+may still be running, shows “Cleanup required,” and keeps Stop available.
+Retry Stop before starting again. If Stop keeps failing, use Disconnect to close
+the transport. Retrying a partial teardown does not guarantee recovery.
+If cleanup fails during Disconnect, the connection still closes, but the client
+reports the cleanup failure and retains the old session's cleanup resources.
+Reconnect retries that cleanup before creating another session; if it still
+fails, the client stays disconnected. A failed manual Start retains the user's
+microphone intent, so later interruption recovery can retry capture.
+
 Phone calls, Siri, route changes, media-service resets, another capture app, or
 closing an XR space can interrupt audio or camera while the control still shows
 the user's requested state. The client re-arms capture when the OS allows it.
@@ -389,28 +592,39 @@ restarts so model weights stay loaded across worker crashes and debug
 restarts. Refer to {doc}`/components/ai-services` → *vLLM model
 persistence*.
 
-**Fix:** to fully release VRAM:
+**Fix:** from the repository root, stop XR Render's model stack to release its
+VRAM:
 
 ```bash
-cd xr-ai
-uv run --project agent-samples/model-servers model_servers --stop
+cd agent-samples/xr-render-demo
+uv run --project model-servers xr_render_demo_model_servers --stop
 ```
 
-For pip-mode servers this sends `SIGTERM` to each persisted process, waits up
-to 20 s, then `SIGKILL`s. For docker-mode servers it runs
+Use the current sample's own model command with `--stop` and the same explicit
+`--gpu-profile NAME` used at launch. Stop before switching samples, updating the
+checkout, or changing the old configuration. Refer to
+{doc}`/guides/customizing-model-servers` for the flow.
+
+For Pocket TTS this sends `SIGTERM` to its verified launcher-owned process
+group, waits up to 20 s, then sends `SIGKILL`. Pocket TTS remains in that group
+so the same escalation also reaches it if stack startup aborts before TTS
+signals readiness. Already-ready model servers are retained until explicit
+cleanup. The stop command falls back to the listener PID if process-group ownership cannot be verified,
+and other local servers always use PID-only cleanup. For docker-mode servers it runs
 `docker stop <container_name>` (escalating to `docker kill` after 20 s). Safe
-to run while the stack is down.
+to run while the stack is down. The command exits nonzero rather than reporting
+success if server ownership cannot be verified or any target remains running.
 
 ### First run downloads models silently
 
-**Symptom:** `uv run --project agent-samples/model-servers model_servers`
+**Symptom:** `uv run --project agent-samples/simple-vlm-example/model-servers simple_vlm_example_model_servers`
 appears to hang at startup the first time.
 
 **Cause:** model weights are downloading from HuggingFace into `models/` at
 the repository root (gitignored; the Cosmos3 checkpoint alone is tens of GB).
 
-**Fix:** wait. Subsequent runs use the cached weights and start in
-~30–60 s. If the download makes no progress, note that unauthenticated
-downloads (model-server runs started with `--allow-anonymous`) are rate-limited and can
-stall indefinitely; set `HF_TOKEN` and restart. Refer to
+**Fix:** wait. Subsequent runs reuse the cached weights, but CUDA graph
+capture and kernel initialization can still take several minutes. If the
+download makes no progress, note that unauthenticated downloads are rate-limited
+and can stall indefinitely; set `HF_TOKEN` and restart. Refer to
 {doc}`Credentials </getting_started/credentials>`.

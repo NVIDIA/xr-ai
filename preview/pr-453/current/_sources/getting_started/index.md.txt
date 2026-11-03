@@ -5,9 +5,10 @@
 
 # Getting Started
 
-Using a coding agent? Start at {doc}`skills`. The rest of this section is the
-manual path: quickstarts, requirements, connecting clients, networking, and
-credentials.
+Using a coding agent? Start at {doc}`skills` with `run-demo` to try the browser
+demo. For development setup, `setup` prepares a checkout and its
+prerequisites. The rest of this section is the manual path: quickstarts,
+requirements, connecting clients, networking, and credentials.
 
 ```{toctree}
 :maxdepth: 1

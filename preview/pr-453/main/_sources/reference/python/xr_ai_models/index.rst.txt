@@ -5,11 +5,11 @@ xr_ai_models
 
 .. autoapi-nested-parse::
 
-   Unified service protocols and OpenAI-compatible clients for XR AI models.
+   Unified typed service protocols and model clients for XR AI.
 
    Repository code talks to the typed ``*Service`` protocols. The concrete
-   ``OpenAICompat*`` clients cover every in-tree backend and external
-   OpenAI-compatible endpoints.
+   ``OpenAICompat*`` clients cover chat, embeddings, and HTTP speech;
+   OCR uses the Nemotron v2 protocol and Riva speech uses optional gRPC.
 
 
 
@@ -32,8 +32,21 @@ Attributes
    xr_ai_models.VideoInput
    xr_ai_models.Category
    xr_ai_models.KIND_OPENAI_COMPAT
+   xr_ai_models.KIND_SYSTEMONE
    xr_ai_models.ModelKind
    xr_ai_models.Spec
+   xr_ai_models.ThinkingControl
+
+
+Exceptions
+----------
+
+.. autoapisummary::
+
+   xr_ai_models.DecisionInputTooLargeError
+   xr_ai_models.ModelServiceError
+   xr_ai_models.OCRRequestError
+   xr_ai_models.OCRResponseError
 
 
 Classes
@@ -44,9 +57,16 @@ Classes
    xr_ai_models.Capabilities
    xr_ai_models.ChatMessage
    xr_ai_models.ChatResponse
+   xr_ai_models.DecisionAnswer
+   xr_ai_models.DecisionQuestion
+   xr_ai_models.DecisionResponse
+   xr_ai_models.DecisionService
+   xr_ai_models.ChatStreamEvent
    xr_ai_models.EmbeddingService
    xr_ai_models.ImagePart
    xr_ai_models.LLMService
+   xr_ai_models.OCRService
+   xr_ai_models.OCRRegion
    xr_ai_models.STTService
    xr_ai_models.TextPart
    xr_ai_models.ToolCall
@@ -60,14 +80,17 @@ Classes
    xr_ai_models.OpenAICompatTTS
    xr_ai_models.OpenAICompatVLM
    xr_ai_models.AdapterSpec
+   xr_ai_models.DecisionSpec
    xr_ai_models.DeploymentSpec
    xr_ai_models.EmbeddingSpec
    xr_ai_models.EndpointSpec
    xr_ai_models.LLMSpec
    xr_ai_models.ModelsConfig
+   xr_ai_models.OCRSpec
    xr_ai_models.STTSpec
    xr_ai_models.TTSSpec
    xr_ai_models.VLMSpec
+   xr_ai_models.ThinkingSpec
    xr_ai_models.RivaSTT
    xr_ai_models.RivaTTS
 
@@ -79,8 +102,10 @@ Functions
 
    xr_ai_models.load_models_config
    xr_ai_models.load_models_config_from_dict
+   xr_ai_models.make_decision
    xr_ai_models.make_embedding
    xr_ai_models.make_llm
+   xr_ai_models.make_ocr
    xr_ai_models.make_stt
    xr_ai_models.make_tts
    xr_ai_models.make_vlm
@@ -216,6 +241,199 @@ Package Contents
 
 
 
+.. py:class:: DecisionAnswer
+
+   One validated choice and its probability trace.
+
+
+   .. py:attribute:: choice
+      :type:  str
+
+      The selected label from the question's criteria.
+
+
+
+   .. py:attribute:: confidence
+      :type:  float
+
+      The selected choice probability.
+
+
+
+   .. py:attribute:: probabilities
+      :type:  Mapping[str, float]
+
+      Probability for every permitted choice label.
+
+
+
+.. py:exception:: DecisionInputTooLargeError
+
+
+
+   The decision service rejected a request as more input than its model accepts.
+
+   The service owns that limit, and the caller cannot know it in advance. The same
+   request will not succeed; a caller can retry with less input.
+
+
+.. py:class:: DecisionQuestion
+
+   One choice question for a structured decision model.
+
+   The keys in ``criteria`` are the permitted answer labels. Each value gives
+   the criterion that distinguishes that choice. Define at least two non-empty
+   labels with non-empty descriptions.
+
+
+   .. py:attribute:: instructions
+      :type:  str
+
+      Question-specific instructions for selecting a criterion.
+
+
+
+   .. py:attribute:: criteria
+      :type:  Mapping[str, str]
+
+      Permitted choice labels and their selection criteria.
+
+
+
+.. py:class:: DecisionResponse
+
+   Validated answers and metadata returned by a decision service.
+
+
+   .. py:attribute:: answers
+      :type:  Mapping[str, DecisionAnswer]
+
+      Answers keyed by the question identifiers supplied to ``decide``.
+
+
+
+   .. py:attribute:: model
+      :type:  str
+
+      Model identifier reported by the service.
+
+
+
+   .. py:attribute:: usage
+      :type:  Mapping[str, Any]
+
+      Provider-reported usage metadata.
+
+
+
+   .. py:attribute:: raw
+      :type:  Mapping[str, Any]
+
+      Unmodified JSON response from the provider.
+
+
+
+.. py:class:: DecisionService
+
+
+
+   Structural interface for typed, choice-only decision services.
+
+
+   .. py:method:: decide(state: str | Mapping[str, Any], questions: Mapping[str, DecisionQuestion], *, images: Sequence[ImageInput] = (), timeout: float | None = None) -> DecisionResponse
+      :async:
+
+
+      Evaluate all questions against text or a JSON-compatible state mapping.
+
+      Optional images are ordered JPEG/PNG bytes, local pathlib.Path objects,
+      or inline base64 data URL strings. Files must match their JPEG or PNG
+      suffix. Filesystem path strings and remote URLs are rejected; the server
+      never fetches images. Describe image roles and ordering in state or instructions.
+      Empty images preserve the text-only wire contract. Older text-only
+      endpoints reject image requests; there is no silent fallback.
+
+      Return one choice and a complete probability map for each question.
+      No free-form text or reasoning is generated. A per-call timeout must be
+      positive and finite; the SystemOne adapter caps it at the configured
+      endpoint timeout. Transport failures and invalid or incomplete answers
+      raise exceptions without returning partial decisions.
+
+      Raises:
+          DecisionInputTooLargeError: The service rejected the request as more
+              input than its model accepts; a smaller request may succeed.
+
+
+
+   .. py:method:: health() -> bool
+      :async:
+
+
+      Return whether the configured endpoint is ready for requests.
+
+
+
+   .. py:method:: close() -> None
+      :async:
+
+
+      Release resources owned by the service.
+
+
+
+.. py:class:: ChatStreamEvent
+
+   One normalized event from a streamed chat completion.
+
+   Text and reasoning events carry deltas as they arrive. Tool calls are
+   emitted only after the provider finishes the response and the complete
+   batch has been validated. A finish event carries the provider finish
+   reason.
+
+
+   .. py:attribute:: kind
+      :type:  Literal['text', 'reasoning', 'tool_call', 'finish']
+
+      The kind of streamed event.
+
+
+
+   .. py:attribute:: text
+      :type:  str | None
+      :value: None
+
+
+      A user-visible text delta for ``kind == "text"``.
+
+
+
+   .. py:attribute:: reasoning
+      :type:  str | None
+      :value: None
+
+
+      A model reasoning delta for ``kind == "reasoning"``.
+
+
+
+   .. py:attribute:: tool_call
+      :type:  ToolCall | None
+      :value: None
+
+
+      A complete tool call for ``kind == "tool_call"``.
+
+
+
+   .. py:attribute:: finish_reason
+      :type:  str | None
+      :value: None
+
+
+      The provider finish reason for ``kind == "finish"``.
+
+
+
 .. py:data:: ContentPart
 
    A supported text, image, or video part in a chat message.
@@ -226,6 +444,23 @@ Package Contents
 
 
    Structural interface for text-embedding services.
+
+
+   .. py:method:: model_identity() -> str | None
+      :async:
+
+
+      Return a stable backing-model identity, or ``None`` when absent.
+
+      ``None`` means a successful lookup found no identity; it must not hide
+      a failed operation. This is not a weight checksum: deployments that
+      replace weights under the same identity need an explicit cache revision.
+      Consumers choose whether absence permits operation without caching.
+
+      Raises:
+          ModelServiceError: Identity lookup failed or returned invalid
+              metadata. Consumers own any fallback or retry policy.
+
 
 
    .. py:method:: embed(texts: Sequence[str], *, timeout: float | None = None) -> list[list[float]]
@@ -250,6 +485,13 @@ Package Contents
 
       Release resources owned by the service.
 
+
+
+.. py:exception:: ModelServiceError
+
+
+
+   Base for model-service failures, including embedding identity and OCR errors.
 
 
 .. py:data:: ImageInput
@@ -284,6 +526,11 @@ Package Contents
 
    Structural interface for text chat-completion services.
 
+   ``enable_thinking`` requests or suppresses model reasoning for one call;
+   ``None`` uses the endpoint's configured default.  The endpoint renders it
+   in the model's own dialect, and models without a switch ignore it.
+   ``thinking_budget`` caps reasoning tokens on servers that enforce it.
+
 
    .. py:attribute:: capabilities
       :type:  Capabilities
@@ -292,7 +539,7 @@ Package Contents
 
 
 
-   .. py:method:: chat(messages: Sequence[ChatMessage], *, tools: Sequence[ToolDef] | None = None, max_tokens: int | None = None, temperature: float | None = None, enable_thinking: bool = False, thinking_budget: int | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> ChatResponse
+   .. py:method:: chat(messages: Sequence[ChatMessage], *, tools: Sequence[ToolDef] | None = None, max_tokens: int | None = None, temperature: float | None = None, enable_thinking: bool | None = None, thinking_budget: int | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> ChatResponse
       :async:
 
 
@@ -300,9 +547,18 @@ Package Contents
 
 
 
-   .. py:method:: stream(messages: Sequence[ChatMessage], *, tools: Sequence[ToolDef] | None = None, max_tokens: int | None = None, temperature: float | None = None, enable_thinking: bool = False, thinking_budget: int | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> AsyncIterator[str]
+   .. py:method:: stream(messages: Sequence[ChatMessage], *, tools: Sequence[ToolDef] | None = None, max_tokens: int | None = None, temperature: float | None = None, enable_thinking: bool | None = None, thinking_budget: int | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> AsyncIterator[str]
 
       Stream user-visible response text for a sequence of chat messages.
+
+
+
+   .. py:method:: stream_events(messages: Sequence[ChatMessage], *, tools: Sequence[ToolDef] | None = None, max_tokens: int | None = None, temperature: float | None = None, enable_thinking: bool | None = None, thinking_budget: int | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> AsyncIterator[ChatStreamEvent]
+
+      Stream text, reasoning, complete tool calls, and finish events.
+
+      Tool calls are held until the stream completes successfully, so a
+      truncated or malformed function call is never exposed as executable.
 
 
 
@@ -319,6 +575,71 @@ Package Contents
 
 
       Release resources owned by the service.
+
+
+
+.. py:class:: OCRService
+
+
+
+   Single-image OCR shared by local Hugging Face and NIM v2 servers.
+
+
+   .. py:method:: read_text(image: ImageInput, *, merge_level: Literal['word', 'sentence', 'paragraph'] = 'word', timeout: float | None = None) -> list[OCRRegion]
+      :async:
+
+
+      Transcribe inline PNG/JPEG bytes, a Path, or a base64 data URL.
+
+      Remote URLs are not accepted. Regions follow backend reading order.
+      This method does not crop, sharpen, parse fields, or change resolution.
+
+      Raises:
+          OCRRequestError: Input-file, transport, timeout, or HTTP failure.
+
+          OCRResponseError: The endpoint returned malformed OCR data.
+
+
+
+   .. py:method:: health() -> bool
+      :async:
+
+
+      Return whether the configured endpoint is ready.
+
+
+
+   .. py:method:: close() -> None
+      :async:
+
+
+      Release owned client resources.
+
+
+
+.. py:class:: OCRRegion
+
+   One recognized text region; polygon coordinates are normalized to [0, 1].
+
+
+   .. py:attribute:: text
+      :type:  str
+
+      Transcribed text.
+
+
+
+   .. py:attribute:: confidence
+      :type:  float
+
+      Recognition confidence reported by the backend.
+
+
+
+   .. py:attribute:: polygon
+      :type:  tuple[tuple[float, float], Ellipsis]
+
+      Ordered (x, y) vertices in the input image's coordinate system.
 
 
 
@@ -555,12 +876,11 @@ Package Contents
 
 
 
-.. py:class:: OpenAICompatLLM(base_url: str, model_name: str, *, capabilities: xr_ai_models.Capabilities | None = None, reasoning_field: str | None = None, default_extras: dict[str, Any] | None = None, api_key_env: str | None = None, timeout: float = 60.0, health_check: bool = True, health_path: str = '/health', client: httpx.AsyncClient | None = None)
+.. py:class:: OpenAICompatLLM(base_url: str, model_name: str, *, capabilities: xr_ai_models.Capabilities | None = None, reasoning_field: str | None = None, default_extras: dict[str, Any] | None = None, thinking: xr_ai_models.ThinkingSpec | None = None, api_key_env: str | None = None, timeout: float = 60.0, health_check: bool = True, health_path: str = '/health', client: httpx.AsyncClient | None = None)
 
    OpenAI-compatible ``/v1/chat/completions`` client.
 
-   Used directly for plain LLMs (Llama-Nemotron, Nemotron3-Nano,
-   Nemotron-Omni) and indirectly via :class:`OpenAICompatVLM` for VLMs.
+   Used directly for plain LLMs (Nemotron3-Nano, Nemotron-Omni) and indirectly via :class:`OpenAICompatVLM` for VLMs.
    The API key is read once from ``api_key_env`` during construction. An
    injected HTTP client remains owned by the caller and is not closed here.
 
@@ -577,7 +897,7 @@ Package Contents
 
 
 
-   .. py:method:: chat(messages: Sequence[xr_ai_models.ChatMessage], *, tools: Sequence[xr_ai_models.ToolDef] | None = None, max_tokens: int | None = None, temperature: float | None = None, enable_thinking: bool = False, thinking_budget: int | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> xr_ai_models.ChatResponse
+   .. py:method:: chat(messages: Sequence[xr_ai_models.ChatMessage], *, tools: Sequence[xr_ai_models.ToolDef] | None = None, max_tokens: int | None = None, temperature: float | None = None, enable_thinking: bool | None = None, thinking_budget: int | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> xr_ai_models.ChatResponse
       :async:
 
 
@@ -589,7 +909,7 @@ Package Contents
 
 
 
-   .. py:method:: stream(messages: Sequence[xr_ai_models.ChatMessage], *, tools: Sequence[xr_ai_models.ToolDef] | None = None, max_tokens: int | None = None, temperature: float | None = None, enable_thinking: bool = False, thinking_budget: int | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> AsyncIterator[str]
+   .. py:method:: stream(messages: Sequence[xr_ai_models.ChatMessage], *, tools: Sequence[xr_ai_models.ToolDef] | None = None, max_tokens: int | None = None, temperature: float | None = None, enable_thinking: bool | None = None, thinking_budget: int | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> AsyncIterator[str]
       :async:
 
 
@@ -597,6 +917,19 @@ Package Contents
 
       Malformed server-sent event lines and deltas without content are
       skipped. Tool-call and reasoning deltas are not yielded.
+
+
+
+   .. py:method:: stream_events(messages: Sequence[xr_ai_models.ChatMessage], *, tools: Sequence[xr_ai_models.ToolDef] | None = None, max_tokens: int | None = None, temperature: float | None = None, enable_thinking: bool | None = None, thinking_budget: int | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> AsyncIterator[xr_ai_models.ChatStreamEvent]
+      :async:
+
+
+      Stream normalized events, withholding tool calls until completion.
+
+      A provider finish reason followed by ``[DONE]`` is required before any
+      tool call is emitted. This prevents consumers from executing partial
+      calls if the connection ends early or the provider returns invalid
+      tool data.
 
 
 
@@ -625,6 +958,23 @@ Package Contents
 
    The API key is read once from ``api_key_env`` during construction. An
    injected HTTP client remains owned by the caller and is not closed here.
+
+
+   .. py:method:: model_identity() -> str | None
+      :async:
+
+
+      Read the configured model's backing ``root`` from ``/v1/models``.
+
+      Return ``None`` only when a successful response has no matching model
+      or no backing identity. A served alias alone does not identify weights.
+      Uses the HTTP client's configured timeout; callers own fallback policy.
+
+      Raises:
+          ModelServiceError: The request failed or the response contains
+              invalid or ambiguous metadata. The original transport or JSON
+              exception is retained as the cause when available.
+
 
 
    .. py:method:: embed(texts: Sequence[str], *, timeout: float | None = None) -> list[list[float]]
@@ -731,7 +1081,7 @@ Package Contents
 
 
 
-.. py:class:: OpenAICompatVLM(base_url: str, model_name: str, *, capabilities: xr_ai_models.Capabilities | None = None, default_extras: dict[str, Any] | None = None, api_key_env: str | None = None, timeout: float = 60.0, health_check: bool = True, health_path: str = '/health', client: httpx.AsyncClient | None = None)
+.. py:class:: OpenAICompatVLM(base_url: str, model_name: str, *, capabilities: xr_ai_models.Capabilities | None = None, default_extras: dict[str, Any] | None = None, thinking: xr_ai_models.ThinkingSpec | None = None, api_key_env: str | None = None, timeout: float = 60.0, health_check: bool = True, health_path: str = '/health', client: httpx.AsyncClient | None = None)
 
    OpenAI-compatible client for image- and video-bearing chat requests.
 
@@ -914,14 +1264,54 @@ Package Contents
 
 
 
+   .. py:attribute:: thinking
+      :type:  xr_ai_models.ThinkingSpec
+
+      How the model switches reasoning, and its default state.
+
+
+
 .. py:data:: Category
 
    A model role supported by :class:`ModelsConfig`.
 
 
+.. py:class:: DecisionSpec
+
+
+
+   Configuration for a choice-only structured decision endpoint.
+
+
+   .. py:attribute:: adapter
+      :type:  AdapterSpec
+
+      Model identifier and adapter settings.
+
+
+
+   .. py:attribute:: endpoint
+      :type:  EndpointSpec
+
+      Endpoint connectivity, authentication, and readiness settings.
+
+
+
+   .. py:attribute:: deployment
+      :type:  DeploymentSpec
+
+      Launcher ownership metadata for the serving process.
+
+
+
 .. py:class:: DeploymentSpec
 
    Process ownership for the endpoint that serves a model role.
+
+   Client profiles can omit ``deployment``: the default ``external`` ownership
+   leaves the endpoint's process lifecycle to its operator. Shared model-server
+   profiles use ``managed`` to select processes to launch. Explicit ``reused``
+   metadata remains supported for older profiles.
 
    ``credentials`` names keys the launched service itself needs (e.g.
    NGC_API_KEY for a NIM container's nvcr.io pull and engine download)
@@ -1020,7 +1410,7 @@ Package Contents
       :value: 'health'
 
 
-      How the client determines whether the endpoint is ready.
+      Policy for explicit ``health()`` calls; does not schedule startup probes.
 
 
 
@@ -1029,7 +1419,7 @@ Package Contents
       :value: '/health'
 
 
-      Endpoint path probed for readiness (NIM containers use /v1/health/ready).
+      Path used by explicit HTTP ``health()`` calls (NIM: /v1/health/ready).
 
 
 
@@ -1037,7 +1427,7 @@ Package Contents
       :type: bool
 
 
-      Whether readiness requires a successful endpoint health check.
+      Whether an explicit ``health()`` call probes the endpoint.
 
 
 
@@ -1049,7 +1439,15 @@ Package Contents
    The adapter kind for OpenAI-compatible HTTP endpoints.
 
 
-.. py:class:: LLMSpec(kind: ModelKind = KIND_OPENAI_COMPAT, base_url: str = '', model_name: str = '', api_key_env: str | None = None, reasoning_field: str | None = None, capabilities: dict[str, Any] | None = None, default_extras: dict[str, Any] | None = None, timeout: float = 60.0, health_check: bool = True, deployment: DeploymentSpec | None = None, *, adapter: AdapterSpec | None = None, endpoint: EndpointSpec | None = None)
+.. py:data:: KIND_SYSTEMONE
+   :type:  ModelKind
+   :value: 'systemone'
+
+
+   The adapter kind for typed Clef SystemOne decision endpoints.
+
+
+.. py:class:: LLMSpec(kind: ModelKind = KIND_OPENAI_COMPAT, base_url: str = '', model_name: str = '', api_key_env: str | None = None, reasoning_field: str | None = None, capabilities: dict[str, Any] | None = None, default_extras: dict[str, Any] | None = None, timeout: float = 60.0, health_check: bool = True, deployment: DeploymentSpec | None = None, *, adapter: AdapterSpec | None = None, endpoint: EndpointSpec | None = None, thinking: xr_ai_models.ThinkingSpec | None = None)
 
 
 
@@ -1124,11 +1522,51 @@ Package Contents
 
 
 
+   .. py:method:: ocr(name: str) -> OCRSpec
+
+      Return the OCR specification named *name*.
+
+
+
+   .. py:method:: decision(name: str) -> DecisionSpec
+
+      Return the decision specification named *name*.
+
+
+
    .. py:property:: required_credentials
       :type: tuple[str, Ellipsis]
 
 
       Return the sorted environment-variable names required by all roles.
+
+
+
+.. py:class:: OCRSpec
+
+
+
+   Configuration for OCR via the Nemotron v2 HTTP protocol.
+
+
+   .. py:attribute:: adapter
+      :type:  AdapterSpec
+
+      OCR request dialect.
+
+
+
+   .. py:attribute:: endpoint
+      :type:  EndpointSpec
+
+      Endpoint connectivity and readiness.
+
+
+
+   .. py:attribute:: deployment
+      :type:  DeploymentSpec
+
+      Launcher ownership metadata.
 
 
 
@@ -1193,7 +1631,7 @@ Package Contents
 
 
 
-.. py:class:: VLMSpec(kind: ModelKind = KIND_OPENAI_COMPAT, base_url: str = '', model_name: str = '', api_key_env: str | None = None, capabilities: dict[str, Any] | None = None, default_extras: dict[str, Any] | None = None, timeout: float = 60.0, health_check: bool = True, deployment: DeploymentSpec | None = None, *, adapter: AdapterSpec | None = None, endpoint: EndpointSpec | None = None)
+.. py:class:: VLMSpec(kind: ModelKind = KIND_OPENAI_COMPAT, base_url: str = '', model_name: str = '', api_key_env: str | None = None, capabilities: dict[str, Any] | None = None, default_extras: dict[str, Any] | None = None, timeout: float = 60.0, health_check: bool = True, deployment: DeploymentSpec | None = None, *, adapter: AdapterSpec | None = None, endpoint: EndpointSpec | None = None, thinking: xr_ai_models.ThinkingSpec | None = None)
 
 
 
@@ -1238,9 +1676,75 @@ Package Contents
    originate from a file.
 
 
+.. py:data:: ThinkingControl
+
+   How a model receives the reasoning switch.
+
+
+.. py:class:: ThinkingSpec
+
+   How a model endpoint switches reasoning, and its default state.
+
+
+   .. py:attribute:: control
+      :type:  ThinkingControl | None
+      :value: None
+
+
+      The model's switch dialect.
+
+      ``chat_template`` sends ``chat_template_kwargs.enable_thinking``, as vLLM
+      and NIM Nemotron/Qwen-style templates expect, and a budget as vLLM's
+      ``thinking_token_budget``.
+      ``system_prompt`` puts a ``detailed thinking on|off`` line at the start of
+      the system message, as Llama-Nemotron expects.  ``none`` leaves requests
+      unchanged for models without a switch or endpoints that reject template
+      arguments.  ``None`` (unset) uses ``chat_template`` when ``default`` is
+      set; otherwise only a call that enables thinking sends the switch, and an
+      explicit off adds nothing to the request.
+
+
+
+   .. py:attribute:: default
+      :type:  bool | None
+      :value: None
+
+
+      Reasoning state when a call leaves ``enable_thinking`` unset.
+
+      ``None`` sends no switch, so the model's own template default applies.
+
+
+
+   .. py:method:: from_mapping(value: Mapping[str, Any]) -> ThinkingSpec
+      :classmethod:
+
+
+      Build a spec from a ``thinking`` configuration mapping.
+
+      Raises :class:`ValueError` for unknown keys or invalid values.
+
+
+
+.. py:function:: make_decision(config: xr_ai_models.ModelsConfig, name: str) -> xr_ai_models.DecisionService
+
+   Construct the typed decision service for the named configuration entry.
+
+   Raises :class:`KeyError` when *name* is absent, :class:`TypeError` when it
+   names a different model role, and :class:`ValueError` for an unsupported
+   adapter kind.
+
+
 .. py:function:: make_embedding(config: xr_ai_models.ModelsConfig, name: str) -> xr_ai_models.EmbeddingService
 
    Construct the embedding service for the named configuration entry.
+
+   ``adapter.default_extras`` supplies embedding payload fields. When its
+   ``input_type`` is ``query`` or ``passage``, that value labels unprefixed
+   inputs; ``query: `` and ``passage: `` labels select their batch type and
+   are stripped before inference. Mixed batches retain input order. Without
+   ``input_type``, text is sent unchanged. ``model`` and ``input`` cannot be
+   overridden by extras.
 
    Raises :class:`KeyError` when *name* is absent, :class:`TypeError` when it
    names a different model role, and :class:`ValueError` for an unsupported
@@ -1254,6 +1758,11 @@ Package Contents
    Raises :class:`KeyError` when *name* is absent, :class:`TypeError` when it
    names a different model role, and :class:`ValueError` for an unsupported
    adapter kind.
+
+
+.. py:function:: make_ocr(config: xr_ai_models.ModelsConfig, name: str) -> xr_ai_models.OCRService
+
+   Construct OCR for *name*; reject a missing role, wrong role, or unsupported kind.
 
 
 .. py:function:: make_stt(config: xr_ai_models.ModelsConfig, name: str) -> xr_ai_models.STTService
@@ -1283,6 +1792,27 @@ Package Contents
    adapter kind.
 
 
+.. py:exception:: OCRRequestError(message: str, *, status_code: int | None = None)
+
+
+
+   OCR input could not be read or the HTTP request failed.
+
+   ``status_code`` is the HTTP failure status, or ``None`` for file/transport
+   failures. The original exception is preserved as ``__cause__``. Requests
+   are not retried automatically.
+
+
+.. py:exception:: OCRResponseError
+
+
+
+   The OCR endpoint returned malformed JSON or invalid detection data.
+
+   Also inherits ``ValueError`` to preserve existing response-validation
+   handlers. Caller argument errors remain ordinary ``ValueError``/``TypeError``.
+
+
 .. py:class:: RivaSTT(base_url: str, *, api_key_env: str | None = None, function_id: str | None = None, use_ssl: bool = False, language: str = 'en-US', timeout: float = 30.0, health_check: bool = True)
 
    Riva ASR client: offline (batch) recognition over gRPC.
@@ -1293,6 +1823,9 @@ Package Contents
 
 
       Recognize *audio* (WAV or raw 16-bit PCM) and return the transcript.
+
+      Timeout and cancellation cancel the RPC and join its pending native read
+      before returning, so a caller can safely release recognition resources.
 
 
 
@@ -1314,8 +1847,7 @@ Package Contents
 
 .. py:class:: RivaTTS(base_url: str, *, api_key_env: str | None = None, function_id: str | None = None, use_ssl: bool = False, voice: str = '', language: str = 'en-US', sample_rate: int = 44100, timeout: float = 30.0, health_check: bool = True)
 
-   Riva TTS client: streaming synthesis over gRPC, concatenated to one
-   WAV (or raw PCM) result.
+   Riva TTS client with buffered WAV or PCM synthesis.
 
 
    .. py:method:: synthesize(text: str, *, response_format: str = 'wav', timeout: float | None = None) -> bytes

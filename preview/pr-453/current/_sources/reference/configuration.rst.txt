@@ -4,10 +4,23 @@
 Sample configuration reference
 ==============================
 
+Overview
+--------
+
+Checked-in YAML and JSON configuration for samples and model services,
+including example values and field comments. Use the catalog to locate
+settings before editing them; the operational guides explain when and how to
+apply changes.
+
+Configuration catalog
+---------------------
+
 This reference is generated directly from configuration files under each
-installed top-level sample's ``yaml/`` directory and from configuration files
-beside a direct capability subproject. Adding a file in either location enrolls
-it automatically. Values are sample- and hardware-specific examples, not
+top-level sample's ``yaml/`` and ``model-servers/yaml/`` directories in
+``agent-samples/``, and from configuration files beside a direct capability
+subproject. Adding a file in these locations enrolls it automatically. The
+catalog also includes service YAML files under ``services/<service>/`` that
+declare ``model_cache``; these supply the shared model-server defaults. Values are sample- and hardware-specific examples, not
 universal defaults. Keep field guidance beside the value as a source comment;
 the generated page preserves those comments verbatim.
 
@@ -18,8 +31,8 @@ workflows remain in the handwritten guides.
 
 To change a sample parameter:
 
-1. Start in ``agent-samples/<sample>/`` and find the owning file in that
-   sample's README or published guide.
+1. Start in ``agent-samples/<sample>/``
+   and find the owning file in that sample's README or published guide.
 2. Edit the checked-in YAML or JSON value, preserving its documented type.
    Resolve relative paths from the file that declares them unless the sample
    guide documents different precedence.

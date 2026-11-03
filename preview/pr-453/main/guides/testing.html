@@ -281,15 +281,17 @@
 <div class="version-switcher">
   <label for="version-select" class="version-switcher__label">Version</label>
   <select id="version-select" class="version-switcher__select">
-    <option value="0" >v0.1.0-beta</option>
-    <option value="1" selected>main (development)</option>
+    <option value="0" >v0.3.0-beta</option>
+    <option value="1" >v0.2.0-beta.2</option>
+    <option value="2" >v0.1.0-beta</option>
+    <option value="3" selected>main (development)</option>
   </select>
 </div>
 <script>
   (function () {
     // Navigate by index into a build-time list, never by reading the URL back
     // out of the DOM, so page text can never become a navigation target.
-    var urls = ["../../v0.1.0-beta/index.html", "testing.html"];
+    var urls = ["../../v0.3.0-beta/guides/testing.html", "../../v0.2.0-beta.2/guides/testing.html", "../../v0.1.0-beta/index.html", "testing.html"];
     var select = document.getElementById("version-select");
     select.addEventListener("change", function () {
       var url = urls[select.selectedIndex];
@@ -328,36 +330,54 @@
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Guides</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="adding-a-sample.html">Adding a new sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="adding-cloudxr.html">Adding CloudXR to a sample</a></li>
+<li class="toctree-l2"><a class="reference internal" href="building-your-app.html">Build your application</a></li>
 <li class="toctree-l2"><a class="reference internal" href="contributing-and-conventions.html">Contributing and conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="customizing-model-servers.html">Customizing model servers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="deploying-with-nim.html">Deploying samples with NIM endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="documentation-style.html">Documentation style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python-code-style.html">Python code style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sbom.html">Software bill of materials</a></li>
 <li class="toctree-l2"><a class="reference internal" href="spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Testing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../reference/index.html">Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-conversation.html">xr-ai-conversation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-hub.html">xr-ai-hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-interaction.html">xr-ai-interaction</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-models.html">xr-ai-models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-routing.html">xr-ai-routing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-runtime.html">xr-ai-runtime</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-tools.html">xr-ai-tools</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-voice.html">xr-ai-voice</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-web-events.html">xr-ai-web-events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/clef-flash.html">Clef-Flash local decision server</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/command-line.html">Command-line reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/configuration.html">Sample configuration reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/conversation-example.html">Conversation example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/magpie-nim-tts.html">Magpie NIM speech</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference/migration-history.html">Migration history</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/migration-history/through-v0.3.0-beta.html">Migration notes through v0.3.0-beta</a></li>
+</ul>
+</details></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/model-servers-nim.html">NIM model endpoints</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/procedure-capture-guide.html">Procedure capture and guidance</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../reference/python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_gpu/index.html">xr_ai_gpu</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_hub/index.html">xr_ai_hub</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vad/index.html">xr_ai_vad</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../reference/python/xr_ai_tools/index.html">xr_ai_tools</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/async_tools/index.html">xr_ai_tools.async_tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/capture/index.html">xr_ai_tools.capture</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/current_frame/index.html">xr_ai_tools.current_frame</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/image/index.html">xr_ai_tools.image</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/image_polygon/index.html">xr_ai_tools.image_polygon</a></li>
@@ -379,11 +399,15 @@
 <li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_models/presets/index.html">xr_ai_models.presets</a></li>
 </ul>
 </details></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_routing/index.html">xr_ai_routing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_runtime/index.html">xr_ai_runtime</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_logging/index.html">xr_ai_logging</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_interaction/index.html">xr_ai_interaction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_conversation/index.html">xr_ai_conversation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_model_server_stack/index.html">xr_ai_model_server_stack</a></li>
 </ul>
 </details></li>
 </ul>
@@ -446,18 +470,40 @@
 -->
 <section id="testing">
 <h1>Testing<a class="headerlink" href="#testing" title="Link to this heading">#</a></h1>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">#</a></h2>
+<p>Run the repository’s test suites and documentation checks when changing shared
+packages, services, or samples. The sections below distinguish CPU checks from
+tests that require GPU hardware or additional services.</p>
+</section>
+<section id="prepare-the-test-environment">
+<h2>Prepare the test environment<a class="headerlink" href="#prepare-the-test-environment" title="Link to this heading">#</a></h2>
 <p>The <code class="docutils literal notranslate"><span class="pre">tests/</span></code> project exercises SDKs, utilities, service wrappers, sample
 behavior, generated documentation invariants, and the DeviceIOHub IPC path.
 Most tests are CPU-only and run without Docker or LiveKit. Node.js 24 is also
 required for the browser camera tests.</p>
+<p>Refer to <a class="reference internal" href="building-your-app.html"><span class="doc">Build your application</span></a> for application test examples.</p>
+<p>The browser camera tests also import presets from the LiveKit version in the
+existing web dependency lock. A fresh checkout must install that artifact
+before running the suite. From the repository root, use the same setup as CI:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">camera_sdk_dir</span><span class="o">=</span><span class="s2">"</span><span class="k">$(</span>mktemp<span class="w"> </span>-d<span class="k">)</span><span class="s2">"</span>
+<span class="nv">camera_sdk_version</span><span class="o">=</span><span class="s2">"</span><span class="k">$(</span>node<span class="w"> </span>-p<span class="w"> </span><span class="s2">"require('./dependency-manifest/web-xr-build/package-lock.json').packages['node_modules/livekit-client'].version"</span><span class="k">)</span><span class="s2">"</span>
+npm<span class="w"> </span>install<span class="w"> </span>--prefix<span class="w"> </span><span class="s2">"</span><span class="nv">$camera_sdk_dir</span><span class="s2">"</span><span class="w"> </span>--ignore-scripts<span class="w"> </span>--no-package-lock<span class="w"> </span>--no-save<span class="w"> </span><span class="s2">"livekit-client@</span><span class="si">${</span><span class="nv">camera_sdk_version</span><span class="si">}</span><span class="s2">"</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">STREAMKIT_LIVEKIT_SDK_MODULE</span><span class="o">=</span><span class="s2">"file://</span><span class="si">${</span><span class="nv">camera_sdk_dir</span><span class="si">}</span><span class="s2">/node_modules/livekit-client/dist/livekit-client.esm.mjs"</span>
+</pre></div>
+</div>
+<p>An existing <code class="docutils literal notranslate"><span class="pre">client-samples/web-xr-build/node_modules</span></code> installation can also
+supply the SDK when the environment override is unset. No LiveKit server or
+camera device is needed for these tests.</p>
+</section>
 <section id="run-the-suite">
 <h2>Run the suite<a class="headerlink" href="#run-the-suite" title="Link to this heading">#</a></h2>
 <p>From the repository root:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>uv.toml<span class="w"> </span>sync<span class="w"> </span>--project<span class="w"> </span>tests
-uv<span class="w"> </span>--config-file<span class="w"> </span>uv.toml<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>tests<span class="w"> </span>pytest<span class="w"> </span>-v
+uv<span class="w"> </span>--config-file<span class="w"> </span>uv.toml<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>tests<span class="w"> </span>pytest<span class="w"> </span>-v<span class="w"> </span>-m<span class="w"> </span><span class="s2">"not gpu"</span>
 </pre></div>
 </div>
-<p>CI runs the same selection on Python 3.11 and 3.12 from <code class="docutils literal notranslate"><span class="pre">tests/</span></code>, with the
+<p>CI runs the same selection on Python 3.11 through 3.14 from <code class="docutils literal notranslate"><span class="pre">tests/</span></code>, with the
 project environment at the repository root for nltk compatibility. The
 equivalent repository-root command is:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>uv.toml<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>tests<span class="w"> </span><span class="se">\</span>
@@ -471,6 +517,60 @@ only on a suitably configured developer host:</p>
 </pre></div>
 </div>
 <p>Pass extra pytest arguments after the script name to select a file or test.</p>
+<p>Run GPU tests serially, without pytest-xdist (<code class="docutils literal notranslate"><span class="pre">-n</span></code>). Each invocation generates
+a fresh session ID and exports <code class="docutils literal notranslate"><span class="pre">XR_AI_TEST_SESSION</span></code> only while a GPU test runs.
+<code class="docutils literal notranslate"><span class="pre">xr_ai_vllm</span></code> labels newly created containers <code class="docutils literal notranslate"><span class="pre">xr-ai-test-session=&lt;id&gt;</span></code> without
+changing their launch fingerprint. Before and after each GPU test, the fixture
+removes only containers with that exact session label, using immutable IDs.
+Test-mode launcher operations also check ownership before reusing, restarting,
+stopping, or removing a container. Ordinary sample launches are unchanged.</p>
+<p>If Docker ownership inventory fails or times out, the test is skipped rather
+than assuming the host is empty. Any foreign <code class="docutils literal notranslate"><span class="pre">xr-ai-vllm-*</span></code> or <code class="docutils literal notranslate"><span class="pre">xr-ai-nim-*</span></code>
+container, running or stopped, causes <strong>all</strong> GPU tests to skip, including
+NVENC and LiveKit tests that launch no model server. This conservative guard
+avoids GPU contention and accidental reuse or replacement of stopped servers.</p>
+<p>Fixture teardown handles test and fixture failures, but cannot run after
+pytest is forcibly killed. A later session does not adopt the dead session’s
+label or automatically reclaim its containers. To recover, inspect
+<code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">ps</span> <span class="pre">-a</span> <span class="pre">--filter</span> <span class="pre">label=xr-ai-test-session</span></code> and confirm the owner of each
+leftover container is no longer running. Remove only that confirmed container
+with <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">rm</span> <span class="pre">-f</span> <span class="pre">&lt;container-id&gt;</span></code>, then rerun the tests. Never purge by label
+presence alone: another worktree may still be using a different session.</p>
+<p>The two Docker cleanup integration tests are marked <code class="docutils literal notranslate"><span class="pre">gpu</span></code> and additionally
+require a local <code class="docutils literal notranslate"><span class="pre">busybox</span></code> image. They use uniquely named, labelled throwaway
+containers; CPU runs do not contact Docker during their collection. The nightly
+workflow retains its separate dedicated-runner cleanup policy.</p>
+</section>
+<section id="apple-microphone-transaction-tests">
+<h2>Apple microphone transaction tests<a class="headerlink" href="#apple-microphone-transaction-tests" title="Link to this heading">#</a></h2>
+<p>With Xcode 26.3 or newer selected, run the real StreamKit package tests on an
+installed iOS Simulator. From <code class="docutils literal notranslate"><span class="pre">client-samples/ios-visionos/StreamKit</span></code>:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>xcodebuild<span class="w"> </span>-scheme<span class="w"> </span>StreamKit<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-destination<span class="w"> </span><span class="s1">'platform=iOS Simulator,name=iPhone 17 Pro'</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="nv">CODE_SIGNING_ALLOWED</span><span class="o">=</span>NO<span class="w"> </span><span class="nb">test</span>
+</pre></div>
+</div>
+<p>Replace the simulator name with one installed in your Xcode environment. The
+<code class="docutils literal notranslate"><span class="pre">ios-microphone-tests</span></code> workflow runs these tests and builds the unsigned iOS
+and visionOS app targets from a clean checkout with dependency resolution
+enabled. It compiles the actual app and LiveKit backend.
+The transaction tests substitute physical capture and transport operations to
+check rollback failures, retained cleanup resources, cancellation, request ordering,
+and disabled audio.
+They do not verify usable remote audio or the operating system’s microphone
+indicator; those checks require a physical device and a running server.</p>
+</section>
+<section id="android-jvm-boundary-tests">
+<h2>Android JVM boundary tests<a class="headerlink" href="#android-jvm-boundary-tests" title="Link to this heading">#</a></h2>
+<p>With JDK 17 and the Android SDK configured, run from <code class="docutils literal notranslate"><span class="pre">client-samples/android</span></code>:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>./gradlew<span class="w"> </span>assembleDebug<span class="w"> </span>testDebugUnitTest<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>verifyNettyPin<span class="w"> </span>verifyBuildscriptSecurityVersions
+</pre></div>
+</div>
+<p>These are the build, JVM test, Netty pin, and buildscript security checks used
+by <code class="docutils literal notranslate"><span class="pre">android-build</span></code> CI. They need no emulator and do not establish physical
+camera, microphone, or remote playback behavior. Validate affected device
+behavior on hardware and report the device and result separately.</p>
 </section>
 <section id="coverage-boundaries">
 <h2>Coverage boundaries<a class="headerlink" href="#coverage-boundaries" title="Link to this heading">#</a></h2>
@@ -490,6 +590,25 @@ it covers multi-client and multi-agent fan-out, interleaving, join and leave
 events, filter isolation, attribution, ordering, and participant-targeted return
 traffic.</p>
 </section>
+<section id="measure-coverage">
+<h2>Measure coverage<a class="headerlink" href="#measure-coverage" title="Link to this heading">#</a></h2>
+<p>CI measures coverage on Python 3.12 and publishes a per-project table to the job
+summary, with the raw reports attached as the <code class="docutils literal notranslate"><span class="pre">coverage</span></code> artifact. The report is
+informational and does not gate the build. The measured packages are listed in
+<code class="docutils literal notranslate"><span class="pre">source_pkgs</span></code> in <code class="docutils literal notranslate"><span class="pre">tests/pyproject.toml</span></code>: the SDK, utilities, and services that
+the test project installs or puts on its <code class="docutils literal notranslate"><span class="pre">pythonpath</span></code>. A package missing from
+that list does not appear in the table. To reproduce the report, run from
+<code class="docutils literal notranslate"><span class="pre">tests/</span></code> with the project environment at the repository root:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">UV_PROJECT_ENVIRONMENT</span><span class="o">=</span>../.venv<span class="w"> </span>uv<span class="w"> </span>--config-file<span class="w"> </span>../uv.toml<span class="w"> </span>run<span class="w"> </span>coverage<span class="w"> </span>run<span class="w"> </span>-m<span class="w"> </span>pytest<span class="w"> </span>-m<span class="w"> </span><span class="s2">"not gpu"</span>
+<span class="nv">UV_PROJECT_ENVIRONMENT</span><span class="o">=</span>../.venv<span class="w"> </span>uv<span class="w"> </span>--config-file<span class="w"> </span>../uv.toml<span class="w"> </span>run<span class="w"> </span>coverage<span class="w"> </span>json
+python3<span class="w"> </span>../.github/scripts/coverage_summary.py<span class="w"> </span>coverage.json
+</pre></div>
+</div>
+<p>Beyond line and branch coverage, the table counts the <code class="docutils literal notranslate"><span class="pre">except</span></code> clauses in each
+project and how many of them ran at least once. An <code class="docutils literal notranslate"><span class="pre">except</span></code> body runs only when
+a test provokes the failure, so this number shows where failure handling is
+untested. Add a test that exercises a handler before changing it.</p>
+</section>
 <section id="adding-tests">
 <h2>Adding tests<a class="headerlink" href="#adding-tests" title="Link to this heading">#</a></h2>
 <p>Keep shared endpoint and polling helpers in <code class="docutils literal notranslate"><span class="pre">conftest.py</span></code>, <code class="docutils literal notranslate"><span class="pre">_helpers.py</span></code>, or
@@ -497,6 +616,57 @@ traffic.</p>
 Docker, or NVENC; otherwise it is expected to run on the stock CI runner. Use
 the narrowest existing test module for the behavior, and add an integration
 test only when a real process boundary is material to the contract.</p>
+<p>Put repository Python tests under <code class="docutils literal notranslate"><span class="pre">tests/</span></code>; native or browser tests elsewhere
+need an explicit repository CI collection path.</p>
+</section>
+<section id="test-design">
+<span id="id1"></span><h2>Test design<a class="headerlink" href="#test-design" title="Link to this heading">#</a></h2>
+<p>Apply these principles to both repository and consumer code.</p>
+<ul class="simple">
+<li><p>Exercise the production entry point for the changed behavior, at the
+narrowest boundary that can expose the defect. Do not copy methods into a
+synthetic harness or inject input after the path being changed. Broader
+application coverage is needed only when the change affects that boundary.</p></li>
+<li><p>For a regression fix, run the test with the fix reverted or the original
+defect restored and confirm a failure for the intended reason. For new
+behavior, check that removing it breaks the assertion. A collection error
+or a missing dependency is not evidence that the test detects the defect.</p></li>
+<li><p>Assert the observable property: payload, ownership, ordering, isolation, or
+output. A status or call count suffices only when that is the contract. Do
+not derive the expected value from the same constant as the actual value.
+Fakes must preserve the real SDK’s event and cancellation guarantees.</p></li>
+<li><p>For checks covering all shipped presets or samples, discover them from the
+project and assert the selection is non-empty so new variants cannot silently
+escape coverage.</p></li>
+<li><p>Bound waits, subprocesses, and thread joins so regressions fail with useful
+diagnostics. A test timeout does not stop background work; fixture teardown
+must release its own tasks and resources even when assertions fail.</p></li>
+<li><p>Restore environment variables and global state with fixtures or scoped
+patching, including mutations performed by setup helpers. Avoid persistent
+<code class="docutils literal notranslate"><span class="pre">os.environ.setdefault()</span></code> calls in test setup.</p></li>
+<li><p>Tests must pass from a fresh checkout with declared dependencies and any
+checked-in lockfiles, without requiring pre-existing <code class="docutils literal notranslate"><span class="pre">node_modules</span></code> or
+untracked developer locks. Provision tools and network artifacts in setup or
+CI, not inside tests; skip optional unavailable prerequisites with a reason.
+Required CI coverage must provision them.</p></li>
+</ul>
+</section>
+<section id="build-the-documentation">
+<h2>Build the documentation<a class="headerlink" href="#build-the-documentation" title="Link to this heading">#</a></h2>
+<p>From the repository root, install the pinned documentation toolchain in a
+separate environment and run the same strict checked-out build as the docs PR
+check:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>venv<span class="w"> </span>docs/.venv
+uv<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>--python<span class="w"> </span>docs/.venv/bin/python<span class="w"> </span>-r<span class="w"> </span>docs/requirements.txt
+make<span class="w"> </span>-C<span class="w"> </span>docs<span class="w"> </span>strict<span class="w"> </span><span class="nv">SPHINXBUILD</span><span class="o">=</span><span class="s2">"</span><span class="nv">$PWD</span><span class="s2">/docs/.venv/bin/sphinx-build"</span>
+</pre></div>
+</div>
+<p>The build validates public API documentation, generates the CLI and
+configuration catalogs, treats Sphinx warnings as errors, and checks the
+rendered Python reference for private implementation details. Open
+<code class="docutils literal notranslate"><span class="pre">docs/_build/current/index.html</span></code> to inspect the result. The deployment workflow
+also runs <code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">-C</span> <span class="pre">docs</span> <span class="pre">strict-versions</span></code> with <code class="docutils literal notranslate"><span class="pre">sphinx-multiversion</span></code> installed
+from the same requirements and full release-tag history available.</p>
 </section>
 </section>
 
@@ -549,9 +719,16 @@ test only when a real process boundary is material to the contract.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#prepare-the-test-environment">Prepare the test environment</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#run-the-suite">Run the suite</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#apple-microphone-transaction-tests">Apple microphone transaction tests</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#android-jvm-boundary-tests">Android JVM boundary tests</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coverage-boundaries">Coverage boundaries</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#measure-coverage">Measure coverage</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#adding-tests">Adding tests</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#test-design">Test design</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#build-the-documentation">Build the documentation</a></li>
 </ul>
   </nav></div>
 

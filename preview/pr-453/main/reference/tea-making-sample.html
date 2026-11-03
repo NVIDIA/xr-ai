@@ -281,15 +281,17 @@
 <div class="version-switcher">
   <label for="version-select" class="version-switcher__label">Version</label>
   <select id="version-select" class="version-switcher__select">
-    <option value="0" >v0.1.0-beta</option>
-    <option value="1" selected>main (development)</option>
+    <option value="0" >v0.3.0-beta</option>
+    <option value="1" >v0.2.0-beta.2</option>
+    <option value="2" >v0.1.0-beta</option>
+    <option value="3" selected>main (development)</option>
   </select>
 </div>
 <script>
   (function () {
     // Navigate by index into a build-time list, never by reading the URL back
     // out of the DOM, so page text can never become a navigation target.
-    var urls = ["../../v0.1.0-beta/index.html", "tea-making-sample.html"];
+    var urls = ["../../v0.3.0-beta/reference/tea-making-sample.html", "../../v0.2.0-beta.2/reference/tea-making-sample.html", "../../v0.1.0-beta/index.html", "tea-making-sample.html"];
     var select = document.getElementById("version-select");
     select.addEventListener("change", function () {
       var url = urls[select.selectedIndex];
@@ -328,36 +330,54 @@
 <li class="toctree-l1 has-children"><a class="reference internal" href="../guides/index.html">Guides</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-a-sample.html">Adding a new sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/building-your-app.html">Build your application</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/deploying-with-nim.html">Deploying samples with NIM endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/python-code-style.html">Python code style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/sbom.html">Software bill of materials</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/testing.html">Testing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Reference</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="agent-sdk-conversation.html">xr-ai-conversation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-hub.html">xr-ai-hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="agent-sdk-interaction.html">xr-ai-interaction</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-models.html">xr-ai-models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="agent-sdk-routing.html">xr-ai-routing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-runtime.html">xr-ai-runtime</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-tools.html">xr-ai-tools</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-voice.html">xr-ai-voice</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-web-events.html">xr-ai-web-events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="clef-flash.html">Clef-Flash local decision server</a></li>
 <li class="toctree-l2"><a class="reference internal" href="command-line.html">Command-line reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="configuration.html">Sample configuration reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conversation-example.html">Conversation example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
+<li class="toctree-l2"><a class="reference internal" href="magpie-nim-tts.html">Magpie NIM speech</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="migration-history.html">Migration history</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="migration-history/through-v0.3.0-beta.html">Migration notes through v0.3.0-beta</a></li>
+</ul>
+</details></li>
 <li class="toctree-l2"><a class="reference internal" href="migrations.html">Release migration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="model-servers-nim.html">NIM model endpoints</a></li>
+<li class="toctree-l2"><a class="reference internal" href="procedure-capture-guide.html">Procedure capture and guidance</a></li>
 <li class="toctree-l2"><a class="reference internal" href="simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_gpu/index.html">xr_ai_gpu</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_hub/index.html">xr_ai_hub</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_vad/index.html">xr_ai_vad</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="python/xr_ai_tools/index.html">xr_ai_tools</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/async_tools/index.html">xr_ai_tools.async_tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/capture/index.html">xr_ai_tools.capture</a></li>
 <li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/current_frame/index.html">xr_ai_tools.current_frame</a></li>
 <li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/image/index.html">xr_ai_tools.image</a></li>
 <li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/image_polygon/index.html">xr_ai_tools.image_polygon</a></li>
@@ -379,11 +399,15 @@
 <li class="toctree-l3"><a class="reference internal" href="python/xr_ai_models/presets/index.html">xr_ai_models.presets</a></li>
 </ul>
 </details></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_routing/index.html">xr_ai_routing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_runtime/index.html">xr_ai_runtime</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_logging/index.html">xr_ai_logging</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_interaction/index.html">xr_ai_interaction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_conversation/index.html">xr_ai_conversation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_model_server_stack/index.html">xr_ai_model_server_stack</a></li>
 </ul>
 </details></li>
 </ul>
@@ -446,20 +470,21 @@
 -->
 <section id="tea-making-guidance-building-deterministic-visual-workflows">
 <h1>Tea-making guidance — building deterministic visual workflows<a class="headerlink" href="#tea-making-guidance-building-deterministic-visual-workflows" title="Link to this heading">#</a></h1>
-<p>The tea-making sample is a reference for applications that combine a guided
-procedure, visual evidence, foreground questions, independent background
-observers, and voice output. Refer to the
-<a class="reference internal" href="../getting_started/quickstart.html"><span class="doc">quickstart</span></a> to run the sample. This
-architecture reference explains how to adapt the sample to another procedure
-rather than merely changing model settings.</p>
-<p>The defining pattern is a deterministic workflow around an agentic core. YAML
-declares the steps and state contract. Application code owns transitions and
-evidence. The model interprets observations and selects native tools, but it
-does not choose which workflow is active, mutate arbitrary state, or advance a
-step implicitly.</p>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">#</a></h2>
+<p>Use this reference for procedural assistants that combine spoken guidance with
+visual checks of task progress. Tea making is the example: the application
+controls the steps and completion rules, while models interpret observations
+and answer questions. Adapt the workflow and its tools to guide other
+procedures.</p>
+<p>To run the sample, refer to the
+<a class="reference internal" href="../getting_started/quickstart.html"><span class="doc">quickstart</span></a>.</p>
+<p>For speech deployment and explicit batch-STT selection, refer to
+<a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a>.</p>
+</section>
 <section id="what-to-copy">
 <h2>What to copy<a class="headerlink" href="#what-to-copy" title="Link to this heading">#</a></h2>
-<p>Use this sample when your application needs one or more of these patterns:</p>
+<p>Reusable patterns include:</p>
 <ul class="simple">
 <li><p>a foreground agent that changes its tool catalog based on explicit state;</p></li>
 <li><p>a guided procedure whose evidence comes from current visual observations;</p></li>
@@ -476,8 +501,8 @@ ownership, and event composition are reusable.</p>
 <section id="quick-start">
 <h2>Quick start<a class="headerlink" href="#quick-start" title="Link to this heading">#</a></h2>
 <p>Run commands from <code class="docutils literal notranslate"><span class="pre">agent-samples/tea-making-sample/</span></code>. The tea sample reuses all
-model services, so start the shared stack, including Piper TTS, first:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>../model-servers<span class="w"> </span>model_servers
+model services, so start the sample’s model stack, including Pocket TTS, first:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-servers<span class="w"> </span>tea_making_sample_model_servers
 </pre></div>
 </div>
 <p>Wait for the model launcher to report readiness and return. Then launch the
@@ -486,31 +511,29 @@ sample from the same terminal:</p>
 uv<span class="w"> </span>run<span class="w"> </span>tea_making_sample
 </pre></div>
 </div>
-<p>Open <code class="docutils literal notranslate"><span class="pre">https://localhost:8080</span></code>, accept the development certificate, allow camera
-and microphone access, and connect. Wake-word mode is the default; try:</p>
-<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Agent, help me make tea.
-Agent, what is the current step?
-Agent, what do you see?
-Agent, start watching for spills.
-Agent, start recording the transcript.
+<p>Open the authenticated web-client URL printed by DeviceIOHub, accept the
+development certificate, allow camera and microphone access, and connect.
+Conversation mode is the default. Say “Hey agent, let’s start talking” once,
+then try:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Help me make tea.
+What is the current step?
+What do you see?
+Start watching for spills.
+Start recording the transcript.
 </pre></div>
 </div>
-<p>The launcher options are:</p>
-<div class="pst-scrollable-table-container"><table class="table">
-<thead>
-<tr class="row-odd"><th class="head"><p>Option</p></th>
-<th class="head"><p>Behavior</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--expose-web-events</span></code></p></td>
-<td><p>Bind the unauthenticated live event viewer to all IPv4 interfaces instead of loopback</p></td>
-</tr>
-</tbody>
-</table>
-</div>
+<p>Pass <code class="docutils literal notranslate"><span class="pre">--expose-web-events</span></code> to bind the unauthenticated live event viewer to all
+IPv4 interfaces instead of loopback. Refer to the generated
+<a class="reference internal" href="command-line.html"><span class="doc">command-line</span></a> reference for all launcher options.</p>
 <p>Speech uses the reused TTS endpoint in <code class="docutils literal notranslate"><span class="pre">yaml/models.local.json</span></code>. Voice-gate
-behavior comes from <code class="docutils literal notranslate"><span class="pre">voice_gate_yaml</span></code> in <code class="docutils literal notranslate"><span class="pre">yaml/tea_making_worker.yaml</span></code>.</p>
+behavior comes from <code class="docutils literal notranslate"><span class="pre">voice_gate_yaml</span></code> in <code class="docutils literal notranslate"><span class="pre">yaml/tea_making_worker.yaml</span></code>.
+The default requires <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">start</span> <span class="pre">talking</span></code> after connecting,
+then accepts speech without a wake phrase until <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">stop</span> <span class="pre">talking</span></code>.
+Set <code class="docutils literal notranslate"><span class="pre">mode:</span> <span class="pre">hybrid</span></code> to also accept wake-addressed one-off questions before a
+conversation starts, or <code class="docutils literal notranslate"><span class="pre">mode:</span> <span class="pre">always_on</span></code> for immediate, ungated speech dispatch.
+The advanced <code class="docutils literal notranslate"><span class="pre">conversation.require_wake_phrase:</span> <span class="pre">true</span></code> policy applies only inside an open
+conversation. Backend selection is independent of these modes. Refer to
+<a class="reference internal" href="agent-sdk-voice.html#voice-conversation-controls"><span class="std std-ref">Conversation controls</span></a>.</p>
 <p>The live event viewer is available at <code class="docutils literal notranslate"><span class="pre">http://127.0.0.1:8092</span></code> on the XR-AI
 host. With <code class="docutils literal notranslate"><span class="pre">--expose-web-events</span></code>, use <code class="docutils literal notranslate"><span class="pre">http://&lt;xr-host&gt;:8092</span></code> from a trusted
 development network and restrict TCP port 8092 accordingly. Durable JSONL
@@ -519,6 +542,11 @@ is only a bounded view of the current worker process.</p>
 </section>
 <section id="architecture">
 <h2>Architecture<a class="headerlink" href="#architecture" title="Link to this heading">#</a></h2>
+<p>YAML declares the workflow steps and state contract. A VLM describes each
+current view, and the observation LLM judges that caption and selects native
+tools. Application code validates the resulting state proposal and counts any
+required consecutive confirmations. The model does not choose which workflow
+is active, mutate arbitrary state, or advance a step implicitly.</p>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>camera frames ────────────────&gt; ParticipantImageAgent
                                       │
 accepted speech or typed query         ├─&gt; GuidanceAgent observation loop
@@ -533,7 +561,7 @@ accepted speech or typed query         ├─&gt; GuidanceAgent observation loop
                                       │
                                       v
                                 typed runtime events
-                                      ├─&gt; GuidanceVoiceAgent ─&gt; voice aggregation
+                                      ├─&gt; GuidanceVoiceAgent ─&gt; voice updates
                                       ├─&gt; BackgroundContextAgent
                                       ├─&gt; FileOutputAgent ─────&gt; JSONL
                                       ├─&gt; TeaWebEventsAgent ───&gt; live browser
@@ -545,14 +573,13 @@ events. The runtime fans typed events out to peer agents. Agents call peer
 tools directly, and each background agent owns its participant tasks.
 The worker uses native <code class="docutils literal notranslate"><span class="pre">xr_ai_runtime</span></code> agents and <code class="docutils literal notranslate"><span class="pre">xr_ai_tools</span></code> instances; it
 does not use NVIDIA Agent Toolkit, PydanticAI, MCP clients, or MCP servers.
-Wake-word gating is the sample default; callers can explicitly select
-always-on speech. Every spoken response is also sent to the connection client
-on <code class="docutils literal notranslate"><span class="pre">agent.response</span></code> so the client can render accessible text alongside audio.
-Raw streamed responses are finalized there as soon as their content completes,
-and batched responses are finalized as soon as their rewrite completes. The
-voice aggregator’s playback reservation affects only subsequent speech
-scheduling, not when the text appears. An urgent barge-in can still stop audio
-after the full intended utterance has reached the client.</p>
+The sample accepts speech without a wake phrase during an active conversation;
+callers can enable its configured wake phrases. Every spoken response is also
+sent to the connection client on <code class="docutils literal notranslate"><span class="pre">agent.response</span></code> so the client can render
+accessible text alongside audio.
+Streamed responses are finalized there as soon as their content completes, and
+combined updates as soon as their rewrite completes. An urgent barge-in can
+still stop audio after the full intended utterance has reached the client.</p>
 </section>
 <section id="agent-responsibilities">
 <h2>Agent responsibilities<a class="headerlink" href="#agent-responsibilities" title="Link to this heading">#</a></h2>
@@ -596,19 +623,15 @@ after the full intended utterance has reached the client.</p>
 <td><p>Which guidance notices are spoken</p></td>
 <td><p>Workflow decisions</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">VoiceAggregationAgent</span></code></p></td>
-<td><p>Participant speech pacing, ordering, and coalescing</p></td>
-<td><p>Workflow decisions</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">FileOutputAgent</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">FileOutputAgent</span></code></p></td>
 <td><p>Participant session files and JSONL records</p></td>
 <td><p>Agent policy</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">TeaWebEventsAgent</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">TeaWebEventsAgent</span></code></p></td>
 <td><p>Explicit compact projections for the generic live viewer</p></td>
 <td><p>Durable storage or file polling</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">WebEventsAgent</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">WebEventsAgent</span></code></p></td>
 <td><p>Bounded HTTP presentation grouped by participant and topic</p></td>
 <td><p>Application event selection</p></td>
 </tr>
@@ -708,6 +731,29 @@ locks, and participant cleanup.</p>
 <a class="reference internal" href="command-line.html"><span class="doc">command-line</span></a> references for configuration fields and
 command syntax.</p>
 </section>
+<section id="opt-in-session-capture">
+<h2>Opt-in session capture<a class="headerlink" href="#opt-in-session-capture" title="Link to this heading">#</a></h2>
+<p>Capture is disabled by default. Run <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">tea_making_sample</span> <span class="pre">--session-recording</span></code>
+from <code class="docutils literal notranslate"><span class="pre">agent-samples/tea-making-sample/</span></code> to start <code class="docutils literal notranslate"><span class="pre">device_io_capture</span></code>
+immediately after DeviceIOHub. It records participant video, device and agent
+audio, and inbound and outbound data in a separate process. The option can be
+combined with <code class="docutils literal notranslate"><span class="pre">--expose-web-events</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">yaml/media_capture.yaml</span></code> selects the <code class="docutils literal notranslate"><span class="pre">demo</span></code> profile and participant-lifetime
+sessions. Each connection creates a raw bundle under
+<code class="docutils literal notranslate"><span class="pre">~/.local/share/xr-ai/captures/tea-making-sample/</span></code>. When the session closes,
+the capture renderer produces a captioned NVENC H.264 MP4 with timestamp-aligned
+AAC-LC audio. Raw media and the exact data timeline are retained. Demo encoding
+requires an NVIDIA GPU with NVENC support and <code class="docutils literal notranslate"><span class="pre">ffmpeg</span></code> on <code class="docutils literal notranslate"><span class="pre">PATH</span></code>.</p>
+<p>Capture uses bounded queues and drops pending capture frames if encoding falls
+behind, so recording does not backpressure the hub or worker. Omit <code class="docutils literal notranslate"><span class="pre">--session-recording</span></code>
+when the deployment must not retain device media. Refer to
+<a class="reference internal" href="../components/server-runtime.html"><span class="doc">Server runtime</span></a> for the capture bundle and renderer contract.</p>
+<p>For a captioned MP4, disconnect the participant and wait for
+<code class="docutils literal notranslate"><span class="pre">video/session.mp4</span></code> and the manifest’s <code class="docutils literal notranslate"><span class="pre">renderings.captioned_mp4</span></code> entry before
+stopping the stack. Shutdown finalizes active raw bundles without starting new
+renders. Refer to <a class="reference internal" href="../components/server-runtime.html"><span class="doc">Server runtime</span></a> for rendering a completed
+raw bundle separately.</p>
+</section>
 <section id="configuration">
 <h2>Configuration<a class="headerlink" href="#configuration" title="Link to this heading">#</a></h2>
 <p>Run and edit the sample from <code class="docutils literal notranslate"><span class="pre">agent-samples/tea-making-sample/</span></code>. The
@@ -727,14 +773,14 @@ temporary worker configuration with absolute paths. Edit the files under
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/workflow.yaml</span></code></p></td>
 <td><p>Typed state, steps, triggers, evidence, tool access, transitions, and user messages</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/voice_gate.yaml</span></code> and <code class="docutils literal notranslate"><span class="pre">yaml/voice_gate.always-on.yaml</span></code></p></td>
-<td><p>Wake-word and always-on speech presets</p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/voice_gate.yaml</span></code></p></td>
+<td><p>Interaction mode, conversation controls and optional wake phrases</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/rag_service.yaml</span></code></p></td>
 <td><p>Document path, model configuration, cache, chunking, embedding dimensions, and score threshold</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/models.local.json</span></code></p></td>
-<td><p>Reused model adapters, endpoints, and readiness checks</p></td>
+<td><p>Model adapters and shared endpoints, including RAG embeddings</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/device_io_hub.yaml</span></code></p></td>
 <td><p>LiveKit room and ports, web and token servers, and network behavior</p></td>
@@ -742,8 +788,8 @@ temporary worker configuration with absolute paths. Edit the files under
 </tbody>
 </table>
 </div>
-<p>Choose a voice preset through <code class="docutils literal notranslate"><span class="pre">voice_gate_yaml</span></code> in
-<code class="docutils literal notranslate"><span class="pre">tea_making_worker.yaml</span></code>. Change observation and summary frequency in that
+<p>Set the interaction mode directly in <code class="docutils literal notranslate"><span class="pre">voice_gate.yaml</span></code>; <code class="docutils literal notranslate"><span class="pre">voice_gate_yaml</span></code> in
+<code class="docutils literal notranslate"><span class="pre">tea_making_worker.yaml</span></code> selects that file. Change observation and summary frequency in that
 worker file, retrieval behavior in <code class="docutils literal notranslate"><span class="pre">rag_service.yaml</span></code>, and the procedure itself
 in <code class="docutils literal notranslate"><span class="pre">workflow.yaml</span></code>. Relative paths declared in each configuration file resolve
 from that file’s directory. Workflow state and step references are validated at
@@ -753,7 +799,11 @@ The <code class="docutils literal notranslate"><span class="pre">--expose-web-ev
 the runtime copy. Changing <code class="docutils literal notranslate"><span class="pre">models.local.json</span></code> changes the endpoints used by
 the worker and RAG service but not the persistent servers. Refer to
 <a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a> for a server-side model, GPU, port, or
-memory change, then restart the shared stack.</p>
+memory change, then restart the sample’s model stack.</p>
+<p>The local embedding server uses <code class="docutils literal notranslate"><span class="pre">nvidia/Nemotron-3-Embed-1B-BF16</span></code>, served as
+<code class="docutils literal notranslate"><span class="pre">embed</span></code> on port 8109. RAG retains its native 2048-dimensional vectors. The
+external NIM profile uses <code class="docutils literal notranslate"><span class="pre">nvidia/nemotron-3-embed-1b</span></code> with the same dimension;
+refer to <a class="reference internal" href="../guides/deploying-with-nim.html"><span class="doc">Deploying samples with NIM endpoints</span></a> for endpoint configuration.</p>
 <p>Refer to the generated <a class="reference internal" href="configuration.html"><span class="doc">configuration</span></a> reference for exact
 fields, checked-in values, and adjacent YAML comments.</p>
 </section>
@@ -764,18 +814,21 @@ participant has an active step.</p>
 <ul class="simple">
 <li><p>With no active workflow, the model receives root tools: start/status,
 current view, RAG, recent background facts, and background controls.</p></li>
-<li><p>With an active workflow, it receives the current step’s tools plus explicit
-workflow controls and compact sparse state.</p></li>
+<li><p>With an active workflow, it receives the focused current-step policy and
+compact sparse state. Read-only step tools remain available unless the whole
+utterance is a procedural guide question. A state-changing workflow tool is
+exposed only for an explicit command, with advance-versus-skip arguments
+fixed before the model call.</p></li>
 </ul>
 <p>Active turns may address the current step, guide status and controls, or the
 independent background applications. For a request unrelated to all of those,
-the model must call no tool, leave guide state unchanged, and reply exactly “I
-can only help with the active tea guide right now.” The rule is scoped to the
-active route; the idle root assistant can answer ordinary questions.</p>
-<p>An inline <code class="docutils literal notranslate"><span class="pre">foreground_prompt</span></code> or <code class="docutils literal notranslate"><span class="pre">foreground_prompt_file</span></code> overrides only the
-shared foreground instructions. The packaged idle or active policy is appended
-after that shared prompt so configuration overrides cannot remove route
-selection, active-guide refusal, or workflow-control safeguards.</p>
+the model must call no tool, leave guide state unchanged, and briefly decline.
+The wording is intentionally not fixed. The rule is scoped to the active route;
+the idle root assistant can answer ordinary questions.</p>
+<p>An inline <code class="docutils literal notranslate"><span class="pre">foreground_prompt</span></code> or <code class="docutils literal notranslate"><span class="pre">foreground_prompt_file</span></code> supplies the root
+assistant and explicit background-route instructions. Active tea behavior comes
+from the focused policies built from <code class="docutils literal notranslate"><span class="pre">workflow.yaml</span></code>; configuration overrides
+cannot replace the active-guide scope or workflow-control safeguards.</p>
 <p>There is exactly one model loop. The foreground agent does not ask one model to
 route to another agent, and background agents never capture a foreground turn.
 <code class="docutils literal notranslate"><span class="pre">current_view</span></code> is a direct-return exception within that loop: after the route is
@@ -821,9 +874,10 @@ workflow step is active, the task:</p>
 <ol class="arabic simple">
 <li><p>Executes the step’s deterministic trigger, such as <code class="docutils literal notranslate"><span class="pre">current_view</span></code> or
 <code class="docutils literal notranslate"><span class="pre">clock__timer</span></code>.</p></li>
-<li><p>Applies the declared evidence rule.</p></li>
-<li><p>Calls the bounded tool loop with only the step’s observation tools.</p></li>
-<li><p>Accepts state through the controlled commit tool.</p></li>
+<li><p>Calls the bounded observation tool loop to judge the trigger result.</p></li>
+<li><p>Counts a valid completion proposal against the declared confirmation rule.</p></li>
+<li><p>Accepts state through the controlled commit tool only after the required
+confirmations.</p></li>
 <li><p>Publishes typed records and completion notices.</p></li>
 </ol>
 <p>Unavailable frames, invalid observations, and service failures record an error
@@ -834,8 +888,10 @@ model I/O run outside the participant state lock; the resulting commit is
 accepted only when the captured step and revision still match. Reset, restart,
 status, and advance controls therefore remain responsive during slow inference.</p>
 <p>To use audio, sensor, or backend evidence, add another deterministic trigger
-that returns a typed result. Keep evidence collection separate from state
-mutation so the same workflow rules remain testable without the live source.</p>
+that returns a typed result. Keep observation, semantic judgment, and guarded
+state mutation separate so the same workflow rules remain testable without the
+live source. Regex matching may guard the internal judgment token, but should
+not be the primary interpreter of natural-language captions.</p>
 </section>
 <section id="independent-background-agents">
 <h2>Independent background agents<a class="headerlink" href="#independent-background-agents" title="Link to this heading">#</a></h2>
@@ -863,8 +919,11 @@ readiness. Open <code class="docutils literal notranslate"><span class="pre">htt
 <code class="docutils literal notranslate"><span class="pre">http://&lt;xr-host&gt;:8092</span></code> from a trusted development network.
 <code class="docutils literal notranslate"><span class="pre">TeaWebEventsAgent</span></code> explicitly subscribes to the
 foreground, guidance, background, transcript, video-log, and participant
-lifecycle topics and publishes compact <code class="docutils literal notranslate"><span class="pre">WebEvent</span></code> payloads. There is no runtime
-wildcard subscription and no file tailing.</p>
+lifecycle topics and publishes compact <code class="docutils literal notranslate"><span class="pre">WebEvent</span></code> payloads. Visual panes show
+only application lifecycle and material <code class="docutils literal notranslate"><span class="pre">BackgroundFact</span></code> results; every-frame
+captions, no-change observations, unavailable frames, and errors remain in the
+durable records and worker log. There is no runtime wildcard subscription and
+no file tailing.</p>
 <p>The viewer keeps only a bounded in-memory history for the current process. The
 participant JSONL files under <code class="docutils literal notranslate"><span class="pre">artifacts/</span></code> remain the durable record and include
 events that may not be selected for live presentation. The listener is
@@ -907,7 +966,8 @@ ZMQ service rather than bypassing the repository’s service model.</p>
 <li><p>Define the new state fields and steps in <code class="docutils literal notranslate"><span class="pre">workflow.yaml</span></code>.</p></li>
 <li><p>Give every step the smallest possible <code class="docutils literal notranslate"><span class="pre">reads</span></code>, <code class="docutils literal notranslate"><span class="pre">writes</span></code>, and tool set.</p></li>
 <li><p>Put calculations and external facts behind deterministic tools.</p></li>
-<li><p>Define evidence independently of the observation prompt.</p></li>
+<li><p>Give the VLM a small factual caption prompt and the observation LLM a small
+semantic judgment prompt; use code only to validate and count proposals.</p></li>
 <li><p>Keep advancement explicit unless the product explicitly requires automatic
 transitions.</p></li>
 <li><p>Add state and routing tests before tuning prompts.</p></li>
@@ -942,11 +1002,13 @@ or voice by accident.</p>
 <p><code class="docutils literal notranslate"><span class="pre">GuidanceVoiceAgent</span></code> is intentionally separate from <code class="docutils literal notranslate"><span class="pre">GuidanceAgent</span></code>. Add,
 suppress, batch, or redirect notices there. Background applications remain
 text and event producers unless a dedicated voice subscriber chooses otherwise.
-Foreground responses and guidance notices publish to <code class="docutils literal notranslate"><span class="pre">VoiceAggregationAgent</span></code>,
-which combines non-urgent output produced during an active utterance before it
-reaches <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code>. The response text reaches the connection client’s Agent
-panel as soon as that raw or rewritten response is complete; the aggregator’s
-open-loop playback estimate remains private scheduling state.</p>
+Foreground answers are replies to the user’s query, and guidance notices are
+unprompted updates, both published through <code class="docutils literal notranslate"><span class="pre">ResponseOutputs</span></code> to
+<code class="docutils literal notranslate"><span class="pre">VOICE_OUTPUT_TOPIC</span></code>. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> owns when they are spoken: it combines
+updates that arrive while the participant is being spoken to, using the
+<code class="docutils literal notranslate"><span class="pre">llm_update_combiner</span></code> passed to it in <code class="docutils literal notranslate"><span class="pre">app.py</span></code>, and a new query supersedes
+prior output. The response text reaches the connection client’s Agent panel as
+soon as that response or combined update is complete.</p>
 </section>
 </section>
 <section id="lifecycle-invariants">
@@ -955,8 +1017,6 @@ open-loop playback estimate remains private scheduling state.</p>
 <li><p>Participant join starts a fresh workflow and output session.</p></li>
 <li><p>Participant leave cancels foreground, observation, and background tasks
 before image resources are released.</p></li>
-<li><p>Participant leave also releases queued voice-aggregation state, so a later
-connection reusing the participant ID cannot inherit stale speech.</p></li>
 <li><p>Record-producing agents publish cleanup-complete events after cancellation;
 <code class="docutils literal notranslate"><span class="pre">FileOutputAgent</span></code> closes the session only after every producer has finished.</p></li>
 <li><p>A superseding query cancels the participant’s prior foreground turn.</p></li>
@@ -990,15 +1050,16 @@ history.</p></li>
 </ol>
 <p>The checked-in live-model routing eval shares the production foreground’s
 root-versus-active prompt and tool preparation. It validates the first model
-action, tool arguments, exact active-guide refusal, and positive active-guide
-routes. Start <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> so the configured Omni LLM endpoint on port 8108
-is healthy, then run from <code class="docutils literal notranslate"><span class="pre">agent-samples/tea-making-sample/</span></code>:</p>
+action, bound workflow arguments, semantic active-guide refusals, and positive
+active-guide routes. The suite must maintain an 80 percent pass rate so
+occasional language-model variation remains visible without making the
+evaluation unusable. Start <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> so the configured Omni LLM endpoint
+on port 8108 is healthy, then run from <code class="docutils literal notranslate"><span class="pre">agent-samples/tea-making-sample/</span></code>:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>worker<span class="w"> </span>python<span class="w"> </span>eval/eval.py
 </pre></div>
 </div>
-<p>The command prints one <code class="docutils literal notranslate"><span class="pre">PASS</span></code> or <code class="docutils literal notranslate"><span class="pre">FAIL</span></code> line for each case and exits with a
-nonzero status when a tool choice, argument schema, or response contract does
-not match.</p>
+<p>The command prints <code class="docutils literal notranslate"><span class="pre">PASS</span></code> or <code class="docutils literal notranslate"><span class="pre">MISS</span></code> for each case. It exits nonzero when the
+overall pass rate drops below 80 percent.</p>
 <p>When debugging, inspect the workflow, background, foreground, and Relay JSONL
 files as separate stages. This shows whether the problem came from evidence,
 tool selection, state policy, event delivery, or presentation.</p>
@@ -1063,11 +1124,13 @@ until another concrete application requires the same contract.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-to-copy">What to copy</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#quick-start">Quick start</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#architecture">Architecture</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#agent-responsibilities">Agent responsibilities</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#source-map">Source map</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#opt-in-session-capture">Opt-in session capture</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#configuration">Configuration</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#deterministic-foreground-routing">Deterministic foreground routing</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#workflow-contract">Workflow contract</a></li>

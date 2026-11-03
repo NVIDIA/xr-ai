@@ -277,15 +277,17 @@
 <div class="version-switcher">
   <label for="version-select" class="version-switcher__label">Version</label>
   <select id="version-select" class="version-switcher__select">
-    <option value="0" selected>v0.1.0-beta</option>
-    <option value="1" >main (development)</option>
+    <option value="0" >v0.3.0-beta</option>
+    <option value="1" >v0.2.0-beta.2</option>
+    <option value="2" selected>v0.1.0-beta</option>
+    <option value="3" >main (development)</option>
   </select>
 </div>
 <script>
   (function () {
     // Navigate by index into a build-time list, never by reading the URL back
     // out of the DOM, so page text can never become a navigation target.
-    var urls = ["py-modindex.html", "../main/index.html"];
+    var urls = ["../v0.3.0-beta/index.html", "../v0.2.0-beta.2/index.html", "py-modindex.html", "../main/index.html"];
     var select = document.getElementById("version-select");
     select.addEventListener("change", function () {
       var url = urls[select.selectedIndex];
@@ -337,11 +339,13 @@
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="reference/python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="reference/python/xr_ai_gpu/index.html">xr_ai_gpu</a></li>
 <li class="toctree-l2"><a class="reference internal" href="reference/python/xr_ai_hub/index.html">xr_ai_hub</a></li>
 <li class="toctree-l2"><a class="reference internal" href="reference/python/xr_ai_vad/index.html">xr_ai_vad</a></li>
 <li class="toctree-l2"><a class="reference internal" href="reference/python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="reference/python/xr_ai_tools/index.html">xr_ai_tools</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="reference/python/xr_ai_tools/async_tools/index.html">xr_ai_tools.async_tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="reference/python/xr_ai_tools/capture/index.html">xr_ai_tools.capture</a></li>
 <li class="toctree-l3"><a class="reference internal" href="reference/python/xr_ai_tools/current_frame/index.html">xr_ai_tools.current_frame</a></li>
 <li class="toctree-l3"><a class="reference internal" href="reference/python/xr_ai_tools/image/index.html">xr_ai_tools.image</a></li>
 <li class="toctree-l3"><a class="reference internal" href="reference/python/xr_ai_tools/image_polygon/index.html">xr_ai_tools.image_polygon</a></li>
@@ -363,11 +367,15 @@
 <li class="toctree-l3"><a class="reference internal" href="reference/python/xr_ai_models/presets/index.html">xr_ai_models.presets</a></li>
 </ul>
 </details></li>
+<li class="toctree-l2"><a class="reference internal" href="reference/python/xr_ai_routing/index.html">xr_ai_routing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="reference/python/xr_ai_runtime/index.html">xr_ai_runtime</a></li>
 <li class="toctree-l2"><a class="reference internal" href="reference/python/xr_ai_logging/index.html">xr_ai_logging</a></li>
 <li class="toctree-l2"><a class="reference internal" href="reference/python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
 <li class="toctree-l2"><a class="reference internal" href="reference/python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
 <li class="toctree-l2"><a class="reference internal" href="reference/python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reference/python/xr_ai_interaction/index.html">xr_ai_interaction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reference/python/xr_ai_conversation/index.html">xr_ai_conversation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reference/python/xr_ai_model_server_stack/index.html">xr_ai_model_server_stack</a></li>
 </ul>
 </details></li>
 </ul>
@@ -411,7 +419,22 @@
      <tr>
        <td></td>
        <td>
+       <a href="reference/python/xr_ai_conversation/index.html#module-xr_ai_conversation"><code class="xref">xr_ai_conversation</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="reference/python/xr_ai_gpu/index.html#module-xr_ai_gpu"><code class="xref">xr_ai_gpu</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
        <a href="reference/python/xr_ai_hub/index.html#module-xr_ai_hub"><code class="xref">xr_ai_hub</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="reference/python/xr_ai_interaction/index.html#module-xr_ai_interaction"><code class="xref">xr_ai_interaction</code></a></td><td>
        <em></em></td></tr>
      <tr>
        <td></td>
@@ -424,6 +447,11 @@
        <a href="reference/python/xr_ai_logging/index.html#module-xr_ai_logging"><code class="xref">xr_ai_logging</code></a></td><td>
        <em></em></td></tr>
      <tr>
+       <td></td>
+       <td>
+       <a href="reference/python/xr_ai_model_server_stack/index.html#module-xr_ai_model_server_stack"><code class="xref">xr_ai_model_server_stack</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
        <td><img src="_static/minus.png" class="toggler"
               id="toggle-1" style="display: none" alt="-" /></td>
        <td>
@@ -433,6 +461,11 @@
        <td></td>
        <td>&#160;&#160;&#160;
        <a href="reference/python/xr_ai_models/presets/index.html#module-xr_ai_models.presets"><code class="xref">xr_ai_models.presets</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="reference/python/xr_ai_routing/index.html#module-xr_ai_routing"><code class="xref">xr_ai_routing</code></a></td><td>
        <em></em></td></tr>
      <tr>
        <td></td>
@@ -449,6 +482,11 @@
        <td></td>
        <td>&#160;&#160;&#160;
        <a href="reference/python/xr_ai_tools/async_tools/index.html#module-xr_ai_tools.async_tools"><code class="xref">xr_ai_tools.async_tools</code></a></td><td>
+       <em></em></td></tr>
+     <tr class="cg-2">
+       <td></td>
+       <td>&#160;&#160;&#160;
+       <a href="reference/python/xr_ai_tools/capture/index.html#module-xr_ai_tools.capture"><code class="xref">xr_ai_tools.capture</code></a></td><td>
        <em></em></td></tr>
      <tr class="cg-2">
        <td></td>

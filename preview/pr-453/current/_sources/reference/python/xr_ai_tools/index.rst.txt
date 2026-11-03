@@ -16,6 +16,7 @@ Submodules
    :maxdepth: 1
 
    /reference/python/xr_ai_tools/async_tools/index
+   /reference/python/xr_ai_tools/capture/index
    /reference/python/xr_ai_tools/current_frame/index
    /reference/python/xr_ai_tools/image/index
    /reference/python/xr_ai_tools/image_polygon/index
@@ -77,6 +78,10 @@ Package Contents
 
 
       Run one validated request through the shared Relay tool lifecycle.
+
+      Handler exceptions propagate with their original type, instance, and
+      cause. Relay records failures before propagating them; middleware can
+      recover from or replace a handler failure. Cancellation propagates.
 
 
 

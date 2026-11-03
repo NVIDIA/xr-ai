@@ -58,10 +58,11 @@ Functions
 .. autoapisummary::
 
    xr_ai_vllm.gpu_compute_major
+   xr_ai_vllm.gpu_is_dgx_spark
    xr_ai_vllm.load_config
+   xr_ai_vllm.parse_config_bool
    xr_ai_vllm.resolve_model_cache
    xr_ai_vllm.setup_hf_env
-   xr_ai_vllm.serve_nim
    xr_ai_vllm.serve
    xr_ai_vllm.stop_persistent_servers
 
@@ -71,10 +72,15 @@ Package Contents
 
 .. py:function:: gpu_compute_major() -> int
 
-   Return the GPU's compute-capability major version, or 0 if unknown.
+   Return the first selected GPU's compute-capability major, or 0 if unknown.
 
    Reads ``CUDA_VISIBLE_DEVICES`` from the env, so set the device filter
    before calling. Logs a warning on failure and falls back to 0.
+
+
+.. py:function:: gpu_is_dgx_spark() -> bool
+
+   Return whether the selected GPU is the GB10 in a DGX Spark.
 
 
 .. py:function:: load_config(argv: list[str] | None = None) -> tuple[dict, pathlib.Path, pathlib.Path | None]
@@ -87,6 +93,11 @@ Package Contents
    used as the base for relative paths like ``model_cache``.
 
 
+.. py:function:: parse_config_bool(value: object, key: str) -> bool
+
+   Parse a YAML boolean without treating every non-empty string as true.
+
+
 .. py:function:: resolve_model_cache(cfg: dict, yaml_dir: pathlib.Path, *, default: str) -> pathlib.Path
 
    Resolve ``model_cache`` (relative to the YAML dir) and ensure it exists.
@@ -97,32 +108,21 @@ Package Contents
    Apply the shared HuggingFace / CUDA env block.
 
    Sets ``CUDA_VISIBLE_DEVICES`` (when configured), ``HF_TOKEN`` (when
-   provided), ``HF_HUB_ENABLE_HF_TRANSFER``, ``HF_HOME``, and
+   provided), ``HF_XET_HIGH_PERFORMANCE``, ``HF_HOME``, and
    ``TRANSFORMERS_CACHE``.
 
-   Both ``HF_HOME`` and ``TRANSFORMERS_CACHE`` are set via ``setdefault``, so
-   an externally-set value wins over the YAML default. This intentionally
-   differs from the pre-consolidation per-server code where the LLM wrappers
-   used an unconditional assignment for ``HF_HOME``; callers that need the
-   YAML value to take priority must unset the env var before calling.
-   ``TRANSFORMERS_CACHE`` mirrors ``HF_HOME`` for Transformers <4.36 and
-   third-party libraries that have not yet adopted the ``HF_HOME`` superset.
+   A non-empty env value for ``HF_TOKEN``, ``HF_HOME``, or
+   ``TRANSFORMERS_CACHE`` wins over the YAML value, per
+   docs/source/getting_started/credentials.md. ``TRANSFORMERS_CACHE`` mirrors
+   ``HF_HOME`` for Transformers <4.36 and libraries that have not adopted
+   ``HF_HOME``.
 
-   Returns the resolved ``cuda_visible_devices`` string (or ``None``) so
-   callers that run GPU detection can confirm the device filter is applied.
-
-
-.. py:function:: serve_nim(*, image: str, container_name: str, log_prefix: str, http_port: int, grpc_port: int | None = None, nim_cache: pathlib.Path, cuda_visible_devices: str | None = None, extra_env: dict[str, str] | None = None, ready_file: pathlib.Path | None = None) -> None
-
-   Pull (if needed) and run a NIM container, blocking until stopped.
-
-   Readiness is ``/v1/health/ready`` on *http_port*. First start includes
-   the NGC engine download (multi-GB), so expect a long cold start; the
-   mounted *nim_cache* makes subsequent starts fast.
+   Returns the YAML device selection when configured, otherwise inherited
+   ``CUDA_VISIBLE_DEVICES`` (or ``None``), for GPU probes and Docker placement.
 
 
 .. py:data:: DEFAULT_IMAGE
-   :value: 'nvcr.io/nvidia/vllm:26.04-py3'
+   :value: 'nvcr.io/nvidia/vllm:26.10.pre1-py3'
 
 
    Default NGC vLLM image used when a service does not override ``vllm_image``.
@@ -130,7 +130,7 @@ Package Contents
    Individual services may pin a newer image when required by their model.
 
 
-.. py:function:: serve(*, backend: str, persistent: bool, image: str = DEFAULT_IMAGE, container_name: str, log_prefix: str, model: str, extra_serve_args: list[str], host: str, port: int, model_cache: pathlib.Path, hf_token: str | None = None, cuda_visible_devices: str | None = None, extra_env: dict[str, str] | None = None, extra_pip: list[str] | None = None, ready_file: pathlib.Path | None = None) -> None
+.. py:function:: serve(*, backend: str, persistent: bool, image: str = DEFAULT_IMAGE, container_name: str, log_prefix: str, model: str, extra_serve_args: list[str], host: str, port: int, model_cache: pathlib.Path, hf_token: str | None = None, cuda_visible_devices: str | None = None, extra_env: dict[str, str] | None = None, extra_pip: list[str] | None = None, ready_file: pathlib.Path | None = None, spark_uma: bool = False) -> None
 
    Launch vLLM via *backend* (`"pip"` or `"docker"`).
 
@@ -156,13 +156,22 @@ Package Contents
    service-specific name (e.g. ``xr-ai-vllm-<entry-point>``) so the stop
    helper can find it.
 
-   *extra_pip* is docker-mode only: a list of pip-installable package
-   specs that get installed into the container right before ``vllm
-   serve`` runs (same shell line that already installs ``hf_transfer``).
-   Use it for models whose architecture imports a wheel the NGC image
-   doesn't bundle — e.g. ``["mamba-ssm", "causal-conv1d"]`` for
-   Nemotron-Omni's hybrid SSM backbone. Silently ignored in pip mode
-   (deps belong in the wrapper's pyproject.toml there).
+   Docker mode resolves *model* from the mounted *model_cache* inside the
+   container and serves the cached snapshot directory under
+   ``--served-model-name`` without contacting the Hub. Only when the snapshot
+   is absent does it verify a Xet-capable Hub, repairing a
+   missing or incompatible ``hf-xet`` wheel, and download the snapshot before
+   CUDA starts. With ``HF_HUB_OFFLINE=1`` a missing snapshot fails startup
+   instead. *extra_pip* is an additional
+   docker-only list of pip-installable package specs for model architectures
+   whose wheels the image doesn't bundle. Silently ignored in pip mode (deps
+   belong in the wrapper's pyproject.toml there).
+
+   *spark_uma* enables the DGX Spark cold-start safeguard in docker mode:
+   one bounded restart of a container attempt launched by this wrapper after
+   a non-container-OOM CUDA driver-allocation failure. Pip mode ignores this
+   Docker lifecycle option, preserving the one-field backend switch used by
+   the service YAML files.
 
 
 .. py:function:: stop_persistent_servers(services: list[tuple[str, int]]) -> bool
@@ -173,8 +182,9 @@ Package Contents
 
    1. Look for a docker container labelled ``xr-ai-vllm.port=<port>``
       (stamped at start time by the vLLM wrapper) and ``docker stop`` it.
-   2. Fall back to port → pid → SIGTERM → SIGKILL for pip-mode vLLM or
-      in-process servers (e.g. STT).
+   2. Fall back to port → pid for pip-mode vLLM or in-process servers
+      (e.g. STT). Pocket TTS is signalled as a complete process group; other
+      local servers are signalled by PID.
 
    A missing container and listener is already stopped. Output is print-style
    with ``[<label>] …`` prefixes. Discovery errors and listeners that are not

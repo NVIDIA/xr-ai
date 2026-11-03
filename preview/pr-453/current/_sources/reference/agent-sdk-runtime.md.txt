@@ -5,12 +5,18 @@
 
 # xr-ai-runtime
 
-`xr-ai-agent-runtime` provides typed, participant-scoped publication and fan-out
-for composable agents. It does not own models, planning, memory, tools, media,
-application state, or agent-created tasks. Refer to {doc}`python/index` for the
-exact public APIs.
+## Overview
+
+Use the runtime to connect agents that need to react to each other's results,
+such as a visual monitor and an agent that announces changes. Events let those
+agents cooperate while keeping their state and background work separate.
 
 ## Agents and tools
+
+The `xr-ai-agent-runtime` package owns event delivery. Models, planning,
+memory, tools, media, application state, and agent-created tasks remain
+application-owned. Refer to
+{doc}`python/index` for the exact public APIs.
 
 An `Agent` owns private state and exposes ordinary finite `Tool` or streaming
 `AsyncTool` objects from `xr-ai-tools`. Direct callers execute those tools
@@ -64,4 +70,7 @@ scope instead. Runtime publication and delivery scopes carry participant,
 message, correlation, parent-message, source, and subscriber metadata. A
 detached agent task whose lifetime exceeds its callback starts a fresh Relay
 scope stack and preserves logical correlation in metadata rather than retaining
-an ended delivery scope.
+an ended delivery scope. Pass `context=nemo_relay.fork_asyncio_context()` to
+`asyncio.create_task()`, then enter
+`nemo_relay.use_scope_stack(nemo_relay.create_scope_stack())` inside the
+detached coroutine before opening its operation scope or calling tools.

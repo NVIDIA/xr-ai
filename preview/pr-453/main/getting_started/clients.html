@@ -281,15 +281,17 @@
 <div class="version-switcher">
   <label for="version-select" class="version-switcher__label">Version</label>
   <select id="version-select" class="version-switcher__select">
-    <option value="0" >v0.1.0-beta</option>
-    <option value="1" selected>main (development)</option>
+    <option value="0" >v0.3.0-beta</option>
+    <option value="1" >v0.2.0-beta.2</option>
+    <option value="2" >v0.1.0-beta</option>
+    <option value="3" selected>main (development)</option>
   </select>
 </div>
 <script>
   (function () {
     // Navigate by index into a build-time list, never by reading the URL back
     // out of the DOM, so page text can never become a navigation target.
-    var urls = ["../../v0.1.0-beta/getting_started/clients.html", "clients.html"];
+    var urls = ["../../v0.3.0-beta/getting_started/clients.html", "../../v0.2.0-beta.2/getting_started/clients.html", "../../v0.1.0-beta/getting_started/clients.html", "clients.html"];
     var select = document.getElementById("version-select");
     select.addEventListener("change", function () {
       var url = urls[select.selectedIndex];
@@ -328,36 +330,54 @@
 <li class="toctree-l1 has-children"><a class="reference internal" href="../guides/index.html">Guides</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-a-sample.html">Adding a new sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/building-your-app.html">Build your application</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/deploying-with-nim.html">Deploying samples with NIM endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/python-code-style.html">Python code style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/sbom.html">Software bill of materials</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/testing.html">Testing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../reference/index.html">Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-conversation.html">xr-ai-conversation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-hub.html">xr-ai-hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-interaction.html">xr-ai-interaction</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-models.html">xr-ai-models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-routing.html">xr-ai-routing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-runtime.html">xr-ai-runtime</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-tools.html">xr-ai-tools</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-voice.html">xr-ai-voice</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-web-events.html">xr-ai-web-events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/clef-flash.html">Clef-Flash local decision server</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/command-line.html">Command-line reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/configuration.html">Sample configuration reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/conversation-example.html">Conversation example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/magpie-nim-tts.html">Magpie NIM speech</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference/migration-history.html">Migration history</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/migration-history/through-v0.3.0-beta.html">Migration notes through v0.3.0-beta</a></li>
+</ul>
+</details></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/model-servers-nim.html">NIM model endpoints</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/procedure-capture-guide.html">Procedure capture and guidance</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../reference/python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_gpu/index.html">xr_ai_gpu</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_hub/index.html">xr_ai_hub</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vad/index.html">xr_ai_vad</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../reference/python/xr_ai_tools/index.html">xr_ai_tools</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/async_tools/index.html">xr_ai_tools.async_tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/capture/index.html">xr_ai_tools.capture</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/current_frame/index.html">xr_ai_tools.current_frame</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/image/index.html">xr_ai_tools.image</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/image_polygon/index.html">xr_ai_tools.image_polygon</a></li>
@@ -379,11 +399,15 @@
 <li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_models/presets/index.html">xr_ai_models.presets</a></li>
 </ul>
 </details></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_routing/index.html">xr_ai_routing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_runtime/index.html">xr_ai_runtime</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_logging/index.html">xr_ai_logging</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_interaction/index.html">xr_ai_interaction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_conversation/index.html">xr_ai_conversation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_model_server_stack/index.html">xr_ai_model_server_stack</a></li>
 </ul>
 </details></li>
 </ul>
@@ -446,11 +470,12 @@
 -->
 <section id="connecting-clients">
 <h1>Connecting clients<a class="headerlink" href="#connecting-clients" title="Link to this heading">#</a></h1>
-<p>Every interactive agent sample starts DeviceIOHub and then accepts one or more
-platform clients.
-This client reference is the canonical build and connection guide for the
-clients under <code class="docutils literal notranslate"><span class="pre">client-samples/</span></code>. Refer to <a class="reference internal" href="quickstart.html"><span class="doc">Quickstart</span></a> for starting an
-agent sample and <a class="reference internal" href="networking.html"><span class="doc">Networking and firewall</span></a> for firewall and TLS configuration.</p>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">#</a></h2>
+<p>Connect your agent to a browser, phone, or XR device using the supplied client
+applications. Use them to test an interaction on your target device or as a
+starting point for your own client integration.</p>
+</section>
 <section id="client-matrix">
 <span id="which-clients-exist"></span><h2>Client matrix<a class="headerlink" href="#client-matrix" title="Link to this heading">#</a></h2>
 <div class="pst-scrollable-table-container"><table class="table">
@@ -493,7 +518,201 @@ agent sample and <a class="reference internal" href="networking.html"><span clas
 <p>The clients share a StreamKit shape: one transport-neutral <code class="docutils literal notranslate"><span class="pre">StreamSession</span></code>
 delegates to a <code class="docutils literal notranslate"><span class="pre">StreamingBackend</span></code>, and <code class="docutils literal notranslate"><span class="pre">LiveKitBackend</span></code> is the only layer that
 imports a LiveKit SDK. Connection, microphone, camera, participant status, data,
-and network metrics remain separate operations.</p>
+network metrics, request-driven image capture, and file transfer remain separate
+operations.</p>
+</section>
+<section id="camera-streaming-quality">
+<span id="id1"></span><h2>Camera streaming quality<a class="headerlink" href="#camera-streaming-quality" title="Link to this heading">#</a></h2>
+<p>Pass an optional <code class="docutils literal notranslate"><span class="pre">CameraEncodingConfig</span></code> through <code class="docutils literal notranslate"><span class="pre">CameraConfig.encoding</span></code> when
+starting video. The settings belong to the local publishing client. No hub
+configuration or client-server policy exchange is involved. LiveKit mapping
+stays inside the backend; other backends apply the settings they support.</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Preset</p></th>
+<th class="head"><p>Adaptation preference</p></th>
+<th class="head"><p>Multiple-resolution publication</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Detail</p></td>
+<td><p>Favor resolution; reduce FPS under pressure</p></td>
+<td><p>Disabled</p></td>
+</tr>
+<tr class="row-odd"><td><p>Motion</p></td>
+<td><p>Favor FPS; reduce resolution under pressure</p></td>
+<td><p>Backend default</p></td>
+</tr>
+<tr class="row-even"><td><p>Balanced</p></td>
+<td><p>Allow both resolution and FPS to change</p></td>
+<td><p>Backend default</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>All three presets start with ceilings of 3 Mbps per encoded stream and 30 FPS.
+These are configurable policy defaults, not values derived from a survey of
+glasses or device measurements. They match LiveKit’s 16:9 1080p preset reference;
+the adaptation preference distinguishes the three presets, not a measured
+quality or bandwidth guarantee for a particular device.
+Override the FPS ceiling for workloads that need fewer, more detailed frames.
+Bitrate is an encoder ceiling, not a total bandwidth cap: simulcast, protocol
+overhead, and other media can add traffic. Actual FPS and bitrate may be lower.
+Omitting <code class="docutils literal notranslate"><span class="pre">encoding</span></code> preserves backend defaults. C++ also retains its existing
+zero-as-unset numeric fields; its named presets supply the explicit ceilings.
+The C++ LiveKit SDK exposes the primary encoding limit but not lower simulcast
+layer controls. With simulcast enabled, that SDK still chooses lower-layer
+budgets; StreamKit cannot enforce their ordering relative to a custom primary
+limit. No C++ runtime behavior is changed to hide this limitation. Explicitly
+disabling simulcast avoids that unsupported combination.</p>
+<div class="highlight-javascript notranslate"><div class="highlight"><pre><span></span><span class="kd">const</span><span class="w"> </span><span class="nx">encoding</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">CameraEncodingConfig</span><span class="p">({</span>
+<span class="w">  </span><span class="p">...</span><span class="nx">CameraEncodingConfig</span><span class="p">.</span><span class="nx">detail</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">maxFramerate</span><span class="o">:</span><span class="w"> </span><span class="mf">10</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">maxBitrateBps</span><span class="o">:</span><span class="w"> </span><span class="mf">3</span><span class="nx">_000_000</span><span class="p">,</span>
+<span class="p">});</span>
+<span class="k">await</span><span class="w"> </span><span class="nx">session</span><span class="p">.</span><span class="nx">startCamera</span><span class="p">(</span><span class="ow">new</span><span class="w"> </span><span class="nx">CameraConfig</span><span class="p">({</span><span class="w"> </span><span class="nx">encoding</span><span class="w"> </span><span class="p">}));</span>
+</pre></div>
+</div>
+<div class="highlight-swift notranslate"><div class="highlight"><pre><span></span><span class="kd">var</span><span class="w"> </span><span class="nv">encoding</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="n">CameraEncodingConfig</span><span class="p">.</span><span class="n">detail</span>
+<span class="n">encoding</span><span class="p">.</span><span class="n">maxFramerate</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="mi">10</span>
+<span class="k">try</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="n">session</span><span class="p">.</span><span class="n">startCamera</span><span class="p">(</span><span class="n">config</span><span class="p">:</span><span class="w"> </span><span class="n">CameraConfig</span><span class="p">(</span><span class="n">encoding</span><span class="p">:</span><span class="w"> </span><span class="n">encoding</span><span class="p">))</span>
+</pre></div>
+</div>
+<div class="highlight-kotlin notranslate"><div class="highlight"><pre><span></span><span class="kd">val</span><span class="w"> </span><span class="nv">encoding</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">CameraEncodingConfig</span><span class="p">.</span><span class="na">DETAIL</span><span class="p">.</span><span class="na">copy</span><span class="p">(</span><span class="n">maxFramerate</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="m">10</span><span class="p">)</span>
+<span class="n">session</span><span class="p">.</span><span class="na">startCamera</span><span class="p">(</span><span class="n">CameraConfig</span><span class="p">(</span><span class="n">encoding</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">encoding</span><span class="p">))</span>
+</pre></div>
+</div>
+<div class="highlight-cpp notranslate"><div class="highlight"><pre><span></span><span class="n">streamkit</span><span class="o">::</span><span class="n">CameraConfig</span><span class="w"> </span><span class="n">camera</span><span class="p">;</span>
+<span class="n">camera</span><span class="p">.</span><span class="n">encoding</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">streamkit</span><span class="o">::</span><span class="n">CameraEncodingConfig</span><span class="o">::</span><span class="n">Detail</span><span class="p">();</span>
+<span class="n">camera</span><span class="p">.</span><span class="n">encoding</span><span class="o">-&gt;</span><span class="n">max_framerate</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">10</span><span class="p">;</span>
+<span class="n">session</span><span class="p">.</span><span class="n">StartCamera</span><span class="p">(</span><span class="n">camera</span><span class="p">);</span>
+</pre></div>
+</div>
+<p>The preference and <code class="docutils literal notranslate"><span class="pre">simulcast</span></code> switch can also be configured independently.
+On web, Android, and Apple clients, publishing with an explicit bitrate limit
+keeps configured lower-layer budgets at or below the primary budget. If the
+largest SDK lower-layer budget exceeds the requested primary budget, all lower
+budgets are reduced by the same SDK-derived proportion. This preserves their
+relative ordering, dimensions, and frame-rate settings without inventing a new
+layer profile. Lower budgets remain unchanged when no reduction is needed;
+when reduction is needed, even an already smaller lower-layer budget can decrease.
+An encoding profile that cannot preserve positive integer budgets and distinct
+budget ordering is rejected during publication rather than silently rounded into
+a different profile. This is not an aggregate bandwidth or power-management policy.
+Favoring detail alone changes encoder adaptation; the Detail preset additionally
+disables lower simulcast layers. Capture format remains selected by the platform
+or external frame producer, preserving the camera’s aspect ratio.</p>
+<p>For externally supplied Apple or Android frames, pass the same encoding policy
+as the optional <code class="docutils literal notranslate"><span class="pre">encoding</span></code> argument to <code class="docutils literal notranslate"><span class="pre">session.injectVideoFrame</span></code> on the first
+frame that publishes the track. Later frames keep the active policy. C++ takes
+the policy through <code class="docutils literal notranslate"><span class="pre">StartCamera</span></code> before the first <code class="docutils literal notranslate"><span class="pre">FrameSink</span></code> frame. Stop the
+camera and start a new publication to change settings. Custom backends using
+the original frame-injection method retain their existing behavior and ignore
+the optional encoding policy until they implement it.</p>
+<p>Android device cameras use LiveKit’s cached camera track; StreamKit does not
+dispose that SDK-owned allocation. Injected Android tracks remain explicit
+allocations. Camera stop during LiveKit reconnection reports not connected:
+the SDK can retain an unpublished track for republishing, so stop cannot safely
+release it until reconnection completes or the room disconnects. A reported
+partial native disposal failure prevents replacement rather than retrying an
+already partly disposed allocation. Retained camera failures do not prevent
+transport reconnection for audio or data. An explicit disconnect still reports
+cleanup failures after closing admission; a failed transport close is retained
+and is not silently treated as success. Android reclaims SDK-held capture only
+after actual custody evidence from that room, not merely its disconnected state
+or an absent publication. It does not wait for an event the SDK may never emit:
+an unentered room has no terminal obligation, and unknown entered-room capture
+remains quarantined until an actual receipt arrives. SDK-internal cleanup failures that LiveKit
+does not expose remain an SDK limitation; a capturer disposal callback is not
+proof that every private native source was released.</p>
+<p>Apple camera transitions use one ordered queue. Every stop cancels earlier
+queued starts and drains cleanup, including a stop admitted after an intervening
+start. Repeated stop when already idle performs no capture work; a later explicit
+start remains a new request. First-frame publication uses the same queue.
+Failed capture cleanup retains the exact track for a later stop or disconnect
+attempt, without preventing transport reconnect; input already admitted before
+or during stop cannot replace it. A terminal room disconnect also attempts
+that cleanup. Neither backend treats a removed publication as proof of completed
+capture release.</p>
+<p>These settings do not guarantee minimum streaming resolution, minimum FPS, or
+latency. Under insufficient bandwidth, delivery may stall or lose frames.
+Consumers must still handle changing frame dimensions. A receiver’s LiveKit
+quality request is also a preference, not a minimum-resolution guarantee.</p>
+</section>
+<section id="request-driven-image-capture">
+<span id="id2"></span><h2>Request-driven image capture<a class="headerlink" href="#request-driven-image-capture" title="Link to this heading">#</a></h2>
+<p>Every StreamKit client can opt in to an image-capture handler. When an agent
+needs a picture for a participant whose video is not already streaming,
+DeviceIOHub sends a targeted <code class="docutils literal notranslate"><span class="pre">camera.capture.request</span></code>. The handler captures and
+encodes one JPEG, PNG, or WebP image; StreamKit returns it to the hub with
+LiveKit’s chunked byte-stream transport. Requests include an opaque correlation
+ID and deadline. The web, Android, and Apple SDKs cancel pending asynchronous
+capture work on disconnect or when a superseding turn expires the request. A
+client without an installed handler, or whose handler fails, returns an
+immediate rejection so the requesting tool does not wait for its full timeout.</p>
+<p>The web, Android, and Apple sample apps expose one persisted <strong>Camera Mode</strong>
+selector. <strong>Off</strong> installs no image handler and publishes no video,
+<strong>On-demand images</strong> installs the handler without publishing video, and <strong>Live
+video</strong> publishes the selected camera without installing the image handler.
+The first-launch default is <strong>Off</strong>. The selection is not reset by disconnect,
+reconnect, or app relaunch, so reconnecting restores the selected behavior
+without silently changing the user’s authorization choice. In on-demand mode,
+the handler briefly opens the selected camera when necessary and stops it after
+the still is encoded. Mode changes gate new requests: a request accepted while
+<strong>On-demand images</strong> is selected finishes normally and releases its resources,
+even if the user selects <strong>Off</strong> before it completes. <strong>Off</strong> prevents the next
+request; it is not a retroactive cancellation signal. Disconnect and the
+request protocol’s cancellation message still cancel pending work.</p>
+<p>The native StreamKit API exposes the same callback for the host application’s
+camera pipeline. The native LiveKit backend requires client-sdk-cpp v1.10.2 or
+newer. Capture streams are targeted to the configured hub identity and are
+limited to 8 MiB at the connector. They are not broadcast to peer participants.</p>
+<p>This capability is independent of visual inference. An agent calls the existing
+<code class="docutils literal notranslate"><span class="pre">CurrentFrameTool</span></code> and can pass its returned <code class="docutils literal notranslate"><span class="pre">ImageReference</span></code> to a VLM, an
+image-processing tool, a workflow, or another participant-scoped agent. The
+tool resolves a fresh hub frame when video is streaming and requests a client
+capture only when one is not available. This applies to every tool invocation,
+including periodic monitoring: installing the client capture handler opts that
+client in to brief camera activation when a caller needs a still while video is
+off. Agents do not branch on transport or camera state.</p>
+<p>External camera sources, including glasses SDKs, use the same mutually
+exclusive modes at the application boundary. In <strong>Live video</strong>, pass each SDK
+frame to <code class="docutils literal notranslate"><span class="pre">injectVideoFrame</span></code>; that API publishes a video track by design. In
+<strong>On-demand images</strong>, keep or request the latest SDK frame in the source adapter
+and encode it only from <code class="docutils literal notranslate"><span class="pre">onImageCaptureRequested</span></code>—do not pass it to
+<code class="docutils literal notranslate"><span class="pre">injectVideoFrame</span></code>, because that would publish video. In <strong>Off</strong>, stop or discard
+the SDK feed and leave the handler unset. This routing is client-side and does
+not require a new StreamKit API. The Android virtual-camera source demonstrates
+both paths: live mode injects its generated frames, while on-demand mode encodes
+one generated frame without publication. Apple integrations apply the same
+routing to the <code class="docutils literal notranslate"><span class="pre">CMSampleBuffer</span></code> supplied by the camera SDK.</p>
+<p>The same resolution rule can extend to a future short-video selector: resolve a
+recorded hub window first, then ask a capable client to record and upload a
+bounded segment when no local window exists. Client video capture is not
+implemented yet, and no provisional video protocol is exposed.</p>
+</section>
+<section id="client-to-agent-files">
+<span id="client-file-transfer"></span><h2>Client-to-agent files<a class="headerlink" href="#client-to-agent-files" title="Link to this heading">#</a></h2>
+<p>Every StreamKit client exposes <code class="docutils literal notranslate"><span class="pre">sendBytes</span></code> and <code class="docutils literal notranslate"><span class="pre">sendFile</span></code> (<code class="docutils literal notranslate"><span class="pre">SendBytes</span></code> and
+<code class="docutils literal notranslate"><span class="pre">SendFile</span></code> in C++). Both operations require an application topic; in-memory
+bytes also require a name. MIME type and string attributes are optional. Send
+completion confirms that the local LiveKit byte stream closed. Applications
+define their own agent-processing acknowledgement when needed.</p>
+<div class="highlight-javascript notranslate"><div class="highlight"><pre><span></span><span class="k">await</span><span class="w"> </span><span class="nx">session</span><span class="p">.</span><span class="nx">sendBytes</span><span class="p">(</span><span class="nx">pngBytes</span><span class="p">,</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nx">topic</span><span class="o">:</span><span class="w"> </span><span class="s1">'image.response'</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s1">'capture.png'</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">mimeType</span><span class="o">:</span><span class="w"> </span><span class="s1">'image/png'</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">attributes</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">request_id</span><span class="o">:</span><span class="w"> </span><span class="nx">requestId</span><span class="w"> </span><span class="p">},</span>
+<span class="p">});</span>
+</pre></div>
+</div>
+<p>Applications can group independent transfers with attributes such as a request
+ID and index. StreamKit supplies transport framing and emits only complete files,
+but it does not impose application-specific grouping or timing.</p>
+<p>Topics, names, and MIME types are limited to 255 UTF-8 bytes. A transfer may
+include up to 32 application attributes; keys are limited to 128 bytes, values
+to 1 KiB, and their combined encoded size to 8 KiB. Every client validates
+these protocol limits before opening the transfer.</p>
 <p id="network-telemetry">Graphical clients display LiveKit connection quality, round-trip time, and
 receive jitter; the C++ sample reports them through its callback. Backends sample
 existing WebRTC statistics about once per second. No hub message or separate
@@ -691,7 +910,8 @@ hub certificate on port 8080 remains required for the LiveKit channel.</p>
 </section>
 <section id="native-c">
 <h2>Native C++<a class="headerlink" href="#native-c" title="Link to this heading">#</a></h2>
-<p>The C++20 sample ships a working backend for the LiveKit C++ SDK v0.4.1.</p>
+<p>The C++20 sample ships a working backend for LiveKit client-sdk-cpp v1.10.2 or
+newer. The SDK root must use its official <code class="docutils literal notranslate"><span class="pre">include/</span></code> and <code class="docutils literal notranslate"><span class="pre">lib/</span></code> layout.</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>client-samples/native
 cmake<span class="w"> </span>-S<span class="w"> </span>.<span class="w"> </span>-B<span class="w"> </span>build<span class="w"> </span>-DLIVEKIT_SDK_ROOT<span class="o">=</span>/path/to/livekit-cpp-sdk
 cmake<span class="w"> </span>--build<span class="w"> </span>build
@@ -734,6 +954,9 @@ with <code class="docutils literal notranslate"><span class="pre">-DSTREAMKIT_BU
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">streamkit_livekit_backend_tests</span></code></p></td>
 <td><p>State deduplication, disconnect races, stale metrics, and callback exceptions</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">streamkit_byte_stream_tests</span></code></p></td>
+<td><p>Byte-stream connection admission and stub or SDK-backed send preconditions</p></td>
 </tr>
 </tbody>
 </table>
@@ -817,7 +1040,11 @@ interruption, and participant-routing contracts.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#client-matrix">Client matrix</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#camera-streaming-quality">Camera streaming quality</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#request-driven-image-capture">Request-driven image capture</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#client-to-agent-files">Client-to-agent files</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#shared-connection-flow">Shared connection flow</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#web">Web</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#web-xr-xr-render-demo">Web-XR (xr-render-demo)</a></li>

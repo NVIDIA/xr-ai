@@ -53,7 +53,9 @@ Package Contents
    When ``on_speech_start`` is provided, it fires once per utterance at the
    moment ``speech_s`` first crosses ``min_speech`` — a "leading edge" hook
    for speculative work (e.g. warming up a downstream resource before STT
-   completes).
+   completes). It is awaited on the feeding task before processing further
+   windows or finalizing that utterance. Callback exceptions are logged and
+   isolated so detection can continue.
 
 
    .. py:method:: reset() -> None
@@ -69,7 +71,11 @@ Package Contents
       Process one chunk of int16 LE PCM audio.
 
       ``pcm_int16``   — raw int16 little-endian PCM bytes (mono).
-      ``sample_rate`` — sample rate in Hz.
+      ``sample_rate`` — sample rate in Hz (constant for this stream).
+
+      Incomplete classification windows remain buffered. Speech and silence
+      durations advance only when a complete 32 ms window is classified,
+      independently of the caller's chunk size.
 
 
 

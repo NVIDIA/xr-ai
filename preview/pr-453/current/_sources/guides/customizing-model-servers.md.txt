@@ -5,244 +5,256 @@
 
 # Customizing model servers
 
-Use this workflow to change which shared models run, where they run, or how a
-sample connects to them. Model-server customization has two separate parts:
+## Overview
 
-1. A `model-servers` deployment profile declares which shared services the
-   operator starts and owns.
-2. Each sample's active models JSON declares compatible client adapters and
-   endpoints, with deployment ownership set to `reused`.
+Change a sample's model selection, GPU placement, or inference endpoints to
+suit your application and hardware. Keep the model-server settings and worker
+profile aligned, and stop the relevant services before applying deployment
+changes.
 
-Samples do not start or stop model services. Keep that ownership boundary when
-adapting a sample: customize the shared stack first, start it, and then point
-the sample at the resulting endpoints.
+## Existing services
+
+Each agent sample has a `model-servers/` convenience launcher that brings up
+only its required local inference servers. It waits for readiness and returns;
+the servers remain running while you start, stop, or develop the agent sample.
+These launchers are editable development presets. Applications can also use
+compatible services launched individually or independently operated endpoints.
+Refer to {doc}`deploying-with-nim` for external NIM endpoints.
+
+Inspect the selected services' configured ports before invoking a model
+launcher. Server identities are shared across samples, but reuse checks differ:
+
+- **vLLM Docker:** reuse requires the expected container name and a matching
+  launch-configuration fingerprint. On the selected ports, startup can evict
+  other xr-ai containers and listeners, or recreate a changed container.
+- **Pocket TTS:** reuses a listener whose `/health` endpoint is healthy,
+  without checking ownership or a launch-configuration fingerprint.
+- **Speaker ASR:** requires an owned listener and matching service fingerprint.
+  An unmanaged listener or configuration mismatch stops startup; it does not
+  evict or recreate the existing service.
+
+Before launching against occupied ports, establish that services will be reused
+unchanged or obtain permission from their operator to replace them.
+
+## Required local servers
+
+| Sample | Servers |
+|---|---|
+| Conversation example | Speaker ASR, Pocket TTS, Nemotron Omni, Cosmos VLM, Clef router |
+| Simple VLM (legacy) | speaker ASR, Pocket TTS, Cosmos VLM |
+| Lab instrument monitoring | Speaker ASR, TTS, Nemotron Omni, Cosmos VLM |
+| Tea making | Speaker ASR, TTS, Nemotron Omni, Nemotron embedding |
+| XR render demo | Speaker ASR, TTS, Nemotron Omni, Cosmos VLM |
+| Procedure capture and guide | Batch STT, Pocket TTS, Nemotron Omni, Cosmos VLM |
+
+The conversation example uses Omni for language and Clef for turn routing.
+Tea making uses Omni for both language and vision; its RAG service needs
+embeddings. XR rendering uses one Omni server for its LLM roles and does not
+need embeddings. Hubs, workers, RAG, scene, and rendering processes remain in
+the agent launcher; the model launcher brings up inference servers only.
+
+The conversation example, Simple VLM, lab monitoring, tea making, and XR render
+workers require speaker ASR on port 8102. They do not contain a batch-STT model
+role or automatically fall back to the batch server on 8103. Procedure capture
+and guide uses batch STT on port 8103 with speaker selection disabled.
+For explicit batch speech, replace `speaker-stt` with `stt` in the sample's
+launcher service list and every selected hardware YAML, add the existing
+batch adapter under `models.stt` in the worker profile, and disable
+`speaker.enabled` in the selected voice-gate YAML. To use automatic selection,
+retain both servers and a real batch client. Refer to
+{doc}`/reference/agent-sdk-voice` for backend policy.
+
+## Start, develop, and stop
+
+The following commands use deprecated Simple VLM as a legacy worked example.
+For new voice-and-vision applications, start with
+{doc}`/reference/conversation-example`. Run the example commands from
+`agent-samples/simple-vlm-example/`:
+
+```bash
+uv run --project model-servers simple_vlm_example_model_servers
+uv run simple_vlm_example
+```
+
+The first command downloads any missing weights, waits for healthy servers,
+and returns. Configure `HF_TOKEN` first; refer to
+{doc}`/getting_started/credentials`. Automatic GPU detection selects a bundled
+profile. To choose a reviewed profile explicitly, add
+`--gpu-profile dual_48G_ada` to the model command.
+
+Stopping or restarting the agent leaves models warm. Stop its model stack
+when finished:
+
+```bash
+uv run --project model-servers simple_vlm_example_model_servers --stop
+```
+
+Stop does not detect GPUs or require download credentials. Without an explicit
+profile it uses the selected services' shared default ports. If a hardware
+profile overrides ports, pass that same `--gpu-profile NAME` when stopping;
+this applies its port settings without inspecting the GPU. GPU placement and
+memory budgets do not affect cleanup. Refer to {doc}`/reference/command-line` for each sample's
+command. Each launcher has only `--stop` and `--gpu-profile`, besides help.
+
+If a later model fails to start, or startup is cancelled, servers that had
+signaled readiness when cleanup began stay running. Fix the failure and rerun
+the same model command to reuse them. If the fix changes a server that already
+started, run the model command with `--stop` first so the new settings take
+effect. You can also use `--stop` to clear retained servers. Unfinished Docker
+backend launches are stopped through their managed wrappers. Persistent
+pip-backend vLLM runs in a separate session and can keep loading after its
+wrapper is stopped; use `--stop` once it is listening to clear it.
+
+On startup failure, merged server YAML remains in a private `model-configs-*`
+directory under the existing run logs, at the paths printed in the failure
+summary. Successful startup removes those files. Credentials belong in the
+environment, not YAML; retained snapshots clear the supported inline `hf_token`
+field and never copy environment variables. Treat customized configurations
+and logs as private when sharing diagnostics.
+
+## Switch samples or update the checkout
+
+Use this flow whenever the set of models or server settings changes:
+
+1. Stop the agent and run its model command with `--stop`, using the current
+   checkout and the profile that launched it.
+2. Switch samples, update the checkout, or edit the server configuration.
+3. Run the destination sample's model launcher, wait for readiness, and start
+   the agent.
+
+The downloaded weight cache is retained. You can restart the agent repeatedly
+without stopping models while its server configuration stays the same.
+
+These stacks use common ports and server identities. They are intended for
+one local sample stack at a time. Stopping a stack also stops recognized
+services on its configured ports if another sample or manual invocation
+started them; `--stop` cannot selectively stop only services started by the
+latest invocation. Always stop the source stack before switching so unused
+models release memory. If any affected service predates your run, obtain its
+operator's authorization before that whole-stack shutdown and switch.
+Starting a stack does not stop services outside its selection.
+
+Launchers read the current configuration; they do not keep a launch history
+or reconcile every older checkout. If you already switched, use the previous
+checkout's stop command and configuration before starting the new stack.
+This explicit workflow is the supported way to apply upgrades and config
+edits. Changes to a convenience preset do not require backward-compatible
+launch plans or migration machinery for old running servers. Existing service
+ownership checks still refuse to stop unknown listeners. Refer to
+{doc}`/components/ai-services` for runtime persistence and cleanup details.
+
+## Developer sample API
+
+Model-server samples call the public
+{py:func}`xr_ai_model_server_stack.run_model_stack` entry point. Their code
+owns argument parsing, the base directory, and the list of required local
+servers. Configuration composition and process management remain inside the
+utility; sample code imports only public XR AI APIs.
 
 ## Configuration layers
 
 | Layer | Location | Responsibility |
 |---|---|---|
-| Deployment profile | `agent-samples/model-servers/yaml/models.<name>.json` | Logical roles, client adapters, endpoints, credentials, and shared-service ownership |
-| Hardware profile | `agent-samples/model-servers/yaml/<gpu-profile>/` | Image or checkpoint, ports, GPU placement, cache paths, and runtime memory settings |
-| Sample models JSON | `agent-samples/<sample>/yaml/models*.json` | The roles that worker consumes and the endpoints it reuses |
-| Sample worker YAML | `agent-samples/<sample>/yaml/<worker>.yaml` | Application behavior such as prompts, voice gating, timeouts, and capability-service endpoints |
+| Service defaults | `services/<service>/<entry>.yaml` | Models, images, ports, cache paths, and common runtime settings |
+| Sample GPU profile | `agent-samples/<sample>/model-servers/yaml/<gpu-profile>.yaml` | Placement, memory budgets, concurrency, and workload overrides for that sample |
+| Model selection | `agent-samples/<sample>/model-servers/main.py` | Explicit list of required local servers |
+| Consumer profile | `agent-samples/<sample>/yaml/models*.json` | Client adapters and endpoints used by workers and capability services |
 
-Do not use `--gpu-profile` to select models. It selects the reviewed hardware
-layout (`dual_48G_ada`, `spark`, or `96G_blackwell`). The `--models` option
-selects the deployment profile independently.
+The launcher combines each server's service defaults with its entry in the
+selected sample GPU profile. Sample values replace whole top-level fields;
+there is no recursive inheritance. For example, a `hf_overrides` mapping
+replaces the shared mapping entirely. Every selected server must have a
+mapping in the profile, including `{}` if no overrides are needed.
 
-## Start from a shipped deployment profile
+The resulting complete YAML files are temporary startup inputs to the existing
+service commands. Cache paths in service defaults resolve relative to the service
+YAML; a sample `model_cache` override resolves relative to that sample profile.
+The helper makes those paths absolute before launching services. Other relative
+path settings must be supplied as absolute paths when added to an override.
+Refer to {doc}`/reference/configuration` for the checked-in YAML and comments.
 
-The shipped profiles are:
+## Tune a sample and hardware combination
 
-- `default`: local Parakeet STT, Piper TTS, Nemotron Omni, Cosmos3-Nano
-  Reasoner, and Nemotron embedding services.
-- `vlm_llm_nim`: local STT, Piper TTS, and embedding plus self-hosted
-  Nemotron-3 Nano Omni and Cosmos3-Nano Reasoner NIM containers.
-
-The shared profiles use Piper TTS. Magpie remains available as a standalone
-service, but is not integrated into the persistent model stack.
-
-Copy the closest profile under a new name:
-
-```bash
-cp agent-samples/model-servers/yaml/models.default.json \
-  agent-samples/model-servers/yaml/models.my-stack.json
-```
-
-Run it by filename stem:
-
-```bash
-uv run --project agent-samples/model-servers \
-  model_servers --models my-stack
-```
-
-You can also pass an absolute JSON path or a path relative to the current
-working directory to `--models`.
-The profile must retain the wrapped JSON shape:
-
-```json
-{
-  "models": {
-    "vlm": {
-      "adapter": {"preset": "cosmos3_nano_reasoner"},
-      "endpoint": {
-        "base_url": "http://localhost:8100",
-        "readiness": "health"
-      },
-      "deployment": {
-        "ownership": "managed",
-        "service": "vlm"
-      }
-    }
-  }
-}
-```
-
-Within the shared profile, `managed` means `model-servers` owns that service.
-Roles may share a service; for example, `llm` and `agent_llm` can both name
-`omni`. A service name must have a corresponding row in `_MODEL_SERVICES` in
-`agent-samples/model-servers/main.py`.
-
-## Customize a hardware-specific server
-
-Each managed service resolves its YAML from the detected GPU-profile
-directory. Change the relevant file there when customizing an existing
-service. Common fields include:
+Edit the sample's GPU profile rather than copying complete server YAML files.
+For example, this entry places Cosmos on GPU 0 with an explicit cache:
 
 ```yaml
-model: nvidia/Cosmos3-Nano
-port: 8100
-model_cache: ../../../../models
-cuda_visible_devices: "0"
-gpu_memory_utilization: 0.55
+vlm:
+  cuda_visible_devices: "0"
+  gpu_memory_utilization: 0.47
+  kv_cache_memory_bytes: 1610612736
+  max_model_len: 8192
+  enforce_eager: true
 ```
 
-NIM services use `image`, `http_port`, `nim_cache`, and optional `NIM_*`
-environment settings instead:
+`gpu_memory_utilization` controls vLLM's startup admission threshold. With
+explicit `kv_cache_memory_bytes`, the byte value sizes the cache independently;
+neither is a cap on total server memory. Embedding models retain a fractional
+memory budget. Place STT and TTS alongside the larger models deliberately.
 
-```yaml
-image: nvcr.io/nim/nvidia/cosmos3-reasoner:1.7.0
-http_port: 8100
-nim_cache: ../../../../models/nim
-cuda_visible_devices: "0"
-env:
-  NIM_MODEL_SIZE: "nano"
-  NIM_MAX_MODEL_LEN: "16384"
-```
+Context length, concurrency, image and video limits, and CUDA graph settings
+can also affect memory. Tune them with placement and cache size, accounting for
+all selected models and application processes; XR rendering also needs graphics
+memory. The initial per-sample overrides retain the former conservative stack
+budgets. Removing unused models leaves spare capacity rather than automatically
+increasing the remaining models' allocations.
 
-The Cosmos 3 Reasoner container serves Nano as
-`nvidia/cosmos3-nano-reasoner`. Keep the model ID in the deployment profile's
-adapter synchronized with the NIM model size.
+To support custom hardware, copy the closest profile YAML within that sample,
+edit its server entries, and select its filename stem with `--gpu-profile NAME`.
+An explicit profile bypasses automatic selection; it does not establish that
+the models fit. Validate a cold start of the whole sample stack on the target
+hardware and inspect vLLM's reported token capacity and concurrency.
 
-When one deployment profile needs a different launch configuration, add a
-variant beside the base YAML:
+## Change a model or endpoint
 
-```text
-nim_vlm_server.yaml
-nim_vlm_server_my-stack.yaml
-```
+Stop models before changing service defaults, sample overrides, or ports. A
+service default edit affects every sample and standalone launch that uses that server. Keep each
+consumer profile's model adapters and endpoints synchronized with the service.
+Consumer profiles do not need deployment ownership objects; the convenience
+launcher's explicit server list controls local startup and shutdown.
 
-The suffix is the deployment profile filename without `models.` or `.json`.
-Only add a variant when the base configuration is not valid for that profile.
-Review GPU placement and aggregate memory before running several services
-together; the checked-in non-Ada NIM settings are estimates where their YAML
-comments say so.
+For an independently operated or hosted model, start no local replacement:
+configure the corresponding role in the sample's consumer profile and launch
+the agent against that endpoint. If keeping some local models, edit the local
+launcher list and its GPU-profile entries to match. Refer to
+{doc}`/reference/agent-sdk-models` for adapters and credentials.
 
-## Adapt a sample to the shared stack
+## Launch a service individually
 
-Do not copy a complete model-server profile into a sample. It can omit roles
-the sample needs, and its `managed` ownership belongs only in the shared stack.
-Copy or update the relevant role entries in the sample's active models JSON,
-then change their ownership to `reused`.
-
-For the shipped `vlm_llm_nim` stack:
-
-1. Copy its `llm` entry when the sample needs language or tool calling.
-2. Copy its `vlm` entry when the sample needs vision.
-3. Change `deployment.ownership` from `managed` to `reused` in every copied
-   entry. Keep `llm-nim` on port 8110 and `vlm-nim` on port 8100.
-4. If the sample uses `agent_llm`, duplicate the `llm` entry under that role.
-5. Preserve the sample's STT, TTS, embedding, and other roles unless the shared
-   stack provides intentional replacements.
-
-The active files and NIM-relevant roles are:
-
-| Sample | Active models file | Roles to replace for `vlm_llm_nim` |
-|---|---|---|
-| Simple VLM | `agent-samples/simple-vlm-example/yaml/models.json` | `vlm` |
-| Lab instrument monitoring | `agent-samples/lab-instrument-monitoring/yaml/models.json` | `llm`, `vlm` |
-| Tea making | `agent-samples/tea-making-sample/yaml/models.local.json` | `llm`, `vlm` |
-| XR Render | `agent-samples/xr-render-demo/yaml/models.json` | `llm`, `agent_llm`, `vlm` |
-
-For example, a sample reusing the Cosmos3-Nano Reasoner NIM uses:
-
-```json
-{
-  "category": "vlm",
-  "adapter": {
-    "kind": "openai_compat",
-    "model_name": "nvidia/cosmos3-nano-reasoner",
-    "capabilities": {
-      "streaming": true,
-      "vision": true,
-      "video": true
-    }
-  },
-  "endpoint": {
-    "base_url": "http://localhost:8100",
-    "readiness": "health",
-    "health_path": "/v1/health/ready"
-  },
-  "deployment": {
-    "ownership": "reused",
-    "service": "vlm-nim"
-  }
-}
-```
-
-Current sample launchers declare their model dependencies as reuse-only, so
-they do not spawn model processes. The worker constructs the client from its
-models JSON and checks endpoint readiness. Starting or stopping the sample
-therefore never changes the shared NIM container.
-
-The `nim_llm_server.yaml` and `nim_vlm_server.yaml` files repeat the copy and
-ownership instructions beside each GPU-specific container configuration.
-
-## Use an endpoint at another address
-
-If an operator already runs a compatible service elsewhere, no model-server
-change is required. Update the sample entry's `endpoint.base_url` and keep
-ownership `reused` when the endpoint belongs to an operator-managed XR AI
-stack. Use `external` for a hosted API or another endpoint with no corresponding
-launcher process:
-
-```json
-{
-  "endpoint": {
-    "base_url": "https://integrate.api.nvidia.com",
-    "api_key_env": "NGC_API_KEY",
-    "readiness": "none"
-  },
-  "deployment": {"ownership": "external"}
-}
-```
-
-Do not put the credential value in JSON. Export it or use the credential store.
-Refer to {doc}`/getting_started/credentials` for credential options.
-
-## Riva speech boundary
-
-The generic model-server service table and NIM YAMLs still support custom Riva
-STT and TTS profiles through the `stt-nim` and `tts-nim` service names. No
-shipped model-server profile selects them, and the samples intentionally do not
-install the optional Riva client. Adding Riva to a sample therefore requires an
-explicit worker dependency and models configuration change; it is not an
-endpoint-only customization.
-
-## Validate and switch profiles
-
-Before committing a custom profile:
+Service projects already expose commands accepting complete YAML via `--config`.
+For example, from the repository root:
 
 ```bash
-jq empty agent-samples/model-servers/yaml/models.my-stack.json
-
-uv run --project tests pytest -q \
-  tests/test_model_servers.py \
-  tests/test_launcher_config.py \
-  tests/test_nim_docker.py
+uv run --project services/vlm-server vlm_server \
+  --config services/vlm-server/vlm_server.yaml
 ```
 
-Model servers persist after the `model_servers` command reports readiness.
-Starting another profile stops persisted services outside the new selection
-before launching it. After changing an image, checkpoint, or launch setting,
-stop the old stack once so it cannot continue serving stale configuration:
+Standalone YAML under `services/` is intended for individual launch and can
+use more memory than a multi-model sample stack. A sample override file is
+partial and cannot be passed directly to a service command. For a manually
+assembled stack, provide complete service YAML and tune the aggregate GPU use.
+Refer to {doc}`/components/ai-services` for the service entry points and lifecycle.
 
-```bash
-uv run --project agent-samples/model-servers model_servers --stop
-uv run --project agent-samples/model-servers \
-  model_servers --models my-stack
-```
+(rag-embedding-health)=
+## RAG embedding health
 
-For adapter fields and model capabilities, refer to
-{doc}`/reference/agent-sdk-models`. For server runtime behavior, persistence,
-and NIM credentials, refer to {doc}`/components/ai-services`.
+Tea making's RAG service reads the `embedding` role from the same
+`yaml/models.local.json` profile as its worker. It calls embedding `health()`
+before indexing and while reporting readiness. Preserve its health settings
+when changing the endpoint.
+
+For a hosted provider without a health route, set `readiness: none` in the
+embedding role's `endpoint`. Otherwise use `readiness: health` and the
+provider's `health_path`. Omitting these settings probes `/health`, which can
+prevent RAG startup when that route is absent.
+
+`readiness: none` disables only the health probe. The OpenAI-compatible
+embedding adapter still requires a successful `GET /v1/models` for model
+identity discovery during indexing, using the embedding role's credentials.
+HTTP errors (including 401 and 404), transport failures, and invalid metadata
+abort startup; fix the endpoint or its access settings before retrying. A
+successful response with no matching backing `root` permits indexing without
+persistent caching, so documents are re-embedded on every startup. `cache_key`
+does not override missing metadata. Refer to {ref}`embedding-service-identity-migration`
+for the identity contract and {doc}`deploying-with-nim` for native Riva speech
+and NIM configuration.
