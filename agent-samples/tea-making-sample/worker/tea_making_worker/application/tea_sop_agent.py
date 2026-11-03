@@ -43,6 +43,7 @@ from ..components import (
     run_visual_verification_flow,
 )
 from ..components.sop_run_recording import _attempt, _event, _frame, _json
+from ..components.visual_verification_flow import VisualVerificationState
 from .tea_data_models import BrewingSettings, TeaIdentity, _TemperatureObservation, _temperature_assessment_issue
 from .tea_events import GUIDANCE_NOTICE_TOPIC, GUIDANCE_RECORD_TOPIC, GuidanceNotice, GuidanceRecord
 from .tea_sop_configuration import SOPConfig
@@ -839,6 +840,100 @@ class SOPAgent(Agent):
             snapshot["resolved_settings"] = self._resolved_settings(session)
         return snapshot
 
+    def _conversation_flow_context(self, session: _Session, flow_id: str, state: Any) -> dict[str, Any]:
+        """Project current facts for QA; execution prompts and evidence stay local."""
+        facts = {"status": state.status, "sampled_at_us": state.updated_at_us}
+        if isinstance(state, VisionRAGRetrievalState):
+            facts.update(
+                phase=state.phase,
+                visual_data=_json(state.visual_data),
+                resolved_data=_json(state.resolved_data),
+                sources={name: source.kind for name, source in state.sources.items()},
+                issue=state.issue,
+            )
+        elif isinstance(state, VisualVerificationState):
+            facts.update(
+                waiting_reason=state.waiting_reason,
+                confirmation={
+                    "positives": state.positives_in_window,
+                    "required": state.required_positives,
+                },
+            )
+            if state.observations:
+                observation = state.observations[-1]
+                # A parsed reading replaces its raw JSON, rather than repeating
+                # both representations or carrying previous-step observations.
+                facts["latest_observation"] = {
+                    "sampled_at_us": observation.timestamp_us,
+                    "judgment": observation.judgment,
+                    "reading": _json(observation.parsed)
+                    if observation.parsed is not None
+                    else observation.description[:600],
+                }
+            if flow_id == "heat_water":
+                assessment = self._flow_context(session, flow_id, state).get("assessment")
+                if assessment is not None:
+                    facts["assessment"] = assessment
+        else:
+            # Timer deadlines and sample times let QA distinguish a current
+            # timer from a remaining-time value spoken earlier in the dialogue.
+            facts.update(
+                duration_seconds=state.duration_seconds,
+                started_at_us=state.started_at_us,
+                deadline_us=state.deadline_us,
+                remaining_seconds=state.remaining_seconds,
+                start_source=session.timer_start_source,
+            )
+        return facts
+
+    def _conversation_context(self, session: _Session) -> dict[str, Any]:
+        """Keep conversation's live view separate from full runner/recording state.
+
+        Completed steps contribute outcomes only. Their captions, retrieval
+        passages, prompts and confirmation histories must not follow the user
+        into later steps. Independently running flows still expose current facts.
+        """
+        snapshot = {
+            "status": session.status,
+            "active_flows": {},
+            "last_interaction": session.last_interaction,
+        }
+        if session.last_run is not None:
+            previous = session.last_run
+            snapshot["historical_previous_run"] = {
+                name: previous[name] for name in ("run_id", "status", "last_step") if name in previous
+            }
+        if session.status == "idle":
+            return snapshot
+        snapshot.update(
+            run_id=session.run_id,
+            current_step=self._step_id(session),
+            step_ready=session.ready,
+            advancement=self.config.advancement,
+            flow_outcomes=dict(session.flow_statuses),
+            instrument_unit={"value": session.display_unit, "source": session.display_unit_source},
+            issue=session.issue,
+        )
+        current_step = self._step_id(session)
+        if session.status == "running" and current_step in self.config.messages:
+            snapshot["current_step_instruction"] = self.config.messages[current_step].format_map(
+                self._resolved_settings(session)
+            )
+        snapshot["active_flows"] = {
+            flow_id: self._conversation_flow_context(session, flow_id, state)
+            for flow_id, state in session.flow_states.items()
+            if session.status == "running" and session.flow_statuses.get(flow_id) == "running"
+        }
+        # Brewing values remain useful across steps; retrieved source text does
+        # not. The complete provenance remains available in the run recording.
+        if session.flow_statuses.get("identify") in {"completed", "skipped"}:
+            snapshot["resolved_settings"] = self._resolved_settings(session)
+            snapshot["resolved_settings"]["sources"] = {
+                name: {"kind": source["kind"]}
+                for name, source in snapshot["resolved_settings"]["sources"].items()
+            }
+        return snapshot
+
     async def _publish_context(self, session: _Session) -> None:
         """Replace the SDK SOP-status source; the conversation agent owns its dialogue."""
         if self._sessions.get(session.participant_id) is not session or not session.connected:
@@ -847,7 +942,7 @@ class SOPAgent(Agent):
             session.participant_id,
             SOP_CONTEXT_SOURCE,
             ConversationContextUpdate(
-                text=json.dumps(self.context_snapshot(session.participant_id), ensure_ascii=False)
+                text=json.dumps(self._conversation_context(session), ensure_ascii=False)
             ),
             mode="summary",
             timestamp_us=time.time_ns() // 1000,
