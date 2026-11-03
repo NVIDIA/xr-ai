@@ -414,14 +414,21 @@ async def test_temperature_readiness_keeps_raw_unit_and_user_declaration_separat
         assert "176" in arguments["completion"].instructions
         for reading in (
             _TemperatureObservation(value=210, unit_text="°F", role="setpoint", role_evidence="Target label"),
-            _TemperatureObservation(value=210, unit_text="°F", role="unknown"),
             _TemperatureObservation(value=96, unit_text="°C", role="current", role_evidence="Current label"),
-            _TemperatureObservation(value=96, role="current"),
+            _TemperatureObservation(value=121, unit_text="Watt", role="unknown"),
         ):
             assert not can_assess(reading)
+        for reading in (
+            _TemperatureObservation(value=210, unit_text="°F", role="unknown"),
+            _TemperatureObservation(value=96, role="current"),
+        ):
+            assert can_assess(reading)
         numeric_only = _TemperatureObservation(value=96, unit_text="°", role="current", role_evidence="96°")
         assert numeric_only.value == 96 and numeric_only.role_evidence is None
-        assert not can_assess(numeric_only)
+        assert can_assess(numeric_only)
+        session.display_unit = None
+        await sop._temperature_check(session, 80)
+        assert not arguments["can_assess"](numeric_only)
         assert _TemperatureObservation(value=96, unit_text="°").unit is None
         assert _TemperatureObservation(value=210, unit_text="MAX").unit is None
     finally:

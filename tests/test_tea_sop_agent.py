@@ -636,7 +636,7 @@ async def test_delayed_controls_bind_step_or_run_as_appropriate(control):
 
 
 @pytest.mark.asyncio
-async def test_sdk_conversation_receives_full_recent_flow_context_not_only_a_completion_flag():
+async def test_sdk_conversation_receives_latest_flow_facts_without_execution_history():
     selected = load_config(_SAMPLE / "yaml/tea_making_worker.yaml")
     third_observation_started = asyncio.Event()
     observation_number = 0
@@ -667,14 +667,21 @@ async def test_sdk_conversation_receives_full_recent_flow_context_not_only_a_com
             await asyncio.wait_for(third_observation_started.wait(), 1)
             await router.handle(AgentTurn("p", "qa", "What is visible and why are we waiting?"))
             messages = "\n".join(message.content for message in language.messages[-1])
-            assert "Observation 1: a continuous water surface" in messages
+            assert "Observation 1: a continuous water surface" not in messages
             assert "Observation 2: a continuous water surface" in messages
-            assert '"positives_in_window": 2' in messages
-            assert '"required_positives": 3' in messages
-            assert '"window_size": 4' in messages
-            assert '"frame_key":' in messages and '"updated_at_us":' in messages
+            assert '"positives": 2' in messages
+            assert '"required": 3' in messages
+            assert '"sampled_at_us":' in messages
+            assert '"frame_key":' not in messages
+            assert '"completed_or_skipped_flows":' not in messages
+            assert '"passages":' not in messages
             assert '"temperature_c": 80.0' in messages
-            assert selected.sop.water.completion.criteria["positive"] in messages
+            assert selected.sop.water.completion.criteria["positive"] not in messages
+            assert selected.sop.water.question not in messages
+            # Full evidence is still available to the runner and recorder.
+            retained = sop.context_snapshot("p")["active_flows"]["fill_water"]
+            assert len(retained["observations"]) == 2
+            assert retained["positives_in_window"] == 2
             assert "truncated" not in messages.lower() or '"truncated": false' in messages
             assert len(messages.encode()) < 64000
         finally:

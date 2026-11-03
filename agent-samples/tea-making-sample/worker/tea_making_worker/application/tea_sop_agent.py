@@ -842,7 +842,13 @@ class SOPAgent(Agent):
 
     def _conversation_flow_context(self, session: _Session, flow_id: str, state: Any) -> dict[str, Any]:
         """Project current facts for QA; execution prompts and evidence stay local."""
-        facts = {"status": state.status, "sampled_at_us": state.updated_at_us}
+        facts = {
+            "status": state.status,
+            "sampled_at_us": state.updated_at_us,
+            "sampled_at_utc": datetime.fromtimestamp(state.updated_at_us / 1_000_000, UTC).isoformat(
+                timespec="seconds"
+            ),
+        }
         if isinstance(state, VisionRAGRetrievalState):
             facts.update(
                 phase=state.phase,
