@@ -15,7 +15,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 import yaml
-from _procedure_guide_helpers import clef_response, stub_decisions
+from _procedure_guide_helpers import clef_response, guide_context, stub_decisions
 from pipecat.frames.frames import BotStartedSpeakingFrame, BotStoppedSpeakingFrame, TextFrame
 from pipecat.processors.frame_processor import FrameDirection
 from xr_ai_hub import FrameUnavailable
@@ -108,7 +108,7 @@ async def connected_engine(document):
     agent.bind_runtime(Mock(running=True, publish=AsyncMock()))
     # Tick explicitly to make evidence and cancellation tests independent of time.
     agent._backend._start_monitor = Mock()
-    await agent.participant_joined(None, context())
+    await agent._join("alice")
     yield agent
     await agent.stop()
 
@@ -197,8 +197,8 @@ async def test_shipped_tea_guide_verification_and_runtime_timer(engine, monkeypa
     monkeypatch.setattr(guiding, "time", SimpleNamespace(monotonic=lambda: now))
     backend = engine._backend
     backend._guide = load_guide(_SAMPLE / "example-guides/tea-making/guide.yaml")
-    await engine.participant_left(None, context())
-    await engine.participant_joined(None, context())
+    await engine._router.participant_left("alice")
+    await engine._join("alice")
     session = backend._sessions["alice"]
     assert not session.active and session.timer is None
     await control(backend, "restart")
@@ -571,7 +571,7 @@ async def test_starts_on_command_and_completes_twice_without_disconnect(connecte
         assert session.step_id == "base" and not session.active
         assert session.state == {"base": False, "lid": False}
         assert not session.notices and session.evidence_hits == 0
-    await engine.participant_joined(None, context())
+    await engine._join("alice")
     assert engine._backend._sessions["alice"] is session
 
 
@@ -583,8 +583,8 @@ async def test_connected_timer_does_not_start_until_start_guide(connected_engine
     }
     document["steps"][0]["evidence"] = {"pattern": "true", "consecutive": 1, "commit": {"base": True}}
     backend._guide = selected(document)
-    await connected_engine.participant_left(None, context())
-    await connected_engine.participant_joined(None, context())
+    await connected_engine._router.participant_left("alice")
+    await connected_engine._join("alice")
     session = backend._sessions["alice"]
     assert not session.active and session.timer is None
     monkeypatch.setattr("procedure_capture_guide_worker.guide.guiding.time", SimpleNamespace(monotonic=lambda: 500))
@@ -639,36 +639,42 @@ async def test_stale_commit_and_notices_discarded_on_transition(engine):
 
 async def test_disconnect_cancels_work_and_reconnect_starts_clean(engine):
     old = engine._backend._sessions["alice"]
-    pending = asyncio.create_task(asyncio.Event().wait())
-    engine._turns["alice"] = pending
-    await engine.participant_joined(None, context("bob"))
-    await engine.participant_left(None, context())
-    assert pending.cancelled() and "alice" not in engine._backend._sessions
+    entered = asyncio.Event()
+    async def blocked(*args, **kwargs):
+        entered.set()
+        await asyncio.Future()
+    engine._llm.chat.side_effect = blocked
+    from xr_ai_routing import AgentTurn
+    turn = asyncio.create_task(engine._router.handle(AgentTurn("alice", "turn", "What is happening?")))
+    await asyncio.wait_for(entered.wait(), 2)
+    await engine._join("bob")
+    await engine._router.participant_left("alice")
+    await asyncio.gather(turn, return_exceptions=True)
+    assert "alice" not in engine._backend._sessions
     assert "bob" in engine._backend._sessions
     assert not engine._backend._current(old, old.step, old.revision)
     engine._backend._current_frame.release.assert_called_once_with("alice")
-    await engine.participant_joined(None, context())
+    await engine._join("alice")
     assert engine._backend._sessions["alice"] is not old
-    assert engine._backend._sessions["alice"].step_id == "base"
     assert not engine._backend._sessions["alice"].active
 
 
-async def test_departure_while_input_cleanup_awaits_does_not_restart_turn(engine):
-    entered, release = asyncio.Event(), asyncio.Event()
-
-    async def cleanup(_pid):
-        entered.set()
-        await release.wait()
-
-    engine._withdraw = cleanup
-    query = asyncio.create_task(engine.user_query(UserQuery(text="next", timestamp_us=1), context()))
-    await entered.wait()
-    leaving = asyncio.create_task(engine.participant_left(None, context()))
-    await asyncio.sleep(0)
-    release.set()
-    await asyncio.wait_for(asyncio.gather(query, leaving), 2)
-    assert not engine._turns and not engine._backend._sessions
-    engine._llm.chat.assert_not_called()
+async def test_departure_during_admission_does_not_start_guide(connected_engine):
+    engine = connected_engine
+    entered = asyncio.Event()
+    original = engine._decisions.decide.side_effect
+    async def blocked(state, questions, **kwargs):
+        if "authorization" in questions:
+            entered.set()
+            await asyncio.Future()
+        return await original(state, questions, **kwargs)
+    engine._decisions.decide.side_effect = blocked
+    from xr_ai_routing import AgentTurn
+    turn = asyncio.create_task(engine._router.handle(AgentTurn("alice", "turn", "start guide")))
+    await asyncio.wait_for(entered.wait(), 2)
+    await engine._router.participant_left("alice")
+    await asyncio.gather(turn, return_exceptions=True)
+    assert not engine._backend._sessions and not engine._backend._monitors
 
 
 async def test_timer_cannot_complete_early_and_does_not_use_camera(engine, document, monkeypatch):
@@ -986,7 +992,7 @@ async def test_visual_questions_keep_camera_and_use_its_result(engine, query, an
     async def chat(messages, *, tools, **kwargs):
         names = {tool.name for tool in tools}
         assert names == {"current_view", "workflow__status"}
-        assert json.loads(messages[1].content)["active_trigger"] is None
+        assert guide_context(messages)["active_trigger"] is None
         if messages[-1].role != "tool":
             return ChatResponse("", None, [ToolCall(
                 id="inspect", name="current_view", arguments=json.dumps({"question": query}),
@@ -1055,14 +1061,14 @@ async def test_timer_question_uses_configured_arguments(
         system = messages[0].content
         assert "call clock__timer with no arguments ({})" in system
         assert "active_trigger.arguments" not in system
-        assert "Answer questions about this step's timer." in system
+        assert "Answer questions about this step's timer." in guide_context(messages)["instructions"]
         assert "If finish_on_complete is true, the runtime ends the run" in system
         assert "completion clears progress and leaves the selected guide\ninactive" in system
         assert "Only a new start guide request begins another run." in system
         assert "can\nbe repeated until disconnection" not in system
         timer_definition = next(tool for tool in tools if tool.name == "clock__timer")
         assert not timer_definition.parameters.get("properties")
-        context = json.loads(messages[1].content)
+        context = guide_context(messages)
         assert context["finish_on_complete"] == automatic_finish
         assert context["active_trigger"] == {
             "function": "clock__timer", "duration_s": 25,
@@ -1113,7 +1119,7 @@ async def test_foreground_guide_order_follows_links_not_yaml_order(engine, docum
     assert list(engine._backend._sessions["alice"].workflow.steps) == ["lid", "base"]
     engine._llm.chat.return_value = ChatResponse("Align the base, then the lid.", None, None, "stop", {})
     await engine._route("What order do I follow?", "alice")
-    context = json.loads(engine._llm.chat.call_args.args[0][1].content)
+    context = guide_context(engine._llm.chat.call_args.args[0])
     assert context["guide_order"] == ["base", "lid"]
 
 
@@ -1266,7 +1272,7 @@ async def test_accepted_stop_survives_foreground_cancellation_and_is_drained(eng
             await pending
         assert backend._control_tasks["alice"]
         if depart:
-            after = asyncio.create_task(engine.participant_left(None, context()))
+            after = asyncio.create_task(engine._router.participant_left("alice"))
         else:
             after = asyncio.create_task(backend.guidance("alice"))
         await asyncio.sleep(0)
@@ -1290,9 +1296,9 @@ async def test_foreground_uses_only_backend_lifecycle_and_guidance_interface(eng
         record_event=backend.record_event,
     )
     engine._llm.chat.return_value = ChatResponse("Align the marked edges.", None, None, "stop", {})
-    await engine.participant_joined(None, context("bob"))
+    await engine._join("bob")
     assert await engine._route("What do I align?", "bob") == "Align the marked edges."
-    await engine.participant_left(None, context("bob"))
+    await engine._router.participant_left("bob")
 
 
 @pytest.mark.parametrize("action", ["advance", "restart", "reset"])
@@ -1419,8 +1425,8 @@ async def test_tea_skip_heating_preserves_immersion_check_and_full_timer(engine,
     monkeypatch.setattr(guiding, "time", SimpleNamespace(monotonic=lambda: now))
     backend = engine._backend
     backend._guide = load_guide(_SAMPLE / "example-guides/tea-making/guide.yaml")
-    await engine.participant_left(None, context())
-    await engine.participant_joined(None, context())
+    await engine._router.participant_left("alice")
+    await engine._join("alice")
     await control(backend, "restart")
     session = backend._sessions["alice"]
     sequence = 0
@@ -1471,7 +1477,7 @@ async def test_tea_skip_heating_preserves_immersion_check_and_full_timer(engine,
 async def test_timer_unavailability_is_a_tool_result(engine, document, missing):
     backend = engine._backend
     if missing == "session":
-        await engine.participant_left(None, context())
+        await engine._router.participant_left("alice")
     elif missing == "duration":
         document["state"]["duration"] = {"type": "integer", "description": "Wait seconds"}
         document["steps"][0]["reads"] = ["duration"]
@@ -1542,7 +1548,7 @@ def test_scenario_cli_reports_failures_and_continues_independent_probes(tmp_path
     manifest_path.write_text(yaml.safe_dump(manifest))
 
     async def chat(messages, **kwargs):
-        query = json.loads(messages[1].content)["request"]
+        query = guide_context(messages)["request"]
         tool, arguments = {
             "Start guide": ("workflow__restart", {}),
             "What is my status?": ("workflow__status", {}),
@@ -1889,7 +1895,7 @@ async def test_actual_runtime_delivers_guide_and_release(document):
                                   participant_id="alice")
             assert await asyncio.wait_for(sink.outputs.get(), 2) == ("alice", "Align the marked edges.")
             await runtime.publish(PARTICIPANT_LEFT_TOPIC, ParticipantLeft(), participant_id="alice")
-            assert not agent._backend._sessions and not agent._backend._monitors and not agent._turns
+            assert not agent._backend._sessions and not agent._backend._monitors
         finally:
             await agent.stop()
 
@@ -1933,7 +1939,7 @@ async def test_interrupted_transition_delivers_guidance_through_runtime(document
             backend._invalidate = invalidate
             await runtime.publish(USER_QUERY_TOPIC, UserQuery(text="next", timestamp_us=1), participant_id="alice")
             await asyncio.wait_for(entered.wait(), 2)
-            interruption = asyncio.create_task(agent.interrupted(None, context()))
+            interruption = asyncio.create_task(agent._router.interrupt("alice"))
             await asyncio.sleep(0)
             release.set()
             await asyncio.wait_for(interruption, 2)
@@ -2128,7 +2134,7 @@ async def test_delayed_clef_result_cannot_commit_after_transition(engine, transi
     pending = asyncio.create_task(backend._tick(session))
     await asyncio.wait_for(entered.wait(), 2)
     if transition == "leave":
-        await engine.participant_left(None, context())
+        await engine._router.participant_left("alice")
     else:
         await control(backend, transition, **({"skip": True} if transition == "advance" else {}))
     engine._runtime.publish.reset_mock()

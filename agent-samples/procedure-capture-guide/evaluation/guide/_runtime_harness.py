@@ -31,7 +31,7 @@ from procedure_capture_guide_worker.config import load_config
 from procedure_capture_guide_worker.guide.agent import GuideAgent
 from procedure_capture_guide_worker.guide.events import PARTICIPANT_JOINED_TOPIC, USER_QUERY_TOPIC
 from procedure_capture_guide_worker.guide.guides import SelectedGuide
-from procedure_capture_guide_worker.guide.measurements import MEASUREMENT_PROMPT, make_measurement_vlm
+from procedure_capture_guide_worker.guide.measurements import make_measurement_vlm
 from xr_ai_hub import FrameData, FrameSignal, PixelFormat
 from xr_ai_interaction import ParticipantJoined, ResponseOutput, UserQuery
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, subscribe
@@ -47,12 +47,13 @@ _PID = "guide-eval"
 def _runtime_hashes(models_config: Path, sources: tuple[Path, ...] = ()) -> dict[str, str]:
     """Identify sample sources and loaded SDK code without scanning environments."""
     paths = {models_config.resolve(), _SAMPLE / "yaml/worker.yaml",
-             _SAMPLE / "yaml/guide-agent-config.yaml", Path(__file__).resolve()}
+             _SAMPLE / "yaml/guide-agent-config.yaml", _SAMPLE / "yaml/guide-policy.yaml", Path(__file__).resolve()}
     paths.update(path.resolve() for path in sources)
     package = _SAMPLE / "worker/procedure_capture_guide_worker"
     for pattern in ("*.py", "*.txt"):
         paths.update(package.rglob(pattern))
-    sdk_packages = {"xr_ai_runtime", "xr_ai_hub", "xr_ai_models", "xr_ai_tools", "xr_ai_voice", "xr_ai_interaction"}
+    sdk_packages = {"xr_ai_runtime", "xr_ai_hub", "xr_ai_models", "xr_ai_tools", "xr_ai_voice",
+                    "xr_ai_interaction", "xr_ai_routing", "xr_ai_conversation"}
     for name, module in tuple(sys.modules.items()):
         source = getattr(module, "__file__", None)
         if name.split(".", 1)[0] in sdk_packages and source and Path(source).suffix == ".py":
@@ -229,20 +230,31 @@ async def run_evaluation(
     llm.chat = logged_chat
 
     class TracedGuideAgent(GuideAgent):
-        async def _answer(self, query, participant_id, request_id):
-            token = model_origin.set(("foreground", query.timestamp_us, asyncio.current_task()))
+        async def admit(self, turn, *, focused):
+            token = model_origin.set(("foreground", turn.timestamp_us, asyncio.current_task()))
             try:
-                await super()._answer(query, participant_id, request_id)
+                return await super().admit(turn, focused=focused)
             finally:
                 model_origin.reset(token)
 
-        async def _tool_loop(self, system, user, tools, *, foreground=False):
+        async def answer(self, turn, *, started):
+            token = model_origin.set(("foreground", turn.timestamp_us, asyncio.current_task()))
+            try:
+                return await super().answer(turn, started=started)
+            finally:
+                model_origin.reset(token)
+
+        async def _prepare_answer(self, turn):
+            model_origin.set(("foreground", turn.timestamp_us, asyncio.current_task()))
+            return await super()._prepare_answer(turn)
+
+        async def _tool_loop(self, system, user, tools, *, foreground=False, messages=None):
             # A monitor can inherit the context of the turn that started it.
             # Its observations must never be attributed to that foreground turn.
             origin = model_origin.get() if foreground else ("observation", None, asyncio.current_task())
             token = model_origin.set(origin)
             try:
-                return await super()._tool_loop(system, user, tools, foreground=foreground)
+                return await super()._tool_loop(system, user, tools, foreground=foreground, messages=messages)
             finally:
                 model_origin.reset(token)
 
@@ -274,15 +286,14 @@ async def run_evaluation(
             log("vision", **item)
             return result
 
-    vision = Vision(images=images, vlm=vlm, system_prompt=(
-        _SAMPLE / "worker/procedure_capture_guide_worker/guide/prompts/guide_vision.txt"
-    ).read_text())
+    vision = Vision(images=images, vlm=vlm, system_prompt=settings.guide.policy.vision_prompt)
     runtime = AgentRuntime()
     agent = runtime.register("guide", TracedGuideAgent(
         guide=guide, llm=llm, decisions=decisions, current_frame=frames, image_query=vision,
         vision_timeout_s=settings.guide.vision_timeout_s,
-        decision_timeout_s=settings.guide.decision_timeout_s,
-        measurement_query=(ImageQueryTool(images=images, vlm=measurement_vlm, system_prompt=MEASUREMENT_PROMPT)
+        decision_timeout_s=settings.guide.decision_timeout_s, policy=settings.guide.policy,
+        measurement_query=(ImageQueryTool(images=images, vlm=measurement_vlm,
+                                          system_prompt=settings.guide.policy.measurement_prompt)
                            if measurement_vlm is not None else None),
     ))
     record_event = agent._backend.record_event
@@ -385,7 +396,10 @@ async def run_evaluation(
             if duration_s is not None:
                 deadline = time.monotonic() + duration_s
             playback_start.set()
-            passed = await exercise(context)
+            try:
+                passed = await exercise(context)
+            finally:
+                await agent.stop()
     except Exception as exc:  # noqa: BLE001 — Loguru traceback at the evaluation boundary.
         # isolation boundary: report a failed evaluation without losing its artifacts.
         logger.exception("Guide evaluation failed")
@@ -404,7 +418,8 @@ async def run_evaluation(
         await decisions.close()
         images.clear()
         # Include SDK modules loaded lazily by model adapters and tools during execution.
-        (output / "runtime.json").write_text(json.dumps(_runtime_hashes(settings.models_config, sources), indent=2))
+        (output / "runtime.json").write_text(json.dumps(
+            _runtime_hashes(settings.models_config, (*sources, settings.guide.policy_path)), indent=2))
         if hashlib.sha256(guide.path.read_bytes()).hexdigest() != guide.sha256:
             passed = False
             log("error", error="guide changed during evaluation; the saved snapshot was evaluated, not the new file")
@@ -417,6 +432,7 @@ async def run_evaluation(
             "camera": "fixture pixels through CurrentFrameTool; not a live camera",
             "frame_semantics": frame_semantics,
             "draft_test_only": draft_test_only,
+            "policy": settings.guide.policy.model_dump(),
             "input": "typed runtime messages; STT and audio playback not tested",
         }, indent=2))
     return passed

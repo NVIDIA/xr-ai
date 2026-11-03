@@ -98,7 +98,7 @@ and completion messages; do not copy the worked example's wording.
 | `trigger` | `function`, positive `interval_s`, `arguments`, optional `result_field` |
 | `voice` | Nonempty `prompt` and allowed `tools` list for conversation |
 | `agent` | Optional for timer steps, required without a direct commit; visual steps reject it |
-| `evidence` | Visual steps require exactly one of text `condition` for CLEF or `measurement` for native numeric checks; timer steps use a full-match `pattern`. Both use positive integer `consecutive` and an optional typed `commit` mapping |
+| `evidence` | Visual steps require exactly one of text `condition` for CLEF or `measurement` for native numeric checks; timer steps use a full-match `pattern`. Timers use positive integer `consecutive`; visual checks use `consecutive` or `confirmation`. Both permit a typed `commit` mapping |
 | `complete_when` | Nonempty typed mapping using only this step's writable fields |
 | `next` | Next step ID, or `null` for the last step |
 | `complete_on_skip` | Optional boolean, default false; true ends the run if this incomplete step is skipped |
@@ -109,7 +109,7 @@ and completion messages; do not copy the worked example's wording.
 For `current_view`, ask Cosmos for a focused description of the relevant region,
 objects, contacts, labels, and hidden details. State the completion requirements
 in `evidence.condition`. CLEF first receives the condition and one selected
-image. Use its chosen accepted, rejected, or unknown result only when confidence is strictly above 0.80.
+image. Use its chosen accepted, rejected, or unknown result only when confidence is strictly above the application policy cutoff (0.80 by default).
 Otherwise the runtime asks Cosmos the required `trigger.arguments.question`
 about the same frame, then sends CLEF only that description and the condition.
 Caption acceptance requires an affirmative majority over rejected and unknown combined. Neither path
@@ -256,3 +256,22 @@ Test artifacts and recording timestamps stay outside the executable guide.
 Write these outputs under `agent-samples/procedure-capture-guide/<slug>-guide/`
 from the repository root, unless a different output directory was requested. Links between these
 references resolve relative to their containing files, not the working directory.
+
+
+## Optional visual confirmation policy
+
+A visual evidence block may replace `consecutive` with
+`confirmation: {required: 2, window: 4, max_age_s: 15.0, reset_on_negative: true}`.
+`required` must fit inside `window` (maximum 100). Age must be finite and positive.
+The window counts distinct accepted/rejected source observations; unknown results
+do not consume a slot. Older evidence expires and unavailable checks clear it.
+A negative result clears preceding support unless `reset_on_negative` is false.
+Do not combine both confirmation forms or use a window for a timer. Retain the
+consecutive policy unless measured intermittent uncertainty justifies the window;
+record the false-accept tradeoff and test negative/recovery sequences. No policy
+can count repeated inference on the same frame as new evidence.
+
+The target checkout's `yaml/guide-policy.yaml` owns conversation and visual system
+instructions, decision questions, and inference settings. Task YAML owns its
+requirements. Evaluation must use the same policy as the intended live execution.
+Previous-step/run evidence and dialogue are explanatory context only.

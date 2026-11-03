@@ -21,39 +21,21 @@ from loguru import logger
 from PIL import Image
 from xr_ai_models import DecisionAnswer, DecisionQuestion, DecisionService, ImageInput
 
-_INSTRUCTIONS = (Path(__file__).with_name("prompts") / "guide_condition.txt").read_text(encoding="utf-8").strip()
-_QUESTION = DecisionQuestion(
-    instructions=_INSTRUCTIONS,
-    criteria={
-        "accepted": "The observation establishes every required visible fact.",
-        "rejected": "Visible evidence contradicts a required condition.",
-        "unknown": "A required fact is missing, ambiguous, obscured, or not observable.",
-    },
-)
-
-_IMAGE_INSTRUCTIONS = (Path(__file__).with_name("prompts") / "guide_image_condition.txt").read_text(
-    encoding="utf-8",
-).strip()
-_IMAGE_QUESTION = DecisionQuestion(
-    instructions=_IMAGE_INSTRUCTIONS,
-    criteria={
-        "accepted": "The image establishes every required visible fact.",
-        "rejected": "Visible evidence contradicts a required condition.",
-        "unknown": "A required fact is missing, ambiguous, obscured, or not observable.",
-    },
-)
+from .policy import load_policy
 
 
 async def judge_image(
     decisions: DecisionService, *, condition: str, image: ImageInput,
-    frame: dict, step_id: str, revision: int, timeout_s: float,
+    frame: dict, step_id: str, revision: int, timeout_s: float, policy=None, on_prepared=None,
 ) -> DecisionAnswer:
     """Judge one selected frame without a caption or conversation history."""
 
     state = {"condition": condition, "image_role": "The single image is the selected current camera frame."}
     prepared = await asyncio.to_thread(_prepare_decision_image, image)
+    if on_prepared is not None:
+        on_prepared(prepared)
     return await _judge(
-        decisions, state=state, question=_IMAGE_QUESTION, images=(prepared,),
+        decisions, state=state, question=(policy or load_policy()).image_question.decision(), images=(prepared,),
         frame=frame, step_id=step_id, revision=revision, timeout_s=timeout_s, source="image",
     )
 
@@ -113,20 +95,20 @@ def _prepare_decision_image(image: ImageInput) -> bytes:
 
 async def condition_met(
     decisions: DecisionService, *, condition: str, observation: str,
-    frame: dict, step_id: str, revision: int, timeout_s: float,
+    frame: dict, step_id: str, revision: int, timeout_s: float, policy=None,
 ) -> bool:
     """Return the caption-only decision for callers evaluating written evidence."""
 
     answer = await judge_observation(
         decisions, condition=condition, observation=observation,
-        frame=frame, step_id=step_id, revision=revision, timeout_s=timeout_s,
+        frame=frame, step_id=step_id, revision=revision, timeout_s=timeout_s, policy=policy,
     )
     return verdict(answer) == "accepted"
 
 
 async def judge_observation(
     decisions: DecisionService, *, condition: str, observation: str,
-    frame: dict, step_id: str, revision: int, timeout_s: float,
+    frame: dict, step_id: str, revision: int, timeout_s: float, policy=None,
 ) -> DecisionAnswer:
     """Judge a description as evidence, without an image or prior decision."""
 
@@ -139,7 +121,7 @@ async def judge_observation(
         step_id, revision, frame, condition, observation,
     )
     return await _judge(
-        decisions, state=state, question=_QUESTION, images=(),
+        decisions, state=state, question=(policy or load_policy()).caption_question.decision(), images=(),
         frame=frame, step_id=step_id, revision=revision, timeout_s=timeout_s, source="caption",
     )
 

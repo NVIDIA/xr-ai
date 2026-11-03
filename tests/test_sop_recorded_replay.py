@@ -222,7 +222,7 @@ async def test_evaluation_attributes_overlapping_model_calls_to_their_origin(
         nonlocal observations
         if "attribution_probe" in args[0]:
             return clef_response()
-        if "action" in args[1] or "authorization" in args[1]:
+        if "destination" in args[1] or "action" in args[1] or "authorization" in args[1]:
             state = dict(args[0])
             if wrong_foreground_call and state.get("request") == "Next":
                 state["request"] = "start guide"
@@ -237,10 +237,10 @@ async def test_evaluation_attributes_overlapping_model_calls_to_their_origin(
     import xr_ai_models
     monkeypatch.setattr(xr_ai_models, "make_decision", lambda *_: decisions)
     llm.chat.side_effect = chat
-    route = GuideAgent._route
+    route = GuideAgent._execute_control
 
-    async def overlapping_route(self, text, participant_id):
-        response = await route(self, text, participant_id)
+    async def overlapping_route(self, participant_id, text, guidance, binding):
+        response = await route(self, participant_id, text, guidance, binding)
         if text == "Start guide":
             # Decision requests must be attributed by their actual owner, not
             # always labeled as background merely because they use CLEF.
@@ -256,7 +256,7 @@ async def test_evaluation_attributes_overlapping_model_calls_to_their_origin(
             )))
         return response
 
-    monkeypatch.setattr(GuideAgent, "_route", overlapping_route)
+    monkeypatch.setattr(GuideAgent, "_execute_control", overlapping_route)
     packet = make_packet(tmp_path, count=30)
     guide = yaml.safe_load((_TEST_DATA / "test_procedure_indicator_guide.yaml").read_text())
     guide["steps"] = guide["steps"][:1]
@@ -386,7 +386,7 @@ def test_runtime_provenance_excludes_environment_and_tracks_loaded_sdk(packets, 
     sample = tmp_path / "sample"
     sources = ["yaml/models.json", "yaml/worker.yaml", "yaml/guide-agent-config.yaml",
                "worker/procedure_capture_guide_worker/guide/agent.py",
-               "worker/procedure_capture_guide_worker/guide/prompts/guide_vision.txt"]
+               "yaml/guide-policy.yaml"]
     excluded = ["worker/.venv/lib/dependency.py", "worker/.venv/lib/prompt.txt",
                 "worker/unrelated.py", "worker/sibling_package/other.py"]
     for relative in sources + excluded:

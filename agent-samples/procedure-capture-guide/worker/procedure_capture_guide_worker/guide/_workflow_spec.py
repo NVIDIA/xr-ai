@@ -22,6 +22,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field
 from xr_ai_tools.types import StrictRequest
 
+from .confirmation import ConfirmationPolicy
 from .measurements import MeasurementPolicy
 
 _ID = re.compile(r"^[a-z][a-z0-9_-]*$")
@@ -62,7 +63,7 @@ _STEP_KEYS = frozenset(
 )
 _TRIGGER_KEYS = frozenset({"function", "interval_s", "arguments", "result_field"})
 _POLICY_KEYS = frozenset({"prompt", "tools"})
-_EVIDENCE_KEYS = frozenset({"pattern", "condition", "measurement", "consecutive", "commit"})
+_EVIDENCE_KEYS = frozenset({"pattern", "condition", "measurement", "consecutive", "confirmation", "commit"})
 _MESSAGE_KEYS = frozenset({"enter", "complete", "skip"})
 
 
@@ -120,6 +121,7 @@ class Evidence:
     commit: dict[str, Any]
     condition: str | None = None
     measurement: MeasurementPolicy | None = None
+    confirmation: ConfirmationPolicy | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -416,14 +418,19 @@ def _evidence(
             re.compile(pattern)
         except re.error as exc:
             raise ValueError(f"step {step_id!r} has invalid evidence regex: {exc}") from exc
-    consecutive = raw.get("consecutive")
+    confirmation = None
+    if "confirmation" in raw:
+        if function != "current_view" or "consecutive" in raw:
+            raise ValueError("confirmation requires a visual step and excludes consecutive")
+        confirmation = ConfirmationPolicy.model_validate(raw["confirmation"])
+    consecutive = confirmation.required if confirmation is not None else raw.get("consecutive")
     if not isinstance(consecutive, int) or isinstance(consecutive, bool) or consecutive < 1:
         raise ValueError(f"steps.{step_id}.evidence.consecutive must be a positive integer")
     commit = _mapping(raw.get("commit", {}), f"steps.{step_id}.evidence.commit")
     if commit and not commit.keys() <= set(writes):
         raise ValueError(f"step {step_id!r} evidence.commit must only use writable fields")
     _state_values(commit, fields, f"steps.{step_id}.evidence.commit")
-    return Evidence(pattern, consecutive, dict(commit), condition, measurement)
+    return Evidence(pattern, consecutive, dict(commit), condition, measurement, confirmation)
 
 
 def _validate_linear_graph(start: str, steps: dict[str, Step]) -> None:

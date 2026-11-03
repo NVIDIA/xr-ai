@@ -33,7 +33,7 @@ summaries, and original images together as complementary, fallible evidence
 of the intended task; none is proof that the runtime observed success.
 
 Use the actual guide checkout, its configured local models, runtime prompts,
-tool implementations, evidence thresholds, state transitions, and clock.
+tool implementations, application policy, evidence thresholds, state transitions, and clock.
 If these are unavailable, report runtime evaluation blocked. Do not substitute
 Luna, fabricated tool responses, mock commits, or a mental walkthrough.
 
@@ -75,7 +75,7 @@ refresh the final frame. Its deadline is the recording duration plus five real
 seconds; `--tail-s` changes the extra time.
 
 The simulated user says "Start guide", waits for observed completion, then
-says "Next" when required through the configured local conversation model.
+says "Next" when required through the configured SDK router and native guide-control authorization.
 Terminal `finish_on_complete` steps end automatically. Checks compare delivered
 announcements with detached runtime guidance state and require the final run
 to be inactive. The harness never writes progress or calls transitions directly.
@@ -227,3 +227,19 @@ Save package hashes, prompt, raw model/tool trace, YAML, validation results,
 action-coverage findings and revision counts. These probes have no images;
 they cannot establish visual replay coverage. Use recorded packets with the
 command above to evaluate image-based refinement.
+
+
+## Check temporal evidence and conversation independently
+
+Record the effective `yaml/guide-policy.yaml` in the evaluation output. If a draft
+uses a visual confirmation window, test distinct fresh positive frames, uncertain
+views, contradictory views, repeated cached frames, and evidence older than its
+maximum age. Compare false accepts as well as missed completions; a longer window
+must not hide a reversible failure.
+
+Ask a follow-up question after a step transition and after stopping/restarting.
+The SDK conversation should retain useful dialogue while using the new detached
+execution snapshot. Prior-run support must not become current verification. For
+timer questions, require an actual read of the runtime-owned timer. Preserve
+prepared-image hashes, per-stage latencies, and any unavailable model stages when
+attributing failures; the authoring LLM remains an observer of actual tool results.

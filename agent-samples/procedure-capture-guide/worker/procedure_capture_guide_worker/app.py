@@ -33,7 +33,7 @@ from .config import WorkerConfig
 from .guide.agent import GuideAgent
 from .guide.events import INTERRUPTED_TOPIC, PARTICIPANT_JOINED_TOPIC, PARTICIPANT_LEFT_TOPIC, USER_QUERY_TOPIC
 from .guide.guides import load_guide
-from .guide.measurements import MEASUREMENT_PROMPT, make_measurement_vlm
+from .guide.measurements import make_measurement_vlm
 
 _HUB_PUB = "ipc:///tmp/xr_hub_pub"
 _HUB_PUSH = "ipc:///tmp/xr_hub_in"
@@ -86,14 +86,14 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
             guide=selected_guide, llm=llm, decisions=decisions, current_frame=frames,
             image_query=ImageQueryTool(
                 images=images, vlm=vlm,
-                system_prompt=(Path(__file__).parent / "guide/prompts/guide_vision.txt").read_text(encoding="utf-8"),
+                system_prompt=config.guide.policy.vision_prompt,
             ),
             vision_timeout_s=config.guide.vision_timeout_s,
             decision_timeout_s=config.guide.decision_timeout_s,
             measurement_query=(ImageQueryTool(images=images, vlm=measurement_vlm,
-                                              system_prompt=MEASUREMENT_PROMPT)
+                                              system_prompt=config.guide.policy.measurement_prompt)
                                if measurement_vlm is not None else None),
-            traces_dir=config.guide.traces_dir,
+            traces_dir=config.guide.traces_dir, policy=config.guide.policy,
         ))
         guide.bind_runtime(runtime)
         probes["llm"] = llm.health
@@ -130,7 +130,11 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
     try:
         await endpoint.wait_until_running()
         async with runtime:
-            await voice.run(runtime)
+            try:
+                await voice.run(runtime)
+            finally:
+                if guide is not None:
+                    await guide.stop()
     finally:
         try:
             # Runtime shutdown drains message delivery, not agent-owned tasks

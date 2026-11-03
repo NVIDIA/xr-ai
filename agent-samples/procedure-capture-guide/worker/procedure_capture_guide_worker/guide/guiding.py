@@ -36,9 +36,12 @@ from xr_ai_tools.tool_calling import ToolLoopError
 from xr_ai_tools.types import EmptyRequest, StrictRequest
 from xr_ai_tools.vision import ImageQueryResult, ImageQueryTool
 
-from ._workflow_spec import Step, Workflow, _CurrentViewRequest, _TimerRequest, _TimerResult
+from ._workflow_spec import Step, Workflow, _CurrentViewRequest, _TimerRequest
+from .confirmation import ConfirmationWindow
 from .guides import SelectedGuide
+from .policy import load_policy
 from .run_trace import RunTrace
+from .timer import GuideTimer as _Timer
 from .visual_check import VisualCheckTrace, caption_image, verify_image
 
 _POLL_INTERVAL_S = 0.25
@@ -107,20 +110,6 @@ class _Observation:
     frame: _FrameIdentity | None = None
 
 
-@dataclass(frozen=True, slots=True)
-class _Timer:
-    started: float
-    duration_s: int
-
-    def read(self) -> _TimerResult:
-        elapsed = max(0.0, time.monotonic() - self.started)
-        return _TimerResult(
-            elapsed_s=math.floor(elapsed),
-            remaining_s=max(0, math.ceil(self.duration_s - elapsed)),
-            expired=elapsed >= self.duration_s,
-        )
-
-
 @dataclass(slots=True)
 class _Session:
     participant_id: str
@@ -138,6 +127,10 @@ class _Session:
     skipped: bool = False
     run_id: str | None = None
     last_verification: dict | None = None
+    observation_history: list[dict] = field(default_factory=list)
+    completed_steps: list[dict] = field(default_factory=list)
+    previous_run: dict | None = None
+    confirmation: ConfirmationWindow = field(default_factory=ConfirmationWindow)
     # Runtime-owned timing never comes from a model commit or a tool argument.
     timer: _Timer | None = None
     timer_error: str | None = None
@@ -179,6 +172,7 @@ class _Guide:
         decision_timeout_s: float = 15.0,
         measurement_query: ImageQueryTool | None = None,
         traces_dir: Path | None = None,
+        policy=None,
     ) -> None:
         if not guide.workflow.runnable:
             raise ValueError("guide mode requires an approved guide")
@@ -192,6 +186,7 @@ class _Guide:
         self._current_frame = current_frame
         self._image_query = image_query
         self._measurement_query = measurement_query
+        self._policy = policy or load_policy()
         self._trace = RunTrace(traces_dir, guide)
         self._vision_timeout_s = vision_timeout_s
         self._tool_loop = run_model
@@ -262,6 +257,12 @@ class _Guide:
                 "state": copy.deepcopy(workflow.project(step, session.state)) if session.active else {},
                 "active_trigger": active_trigger,
                 "last_verification": copy.deepcopy(evidence) if session.active else None,
+                "run_id": session.run_id,
+                "step_id": step.id if session.active else None,
+                "step_revision": session.revision,
+                "recent_observations": [_evidence_context(item) for item in session.observation_history],
+                "completed_steps": copy.deepcopy(session.completed_steps),
+                "historical_previous_run": copy.deepcopy(session.previous_run),
             }
 
         async def finish(answer: str) -> str:
@@ -464,6 +465,9 @@ class _Guide:
         if skipping:
             session.skipped = True
             session.state.update(copy.deepcopy(step.state_on_skip))
+        session.completed_steps.append({"step_id": step.id, "outcome": "skipped" if skipping else "completed",
+                                        "verification": (_historical_evidence(session.last_verification)
+                                                         if session.last_verification else None)})
         next_step = None if skipping and step.complete_on_skip else step.next_step
         session.revision += 1
         session.control_revision += 1
@@ -483,7 +487,11 @@ class _Guide:
         return session.step.enter_message
 
     def _reset_progress(self, session: _Session, *, active: bool = True, reason: str = "reset") -> None:
+        if session.run_id is not None:
+            session.previous_run = {"run_id": session.run_id, "outcome": reason,
+                                    "steps": copy.deepcopy(session.completed_steps)}
         self._end_trace(session, reason)
+        session.completed_steps.clear()
         session.last_verification = None
         session.active = active
         session.state = session.workflow.initial_state()
@@ -508,7 +516,8 @@ class _Guide:
     def _begin_trace(self, session: _Session) -> None:
         session.run_id = uuid.uuid4().hex
         self._trace.emit(session.run_id, "run_started", participant_id=session.participant_id,
-                         guide_sha256=session.guide.sha256, state=dict(session.state))
+                         guide_sha256=session.guide.sha256, state=dict(session.state),
+                         policy=self._policy.model_dump())
 
     def _end_trace(self, session: _Session, reason: str) -> None:
         self._trace.emit(session.run_id, "run_ended", reason=reason, state=dict(session.state),
@@ -516,6 +525,8 @@ class _Guide:
         session.run_id = None
 
     def _enter_step(self, session: _Session) -> None:
+        session.observation_history.clear()
+        session.confirmation.observations.clear()
         session.last_verification = None
         self._trace.emit(session.run_id, "step_entered", step=session.step_id,
                          revision=session.revision, state=dict(session.state))
@@ -525,7 +536,7 @@ class _Guide:
         if session.active and session.step.trigger.function == "clock__timer":
             try:
                 arguments = _TimerRequest.model_validate(self._resolve(session.step.trigger.arguments, session.state))
-                session.timer = _Timer(time.monotonic(), arguments.duration_s)
+                session.timer = _Timer(time.monotonic(), arguments.duration_s, clock=time.monotonic)
             except ValueError as exc:
                 # Missing duration leaves the step blocked, never implicitly expired.
                 session.timer_error = str(exc)
@@ -575,6 +586,7 @@ class _Guide:
             async with session.lock:
                 if self._current(session, step, revision):
                     session.evidence_hits = 0
+                    session.confirmation.observations.clear()
                     session.last_verification = {
                         "step_id": step.id, "revision": revision, "verdict": None,
                         "observed_monotonic": time.monotonic(),
@@ -589,6 +601,7 @@ class _Guide:
                 return
             if not observation.available:
                 session.evidence_hits = 0
+                session.confirmation.observations.clear()
                 session.last_verification = {
                     "step_id": step.id, "revision": revision, "verdict": None,
                     "observed_monotonic": time.monotonic(), "error": "current observation unavailable",
@@ -658,7 +671,7 @@ class _Guide:
                 image=observation.value, condition=step.evidence.condition, question=question,
                 frame=frame, step_id=step.id, revision=revision,
                 decision_timeout_s=self._decision_timeout_s, vision_timeout_s=self._vision_timeout_s, trace=trace,
-                measurement=step.evidence.measurement, measurement_query=self._measurement_query,
+                measurement=step.evidence.measurement, measurement_query=self._measurement_query, policy=self._policy,
             )
         except asyncio.CancelledError:
             error = {"type": "CancelledError", "message": "observation cancelled"}
@@ -667,6 +680,9 @@ class _Guide:
             error = {"type": type(exc).__name__, "message": str(exc)}
             logger.warning("Guide decision unavailable pid={!r} step={}: {}", session.participant_id, step.id, exc)
         finally:
+            if trace.prepared_image is not None:
+                self._trace.emit(run_id, "decision_image_prepared", image=trace.prepared_image,
+                                 step=step.id, revision=revision, frame=frame)
             self._trace.emit(run_id, "observation_finished", step=step.id, revision=revision,
                              frame=frame, latency_s=time.monotonic() - before, error=error, **trace.record())
         async with session.lock:
@@ -679,7 +695,14 @@ class _Guide:
                 "observed_monotonic": time.monotonic(),
             }
             matched = error is None and trace.accepted is True
-            session.evidence_hits = previous_hits + 1 if matched else 0
+            session.observation_history.append(copy.deepcopy(session.last_verification))
+            del session.observation_history[:-self._policy.history_limit]
+            if step.evidence.confirmation is not None:
+                session.evidence_hits = session.confirmation.observe(
+                    trace.verdict if error is None else None, time.monotonic(), step.evidence.confirmation,
+                )
+            else:
+                session.evidence_hits = previous_hits + 1 if matched else 0
             if step.evidence.commit and session.evidence_hits >= step.evidence.consecutive:
                 self._commit(session, step, step.evidence.commit, "")
         return trace
@@ -898,6 +921,9 @@ class _Guide:
                 await self._invalidate(session.participant_id)
                 message = ("Guide ended with skipped steps." if session.skipped
                            else session.workflow.complete_message)
+                session.completed_steps.append({"step_id": session.step.id, "outcome": "completed",
+                                                "verification": (_historical_evidence(session.last_verification)
+                                                         if session.last_verification else None)})
                 self._reset_progress(session, active=False, reason="skipped" if session.skipped else "completed")
                 await self._announce(session.participant_id, f"{message} Say start guide to begin again.")
                 return
@@ -962,3 +988,18 @@ def _discard(
     with suppress(asyncio.CancelledError):
         if error := task.exception():
             logger.error("SOP task stopped pid={!r}: {!r}", participant_id, error)
+
+
+def _evidence_context(item):
+    result = copy.deepcopy(item)
+    observed = result.pop("observed_monotonic", None)
+    if observed is not None:
+        result["age_s"] = max(0.0, time.monotonic() - observed)
+    return result
+
+
+def _historical_evidence(item):
+    result = _evidence_context(item)
+    if "age_s" in result:
+        result["age_at_transition_s"] = result.pop("age_s")
+    return result

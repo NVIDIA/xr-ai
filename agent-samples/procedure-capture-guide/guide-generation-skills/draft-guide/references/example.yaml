@@ -9,7 +9,8 @@
 # available incomplete and completed views through the actual guide VLM and CLEF,
 # then refine and rerun the draft. The author observes actual responses, never
 # supplies a visual or decision answer itself. Preserve both false positives and missed completions.
-# CLEF first judges the image; only confidence >0.80 avoids the caption path.
+# CLEF first judges the image; confidence must exceed the application policy
+# cutoff (0.80 by default) to avoid the caption path.
 # Both steps still need a focused Cosmos question. On the fallback path,
 # if Cosmos describes only the center surface, a missed clip check can justify
 # focusing the question on both side edges while preserving the condition.
@@ -81,6 +82,9 @@ steps:
       condition: >-
         One workpiece rests flat and centered inside the marked area, not held
         above it.
+      # Keep consecutive confirmation unless evaluated uncertainty warrants:
+      # confirmation: {required: 2, window: 4, max_age_s: 15.0, reset_on_negative: true}
+      # Replace consecutive; do not supply both. Test contradictory frames too.
       consecutive: 2
       commit:
         workpiece_positioned: true

@@ -23,15 +23,16 @@ import httpx
 import yaml
 from _scene_rendering import load_scenes, render_scene
 from _visual_expectations import matches_answer, visual_cases
+from procedure_capture_guide_worker.guide.config import load_guide_config
 from procedure_capture_guide_worker.guide.guides import load_guide
-from procedure_capture_guide_worker.guide.measurements import MEASUREMENT_PROMPT, make_measurement_vlm
+from procedure_capture_guide_worker.guide.measurements import make_measurement_vlm
 from procedure_capture_guide_worker.guide.visual_check import VisualCheckTrace, verify_image
 from xr_ai_models import load_models_config, make_decision, make_vlm
 from xr_ai_tools.image import ImageRegistry
 from xr_ai_tools.vision import ImageQueryTool
 
 _SAMPLE = Path(__file__).resolve().parents[3]
-_PROMPT = _SAMPLE / "worker/procedure_capture_guide_worker/guide/prompts/guide_vision.txt"
+_GUIDE = _SAMPLE / "worker/procedure_capture_guide_worker/guide"
 
 
 def score(case: dict, accepted: bool | None, text: str | None, available: bool) -> dict:
@@ -70,6 +71,7 @@ def prepare(manifest_path: Path, output: Path) -> tuple:
     manifest = yaml.safe_load(manifest_path.read_text())
     scenes = load_scenes(manifest_path, manifest)
     guide = load_guide(manifest_path.parent / manifest["guide_path"])
+    config = load_guide_config(_SAMPLE / "yaml/guide-agent-config.yaml", guide_path=str(guide.path))
     cases = list(visual_cases(manifest).values())
     for case in cases:
         step = guide.workflow.steps[case["step"]]
@@ -78,10 +80,10 @@ def prepare(manifest_path: Path, output: Path) -> tuple:
         if case["scene"] not in scenes:
             raise ValueError("case scene must name a safe, defined scene")
     sources = [manifest_path, Path(__file__), Path(__file__).with_name("_scene_rendering.py"),
-               Path(__file__).with_name("_visual_expectations.py"), _PROMPT, guide.path,
-               _PROMPT.with_name("guide_condition.txt"), _PROMPT.with_name("guide_image_condition.txt"),
-               _PROMPT.parent.parent / "verification.py", _PROMPT.parent.parent / "measurements.py",
-               _PROMPT.parent.parent / "visual_check.py"]
+               Path(__file__).with_name("_visual_expectations.py"), config.policy_path,
+               _SAMPLE / "yaml/guide-agent-config.yaml", guide.path,
+               _GUIDE / "policy.py", _GUIDE / "verification.py", _GUIDE / "measurements.py",
+               _GUIDE / "visual_check.py"]
     if manifest.get("scenes_file") is not None:
         sources.append(manifest_path.parent / manifest["scenes_file"])
     source_hashes = {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in sources}
@@ -98,25 +100,25 @@ def prepare(manifest_path: Path, output: Path) -> tuple:
         "images": provenance,
         "source_sha256": source_hashes,
         "scenes": scenes, "manifest": manifest, "guide_sha256": guide.sha256,
-        "system_prompt": _PROMPT.read_text(),
+        "policy": config.policy.model_dump(),
         "origin": "Deterministically drawn schematics; no photographs or recording frames.",
     }, indent=2) + "\n")
     (output / "guide.yaml").write_bytes(guide.path.read_bytes())
-    return cases, guide
+    return cases, guide, config.policy
 
 
 async def evaluate(manifest_path: Path, output: Path, models_path: Path, repeats: int, timeout_s: float) -> dict:
     if repeats < 1 or timeout_s <= 0:
         raise ValueError("repeats and timeout must be positive")
-    cases, guide = prepare(manifest_path, output)
+    cases, guide, policy = prepare(manifest_path, output)
     models = load_models_config(models_path)
     vlm = make_vlm(models, "vlm")
     decisions = make_decision(models, "decision")
     measurement_vlm = (make_measurement_vlm(models) if any(
         guide.workflow.steps[case["step"]].evidence.measurement for case in cases) else None)
     images = ImageRegistry()
-    tool = ImageQueryTool(images=images, vlm=vlm, system_prompt=_PROMPT.read_text())
-    measurement_tool = (ImageQueryTool(images=images, vlm=measurement_vlm, system_prompt=MEASUREMENT_PROMPT)
+    tool = ImageQueryTool(images=images, vlm=vlm, system_prompt=policy.vision_prompt)
+    measurement_tool = (ImageQueryTool(images=images, vlm=measurement_vlm, system_prompt=policy.measurement_prompt)
                         if measurement_vlm is not None else None)
     rows = []
     started = time.monotonic()
@@ -138,7 +140,7 @@ async def evaluate(manifest_path: Path, output: Path, models_path: Path, repeats
                         frame={"scene": case["scene"], "trial": trial + 1},
                         step_id=step.id, revision=trial,
                         decision_timeout_s=timeout_s, vision_timeout_s=timeout_s, trace=trace,
-                        measurement=step.evidence.measurement, measurement_query=measurement_tool,
+                        measurement=step.evidence.measurement, measurement_query=measurement_tool, policy=policy,
                     )
                     accepted = trace.accepted
                 except (TimeoutError, ValueError, KeyError, RuntimeError, httpx.HTTPError) as exc:

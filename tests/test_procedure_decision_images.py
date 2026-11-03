@@ -83,9 +83,10 @@ async def test_camera_inputs_pass_real_adapter_and_default_server_limits(fmt, si
             if fmt == "JPEG":
                 # Reproduce the old path's admission failure with the hub's
                 # quality-95 JPEG and real serialization, before preparation.
-                from procedure_capture_guide_worker.guide.verification import _IMAGE_QUESTION
+                from procedure_capture_guide_worker.guide.policy import load_policy
+                image_question = load_policy().image_question.decision()
                 with pytest.raises(DecisionInputTooLargeError, match="body"):
-                    await decisions.decide("condition", {"condition_met": _IMAGE_QUESTION}, images=(original,))
+                    await decisions.decide("condition", {"condition_met": image_question}, images=(original,))
                 assert bodies[-1] > config.max_body_bytes
             result = await verify_image(
                 decisions, query, images=ImageRegistry(), image=original,

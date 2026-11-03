@@ -111,7 +111,7 @@ required outcomes, keep them as separate checks. Block the unsupported outcome
 without also disabling the independently verifiable placement.
 
 Semantic visual steps use CLEF to judge the image first.
-A selected accepted, rejected, or unknown result with confidence strictly above 0.80 is used directly;
+A selected accepted, rejected, or unknown result with confidence strictly above the configured cutoff (0.80 by default) is used directly;
 otherwise Cosmos describes that same frame and CLEF judges the caption alone.
 For semantic steps, write both instructions even if the image check seems easy:
 
@@ -191,3 +191,19 @@ Report the selected packet, output paths, validation result, evidence gaps,
 consequential assumptions, and approval blockers. Keep the guide draft and mark
 it as not yet runtime-evaluated. Do not create evaluation results or start a
 revision loop here; return to [the orchestration workflow](../SKILL.md).
+
+
+## Preserve execution policy
+
+Read the target checkout's `yaml/guide-policy.yaml` alongside its guide contract.
+The application policy selects model instructions and the image confidence cutoff;
+the guide supplies the task's question and completion requirements. Do not change
+application policy to make a draft pass. SDK conversation can explain observations
+and past steps, but historical dialogue and previous-run evidence cannot complete
+a current step.
+
+Keep `consecutive` confirmation unless evaluation supports a bounded visual
+`confirmation` window. See the contract for its required fields and semantics.
+Document why unknown views should retain support, choose a maximum evidence age,
+and test contradictory views before disabling reset on a negative decision. This
+changes temporal confirmation, never the physical completion requirement.

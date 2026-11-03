@@ -34,7 +34,7 @@ async def evaluate(cases_path: Path, models_path: Path, output: Path, *, repeats
         raise ValueError("decision cases must not be empty")
     output.mkdir(parents=True, exist_ok=False)
     sources = [cases_path, models_path, Path(__file__), Path(verification.__file__),
-               Path(verification.__file__).with_name("prompts") / "guide_condition.txt"]
+               Path(verification.__file__).resolve().parents[3] / "yaml/guide-policy.yaml"]
     (output / "provenance.json").write_text(json.dumps({
         "source_sha256": {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in sources},
         "cases": cases,

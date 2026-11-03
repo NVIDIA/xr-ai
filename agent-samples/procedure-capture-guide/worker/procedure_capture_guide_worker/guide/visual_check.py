@@ -11,7 +11,10 @@ owns frame selection, consecutive evidence, and progress updates.
 from __future__ import annotations
 
 import asyncio
-from dataclasses import asdict, dataclass
+import hashlib
+import time
+from contextlib import contextmanager
+from dataclasses import asdict, dataclass, field
 from typing import Literal
 
 from loguru import logger
@@ -20,14 +23,27 @@ from xr_ai_tools.image import ImageRegistry
 from xr_ai_tools.vision import ImageQueryRequest, ImageQueryResult, ImageQueryTool
 
 from .measurements import MeasurementPolicy, MeasurementResult, compare_measurements
+from .policy import load_policy
 from .verification import judge_image, judge_observation, verdict
-
-_IMAGE_CONFIDENCE_THRESHOLD = 0.80
 
 
 @dataclass(slots=True)
 class VisualCheckTrace:
     """Retain completed stages even when a later inference fails."""
+
+    prepared_image: bytes | None = field(default=None, repr=False)
+    latency_s: dict[str, float] = field(default_factory=dict)
+
+    def prepared(self, image):
+        self.prepared_image = image
+
+    @contextmanager
+    def stage(self, name):
+        started = time.monotonic()
+        try:
+            yield
+        finally:
+            self.latency_s[name] = time.monotonic() - started
 
     source: Literal["image", "caption", "measurement"] = "image"
     image_answer: DecisionAnswer | None = None
@@ -54,7 +70,9 @@ class VisualCheckTrace:
         return self.caption.text if self.caption is not None else None
 
     def record(self) -> dict:
-        return {"source": self.source, "verdict": self.verdict,
+        return {"source": self.source, "verdict": self.verdict, "stage_latency_s": dict(self.latency_s),
+                "prepared_image_sha256": (hashlib.sha256(self.prepared_image).hexdigest()
+                                          if self.prepared_image is not None else None),
                 "caption": self.caption.model_dump() if self.caption is not None else None,
                 "image_answer": asdict(self.image_answer) if self.image_answer is not None else None,
                 "answer": asdict(self.answer) if self.answer is not None else None,
@@ -79,47 +97,52 @@ async def verify_image(
     image: ImageInput, condition: str | None, question: str, frame: dict, step_id: str,
     revision: int, decision_timeout_s: float, vision_timeout_s: float,
     trace: VisualCheckTrace | None = None,
-    measurement: MeasurementPolicy | None = None, measurement_query: ImageQueryTool | None = None,
+    measurement: MeasurementPolicy | None = None, measurement_query: ImageQueryTool | None = None, policy=None,
 ) -> VisualCheckTrace:
-    """Use a >80% image decision, otherwise judge a caption of the same frame.
+    """Use an image decision above the configured cutoff, otherwise judge its caption.
 
     The cutoff applies to the selected choice, including rejected and unknown. Caption judgment
     uses the existing caption-only rule without another confidence threshold.
     Errors and cancellation propagate; they are not low-confidence answers.
     """
 
-    context = dict(condition=condition, frame=frame, step_id=step_id, revision=revision,
+    policy = policy or load_policy()
+    context = dict(policy=policy, condition=condition, frame=frame, step_id=step_id, revision=revision,
                    timeout_s=decision_timeout_s)
     trace = trace if trace is not None else VisualCheckTrace()
     if measurement is not None:
         trace.source = "measurement"
         if measurement_query is None:
             raise ValueError("measurement extraction client is not configured")
-        trace.caption = await caption_image(
-            measurement_query, images=images, image=image, question=question,
-            timeout_s=vision_timeout_s, owner=frame.get("participant_id"),
-        )
+        with trace.stage("measurement"):
+            trace.caption = await caption_image(
+                measurement_query, images=images, image=image, question=question,
+                timeout_s=vision_timeout_s, owner=frame.get("participant_id"),
+            )
         if not trace.caption.available:
             raise ValueError("measurement extraction unavailable")
         trace.measurement = compare_measurements(trace.caption.text, measurement)
         return trace
     if condition is None:
         raise ValueError("semantic verification requires a condition")
-    first = await judge_image(decisions, image=image, **context)
+    with trace.stage("image_decision"):
+        first = await judge_image(decisions, image=image, on_prepared=trace.prepared, **context)
     trace.image_answer = first
-    if first.confidence > _IMAGE_CONFIDENCE_THRESHOLD:
+    if first.confidence > policy.image_confidence_threshold:
         trace.answer = first
         return trace
     trace.source = "caption"
     logger.debug("Guide caption fallback step={} revision={} frame={} confidence={} threshold={}",
-                 step_id, revision, frame, first.confidence, _IMAGE_CONFIDENCE_THRESHOLD)
-    caption = await caption_image(
-        query, images=images, image=image, question=question, timeout_s=vision_timeout_s,
-        owner=frame.get("participant_id"),
-    )
+                 step_id, revision, frame, first.confidence, policy.image_confidence_threshold)
+    with trace.stage("caption"):
+        caption = await caption_image(
+            query, images=images, image=image, question=question, timeout_s=vision_timeout_s,
+            owner=frame.get("participant_id"),
+        )
     trace.caption = caption
     if not caption.available or not caption.text.strip():
         raise ValueError("visual caption unavailable")
-    final = await judge_observation(decisions, observation=caption.text, **context)
+    with trace.stage("caption_decision"):
+        final = await judge_observation(decisions, observation=caption.text, **context)
     trace.answer = final
     return trace

@@ -9,3 +9,6 @@ decision_timeout_s: 15.0
 # Save consumed images, decisions, controls, and state transitions per guide run.
 # Relative to this YAML file. Use null to disable; retained until manually removed.
 traces_dir: ../artifacts/guide-runs
+
+# Complete application prompts and inference policy, relative to this file.
+policy: guide-policy.yaml

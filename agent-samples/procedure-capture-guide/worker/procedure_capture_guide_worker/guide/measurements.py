@@ -61,16 +61,6 @@ class MeasurementResult:
     readings: list[dict]
 
 
-MEASUREMENT_PROMPT = """Read only the measurement displays requested by the user question.
-Copy visible numbers and units exactly; do not compare to a target, convert units,
-or infer values from expected settings. CURRENT/ACTUAL and measured thermometer
-readings have role current; TARGET/SET readings have role target; otherwise use
-unlabeled. Include every relevant display so a conflicting current value is not
-hidden by a target. Omit unreadable values or values without an explicit unit.
-Return only the required JSON readings object. Empty readings means unavailable.
-"""
-
-
 def make_measurement_vlm(models: ModelsConfig) -> VLMService:
     """Use the configured Cosmos endpoint with a per-client decoding contract."""
     spec = models.vlm("vlm")

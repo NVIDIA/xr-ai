@@ -102,7 +102,7 @@ def evaluator(monkeypatch):
 
 
 def test_scenes_are_reproducible_and_distinct(evaluator, tmp_path):
-    cases, guide = evaluator.prepare(_TEA_EVAL / "fixtures/visual_expectations.yaml", tmp_path / "images")
+    cases, guide, policy = evaluator.prepare(_TEA_EVAL / "fixtures/visual_expectations.yaml", tmp_path / "images")
     assert len(cases) == 27
     assert guide.path == _SAMPLE / "example-guides/tea-making/guide.yaml"
     assert guide.workflow.steps["steep_timer"].trigger.arguments["duration_s"] == 300
@@ -202,7 +202,8 @@ async def test_visual_evaluator_uses_guide_question_not_answer(evaluator, tmp_pa
         def __init__(self, *, images, vlm, system_prompt):
             self.images = images
             assert vlm is fake_vlm
-            assert system_prompt == evaluator._PROMPT.read_text()
+            assert system_prompt == evaluator.load_guide_config(
+                evaluator._SAMPLE / "yaml/guide-agent-config.yaml", guide_path="unused.yaml").policy.vision_prompt
 
         async def execute(self, request):
             requests.append(request)
@@ -401,7 +402,7 @@ def test_inline_scene_manifest_preserves_provenance(evaluator, tmp_path):
     manifest["guide_path"] = str(_SAMPLE / "example-guides/tea-making/guide.yaml")
     path = tmp_path / "inline.yaml"
     path.write_text(yaml.safe_dump(manifest))
-    cases, _guide = evaluator.prepare(path, tmp_path / "output")
+    cases, _guide, _policy = evaluator.prepare(path, tmp_path / "output")
     provenance = json.loads((tmp_path / "output/provenance.json").read_text())
     assert provenance["scenes"] == manifest["scenes"]
     assert str(path) in provenance["source_sha256"]

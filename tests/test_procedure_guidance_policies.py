@@ -16,7 +16,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, Mock
 
 import pytest
-from _procedure_guide_helpers import clef_response
+from _procedure_guide_helpers import clef_response, guide_context
 from PIL import Image
 from xr_ai_models import DecisionAnswer, DecisionResponse, load_models_config
 from xr_ai_tools.vision import ImageQueryResult
@@ -260,7 +260,7 @@ async def test_informational_classification_keeps_evidence_answering(engine):
         model="test", usage={}, raw={},
     )
     async def answer(messages, *, tools, **kwargs):
-        context = json.loads(messages[1].content)
+        context = guide_context(messages)
         assert context["last_verification"]["caption"]["text"] == "The display reads 94 C."
         assert {tool.name for tool in tools} == {"current_view", "workflow__status"}
         return ChatResponse("The last check read 94 C, below the required temperature.", None, None, "stop", {})
@@ -268,3 +268,109 @@ async def test_informational_classification_keeps_evidence_answering(engine):
     assert "94 C" in await engine._route("Why has the check not passed?", "alice")
     assert session.state == before
     assert engine._decisions.decide.await_count == 1
+
+
+def test_confirmation_window_counts_only_decidable_fresh_evidence():
+    from procedure_capture_guide_worker.guide.confirmation import ConfirmationPolicy, ConfirmationWindow
+    rules = ConfirmationPolicy(required=2, window=3, max_age_s=10, reset_on_negative=False)
+    window = ConfirmationWindow()
+    assert window.observe("accepted", 0, rules) == 1
+    assert window.observe("unknown", 1, rules) == 1
+    assert window.observe("rejected", 2, rules) == 1
+    assert window.observe("accepted", 3, rules) == 2
+    assert window.observe("unknown", 11, rules) == 1
+    assert window.observe(None, 12, rules) == 0
+    reset = rules.model_copy(update={"reset_on_negative": True})
+    assert window.observe("accepted", 13, reset) == 1
+    assert window.observe("rejected", 14, reset) == 0
+
+
+@pytest.mark.parametrize("overrides", [
+    {"required": 4}, {"required": True}, {"window": 0}, {"max_age_s": float("inf")},
+    {"max_age_s": 0}, {"reset_on_negative": "false"},
+])
+def test_confirmation_policy_rejects_invalid_contract(overrides):
+    from procedure_capture_guide_worker.guide.confirmation import ConfirmationPolicy
+    with pytest.raises(ValueError):
+        ConfirmationPolicy.model_validate({"required": 2, "window": 3, "max_age_s": 10, **overrides})
+
+
+async def test_window_confirmation_is_opt_in_and_deduplicates_frames(engine, document):
+    backend = engine._backend
+    gate = document["steps"][0]["evidence"]
+    del gate["consecutive"]
+    gate["confirmation"] = {"required": 2, "window": 3, "max_age_s": 10, "reset_on_negative": False}
+    backend._guide = selected(document)
+    backend._start("alice")
+    session = backend._sessions["alice"]
+    image = io.BytesIO()
+    Image.new("RGB", (2, 2)).save(image, format="PNG")
+    backend._decisions.decide.side_effect = None
+    async def observe(value, sequence):
+        backend._decisions.decide.return_value = clef_response(value, .95)
+        backend._trigger = AsyncMock(return_value=replace(observation(value, sequence), value=image.getvalue()))
+        session.next_tick = 0
+        await backend._tick(session)
+    await observe("yes", 1)
+    await observe("yes", 1)
+    assert session.evidence_hits == 1 and not session.state["base"]
+    await observe("unknown", 2)
+    assert session.evidence_hits == 1
+    await observe("no", 3)
+    assert session.evidence_hits == 1 and not session.state["base"]
+    await observe("yes", 4)
+    assert session.state["base"]
+    await control(backend, "advance", skip=False)
+    snapshot = (await backend.guidance("alice")).context
+    assert snapshot["recent_observations"] == []
+    assert snapshot["completed_steps"][0]["step_id"] == "base"
+    assert snapshot["completed_steps"][0]["outcome"] == "completed"
+    await control(backend, "restart")
+    snapshot = (await backend.guidance("alice")).context
+    assert snapshot["completed_steps"] == [] and not any(snapshot["state"].values())
+    assert snapshot["historical_previous_run"]["steps"][0]["step_id"] == "base"
+
+
+def test_confirmation_and_consecutive_are_mutually_exclusive(document):
+    document["steps"][0]["evidence"]["confirmation"] = {"required": 2, "window": 3, "max_age_s": 10}
+    with pytest.raises(ValueError, match="excludes consecutive"):
+        selected(document)
+
+
+@pytest.mark.parametrize("section,setting,value", [
+    ("foreground_options", "max_tokens", "100"), ("foreground_options", "enable_thinking", 1),
+    ("observation_options", "thinking_budget", -1), ("foreground_options", "tools", []),
+])
+def test_application_policy_rejects_invalid_inference_settings(section, setting, value):
+    from procedure_capture_guide_worker.guide.policy import GuidePolicy, load_policy
+    raw = load_policy().model_dump()
+    raw[section][setting] = value
+    with pytest.raises(ValueError):
+        GuidePolicy.model_validate(raw)
+
+
+async def test_sdk_conversation_keeps_dialogue_and_refreshes_execution_context(engine):
+    from xr_ai_models import ChatResponse
+    engine._llm.chat.return_value = ChatResponse(
+        content="The two edges must line up.", tool_calls=(), reasoning=None, finish_reason="stop", raw={})
+    await engine._route("What should I look for?", "alice")
+    await control(engine._backend, "advance", skip=True)
+    engine._llm.chat.reset_mock()
+    await engine._route("And what about this step?", "alice")
+    messages = engine._llm.chat.call_args.args[0]
+    assert any("edges must line up" in str(message.content) for message in messages)
+    snapshot = guide_context(messages)
+    assert snapshot["step_id"] == "lid"
+    assert snapshot["completed_steps"][0]["outcome"] == "skipped"
+    assert not any(tool.name.startswith("workflow__") and tool.name != "workflow__status"
+                   for tool in engine._llm.chat.call_args.kwargs["tools"])
+
+
+async def test_stopping_an_idle_guide_preserves_last_run_history(engine):
+    backend = engine._backend
+    await control(backend, "advance", skip=True)
+    await control(backend, "reset")
+    previous = (await backend.guidance("alice")).context["historical_previous_run"]
+    await control(backend, "reset")
+    assert (await backend.guidance("alice")).context["historical_previous_run"] == previous
+    assert previous["steps"][0]["outcome"] == "skipped"

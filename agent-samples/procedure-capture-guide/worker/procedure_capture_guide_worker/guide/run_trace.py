@@ -22,6 +22,8 @@ class RunTrace:
     def __init__(self, directory: Path | None, guide) -> None:
         self.directory = directory
         self.guide = guide
+        self._sources = {str(path.relative_to(Path(__file__).parent)): hashlib.sha256(path.read_bytes()).hexdigest()
+                         for path in Path(__file__).parent.rglob("*.py")}
         self._queue = asyncio.Queue()
         self._writer = None
         self._closed = False
@@ -74,7 +76,8 @@ class RunTrace:
         if event["kind"] == "run_started":
             self._replace(directory / "guide.yaml", self.guide.content)
             packet = {"schema_version": 1, "kind": "guide-run", "status": "active",
-                      "guide_sha256": self.guide.sha256, "events": "events.jsonl"}
+                      "guide_sha256": self.guide.sha256, "events": "events.jsonl",
+                      "sources": self._sources, "policy": event.get("policy")}
             self._replace(directory / "packet.json", json.dumps(packet, indent=2).encode())
         if image is not None:
             digest = hashlib.sha256(image).hexdigest()

@@ -7,6 +7,7 @@ YES/NO markers are test inputs, not the production visual answer contract.
 Model accuracy is exercised separately with descriptive observations and images.
 """
 
+import json
 from unittest.mock import AsyncMock, Mock
 
 from xr_ai_models import DecisionAnswer, DecisionResponse
@@ -25,6 +26,13 @@ def clef_response(choice="yes", confidence=0.9):
 
 def stub_decisions():
     async def decide(state, _questions, **kwargs):
+        if "destination" in _questions:
+            text = state["request"].lower()
+            controls = ("start guide", "stop guide", "next", "skip", "continue now")
+            choice = "guide" if any(word in text for word in controls) else "conversation"
+            return DecisionResponse(answers={"destination": DecisionAnswer(choice, 1.0, {
+                key: float(key == choice) for key in _questions["destination"].criteria})},
+                model="scripted", usage={}, raw={})
         if "action" in _questions or "authorization" in _questions:
             key = next(iter(_questions))
             controls = {
@@ -45,3 +53,17 @@ def stub_decisions():
         return clef_response("yes" if state["current_observation"] == "YES" else "no")
 
     return Mock(decide=AsyncMock(side_effect=decide), health=AsyncMock(return_value=True), close=AsyncMock())
+
+
+def guide_context(messages):
+    """Read the execution JSON from SDK Conversation's reference-only context."""
+    for message in messages:
+        text = message.content
+        if not isinstance(text, str):
+            continue
+        index = text.find('{"instructions":')
+        if index >= 0:
+            context = json.JSONDecoder().raw_decode(text[index:])[0]
+            context["request"] = next(item.content for item in reversed(messages) if item.role == "user")
+            return context
+    raise AssertionError("No guide execution context supplied")

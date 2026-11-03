@@ -753,7 +753,7 @@ condition/description pairs for the shared CLEF policy: counts, orientation,
 contact, incomplete labels, optional evidence, measurement provenance, and
 unsupported history. These conditions are independent of the tea recipe;
 measurement cases explicitly require a measured value. Run them after changing
-`guide_condition.txt` or decision request construction:
+`caption_question` in `yaml/guide-policy.yaml` or decision request construction:
 
 ```bash
 uv run --project worker python evaluation/guide/evaluate_conditions.py \
@@ -868,7 +868,7 @@ even when their `task.status` is `approved`.
   with the prepared image path. Oversized prompt text or stricter external
   service limits can still cause admission errors and are reported as unavailable.
 - Visual `evidence` requires exactly one of prose `condition` or numeric
-  `measurement`, a positive `consecutive` count,
+  `measurement`, a positive `consecutive` count or visual `confirmation` policy,
   and a bounded `commit` mapping for approved guides. The question asks Cosmos
   for observable facts; the condition tells CLEF which facts must all hold.
   Numeric policies use the structured extraction and comparison described below.
@@ -943,8 +943,12 @@ and shared settings in `config.py`. The sibling `capture/` and `guide/` packages
 own their capability-specific agents, settings, and helpers. Only the selected
 agent is registered. With no mode flag, capture remains the default.
 
-`guide/agent.py` handles connection events, foreground questions, and conversational
-controls. Its `_Guide` backend in `guide/guiding.py` owns guide progress,
+`guide/agent.py` composes the SDK `AgentRouter`, `Conversation`, and
+`ContextManager`. The router owns participant lifecycle, cancellation, foreground
+scheduling, and destination selection. The guide destination classifies and
+authorizes controls; the conversation destination answers questions with detached
+execution context and read-only tools. `guide/conversation.py` adapts the sample's
+tool loop to SDK conversation without exposing state-changing tools. Its `_Guide` backend in `guide/guiding.py` owns guide progress,
 runtime timers, frame evidence, and background verification.
 `guide/verification.py` uses the typed decision service to judge descriptive
 evidence; its Relay trace retains the source frame, step, and revision. Transitions clear
@@ -956,8 +960,7 @@ Completing the same step during inference does not invalidate a stop or advance
 request, but a concurrent step transition does. The backend rechecks those scopes
 under its own lock when controls execute and answers finish. It owns accepted control tasks
 through completion even if a new utterance cancels the foreground turn. The
-cancelled turn drains accepted controls and delivers their still-current transition
-response; new guidance snapshots also drain controls first. Departure and shutdown
+cancelled turn drains accepted controls; new guidance snapshots also drain controls first. Departure and shutdown
 drain those tasks without speaking to disconnected participants.
 Stop guide cancels the observer and clears timer
 state without unloading the selected guide. Connecting only loads an inactive
@@ -981,7 +984,8 @@ cannot cancel its own response.
 |---|---|
 | `yaml/worker.yaml` | Shared frame and speech detection settings; capability configuration paths |
 | `yaml/capture-agent-config.yaml` | Task output directory, sampling rate, and caption interval |
-| `yaml/guide-agent-config.yaml` | Visual and CLEF decision timeouts |
+| `yaml/guide-agent-config.yaml` | Verification timeouts, trace directory, and application policy path |
+| `yaml/guide-policy.yaml` | Conversation/vision instructions, decision questions, inference settings, history bound, and image confidence cutoff |
 | `yaml/models.json` | Shared batch STT, LLM, VLM, TTS, and CLEF services and endpoints |
 | `yaml/media_capture.yaml` | Opt-in session recording output, profile, and participant lifetime |
 | `yaml/voice_gate.yaml` | Shared wake-word-free speech input; each mode handles its own commands |
@@ -1044,8 +1048,12 @@ CLEF. Capture captioning is unchanged.
 
 The foreground receives the latest verification of its current step, including
 frame identity, observation age, descriptive or typed evidence, verdict, and
-errors. Transitions clear this context. A previous observation is not a fresh
-camera inspection. Image-only decisions do not create a synthetic description.
+errors. A bounded recent-observation history accompanies the current step.
+Transitions clear current evidence while retaining a detached record of completed
+or skipped steps. A separate `historical_previous_run` summarizes the last run;
+it never authorizes progress in a new run. SDK conversation retains dialogue and
+receives a fresh execution snapshot before each answer. A previous observation
+is not a fresh camera inspection. Image-only decisions do not create a synthetic description.
 
 Guide controls use bounded CLEF classification followed by independent
 transaction authorization. Native tools retain readiness and revision checks.
@@ -1061,7 +1069,11 @@ a `packet.json` with `kind: guide-run`, `events.jsonl`, and consumed image bytes
 under `frames/`, named by content hash. Events retain questions, frame identity,
 raw decisions and probabilities, descriptions/readings, errors and cancellations,
 controls, and state transitions. Image bytes preserve the selected original;
-CLEF image preparation is separate. Only observations actually consumed by the
+A separate `decision_image_prepared` event references the exact normalized bytes
+submitted to CLEF, preserving the original frame identity. Observation results
+include per-stage latency for image judgment, captioning, and caption judgment.
+The packet records the effective application policy and guide implementation hashes;
+these diagnostics explain inputs and timing, not model reproducibility guarantees. Only observations actually consumed by the
 guide are saved, not a continuous audio/video recording.
 
 Run packets are diagnostic traces, distinct from procedure capture packets. The
@@ -1079,3 +1091,37 @@ Gate correctness measures acceptance versus non-acceptance, so an unknown result
 on a negative example can be gate-correct without proving the model recognized
 the contradiction. Inspect unknown counts and raw evidence alongside false accepts
 and false rejects; valid structured JSON does not guarantee a correct reading.
+
+
+### Optional visual confirmation windows
+
+Existing guides use `evidence.consecutive`: an unknown, negative, or unavailable
+check breaks the success streak. A visual step may instead select an explicit
+bounded window when evaluation shows that occasional uncertain views should not
+erase otherwise consistent evidence:
+
+```yaml
+confirmation:
+  required: 2
+  window: 4
+  max_age_s: 15.0
+  reset_on_negative: true
+```
+
+Put this mapping inside `evidence`, replacing `consecutive`. Only distinct source
+frames count. Accepted and rejected decisions occupy the last `window` decidable
+observations; unknown decisions occupy no slot. Evidence older than `max_age_s`
+is removed before counting. Unavailable checks clear the window. By default a
+rejection clears earlier support; setting `reset_on_negative: false` retains it
+until it ages out or leaves the window. That tradeoff can increase false accepts
+for reversible states and must be evaluated with contradictory and recovery views.
+Step transitions and new runs always clear the window. Timers continue to use
+`consecutive` and the runtime-owned monotonic clock.
+
+Application instructions are loaded from the complete policy file selected by
+`yaml/guide-agent-config.yaml`. Live guide execution, recorded-packet evaluation,
+and the checked-in visual evaluator use the sample policy. The default image
+confidence cutoff remains 0.80 with a strict greater-than comparison. Record the
+effective policy with every comparison and rerun control, visual, and timing
+cases after changes; a policy edit is not an approval of a guide or a change to
+its required outcome. Task-specific questions and conditions remain in guide YAML.
