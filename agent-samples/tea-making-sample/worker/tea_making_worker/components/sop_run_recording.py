@@ -470,3 +470,40 @@ class _RecordedLanguage:
             duration_ms=(time.perf_counter() - started_at) * 1000,
         )
         return response
+
+
+    async def stream_events(self, messages, **kwargs):
+        """Record the exact SDK Conversation input and completed stream once."""
+        current_attempt = _ATTEMPT.get()
+        call_id = uuid4().hex
+        if current_attempt is not None:
+            await current_attempt.event(
+                "language.started", call_id=call_id, messages=messages,
+                settings={key: value for key, value in kwargs.items() if key != "headers"}, streaming=True,
+            )
+        started_at = time.perf_counter()
+        fragments = []
+        finish_reason = None
+        events = self._service.stream_events(messages, **kwargs)
+        try:
+            async for event in events:
+                if event.kind == "text" and event.text:
+                    fragments.append(event.text)
+                if event.kind == "finish":
+                    finish_reason = event.finish_reason
+                yield event
+        except (Exception, asyncio.CancelledError) as error:  # noqa: BLE001 -- preserve the actual streaming failure after recording it.
+            if current_attempt is not None:
+                await current_attempt.event(
+                    "language.failed", call_id=call_id, error_type=type(error).__name__, error=str(error), streaming=True,
+                )
+            raise
+        else:
+            if current_attempt is not None:
+                await current_attempt.event(
+                    "language.finished", call_id=call_id,
+                    response={"content": "".join(fragments), "finish_reason": finish_reason},
+                    duration_ms=(time.perf_counter() - started_at) * 1000, streaming=True,
+                )
+        finally:
+            await events.aclose()

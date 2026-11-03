@@ -35,6 +35,7 @@ from tea_making_worker.application.tea_events import (  # noqa: E402
     USER_QUERY_TOPIC,
     GuidanceNotice,
 )
+from tea_making_worker.application.tea_interaction import _TeaInteraction
 from tea_making_worker.application.tea_sop_agent import (  # noqa: E402
     SOP_CONTEXT_SOURCE,
     SOPAgent,
@@ -50,7 +51,7 @@ class _Decisions:
         "stop tea making": "stop",
         "next step": "next",
         "skip": "skip",
-        "reset": "reset",
+        "reset": "stop",
         "restart": "restart",
     }
 
@@ -58,12 +59,16 @@ class _Decisions:
         answers = {}
         request = state.get("request", "") if isinstance(state, dict) else ""
         for key, question in questions.items():
-            if key == "destination":
-                choice = "workflow" if request in self.controls else "conversation"
-            elif key == "control":
+            if key == "operation":
                 choice = self.controls.get(request, "none")
-            elif key == "authorization":
-                choice = "command" if request in self.controls else "not_command"
+            elif key == "referent":
+                control = self.controls.get(request, "none")
+                choice = (
+                    state["sop"]["current_step"] if control in {"next", "skip"}
+                    else "workflow" if control != "none" else "not_requested"
+                )
+            elif key == "instrument_unit":
+                choice = "not_declared"
             else:
                 choice = "positive"
             answers[key] = DecisionAnswer(
@@ -105,11 +110,12 @@ def _runner(*, config=None, observer=None, llm=None, frames=None):
 
     async def observe(request):
         text = (
-            '{"tea_name":"Northwind White Tea"}'
+            '{"tea_name":"Northwind White Tea","tea_type":"white tea"}'
             if request.query.startswith(config.identification_question)
             else (
-                "A clear water surface is visible; current display reads 80 degrees Celsius; "
-                "tea is visibly immersed in the same cup."
+                '{"value":80,"unit_text":"°C","role":"current","role_evidence":"Current temperature label"}'
+                if request.query.startswith(config.temperature.question)
+                else "A clear water surface is visible; tea is visibly immersed in the same cup."
             )
         )
         return ImageQueryResult(text=text)
@@ -185,8 +191,9 @@ def _router(sop, runtime, context, conversation_language=None, **router_options)
         output_topic=VOICE_OUTPUT_TOPIC,
     )
     router = AgentRouter(
-        {"workflow": sop, "conversation": conversation},
+        {"tea": _TeaInteraction(sop, conversation, sop._decisions)},
         sop._decisions,
+        default_destination="tea",
         query_topic=USER_QUERY_TOPIC,
         output_topic=VOICE_OUTPUT_TOPIC,
         output=AsyncMock(),
@@ -211,7 +218,7 @@ async def test_actual_python_procedure_completes_all_five_steps():
     async with runtime:
         try:
             result = await router.handle(AgentTurn("p", "start", "start tea making"))
-            assert result.text == sop.config.messages["start"]
+            assert sop.context_snapshot("p")["status"] in {"running", "completed"}
             await _until(lambda: sop._sessions["p"].status == "completed")
             snapshot = sop.context_snapshot("p")
             assert snapshot["resolved_settings"]["temperature_c"] == 80
@@ -240,7 +247,7 @@ async def test_questions_reach_sdk_conversation_while_sop_runs_and_stop_is_a_con
 
     async def observe(request):
         if "Return JSON matching" in request.query:
-            return ImageQueryResult(text='{"tea_name":"Northwind White Tea"}')
+            return ImageQueryResult(text='{"tea_name":"Northwind White Tea","tea_type":"white tea"}')
         # Hold an actual model/tool trace scope open while QA and stop proceed.
         # A flow must inherit trace lineage without sharing its mutable stack.
         with nemo_relay.scope.scope("blocked-visual-tool", nemo_relay.ScopeType.Tool):
@@ -264,7 +271,7 @@ async def test_questions_reach_sdk_conversation_while_sop_runs_and_stop_is_a_con
             assert '"kind": "retrieved"' in messages
             await router.handle(AgentTurn("p", "stop", "stop tea making"))
             assert procedure.done()
-            assert sop.context_snapshot("p")["status"] == "stopped"
+            assert sop.context_snapshot("p")["status"] == "idle"
             assert sop.context_snapshot("p")["active_flows"] == {}
         finally:
             await router.stop()
@@ -304,7 +311,7 @@ async def test_skip_retains_partial_settings_and_defaults_only_missing_fields():
 
     async def observe(request):
         if "Return JSON matching" in request.query:
-            return ImageQueryResult(text='{"tea_name":"Northwind White Tea"}')
+            return ImageQueryResult(text='{"tea_name":"Northwind White Tea","tea_type":"white tea"}')
         water_started.set()
         await asyncio.Event().wait()
 
@@ -346,7 +353,7 @@ async def test_manual_next_cannot_bypass_incomplete_step():
             session = sop._sessions["p"]
             if not session.ready:
                 response = await router.handle(AgentTurn("p", "early-next", "next step"))
-                assert response.text == sop.config.messages["not_ready"]
+                assert sop.context_snapshot("p")["last_interaction"]["outcome"] == "current_step_not_confirmed"
             assert session.status == "running"
         finally:
             await router.stop()
@@ -432,7 +439,7 @@ async def test_runtime_departure_drains_work_before_releasing_frames_and_readmit
 
     async def observe(request):
         if "Return JSON matching" in request.query:
-            return ImageQueryResult(text='{"tea_name":"Northwind White Tea"}')
+            return ImageQueryResult(text='{"tea_name":"Northwind White Tea","tea_type":"white tea"}')
         inference_started.set()
         try:
             await backend_released.wait()
@@ -460,8 +467,9 @@ async def test_runtime_departure_drains_work_before_releasing_frames_and_readmit
         released_participants.append(participant_id)
 
     router = AgentRouter(
-        {"workflow": sop, "conversation": conversation},
+        {"tea": _TeaInteraction(sop, conversation, sop._decisions)},
         sop._decisions,
+        default_destination="tea",
         query_topic=USER_QUERY_TOPIC,
         output_topic=VOICE_OUTPUT_TOPIC,
         participant_joined_topic=PARTICIPANT_JOINED_TOPIC,
@@ -525,7 +533,7 @@ async def test_superseding_stop_acknowledgment_does_not_abandon_committed_stop()
 
     async def observe(request):
         if "Return JSON matching" in request.query:
-            return ImageQueryResult(text='{"tea_name":"Northwind White Tea"}')
+            return ImageQueryResult(text='{"tea_name":"Northwind White Tea","tea_type":"white tea"}')
         inference_started.set()
         try:
             await backend_released.wait()
@@ -549,7 +557,7 @@ async def test_superseding_stop_acknowledgment_does_not_abandon_committed_stop()
                 1,
             )
             assert isinstance(results[0], asyncio.CancelledError)
-            assert sop.context_snapshot("p")["status"] == "stopped"
+            assert sop.context_snapshot("p")["status"] == "idle"
             assert sop.context_snapshot("p")["active_flows"] == {}
             assert language.messages
         finally:
@@ -573,7 +581,7 @@ async def test_delayed_controls_bind_step_or_run_as_appropriate(control):
 
     async def observe(request):
         if "Return JSON matching" in request.query:
-            return ImageQueryResult(text='{"tea_name":"Northwind White Tea"}')
+            return ImageQueryResult(text='{"tea_name":"Northwind White Tea","tea_type":"white tea"}')
         if request.query == selected.sop.water.question:
             water_started.set()
             await water_released.wait()
@@ -584,7 +592,7 @@ async def test_delayed_controls_bind_step_or_run_as_appropriate(control):
 
     class DelayedDecisions(_Decisions):
         async def decide(self, state, questions, **kwargs):
-            if "control" in questions and state["request"] in {"skip", "stop tea making"}:
+            if "operation" in questions and state["request"] in {"skip", "stop tea making"}:
                 classification_started.set()
                 await classification_released.wait()
             return await super().decide(state, questions, **kwargs)
@@ -611,12 +619,12 @@ async def test_delayed_controls_bind_step_or_run_as_appropriate(control):
             classification_released.set()
             result = await asyncio.wait_for(control_task, 1)
             if control == "skip":
-                assert result.text == sop.config.messages["changed"]
+                assert sop.context_snapshot("p")["last_interaction"]["outcome"] == "referenced_step_already_finished"
                 assert sop.context_snapshot("p")["current_step"] == "heat_water"
                 assert sop.context_snapshot("p")["status"] == "running"
             else:
-                assert result.text == sop.config.messages["stop"]
-                assert sop.context_snapshot("p")["status"] == "stopped"
+                assert sop.context_snapshot("p")["last_interaction"]["outcome"] == "workflow_stop_applied"
+                assert sop.context_snapshot("p")["status"] == "idle"
         finally:
             water_released.set()
             heat_released.set()
@@ -636,7 +644,7 @@ async def test_sdk_conversation_receives_full_recent_flow_context_not_only_a_com
     async def observe(request):
         nonlocal observation_number
         if "Return JSON matching" in request.query:
-            return ImageQueryResult(text='{"tea_name":"Northwind White Tea"}')
+            return ImageQueryResult(text='{"tea_name":"Northwind White Tea","tea_type":"white tea"}')
         observation_number += 1
         if observation_number == 3:
             third_observation_started.set()
@@ -677,13 +685,15 @@ async def test_sdk_conversation_receives_full_recent_flow_context_not_only_a_com
 
 
 @pytest.mark.asyncio
-async def test_skipping_unconfirmed_tea_contact_does_not_start_a_timer():
+async def test_skipping_unconfirmed_tea_contact_starts_a_manual_origin_timer():
     selected = load_config(_SAMPLE / "yaml/tea_making_worker.yaml")
     contact_started = asyncio.Event()
 
     async def observe(request):
         if "Return JSON matching" in request.query:
-            return ImageQueryResult(text='{"tea_name":"Northwind White Tea"}')
+            return ImageQueryResult(text='{"tea_name":"Northwind White Tea","tea_type":"white tea"}')
+        if request.query.startswith(selected.sop.temperature.question):
+            return ImageQueryResult(text='{"value":80,"unit_text":"°C","role":"current","role_evidence":"Current temperature label"}')
         if request.query == selected.sop.tea_bag.question:
             contact_started.set()
             await asyncio.Event().wait()
@@ -699,8 +709,10 @@ async def test_skipping_unconfirmed_tea_contact_does_not_start_a_timer():
             await _until(lambda: sop.context_snapshot("p")["status"] == "completed")
             snapshot = sop.context_snapshot("p")
             assert snapshot["flow_outcomes"]["start_steeping"] == "skipped"
-            assert snapshot["flow_outcomes"]["steep_timer"] == "skipped"
-            assert "steep_timer" not in sop._sessions["p"].flow_states
+            assert snapshot["flow_outcomes"]["steep_timer"] == "completed"
+            assert snapshot["timer_start_source"] == "user_skipped_visual_check"
+            timer = sop._sessions["p"].flow_states["steep_timer"]
+            assert timer.started_at_us <= timer.updated_at_us and timer.remaining_seconds == 0
         finally:
             await router.stop()
             await sop.stop()
@@ -714,7 +726,7 @@ async def test_stopping_runner_drains_every_parallel_child_before_returning():
 
     async def observe(request):
         if "Return JSON matching" in request.query:
-            return ImageQueryResult(text='{"tea_name":"Northwind White Tea"}')
+            return ImageQueryResult(text='{"tea_name":"Northwind White Tea","tea_type":"white tea"}')
         water_started.set()
         await asyncio.Event().wait()
 
@@ -806,7 +818,7 @@ async def test_conversation_context_exposes_only_entered_steps_and_established_s
         if "Return JSON matching" in request.query:
             identification_started.set()
             await release_identification.wait()
-            return ImageQueryResult(text='{"tea_name":"Northwind White Tea"}')
+            return ImageQueryResult(text='{"tea_name":"Northwind White Tea","tea_type":"white tea"}')
         water_started.set()
         await asyncio.Event().wait()
 
@@ -820,12 +832,11 @@ async def test_conversation_context_exposes_only_entered_steps_and_established_s
     async with runtime:
         try:
             messages = await ask("What can you do?", "capabilities")
-            assert sop.context_snapshot("p") == {
-                "status": "idle",
-                "active_flows": {},
-                "historical_previous_run": None,
-            }
-            for absent in ("procedure_steps", "resolved_settings", "93", "180", "Fill a kettle", "Heat the water"):
+            snapshot = sop.context_snapshot("p")
+            assert snapshot["status"] == "idle" and snapshot["active_flows"] == {}
+            assert snapshot["historical_previous_run"] is None
+            assert snapshot["last_interaction"]["outcome"] == "no_workflow_change"
+            for absent in ("procedure_steps", "resolved_settings", '"temperature_c": 93', '"duration_seconds": 180', "Fill a kettle", "Heat the water"):
                 assert absent not in messages
             assert "tea-making guidance" in messages
 
@@ -835,7 +846,7 @@ async def test_conversation_context_exposes_only_entered_steps_and_established_s
             snapshot = sop.context_snapshot("p")
             assert list(snapshot["entered_step_instructions"]) == ["identify"]
             assert "resolved_settings" not in snapshot
-            assert "Hold the tea package" in messages
+            assert sop.config.messages["identify"] in messages
             assert "Heat the water" not in messages and '"temperature_c": 93' not in messages
 
             release_identification.set()
@@ -849,7 +860,7 @@ async def test_conversation_context_exposes_only_entered_steps_and_established_s
 
             await router.handle(AgentTurn("p", "stop", "stop tea making"))
             snapshot = sop.context_snapshot("p")
-            assert snapshot["status"] == "stopped" and snapshot["active_flows"] == {}
+            assert snapshot["status"] == "idle" and snapshot["active_flows"] == {}
             await router.handle(AgentTurn("p", "reset", "reset"))
             messages = await ask("Is guidance running?", "after-reset")
             snapshot = sop.context_snapshot("p")
@@ -951,7 +962,7 @@ async def test_public_router_can_start_after_reset_and_after_each_completed_proc
             run_ids = []
             for number in range(3):
                 response = await router.handle(AgentTurn("p", f"start-{number}", "start tea making"))
-                assert response.text == sop.config.messages["start"]
+                assert sop.context_snapshot("p")["status"] in {"running", "completed"}
                 await _until(lambda: sop.context_snapshot("p")["status"] == "completed")
                 session = sop._sessions["p"]
                 run_ids.append(session.run_id)
@@ -959,7 +970,7 @@ async def test_public_router_can_start_after_reset_and_after_each_completed_proc
                 assert not session.active_tasks
                 if number == 0:
                     response = await router.handle(AgentTurn("p", "reset-between", "reset"))
-                    assert response.text == sop.config.messages["reset"]
+                    assert sop.context_snapshot("p")["status"] == "idle"
                     assert sop.context_snapshot("p")["status"] == "idle"
             assert len(set(run_ids)) == 3
             assert sop.context_snapshot("p")["historical_previous_run"]["run_id"] == run_ids[-2]
@@ -1009,7 +1020,7 @@ async def test_start_queued_during_active_reset_waits_for_old_inference_cleanup(
             await asyncio.gather(resetting, return_exceptions=True)
             response = await asyncio.wait_for(restarting, 1)
             await asyncio.wait_for(second_water.wait(), 1)
-            assert response.text == sop.config.messages["start"]
+            assert sop.context_snapshot("p")["status"] in {"running", "completed"}
             assert old_procedure.done() and sop._sessions["p"].run_id != old_run
             assert "A late old-run observation." not in json.dumps(sop.context_snapshot("p"))
         finally:
@@ -1021,7 +1032,7 @@ async def test_start_queued_during_active_reset_waits_for_old_inference_cleanup(
 
 
 @pytest.mark.asyncio
-async def test_unresolved_identification_notifies_once_without_defaults_or_wording_spam():
+async def test_unresolved_identification_keeps_state_without_unsolicited_questions():
     notices = []
     observation_calls = 0
     all_observations_seen = asyncio.Event()
@@ -1065,10 +1076,8 @@ async def test_unresolved_identification_notifies_once_without_defaults_or_wordi
             await router.handle(AgentTurn("p", "start-pending", "start tea making"))
             await asyncio.wait_for(all_observations_seen.wait(), 1)
             pending_notices = [text for text in notices if text.startswith("I can read")]
-            assert len(pending_notices) == 1
-            assert "water temperature and steeping time" in pending_notices[0]
-            assert "skip" in pending_notices[0] and "Show the tea type" in pending_notices[0]
-            assert language.chat.await_count == 2
+            assert pending_notices == []
+            assert language.chat.await_count == 1
             sop._rag.retrieve.execute.assert_awaited_once()
             state = sop.context_snapshot("p")
             assert "resolved_settings" not in state
@@ -1081,7 +1090,7 @@ async def test_unresolved_identification_notifies_once_without_defaults_or_wordi
             all_observations_seen.clear()
             await router.handle(AgentTurn("p", "start-pending-again", "start tea making"))
             await asyncio.wait_for(all_observations_seen.wait(), 1)
-            assert len([text for text in notices if text.startswith("I can read")]) == 2
+            assert not [text for text in notices if text.startswith("I can read")]
         finally:
             await router.stop()
             await sop.stop()
@@ -1115,7 +1124,7 @@ async def test_explicit_restart_launches_new_first_inference_while_start_keeps_a
             new_run = sop._sessions["p"].run_id
             assert old_procedure.done() and new_run != old_run
             response = await router.handle(AgentTurn("p", "already-active", "let's make tea"))
-            assert response.text == sop.config.messages["already_running"]
+            assert sop.context_snapshot("p")["last_interaction"]["outcome"] == "already_running"
             assert sop._sessions["p"].run_id == new_run and len(first_inferences) == 2
         finally:
             await router.stop()

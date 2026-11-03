@@ -13,15 +13,20 @@ from __future__ import annotations
 
 import asyncio
 import math
+import json
 import time
 from collections import deque
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, TypeVar
+
+from pydantic import BaseModel, ValidationError
 
 from xr_ai_models import DecisionQuestion, DecisionService
 from xr_ai_tools.current_frame import ImageFrame
 from xr_ai_tools.vision import ImageQueryRequest, ImageQueryTool
+
+_ObservationData = TypeVar("_ObservationData", bound=BaseModel)
 
 Judgment = Literal["positive", "negative", "unknown"]
 
@@ -35,6 +40,7 @@ class VisualObservation:
     description: str
     judgment: Judgment
     truncated: bool = False
+    parsed: BaseModel | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,6 +77,8 @@ async def run_visual_verification_flow(
     timeout_seconds: float,
     history_max_age_seconds: float | None = None,
     on_state: Callable[[VisualVerificationState], Awaitable[None]] | None = None,
+    observation_model: type[_ObservationData] | None = None,
+    can_assess: Callable[[_ObservationData], bool] | None = None,
 ) -> VisualVerificationState:
     """Observe fresh frames, judge evidence with Clef and return at the threshold.
 
@@ -87,6 +95,9 @@ async def run_visual_verification_flow(
         observation_text_limit: Maximum characters retained per observation; truncation is labeled.
         timeout_seconds: Timeout for each acquisition/inference operation.
         history_max_age_seconds: Optional age limit for contextual observation history.
+        observation_model: Optional native schema for the visual data instance. Invalid output remains unknown.
+        can_assess: Optional deterministic readiness predicate over parsed data; false preserves
+            the partial observation as unknown without calling the completion service. Requires a schema.
         on_state: Async callback awaited in this coroutine after each distinct observation.
             Exceptions propagate to the owning runner; cancellation ends further callbacks.
 
@@ -100,6 +111,13 @@ async def run_visual_verification_flow(
     Re-reading an image cannot confirm a condition twice. Acquisition/model errors
     propagate rather than being silently turned into successful or negative evidence.
     """
+    if observation_model is not None and (not isinstance(observation_model, type) or not issubclass(observation_model, BaseModel)):
+        raise TypeError("observation_model must be a Pydantic model type")
+    if can_assess is not None and (observation_model is None or not callable(can_assess)):
+        raise ValueError("can_assess requires observation_model and a callable predicate")
+    observation_question = question
+    if observation_model is not None:
+        observation_question += "\nReturn only a JSON data instance matching this schema, not the schema itself:\n" + json.dumps(observation_model.model_json_schema())
     if not question.strip() or set(completion.criteria) != {"positive", "negative", "unknown"}:
         raise ValueError("visual verification requires a question and positive/negative/unknown criteria")
     if type(required_positives) is not int or type(window_size) is not int:
@@ -167,14 +185,27 @@ async def run_visual_verification_flow(
         latest_frame_keys[frame.track_id] = frame_position
 
         async with asyncio.timeout(timeout_seconds):
-            answer = await observer.execute(ImageQueryRequest(image=frame.image, query=question))
+            answer = await observer.execute(ImageQueryRequest(image=frame.image, query=observation_question))
         if asyncio.current_task().cancelling():
             raise asyncio.CancelledError
         description = answer.text
         judgment: Judgment = "unknown"
-        if answer.available and description.strip():
+        parsed = None
+        waiting_reason = ""
+        ready_to_assess = answer.available and bool(description.strip())
+        if ready_to_assess and observation_model is not None:
+            try:
+                parsed = observation_model.model_validate_json(description)
+            except ValidationError:
+                ready_to_assess = False
+                waiting_reason = "Visual output does not match the observation schema."
+            else:
+                if can_assess is not None and not can_assess(parsed):
+                    ready_to_assess = False
+                    waiting_reason = "The observation is partial; completion cannot yet be assessed."
+        if ready_to_assess:
             verdict = await decisions.decide(
-                {"observation": description},
+                {"observation": parsed.model_dump(mode="json") if parsed is not None else description},
                 {"completion": completion},
                 timeout=timeout_seconds,
             )
@@ -193,6 +224,7 @@ async def run_visual_verification_flow(
                 description[:observation_text_limit],
                 judgment,
                 truncated,
+                parsed.model_copy(deep=True) if parsed is not None else None,
             )
         )
         while len(observations) > history_limit or (
@@ -218,6 +250,7 @@ async def run_visual_verification_flow(
             omitted_count,
             evidence_window.count("positive"),
             len(evidence_window),
+            waiting_reason,
         )
         if on_state is not None:
             await on_state(state)

@@ -286,3 +286,160 @@ def test_fresh_component_import_does_not_load_the_application():
         "assert not any(name.startswith('tea_making_worker.application') for name in sys.modules)"
     )
     subprocess.run([sys.executable, "-c", script, str(_WORKER)], check=True, capture_output=True, text=True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("fail_disposal", (False, True))
+async def test_application_drains_sop_work_before_closing_borrowed_services(monkeypatch, tmp_path, fail_disposal):
+    """Voice input may stop first; models/images outlive actual owned inference."""
+    import asyncio
+    from dataclasses import replace
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, Mock
+
+    from tea_making_worker.application import tea_application as application
+    from tea_making_worker.application.tea_events import USER_QUERY_TOPIC
+    from tea_making_worker.application.tea_sop_agent import SOPAgent
+    from xr_ai_interaction import UserQuery
+    from xr_ai_models import DecisionAnswer, DecisionResponse
+    from xr_ai_tools.image import ImageRegistry
+
+    inference_started = asyncio.Event()
+    cleanup_started = asyncio.Event()
+    finish_cleanup = asyncio.Event()
+    cleanup_finished = asyncio.Event()
+    images = ImageRegistry()
+    instances = []
+    endpoint = Mock(closed=False, set_status=AsyncMock())
+
+    class Client:
+        def __init__(self, name):
+            self.name = name
+            self.close_count = 0
+            self.health = AsyncMock(return_value=True)
+
+        async def close(self):
+            if self.name != "speech" and inference_started.is_set():
+                assert cleanup_finished.is_set(), "borrowed service closed before inference cleanup"
+            self.close_count += 1
+
+        async def decide(self, _state, questions, **_kwargs):
+            choices = {"operation": "start", "referent": "workflow"}
+            return DecisionResponse(
+                {
+                    name: DecisionAnswer(
+                        choices[name],
+                        1.0,
+                        {label: float(label == choices[name]) for label in question.criteria},
+                    )
+                    for name, question in questions.items()
+                },
+                "fixture",
+                {},
+                {},
+            )
+
+    # Deliberate alias verifies that shared client ownership is based on object
+    # identity rather than one close for every configured model role.
+    language_and_decisions = Client("language-and-decisions")
+    vision = Client("vision")
+    retrieval = Client("retrieval")
+    speech = Client("speech")
+
+    class ScopedSOP(SOPAgent):
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            instances.append(self)
+
+        async def participant_left(self, participant_id):
+            if fail_disposal and not finish_cleanup.is_set():
+                raise RuntimeError("scope disposal blocked")
+            await super().participant_left(participant_id)
+
+        async def _procedure(self, session):
+            async def infer():
+                image = images.put(b"owned immutable frame", owner=session.participant_id)
+                inference_started.set()
+                try:
+                    await asyncio.Event().wait()
+                finally:
+                    cleanup_started.set()
+                    await finish_cleanup.wait()
+                    assert endpoint.closed
+                    assert images.resolve(image) == b"owned immutable frame"
+                    cleanup_finished.set()
+
+            await self._run_step(session, 0, infer)
+
+    class Voice(Agent):
+        def __init__(self, kwargs):
+            super().__init__()
+            self.kwargs = kwargs
+
+        async def run(self, runtime):
+            try:
+                await runtime.publish(PARTICIPANT_JOINED_TOPIC, ParticipantJoined(), participant_id="p")
+                await runtime.publish(
+                    USER_QUERY_TOPIC,
+                    UserQuery(text="start tea making", timestamp_us=100),
+                    participant_id="p",
+                )
+                await inference_started.wait()
+            finally:
+                endpoint.closed = True
+                for client in (speech, *self.kwargs.get("closeables", ())):
+                    await client.close()
+
+    monkeypatch.setattr(application, "make_llm", lambda *_: language_and_decisions)
+    monkeypatch.setattr(application, "make_decision", lambda *_: language_and_decisions)
+    monkeypatch.setattr(application, "make_vlm", lambda *_: vision)
+    monkeypatch.setattr(application, "make_tts", lambda *_: speech)
+    monkeypatch.setattr(application, "RAGTools", lambda *_: retrieval)
+    monkeypatch.setattr(application, "HubVoiceTransport", lambda: SimpleNamespace(endpoint=endpoint))
+    monkeypatch.setattr(application, "VoiceAgent", SimpleNamespace(from_models=lambda **kwargs: Voice(kwargs)))
+    monkeypatch.setattr(application, "ImageRegistry", lambda: images)
+    monkeypatch.setattr(application, "SOPAgent", ScopedSOP)
+    config = replace(load_config(None), artifacts_dir=tmp_path, web_events_port=0)
+    task = asyncio.create_task(application.run_app(config))
+    clients = (language_and_decisions, vision, retrieval)
+    try:
+        start_wait = asyncio.create_task(inference_started.wait())
+        done, _pending = await asyncio.wait((task, start_wait), timeout=2, return_when=asyncio.FIRST_COMPLETED)
+        if task in done:
+            await task
+        assert start_wait in done, "application did not enter inference"
+        if fail_disposal:
+            with pytest.raises(ExceptionGroup) as failure:
+                await task
+            assert "scope disposal blocked" in repr(failure.value)
+            assert instances[0]._sessions["p"].procedure is not None
+            assert not instances[0]._sessions["p"].procedure.done()
+            assert len(images) == 1
+        else:
+            await asyncio.wait_for(cleanup_started.wait(), 2)
+            assert not task.done() and len(images) == 1
+        assert all(client.close_count == 0 for client in clients)
+        finish_cleanup.set()
+        if fail_disposal:
+            await instances[0].stop()
+            assert cleanup_finished.is_set()
+            # Failed application cleanup intentionally retained borrowed services;
+            # the test now disposes its own remaining fixture resources.
+            for client in clients:
+                await client.close()
+            images.clear()
+        else:
+            await asyncio.wait_for(task, 2)
+            assert len(images) == 0
+        assert all(client.close_count == 1 for client in clients)
+        assert speech.close_count == 1
+    finally:
+        finish_cleanup.set()
+        start_wait.cancel()
+        await asyncio.gather(start_wait, return_exceptions=True)
+        if not task.done():
+            task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        for instance in instances:
+            await instance.stop()
+            await instance._context.close()

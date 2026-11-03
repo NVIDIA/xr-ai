@@ -870,3 +870,231 @@ def test_model_facing_schema_defaults_are_removed_without_deleting_named_fields(
     assert rendered["$defs"]["Choice"]["properties"]["value"] == {"type": "integer"}
     assert original["properties"]["default"]["default"] is None
     assert original["$defs"]["Choice"]["properties"]["value"]["default"] == 9
+
+
+@pytest.mark.asyncio
+async def test_typed_partial_observation_stays_unknown_without_a_completion_call():
+    class Reading(BaseModel):
+        value: float | None = None
+        unit: str | None = None
+
+    frames = iter((_frame(1), _frame(2), _frame(3)))
+    observer = SimpleNamespace(execute=AsyncMock(side_effect=[
+        ImageQueryResult(text='{"value":96,"unit":null}'),
+        ImageQueryResult(text='{"value":96,"unit":"fahrenheit"}'),
+        ImageQueryResult(text='{"value":96,"unit":"fahrenheit"}'),
+    ]))
+    decisions = SimpleNamespace(decide=AsyncMock(return_value=DecisionResponse(
+        {"completion": DecisionAnswer("positive", 1, {"positive":1,"negative":0,"unknown":0})}, "fixture", {}, {},
+    )))
+    states = []
+    result = await run_visual_verification_flow(
+        frame_source=AsyncMock(side_effect=lambda: next(frames)), observer=observer, decisions=decisions,
+        question="Read the current number and unit, retaining unknown fields.",
+        completion=DecisionQuestion("Compare established current readings.", {"positive":"Complete", "negative":"Incomplete", "unknown":"Unclear"}),
+        required_positives=2, window_size=4, poll_interval_seconds=0.001,
+        history_limit=4, observation_text_limit=1000, timeout_seconds=1,
+        observation_model=Reading, can_assess=lambda reading: reading.value is not None and reading.unit is not None,
+        on_state=AsyncMock(side_effect=states.append),
+    )
+    partial = next(state for state in states if state.observations and state.observations[-1].parsed.unit is None)
+    assert partial.observations[-1].parsed.value == 96
+    assert partial.observations[-1].description == '{"value":96,"unit":null}'
+    assert partial.confirmation_window == () and partial.observations[-1].judgment == "unknown"
+    assert partial.waiting_reason
+    assert decisions.decide.await_count == 2
+    assert result.confirmation_window == ("positive", "positive")
+
+
+@pytest.mark.asyncio
+async def test_generation_prerequisite_skips_llm_and_preserves_retrieved_partial():
+    arguments = _single_visual_input()
+    arguments["can_generate"] = lambda identity: identity.tea_type is not None
+    arguments["observer"].execute.return_value = ImageQueryResult(text='{"tea_name":"Moon Orchard"}')
+    arguments["llm"].chat.side_effect = [_chat(json.dumps({
+        "values":{"temperature":{"value":80,"unit":"celsius"}},
+        "sources":{"temperature":{"applicability":"applicable","passage_id":"P1","quote":"80 degrees Celsius"}},
+    }))]
+    settled = asyncio.Event()
+    states = []
+
+    async def state(value):
+        states.append(value)
+        if value.phase == "observing" and value.resolved_data.temperature is not None:
+            settled.set()
+
+    arguments["on_state"] = state
+    task = asyncio.create_task(run_vision_rag_retrieval_flow(**arguments))
+    try:
+        await asyncio.wait_for(settled.wait(), 1)
+        assert arguments["llm"].chat.await_count == 1
+        assert states[-1].resolved_data.temperature.celsius == 80
+        assert states[-1].resolved_data.steep_duration is None
+        assert states[-1].sources["temperature"].kind == "retrieved"
+        assert "does not permit generation" in states[-1].issue
+    finally:
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+
+@pytest.mark.asyncio
+async def test_invalid_typed_visual_data_does_not_erase_prior_positive_evidence():
+    from pydantic import ConfigDict
+
+    class Reading(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+        value: float
+
+    arguments = _visual(["positive", "positive"])
+    arguments.update(
+        observation_model=Reading,
+        frame_source=AsyncMock(side_effect=[_frame(i) for i in range(1, 5)]),
+        observer=SimpleNamespace(execute=AsyncMock(side_effect=[
+            ImageQueryResult(text='{"value":80}'),
+            ImageQueryResult(text='{"properties":{"value":{"type":"number"}}}'),
+            ImageQueryResult(text='{"value":'),
+            ImageQueryResult(text='{"value":81}'),
+        ])),
+    )
+    states = []
+    arguments["on_state"] = AsyncMock(side_effect=states.append)
+    result = await run_visual_verification_flow(**arguments)
+    assert arguments["decisions"].decide.await_count == 2
+    for state in states[1:3]:
+        assert state.confirmation_window == ("positive",)
+        assert state.observations[-1].judgment == "unknown"
+        assert state.observations[-1].parsed is None and state.waiting_reason
+    assert result.confirmation_window == ("positive", "positive")
+
+
+@pytest.mark.asyncio
+async def test_readiness_predicate_error_propagates_without_a_model_judgment():
+    class Reading(BaseModel):
+        value: float
+
+    def unavailable_policy(_reading):
+        raise RuntimeError("application prerequisite unavailable")
+
+    arguments = _visual([])
+    arguments.update(
+        observation_model=Reading, can_assess=unavailable_policy,
+        frame_source=AsyncMock(return_value=_frame(1)),
+        observer=SimpleNamespace(execute=AsyncMock(return_value=ImageQueryResult(text='{"value":80}'))),
+    )
+    with pytest.raises(RuntimeError, match="application prerequisite unavailable"):
+        await run_visual_verification_flow(**arguments)
+    arguments["decisions"].decide.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_generation_prerequisite_is_validated_before_frame_or_model_work():
+    arguments = _single_visual_input()
+    arguments["can_generate"] = False
+    with pytest.raises(TypeError, match="can_generate must be callable"):
+        await run_vision_rag_retrieval_flow(**arguments)
+    arguments["frame_source"].assert_not_awaited()
+    arguments["llm"].chat.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_generation_prerequisite_false_does_not_block_fully_retrieved_settings():
+    arguments = _single_visual_input()
+    arguments["can_generate"] = lambda _visual: False
+    arguments["llm"].chat.side_effect = [_chat(json.dumps({
+        "values": {"temperature": {"value":80,"unit":"celsius"}, "steep_duration":{"value":3,"unit":"minutes"}},
+        "sources": {name:{"applicability":"applicable","passage_id":"P1","quote":"Use 80 degrees Celsius for 3 minutes."}
+                    for name in ("temperature","steep_duration")},
+    }))]
+    result = await run_vision_rag_retrieval_flow(**arguments)
+    assert result.status == "completed"
+    assert result.resolved_data.temperature.celsius == 80
+    assert result.resolved_data.steep_duration.seconds == 180
+    assert all(source.kind == "retrieved" for source in result.sources.values())
+    arguments["llm"].chat.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_generation_predicate_error_is_not_mistaken_for_an_unreadable_identity():
+    arguments = _single_visual_input()
+
+    def unavailable_policy(_identity):
+        raise RuntimeError("generation policy unavailable")
+
+    arguments["can_generate"] = unavailable_policy
+    arguments["llm"].chat.side_effect = [_chat('{"values":{}}')]
+    with pytest.raises(RuntimeError, match="generation policy unavailable"):
+        await run_vision_rag_retrieval_flow(**arguments)
+    assert arguments["llm"].chat.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_weaker_consistent_identity_preserves_enrichment_partial_settings_and_cache():
+    arguments = _vision_rag_retrieval()
+    arguments["can_generate"] = lambda identity: identity.tea_type is not None
+    arguments["frame_source"] = AsyncMock(side_effect=[_frame(i) for i in range(1, 5)])
+    arguments["retrieval"] = SimpleNamespace(execute=AsyncMock(return_value=RetrieveResult(results=[])))
+    settled = asyncio.Event()
+
+    async def block_observation(_request):
+        settled.set()
+        await asyncio.Event().wait()
+
+    observation_number = 0
+    async def observe(request):
+        nonlocal observation_number
+        observation_number += 1
+        if observation_number == 4:
+            return await block_observation(request)
+        return ImageQueryResult(text=(
+            '{"tea_name":"Moon Orchard","tea_type":"green tea"}' if observation_number == 2
+            else '{"tea_name":"Moon Orchard"}'
+        ))
+    arguments["observer"] = SimpleNamespace(execute=AsyncMock(side_effect=observe))
+    arguments["llm"].chat.side_effect = [_chat('{"values":{"temperature":{"value":80,"unit":"celsius"},"steep_duration":null}}')]
+    states = []
+    arguments["on_state"] = AsyncMock(side_effect=states.append)
+    task = asyncio.create_task(run_vision_rag_retrieval_flow(**arguments))
+    try:
+        await asyncio.wait_for(settled.wait(), 1)
+        assert arguments["retrieval"].execute.await_count == 2
+        assert arguments["llm"].chat.await_count == 1
+        assert states[-1].visual_data.tea_type == "green tea"
+        assert states[-1].resolved_data.temperature.celsius == 80
+        assert states[-1].sources["temperature"].kind == "generated"
+        assert json.loads(states[-1].observations[-1].description) == {"tea_name":"Moon Orchard"}
+    finally:
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+
+@pytest.mark.asyncio
+async def test_retrieved_range_point_waits_for_new_identity_instead_of_reextracting_forever():
+    arguments = _single_visual_input()
+    arguments["observer"].execute.return_value = ImageQueryResult(text='{"tea_name":"Moon Orchard"}')
+    arguments["can_generate"] = lambda identity: identity.tea_type is not None
+    quote = "Use 75–82 °C for 2–3 minutes."
+    arguments["retrieval"].execute.return_value = RetrieveResult(results=[RetrievedChunk(source="tea.md",text=quote,score=1)])
+    arguments["llm"].chat.side_effect = [_chat(json.dumps({
+        "values":{"temperature":{"value":80,"unit":"celsius"},"steep_duration":{"value":2.5,"unit":"minutes"}},
+        "sources":{name:{"applicability":"applicable","passage_id":"P1","quote":quote} for name in ("temperature","steep_duration")},
+    }))]
+    settled = asyncio.Event()
+    states = []
+    async def state(value):
+        states.append(value)
+        if value.phase == "observing" and value.passages:
+            settled.set()
+    arguments["on_state"] = state
+    task = asyncio.create_task(run_vision_rag_retrieval_flow(**arguments))
+    try:
+        await asyncio.wait_for(settled.wait(),1)
+        assert arguments["llm"].chat.await_count == 1
+        arguments["retrieval"].execute.assert_awaited_once()
+        assert states[-1].resolved_data.temperature is None and states[-1].resolved_data.steep_duration is None
+        assert states[-1].passages[0]["text"] == quote
+        assert "requires a generated recommendation" not in states[-1].issue
+    finally:
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):await task

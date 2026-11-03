@@ -120,9 +120,14 @@ def _sop(data: dict[str, Any]) -> SOPConfig:
     if not isinstance(configuration, dict):
         raise ValueError("sop application configuration is required")
     expected = set(SOPConfig.__dataclass_fields__)
-    if set(configuration) != expected:
+    if set(configuration) - expected or expected - set(configuration) - {"instrument_unit_question"}:
         raise ValueError(f"sop configuration keys differ: {sorted(set(configuration) ^ expected)}")
     arguments = dict(configuration)
+    arguments.setdefault("instrument_unit_question", None)
+    if arguments["instrument_unit_question"] is not None:
+        arguments["instrument_unit_question"] = _decision(configuration, "instrument_unit_question")
+        if set(arguments["instrument_unit_question"].criteria) != {"celsius", "fahrenheit", "not_declared", "unclear"}:
+            raise ValueError("instrument units require celsius/fahrenheit/not_declared/unclear")
     for name in ("water", "temperature", "tea_bag"):
         visual = arguments[name]
         if not isinstance(visual, dict) or set(visual) != {"question", "completion"}:
@@ -133,10 +138,10 @@ def _sop(data: dict[str, Any]) -> SOPConfig:
         arguments[name] = VisualInstructions(_prompt(visual, "question"), decision)
     for name in ("control_question", "authorization_question"):
         arguments[name] = _decision(configuration, name)
-    if set(arguments["control_question"].criteria) != {"start", "stop", "next", "skip", "reset", "restart", "none"}:
+    if set(arguments["control_question"].criteria) != {"start", "stop", "next", "skip", "restart", "none"}:
         raise ValueError("sop control choices are fixed native controls")
-    if set(arguments["authorization_question"].criteria) != {"command", "not_command", "unknown"}:
-        raise ValueError("sop authorization requires command/not_command/unknown")
+    if set(arguments["authorization_question"].criteria) != {"workflow", "identify", "fill_water", "heat_water", "start_steeping", "steep_timer", "assistant_speech", "physical_activity", "other", "not_requested", "unclear"}:
+        raise ValueError("sop requested referents must match the native workflow/step targets")
     if arguments["advancement"] not in {"automatic", "manual"}:
         raise ValueError("sop.advancement must be automatic or manual")
     for name in (
@@ -184,7 +189,6 @@ def _sop(data: dict[str, Any]) -> SOPConfig:
     required_messages = {
         "start",
         "stop",
-        "reset",
         "restart",
         "next",
         "skip",
@@ -194,12 +198,14 @@ def _sop(data: dict[str, Any]) -> SOPConfig:
         "changed",
         "complete",
         "identify",
-        "identify_pending",
         "fill_water",
+        "identification_complete",
         "heat_water",
         "start_steeping",
         "steep_timer",
     }
+    if arguments["instrument_unit_question"] is not None:
+        required_messages.add("unit_needed")
     if not isinstance(arguments["messages"], dict) or set(arguments["messages"]) != required_messages:
         raise ValueError("sop.messages must define all native control/step messages")
     if any(not isinstance(value, str) or not value.strip() for value in arguments["messages"].values()):

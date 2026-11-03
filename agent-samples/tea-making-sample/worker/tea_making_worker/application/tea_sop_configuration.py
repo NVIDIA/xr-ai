@@ -54,3 +54,4 @@ class SOPConfig:
     max_retrieved_passages: int
     retrieved_text_limit: int
     timer_update_interval_seconds: float
+    instrument_unit_question: DecisionQuestion | None = None

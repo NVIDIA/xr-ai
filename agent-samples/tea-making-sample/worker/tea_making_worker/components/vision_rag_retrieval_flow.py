@@ -115,6 +115,7 @@ async def run_vision_rag_retrieval_flow(
     retrieved_text_limit: int,
     history_max_age_seconds: float | None = None,
     on_state: Callable[[VisionRAGRetrievalState[VisualData, ResolvedData]], Awaitable[None]] | None = None,
+    can_generate: Callable[[VisualData], bool] | None = None,
 ) -> VisionRAGRetrievalState[VisualData, ResolvedData]:
     """Observe visual data, resolve requested fields and return the source-labeled result.
 
@@ -138,6 +139,8 @@ async def run_vision_rag_retrieval_flow(
         max_retrieved_passages: Retrieval and retained-passage limit.
         retrieved_text_limit: Maximum retained characters in each retrieved passage.
         history_max_age_seconds: Optional maximum age of contextual observations.
+        can_generate: Optional application prerequisite for missing-field generation. False
+            retains retrieved partial values and waits for new visual information without an LLM call.
         on_state: Async full-state callback in this task; callback failures propagate.
 
     Returns:
@@ -162,6 +165,8 @@ async def run_vision_rag_retrieval_flow(
         raise ValueError("visual extraction limits must be positive and retrieval count at most 20")
     if history_max_age_seconds is not None and history_max_age_seconds <= 0:
         raise ValueError("history age must be positive")
+    if can_generate is not None and not callable(can_generate):
+        raise TypeError("can_generate must be callable")
     empty_result = result_model.model_validate({})
     if any(value is not None for value in empty_result.model_dump().values()):
         raise ValueError("result fields must default to None; caller owns application defaults")
@@ -357,6 +362,7 @@ async def run_vision_rag_retrieval_flow(
             if validated_value is None:
                 # Application prerequisites may classify a recommendation as
                 # unavailable. Do not label a missing value as generated fact.
+                resolution_issues.pop(name, None)
                 continue
             resolved_values[name] = validated_value
             resolved_data = result_model.model_validate(resolved_values)
@@ -418,6 +424,13 @@ async def run_vision_rag_retrieval_flow(
         # An unreadable intervening view does not erase an already established
         # identity or its validated partial values. A new usable input below
         # still invalidates evidence and settings for the previous entity.
+        if visual_data is not None:
+            established_fields = visual_data.model_dump(exclude_none=True)
+            observed_fields = observed_visual_data.model_dump(exclude_none=True)
+            if all(name in established_fields and established_fields[name] == value for name, value in observed_fields.items()):
+                # Retain the whole established model for a weaker consistent
+                # reread; do not merge new complementary identity fragments.
+                observed_visual_data = visual_data
         visual_data = observed_visual_data
 
         if visual_data != retrieved_for:
@@ -461,11 +474,14 @@ async def run_vision_rag_retrieval_flow(
                     )
                 missing_fields = [name for name, value in resolved_data.model_dump().items() if value is None]
                 valid_generation = True
-                if missing_fields:
+                if missing_fields and (can_generate is None or can_generate(visual_data)):
+                    resolution_issues.pop("generation", None)
                     await report("generating")
                     valid_generation = await resolve_fields(
                         fallback_instructions, missing_fields, document_backed=False
                     )
+                elif missing_fields:
+                    resolution_issues["generation"] = "Current visual data does not permit generation."
             except _ResolutionResponseError as error:
                 # Repair malformed output against the already known input. Do
                 # not reacquire/re-read frames or retrieve the same documents.
