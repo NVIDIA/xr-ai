@@ -49,12 +49,12 @@ sop:
       Transcribe the number and exact legible unit_text on the actual instrument display. unit_text is a copied glyph or word, not a conventional temperature unit: if no unit can be read, it is null. Preserve a readable value even with unknown units. Copy the visible measurement label or describe the specific visible mode indicator into role_evidence. A number by itself does not distinguish current measured temperature from a target setting: when there is no distinguishing label/indicator, role is unknown and role_evidence is null. Use current only with evidence of a current measurement and setpoint only with evidence of a target setting. Do not infer a unit or measurement role from the number, appliance type, brewing target or familiarity. Return only the requested compact JSON instance.
     completion:
       instructions: |-
-        Compare only structured data whose role is current. The user-declared instrument unit for this check is {instrument_unit}; use it only when the observed unit is null. Never use an answer-format preference as an instrument unit. Conflicting units, a setpoint or incomplete data are unknown. The recommended target is {target_temperature_c} Celsius or {target_temperature_f} Fahrenheit. Verify that the current measurement matches that target in its established effective unit; merely being hotter is not completion. Do not invent a tolerance or infer a unit.
+        Compare only structured data whose role is current. The user-declared instrument unit for this check is {instrument_unit}; use it only when the observed unit is null. Never use an answer-format preference as an instrument unit. Conflicting units, a setpoint or incomplete data are unknown. The recommended target is {target_temperature_c} Celsius or {target_temperature_f} Fahrenheit. Verify that the current measurement has reached or exceeded that target in its established effective unit. A reading already at or above the target qualifies immediately; no rising trend or earlier below-target reading is required. Do not invent a unit.
       criteria:
         positive: |-
-          The established CURRENT measurement matches {target_temperature_c} degrees Celsius in effective Celsius units, or {target_temperature_f} degrees Fahrenheit in effective Fahrenheit units.
+          The established CURRENT measurement is at or above {target_temperature_c} degrees Celsius in effective Celsius units, or at or above {target_temperature_f} degrees Fahrenheit in effective Fahrenheit units.
         negative: |-
-          The established CURRENT measurement is below OR above the recommended {target_temperature_c} Celsius / {target_temperature_f} Fahrenheit target in its effective unit; it does not match the required temperature.
+          The established CURRENT measurement is below the recommended {target_temperature_c} Celsius / {target_temperature_f} Fahrenheit threshold in its effective unit.
         unknown: |-
           The data does not establish a current numeric reading and effective unit, units conflict, the reading is a setpoint, or comparison is unresolved.
   tea_bag:
@@ -131,6 +131,8 @@ sop:
     identification_complete: "I identified {tea_name}. The brewing recommendation is {temperature_c:g} degrees Celsius for {duration_minutes:g} minutes. {next_instruction}"
     unit_needed: Which unit does this kettle display, Celsius or Fahrenheit?
     fill_water: Fill a kettle or pot with fresh water and keep it in view.
+    water_verified: "Water is visible in the vessel. {next_instruction}"
+    water_skipped: "Water verification was skipped. {next_instruction}"
     heat_water: Heat the water to {temperature_c:g} degrees Celsius.
     start_steeping: Put the tea in the water; I will start the timer when I see it immersed.
     steep_timer: I will time {duration_seconds:g} seconds from now.

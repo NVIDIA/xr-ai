@@ -625,6 +625,13 @@ class SOPAgent(Agent):
                     "duration_source": settings["sources"]["steep_duration"]["kind"],
                     "next_instruction": instruction,
                 })
+            elif step_index == 2:
+                water_outcome = session.flow_statuses.get("fill_water")
+                if water_outcome in {"completed", "skipped"}:
+                    message = "water_verified" if water_outcome == "completed" else "water_skipped"
+                    instruction = self.config.messages[message].format_map({
+                        **settings, "next_instruction": instruction,
+                    })
             await self._announce_entry(session, step_index, instruction)
             async with _attempt(
                 session.participant_id,
