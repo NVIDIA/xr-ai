@@ -54,6 +54,7 @@ from ._health import stack_health
 
 _READY_INTERVAL = 5.0   # seconds between progress lines
 _STOP_TIMEOUT   = 20.0  # seconds before SIGKILL during shutdown
+_KILL_TIMEOUT = 5.0
 _OUTPUT_DRAIN_TIMEOUT = 1.0
 _PROCESS_GROUP_OWNER_ENV = "_XR_AI_LAUNCHER_PROCESS_GROUP_OWNER"
 _READY_PROCESS_MAY_EXIT_ENV = "_XR_AI_LAUNCHER_READY_PROCESS_MAY_EXIT"
@@ -503,17 +504,30 @@ def _shutdown(
             break
         if p.poll() is None:
             try:
-                p.wait(timeout=max(0.1, remaining))
+                p.wait(timeout=remaining)
             except (subprocess.TimeoutExpired, KeyboardInterrupt):
-                log.warning("[%s] force-killing", name)
-                _killpg(p, signal.SIGKILL)
-                try:
-                    p.wait(timeout=5.0)
-                except Exception as exc:
-                    log.warning(
-                        "[%s] wait() failed after SIGKILL: %s — process may be zombie",
-                        name, exc,
-                    )
+                break
+
+    # Escalate every remaining child before waiting on any one of them.
+    for name, p in procs.items():
+        if name not in skip and p.poll() is None:
+            log.warning("[%s] force-killing", name)
+            _killpg(p, signal.SIGKILL)
+
+    deadline = time.monotonic() + _KILL_TIMEOUT
+    for name, p in procs.items():
+        if name in skip or p.poll() is not None:
+            continue
+        try:
+            p.wait(timeout=max(0.0, deadline - time.monotonic()))
+        except KeyboardInterrupt:
+            break
+        except Exception as exc:
+            # isolation boundary: a failed reap must not mask the stack failure or skip peers.
+            log.warning(
+                "[%s] wait() failed after SIGKILL: %s — process may be zombie",
+                name, exc,
+            )
 
 
 # ── readiness banner ───────────────────────────────────────────────────────────
