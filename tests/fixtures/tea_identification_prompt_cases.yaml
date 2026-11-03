@@ -1,0 +1,31 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Manual visual-model qualification cases; deterministic tests cannot establish
+# whether a model actually reads the supplied image instead of guessing a brand.
+cases:
+  - name: readable_type_unreadable_brand
+    scene: Tea label with legible "Oolong tea" and a completely obscured brand/product title.
+    expected:
+      tea_name: null
+      tea_type: Oolong tea
+  - name: partial_brand_must_not_be_completed
+    scene: Tea label with a cropped, incomplete brand and legible "Rooibos".
+    expected:
+      tea_name: null
+      tea_type: Rooibos
+  - name: familiar_packaging_unreadable_text
+    scene: Recognizable tea packaging with all brand, product and type text blurred.
+    expected:
+      tea_name: null
+      tea_type: null
+  - name: no_tea_in_view
+    scene: Kettle display and unrelated laptop stickers, without a tea label.
+    expected:
+      tea_name: null
+      tea_type: null
+  - name: readable_product_and_type
+    scene: Label with clearly legible "Meadow Grove" product text and "Herbal infusion" type.
+    expected:
+      tea_name: Meadow Grove
+      tea_type: Herbal infusion
