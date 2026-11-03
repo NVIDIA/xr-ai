@@ -459,6 +459,13 @@ class SOPAgent(Agent):
                 session.flow_statuses[self._step_id(session)] = "failed"
             if self._sessions.get(session.participant_id) is session:
                 await self._publish_context(session)
+                # A pending control reply and autonomous speech must not both
+                # announce the same failure.
+                entry = session.native_reply_entry
+                await self._announce_entry(
+                    session, entry[0] if entry is not None else session.step_index,
+                    self.config.messages["failed"],
+                )
         finally:
             if session.native_reply_entry is not None:
                 if not session.native_reply_entry[1].done():
@@ -539,7 +546,11 @@ class SOPAgent(Agent):
         session.status = "completed"
         session.revision += 1
         await self._publish_context(session)
-        await self._announce_entry(session, len(_STEP_IDS), self.config.messages["complete"])
+        timer_message = "timer_skipped" if session.flow_statuses.get("steep_timer") == "skipped" else "timer_complete"
+        await self._announce_entry(
+            session, len(_STEP_IDS),
+            self.config.messages[timer_message].format_map({"next_instruction": self.config.messages["complete"]}),
+        )
 
     def _temperature_check(self, session: _Session, target_celsius: float):
         """Construct this execution from explicit reading/unit provenance."""
@@ -627,6 +638,10 @@ class SOPAgent(Agent):
                     "duration_source": settings["sources"]["steep_duration"]["kind"],
                     "next_instruction": instruction,
                 })
+            elif step_index == 1 and session.flow_statuses.get("identify") == "skipped":
+                instruction = self.config.messages["identification_skipped"].format_map(
+                    {"next_instruction": instruction}
+                )
             elif step_index == 2:
                 water_outcome = session.flow_statuses.get("fill_water")
                 if water_outcome in {"completed", "skipped"}:
@@ -653,6 +668,9 @@ class SOPAgent(Agent):
                                 "minimum_value": assessment["minimum_value"],
                                 "next_instruction": instruction,
                             })
+            elif step_index == 4:
+                message = "tea_contact_skipped" if session.flow_statuses.get("start_steeping") == "skipped" else "tea_contact_verified"
+                instruction = self.config.messages[message].format_map({"next_instruction": instruction})
             await self._announce_entry(session, step_index, instruction)
             async with _attempt(
                 session.participant_id,

@@ -150,10 +150,17 @@ or document is correct.
 Successful retrieval and validated partial/null resolution are cached for the
 current visual data. Unchanged data does not rerun retrieval/extraction/generation;
 the flow waits for new visual information. Malformed responses or invalid
-candidates repair against the known data with bounded feedback, without rereading
-the camera or repeating retrieval. A genuinely new visual result clears the old
+candidates repair against the known data for at most three resolution attempts
+before returning to camera observation. Valid partial fields and cached retrieval
+survive this limit; a fresh frame can resume resolution or establish a different
+identity. A genuinely new visual result clears the old
 entity's partial values/evidence. Callback and service failures propagate to the
 owner; cancellation ends the observation/repair loop.
+
+Automatic transitions combine the previous step's verified result or explicit
+skip outcome with the next instruction in one message. Timer completion is
+distinguished from skipping the remaining wait. A failed procedure publishes one
+failure announcement and retains failed state; it does not restart or advance.
 
 For an explicitly observed tea category, application instructions allow conventional
 generated starting values when retrieval is empty or unrelated. An unfamiliar

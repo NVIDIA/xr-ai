@@ -197,9 +197,11 @@ def _sop(data: dict[str, Any]) -> SOPConfig:
         "not_ready",
         "changed",
         "complete",
+        "failed",
         "identify",
         "fill_water",
         "identification_complete",
+        "identification_skipped",
         "water_verified",
         "water_skipped",
         "temperature_verified",
@@ -207,6 +209,10 @@ def _sop(data: dict[str, Any]) -> SOPConfig:
         "heat_water",
         "start_steeping",
         "steep_timer",
+        "tea_contact_verified",
+        "tea_contact_skipped",
+        "timer_complete",
+        "timer_skipped",
     }
     if arguments["instrument_unit_question"] is not None:
         required_messages.add("unit_needed")

@@ -128,8 +128,10 @@ sop:
     not_ready: This step is not yet confirmed complete. You can explicitly skip it.
     changed: The guide changed while I was checking that request. Please repeat it.
     complete: Tea guidance is complete.
+    failed: Tea guidance could not continue because a processing step failed. You can start the guide again when you are ready.
     identify: Show the tea label clearly so I can read its name and brewing information.
     identification_complete: "I identified {tea_name}. The brewing recommendation is {temperature_c:g} degrees Celsius for {duration_minutes:g} minutes. {next_instruction}"
+    identification_skipped: "Tea identification was skipped. I will use the available settings and defaults where needed. {next_instruction}"
     unit_needed: Which unit does this kettle display, Celsius or Fahrenheit?
     fill_water: Fill a kettle or pot with fresh water and keep it in view.
     water_verified: "Water is visible in the vessel. {next_instruction}"
@@ -139,6 +141,10 @@ sop:
     temperature_skipped: "Temperature verification was skipped. {next_instruction}"
     start_steeping: Put the tea in the water; I will start the timer when I see it immersed.
     steep_timer: I will time {duration_seconds:g} seconds from now.
+    tea_contact_verified: "Tea is visibly in contact with the water. {next_instruction}"
+    tea_contact_skipped: "Tea immersion verification was skipped. {next_instruction}"
+    timer_complete: "The steeping timer has finished. {next_instruction}"
+    timer_skipped: "The remaining steeping wait was skipped. {next_instruction}"
   default_tea_name: generic tea
   default_temperature_c: 93
   default_duration_seconds: 180

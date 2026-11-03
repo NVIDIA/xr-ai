@@ -554,6 +554,42 @@ async def test_malformed_resolution_retries_cached_input_and_propagates_feedback
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("invalid_response", ["{", '{"values":{"steep_duration":{"value":0,"unit":"minutes"}}}'])
+async def test_resolution_retry_limit_reobserves_without_losing_partial_settings(invalid_response):
+    arguments = _single_visual_input()
+    states = []
+    arguments["on_state"] = AsyncMock(side_effect=states.append)
+    arguments["frame_source"].side_effect = [_frame(1), _frame(2)]
+    arguments["llm"].chat.side_effect = [
+        _chat(json.dumps({
+            "values": {"temperature": {"value": 80, "unit": "celsius"}, "steep_duration": None},
+            "sources": {"temperature": {
+                "applicability": "applicable", "passage_id": "P1", "quote": "80 degrees Celsius",
+            }},
+        })),
+        *[_chat(invalid_response) for _ in range(3)],
+        _chat(json.dumps({
+            "values": {"steep_duration": {"value": 3, "unit": "minutes"}},
+            "sources": {"steep_duration": {
+                "applicability": "applicable", "passage_id": "P1", "quote": "3 minutes",
+            }},
+        })),
+    ]
+    async with asyncio.timeout(1):
+        result = await run_vision_rag_retrieval_flow(**arguments)
+    assert result.status == "completed"
+    assert result.resolved_data.temperature.celsius == 80
+    assert result.resolved_data.steep_duration.seconds == 180
+    arguments["retrieval"].execute.assert_awaited_once()
+    assert arguments["observer"].execute.await_count == 2
+    assert any(
+        state.phase == "observing" and "retry limit" in state.issue
+        and state.resolved_data.temperature.celsius == 80
+        for state in states
+    )
+
+
+@pytest.mark.asyncio
 async def test_generated_value_respects_retained_range_and_invalid_value_is_repaired():
     arguments = _single_visual_input()
     arguments["retrieval"].execute.return_value = RetrieveResult(

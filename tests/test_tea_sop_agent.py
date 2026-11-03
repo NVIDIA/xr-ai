@@ -267,6 +267,61 @@ async def test_actual_python_procedure_completes_all_five_steps(
             assert timer["updated_at_us"] >= timer["started_at_us"]
             confirmations = [text for text in announcements if text.startswith("The water reads")]
             assert confirmations == [expected_confirmation + " " + sop.config.messages["start_steeping"]]
+            assert sum(text.startswith("I identified") for text in announcements) == 1
+            assert sum(text.startswith("Water is visible") for text in announcements) == 1
+            assert announcements.count(sop.config.messages["tea_contact_verified"].format_map({
+                "next_instruction": sop.config.messages["steep_timer"].format_map({"duration_seconds": 0.02}),
+            })) == 1
+            final_notice = sop.config.messages["timer_complete"].format_map({
+                "next_instruction": sop.config.messages["complete"],
+            })
+            await _until(lambda: final_notice in announcements)
+            assert announcements.count(final_notice) == 1
+        finally:
+            await router.stop()
+            await sop.stop()
+            await conversation.close()
+            await context.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failed_step", ["identify", "fill_water", "heat_water", "start_steeping"])
+async def test_flow_service_failure_announces_once_and_does_not_advance(failed_step):
+    sop, runtime, context = _runner()
+    observe_original = sop._image_query.execute
+    announcements = []
+
+    async def observe(request):
+        failing_question = {
+            "identify": sop.config.identification_question,
+            "fill_water": sop.config.water.question,
+            "heat_water": sop.config.temperature.question,
+            "start_steeping": sop.config.tea_bag.question,
+        }[failed_step]
+        if request.query.startswith(failing_question):
+            raise RuntimeError("fixture service unavailable")
+        return await observe_original(request)
+
+    sop._image_query.execute = observe
+
+    class Capture(Agent):
+        @subscribe(GUIDANCE_NOTICE_TOPIC)
+        async def notice(self, event: GuidanceNotice, _context: RuntimeContext):
+            announcements.append(event.text)
+
+    runtime.register("failure-notices", Capture())
+    router, conversation, _language = _router(sop, runtime, context)
+    async with runtime:
+        try:
+            await router.handle(AgentTurn("p", "start", "start tea making"))
+            await _until(lambda: sop._sessions["p"].procedure.done())
+            session = sop._sessions["p"]
+            assert session.status == "failed"
+            assert sop.context_snapshot("p")["current_step"] == failed_step
+            assert session.flow_statuses[failed_step] == "failed"
+            assert announcements.count(sop.config.messages["failed"]) == 1
+            assert "Tea guidance is complete." not in announcements
+            assert not session.active_tasks
         finally:
             await router.stop()
             await sop.stop()
@@ -354,7 +409,10 @@ async def test_skip_retains_partial_settings_and_defaults_only_missing_fields():
         try:
             await router.handle(AgentTurn("p", "start", "start tea making"))
             await asyncio.wait_for(fallback_started.wait(), 1)
-            await router.handle(AgentTurn("p", "skip", "skip"))
+            response = await router.handle(AgentTurn("p", "skip", "skip"))
+            assert response.text == sop.config.messages["identification_skipped"].format_map({
+                "next_instruction": sop.config.messages["fill_water"],
+            })
             await asyncio.wait_for(water_started.wait(), 1)
             snapshot = sop.context_snapshot("p")
             assert snapshot["current_step"] == "fill_water"
@@ -745,7 +803,10 @@ async def test_skipping_unconfirmed_tea_contact_starts_a_manual_origin_timer():
         try:
             await router.handle(AgentTurn("p", "start", "start tea making"))
             await asyncio.wait_for(contact_started.wait(), 1)
-            await router.handle(AgentTurn("p", "skip", "skip"))
+            response = await router.handle(AgentTurn("p", "skip", "skip"))
+            assert response.text == sop.config.messages["tea_contact_skipped"].format_map({
+                "next_instruction": sop.config.messages["steep_timer"].format_map({"duration_seconds": 0.02}),
+            })
             await _until(lambda: sop.context_snapshot("p")["status"] == "completed")
             snapshot = sop.context_snapshot("p")
             assert snapshot["flow_outcomes"]["start_steeping"] == "skipped"
@@ -753,6 +814,51 @@ async def test_skipping_unconfirmed_tea_contact_starts_a_manual_origin_timer():
             assert snapshot["timer_start_source"] == "user_skipped_visual_check"
             timer = sop._sessions["p"].flow_states["steep_timer"]
             assert timer.started_at_us <= timer.updated_at_us and timer.remaining_seconds == 0
+        finally:
+            await router.stop()
+            await sop.stop()
+            await conversation.close()
+            await context.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("step", "message"),
+    [("fill_water", "water_skipped"), ("heat_water", "temperature_skipped"), ("steep_timer", "timer_skipped")],
+)
+async def test_skip_reply_labels_bypassed_check_or_wait(step, message, monkeypatch):
+    from tea_making_worker.application import tea_sop_agent as module
+
+    sop, runtime, context = _runner()
+    entered = asyncio.Event()
+    original_observe = sop._image_query.execute
+    original_timer = module.run_timer_flow
+
+    async def observe(request):
+        target = {"fill_water": sop.config.water.question, "heat_water": sop.config.temperature.question}.get(step)
+        if target is not None and request.query.startswith(target):
+            entered.set()
+            await asyncio.Event().wait()
+        return await original_observe(request)
+
+    async def timer(**kwargs):
+        if step == "steep_timer":
+            entered.set()
+            await asyncio.Event().wait()
+        return await original_timer(**kwargs)
+
+    sop._image_query.execute = observe
+    monkeypatch.setattr(module, "run_timer_flow", timer)
+    router, conversation, _language = _router(sop, runtime, context)
+    async with runtime:
+        try:
+            await router.handle(AgentTurn("p", "start", "start tea making"))
+            await asyncio.wait_for(entered.wait(), 1)
+            response = await router.handle(AgentTurn("p", "skip", "skip"))
+            assert response.text.startswith(sop.config.messages[message].split("{next_instruction}")[0])
+            assert sop._sessions["p"].flow_statuses[step] == "skipped"
+            assert "The water reads" not in response.text
+            assert "timer has finished" not in response.text
         finally:
             await router.stop()
             await sop.stop()

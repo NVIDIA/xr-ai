@@ -31,6 +31,8 @@ from xr_ai_tools.vision import ImageQueryRequest, ImageQueryTool
 VisualData = TypeVar("VisualData", bound=BaseModel)
 ResolvedData = TypeVar("ResolvedData", bound=BaseModel)
 
+_MAX_RESOLUTION_ATTEMPTS = 3
+
 
 class _ResolutionResponseError(ValueError):
     """A malformed model envelope can retry using already retrieved passages."""
@@ -464,7 +466,7 @@ async def run_vision_rag_retrieval_flow(
             continue
 
         extraction_complete = not passages
-        while True:
+        for attempt_index in range(_MAX_RESOLUTION_ATTEMPTS):
             missing_fields = [name for name, value in resolved_data.model_dump().items() if value is None]
             try:
                 if not extraction_complete and missing_fields:
@@ -487,7 +489,8 @@ async def run_vision_rag_retrieval_flow(
                 # not reacquire/re-read frames or retrieve the same documents.
                 resolution_issues["response"] = str(error)
                 await report("extracting")
-                await asyncio.sleep(poll_interval_seconds)
+                if attempt_index + 1 < _MAX_RESOLUTION_ATTEMPTS:
+                    await asyncio.sleep(poll_interval_seconds)
                 continue
             if all(value is not None for value in resolved_data.model_dump().values()):
                 return await report("complete", complete=True)
@@ -497,6 +500,11 @@ async def run_vision_rag_retrieval_flow(
                 resolved_for = visual_data.model_copy(deep=True)
                 break
             await report("generating")
-            await asyncio.sleep(poll_interval_seconds)
+            if attempt_index + 1 < _MAX_RESOLUTION_ATTEMPTS:
+                await asyncio.sleep(poll_interval_seconds)
+        else:
+            # Keep valid fields and cached passages, but let a clearer or changed
+            # view replace the identity instead of repairing one input forever.
+            resolution_issues["response"] = "Settings response retry limit reached; checking a new image."
         await report("observing", issue="Requested fields remain unavailable.")
         await asyncio.sleep(poll_interval_seconds)
