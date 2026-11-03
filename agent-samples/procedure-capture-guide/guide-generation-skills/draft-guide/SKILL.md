@@ -110,10 +110,10 @@ When visible placement and a subsequent functional or motion check are distinct
 required outcomes, keep them as separate checks. Block the unsupported outcome
 without also disabling the independently verifiable placement.
 
-Every visual step uses the same runtime policy: CLEF judges the image first.
-A selected yes or no with confidence strictly above 0.80 is used directly;
+Semantic visual steps use CLEF to judge the image first.
+A selected accepted, rejected, or unknown result with confidence strictly above 0.80 is used directly;
 otherwise Cosmos describes that same frame and CLEF judges the caption alone.
-Write both instructions for every step, even if the image check seems easy:
+For semantic steps, write both instructions even if the image check seems easy:
 
 - `trigger.arguments.question` (1–500 characters) is the required Cosmos fallback question.
   Direct attention to the relevant region or objects and ask for concrete
@@ -130,8 +130,18 @@ Write both instructions for every step, even if the image check seems easy:
   counts, locations, orientation, and distinctions such as attached versus
   held nearby. Avoid conditions that require hidden facts or a motion history.
 
+For a visible numeric measurement with a known unit and range, use
+`evidence.measurement` instead of `evidence.condition`; see the
+[measurement example](references/measurement.yaml) and
+[contract](references/packet-and-guide-schema.md). Keep the question focused on
+which display to read. Cosmos extracts schema-constrained readings; native code
+compares explicit unit-specific ranges. Include required unit alternatives and
+choose whether current measurements take precedence over targets. Derive limits
+from the procedure, never from a convenient test reading. Semantic attachment,
+identity, or contact checks still use `condition`.
+
 Use `consecutive: 2` and a typed `evidence.commit` completing the step's own
-boolean. Only CLEF's yes counts; negative, missing, failed, or cancelled decisions
+boolean. Only an accepted verdict counts; negative, missing, failed, or cancelled decisions
 break the sequence. State mandatory facts and alternatives explicitly: a
 supported alternative must not accidentally require an optional object from
 another alternative.

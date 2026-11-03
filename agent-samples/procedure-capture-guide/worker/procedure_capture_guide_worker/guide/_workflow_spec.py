@@ -22,6 +22,8 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field
 from xr_ai_tools.types import StrictRequest
 
+from .measurements import MeasurementPolicy
+
 _ID = re.compile(r"^[a-z][a-z0-9_-]*$")
 _TYPES = frozenset({"boolean", "integer", "number", "string"})
 _STATUSES = frozenset({"draft", "approved"})
@@ -60,7 +62,7 @@ _STEP_KEYS = frozenset(
 )
 _TRIGGER_KEYS = frozenset({"function", "interval_s", "arguments", "result_field"})
 _POLICY_KEYS = frozenset({"prompt", "tools"})
-_EVIDENCE_KEYS = frozenset({"pattern", "condition", "consecutive", "commit"})
+_EVIDENCE_KEYS = frozenset({"pattern", "condition", "measurement", "consecutive", "commit"})
 _MESSAGE_KEYS = frozenset({"enter", "complete", "skip"})
 
 
@@ -117,6 +119,7 @@ class Evidence:
     consecutive: int
     commit: dict[str, Any]
     condition: str | None = None
+    measurement: MeasurementPolicy | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -388,18 +391,26 @@ def _evidence(
 ) -> Evidence | None:
     if value is None:
         if function == "current_view":
-            raise ValueError(f"visual step {step_id!r} requires evidence.condition for CLEF verification")
+            raise ValueError(
+                f"visual step {step_id!r} requires evidence.condition or evidence.measurement for verification"
+            )
         return None
     raw = _mapping(value, f"steps.{step_id}.evidence")
     _only(raw, _EVIDENCE_KEYS, f"steps.{step_id}.evidence")
     pattern = condition = None
+    measurement = None
     if function == "current_view":
-        condition = _required_text(raw.get("condition"), f"steps.{step_id}.evidence.condition")
+        if ("condition" in raw) == ("measurement" in raw):
+            raise ValueError(f"steps.{step_id}.evidence requires exactly one of condition or measurement")
+        if "measurement" in raw:
+            measurement = MeasurementPolicy.model_validate(raw["measurement"])
+        else:
+            condition = _required_text(raw.get("condition"), f"steps.{step_id}.evidence.condition")
         if "pattern" in raw:
-            raise ValueError(f"visual step {step_id!r} cannot use evidence.pattern; CLEF judges evidence.condition")
+            raise ValueError(f"visual step {step_id!r} cannot use evidence.pattern; use condition or measurement")
     else:
-        if "condition" in raw:
-            raise ValueError(f"step {step_id!r} evidence.condition requires current_view")
+        if "condition" in raw or "measurement" in raw:
+            raise ValueError(f"step {step_id!r} evidence.condition or measurement requires current_view")
         pattern = _required_text(raw.get("pattern"), f"steps.{step_id}.evidence.pattern")
         try:
             re.compile(pattern)
@@ -412,7 +423,7 @@ def _evidence(
     if commit and not commit.keys() <= set(writes):
         raise ValueError(f"step {step_id!r} evidence.commit must only use writable fields")
     _state_values(commit, fields, f"steps.{step_id}.evidence.commit")
-    return Evidence(pattern, consecutive, dict(commit), condition)
+    return Evidence(pattern, consecutive, dict(commit), condition, measurement)
 
 
 def _validate_linear_graph(start: str, steps: dict[str, Step]) -> None:

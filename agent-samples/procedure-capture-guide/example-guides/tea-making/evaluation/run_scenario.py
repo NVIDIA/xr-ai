@@ -86,7 +86,9 @@ def announcement_elapsed(events: list[dict], origin: str, completion: str) -> fl
     """Measure first announcements within the latest restart, not later paraphrases."""
     start = 0
     for index, event in enumerate(events):
-        if event["kind"] == "model" and any(call["name"] == "workflow__restart" for call in event["calls"]):
+        if event["kind"] in {"model", "control"} and any(
+            call["name"] == "workflow__restart" for call in event["calls"]
+        ):
             start = index + 1
     speeches = [event for event in events[start:] if event["kind"] == "speech"]
     first = next((index for index, event in enumerate(speeches) if re.search(origin, event["text"])), None)

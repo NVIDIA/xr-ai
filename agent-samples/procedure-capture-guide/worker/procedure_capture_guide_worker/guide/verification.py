@@ -25,8 +25,9 @@ _INSTRUCTIONS = (Path(__file__).with_name("prompts") / "guide_condition.txt").re
 _QUESTION = DecisionQuestion(
     instructions=_INSTRUCTIONS,
     criteria={
-        "yes": "The written observation establishes the required visible condition.",
-        "no": "The observation contradicts the condition, lacks a required fact, or leaves it uncertain or obscured.",
+        "accepted": "The observation establishes every required visible fact.",
+        "rejected": "Visible evidence contradicts a required condition.",
+        "unknown": "A required fact is missing, ambiguous, obscured, or not observable.",
     },
 )
 
@@ -36,8 +37,9 @@ _IMAGE_INSTRUCTIONS = (Path(__file__).with_name("prompts") / "guide_image_condit
 _IMAGE_QUESTION = DecisionQuestion(
     instructions=_IMAGE_INSTRUCTIONS,
     criteria={
-        "yes": "The image establishes the required visible condition.",
-        "no": "The image contradicts the condition, lacks a required fact, or leaves it uncertain or obscured.",
+        "accepted": "The image establishes every required visible fact.",
+        "rejected": "Visible evidence contradicts a required condition.",
+        "unknown": "A required fact is missing, ambiguous, obscured, or not observable.",
     },
 )
 
@@ -119,7 +121,7 @@ async def condition_met(
         decisions, condition=condition, observation=observation,
         frame=frame, step_id=step_id, revision=revision, timeout_s=timeout_s,
     )
-    return answer.choice == "yes"
+    return verdict(answer) == "accepted"
 
 
 async def judge_observation(
@@ -167,4 +169,20 @@ async def _judge(
             "procedure-guide.visual-condition-result", handle=scope,
             data={"source": source, "choice": answer.choice, "confidence": answer.confidence},
         )
+        verdict(answer)
         return answer
+
+
+def verdict(answer: DecisionAnswer) -> str:
+    """An affirmative plurality is insufficient when two choices mean do not pass."""
+    expected = {"accepted", "rejected", "unknown"}
+    if answer.choice not in expected or set(answer.probabilities) != expected:
+        raise ValueError("invalid three-way evidence result")
+    if any(isinstance(value, bool) or not isinstance(value, (float, int)) or not math.isfinite(value)
+           or not 0 <= value <= 1 for value in answer.probabilities.values()):
+        raise ValueError("invalid evidence probabilities")
+    if answer.choice == "accepted" and answer.probabilities["accepted"] <= (
+        answer.probabilities["rejected"] + answer.probabilities["unknown"]
+    ):
+        return "unknown"
+    return answer.choice

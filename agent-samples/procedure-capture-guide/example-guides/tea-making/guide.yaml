@@ -7,7 +7,7 @@ schema_version: 2
 task:
   id: tea_making
   name: Tea Making
-  version: 7
+  version: 8
   status: approved
   start_step: identify
   foreground_prompt: >-
@@ -107,17 +107,14 @@ steps:
           settings. Describe the display rather than judging brewing readiness.
       result_field: text
     evidence:
-      condition: >-
-        If a measured water temperature is identified (CURRENT, ACTUAL, or a
-        water thermometer), that measured value must be 100 C or 212 F. Ignore
-        target and setpoint values in this case: a different measured value
-        means the condition is not met even if the target is 100 C or 212 F.
-        Only when no measured water temperature is identified, accept a visible
-        display reading of 100 C or 212 F with any label or absent label,
-        including TARGET or SET; no probe is required. In either case both
-        the complete number and its temperature unit must be readable in the
-        observation. A missing unit or a desired temperature without a visible
-        reading does not establish the condition.
+      measurement:
+        # Exact display alternatives preserve this guide's 100 C / 212 F policy.
+        prefer_current: true
+        ranges:
+          - {unit: C, minimum: 100, maximum: 100}
+          - {unit: °C, minimum: 100, maximum: 100}
+          - {unit: F, minimum: 212, maximum: 212}
+          - {unit: °F, minimum: 212, maximum: 212}
       consecutive: 2
       commit: {water_at_target: true}
     voice:

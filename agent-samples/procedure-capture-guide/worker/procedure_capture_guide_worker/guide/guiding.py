@@ -12,14 +12,17 @@ GuideAgent in agent.py. Conversation handling remains in the agent.
 from __future__ import annotations
 
 import asyncio
+import base64
 import copy
 import json
 import math
 import re
 import time
+import uuid
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import nemo_relay
@@ -35,6 +38,7 @@ from xr_ai_tools.vision import ImageQueryResult, ImageQueryTool
 
 from ._workflow_spec import Step, Workflow, _CurrentViewRequest, _TimerRequest, _TimerResult
 from .guides import SelectedGuide
+from .run_trace import RunTrace
 from .visual_check import VisualCheckTrace, caption_image, verify_image
 
 _POLL_INTERVAL_S = 0.25
@@ -132,6 +136,8 @@ class _Session:
     evidence_hits: int = 0
     notices: list[str] = field(default_factory=list)
     skipped: bool = False
+    run_id: str | None = None
+    last_verification: dict | None = None
     # Runtime-owned timing never comes from a model commit or a tool argument.
     timer: _Timer | None = None
     timer_error: str | None = None
@@ -171,6 +177,8 @@ class _Guide:
         invalidate: Callable[[str], Awaitable[None]],
         connected: Callable[[str], bool],
         decision_timeout_s: float = 15.0,
+        measurement_query: ImageQueryTool | None = None,
+        traces_dir: Path | None = None,
     ) -> None:
         if not guide.workflow.runnable:
             raise ValueError("guide mode requires an approved guide")
@@ -183,6 +191,8 @@ class _Guide:
         self._decision_timeout_s = decision_timeout_s
         self._current_frame = current_frame
         self._image_query = image_query
+        self._measurement_query = measurement_query
+        self._trace = RunTrace(traces_dir, guide)
         self._vision_timeout_s = vision_timeout_s
         self._tool_loop = run_model
         self._announce = announce
@@ -241,12 +251,17 @@ class _Guide:
                     "The selected guide is inactive. There is no active step or verification. "
                     "Say start guide to begin."
                 )
+            evidence = session.last_verification
+            if evidence is not None:
+                evidence = {**evidence, "age_s": max(0.0, time.monotonic() - evidence["observed_monotonic"])}
+                evidence.pop("observed_monotonic", None)
             context = {
                 "active": session.active,
                 "finish_on_complete": step.finish_on_complete if session.active else False,
                 "guide_order": guide_order,
                 "state": copy.deepcopy(workflow.project(step, session.state)) if session.active else {},
                 "active_trigger": active_trigger,
+                "last_verification": copy.deepcopy(evidence) if session.active else None,
             }
 
         async def finish(answer: str) -> str:
@@ -276,14 +291,17 @@ class _Guide:
 
     async def leave(self, participant_id: str) -> None:
         await self._drain_controls(participant_id)
-        self._sessions.pop(participant_id, None)
+        session = self._sessions.pop(participant_id, None)
         await _cancel(self._monitors, participant_id)
+        if session is not None:
+            self._end_trace(session, "disconnect")
         self._current_frame.release(participant_id)
 
     async def stop(self) -> None:
         for participant_id in tuple(self._control_tasks):
             await self._drain_controls(participant_id)
         participants = tuple(self._sessions)
+        sessions = tuple(self._sessions.values())
         self._sessions.clear()
         tasks = tuple(self._monitors.values())
         self._monitors.clear()
@@ -291,6 +309,9 @@ class _Guide:
             task.cancel()
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
+        for session in sessions:
+            self._end_trace(session, "shutdown")
+        await self._trace.close()
         for participant_id in participants:
             self._current_frame.release(participant_id)
 
@@ -304,6 +325,8 @@ class _Guide:
             step_id=workflow.start_step,
             active=active,
         )
+        if active:
+            self._begin_trace(session)
         self._enter_step(session)
         self._sessions[participant_id] = session
         logger.info(
@@ -393,7 +416,13 @@ class _Guide:
         self, session: _Session, revision: int, action: str, *, skip: bool = False,
     ) -> tuple[str, int]:
         async with session.lock:
+            previous_run = session.run_id
+            self._trace.emit(previous_run, "control", action=action, skip=skip,
+                             step=session.step_id, revision=revision)
             message = await self._apply_control(session, revision, action, skip=skip)
+            self._trace.emit(previous_run or session.run_id, "control_result", action=action, message=message,
+                             next_run_id=session.run_id,
+                             step=session.step_id, revision=session.revision, state=dict(session.state))
             return message, session.control_revision
 
     async def _apply_control(self, session: _Session, revision: int, action: str, *, skip: bool) -> str:
@@ -416,7 +445,7 @@ class _Guide:
         if action not in {"reset", "restart"}:
             raise ValueError(f"unknown guide control: {action}")
         await self._invalidate(pid)
-        self._reset_progress(session, active=action == "restart")
+        self._reset_progress(session, active=action == "restart", reason=action)
         await _cancel(self._monitors, pid)
         if session.active:
             self._start_monitor(pid)
@@ -443,16 +472,19 @@ class _Guide:
         session.notices.clear()
         if next_step is None:
             message = "Guide ended with skipped steps." if session.skipped else session.workflow.complete_message
-            self._reset_progress(session, active=False)
+            self._reset_progress(session, active=False, reason="skipped" if session.skipped else "completed")
             await _cancel(self._monitors, session.participant_id)
             return f"{message} Say start guide to begin again."
         session.step_id = next_step
+        session.last_verification = None
         self._enter_step(session)
         if skipping and step.skip_message:
             return f"{step.skip_message} {session.step.enter_message}"
         return session.step.enter_message
 
-    def _reset_progress(self, session: _Session, *, active: bool = True) -> None:
+    def _reset_progress(self, session: _Session, *, active: bool = True, reason: str = "reset") -> None:
+        self._end_trace(session, reason)
+        session.last_verification = None
         session.active = active
         session.state = session.workflow.initial_state()
         session.step_id = session.workflow.start_step
@@ -462,9 +494,31 @@ class _Guide:
         session.evidence_hits = 0
         session.notices.clear()
         session.skipped = False
+        if active:
+            self._begin_trace(session)
         self._enter_step(session)
 
+    def record_event(self, participant_id: str, kind: str, *, run_id: str | None = None, **data) -> str | None:
+        session = self._sessions.get(participant_id)
+        target = run_id or (session.run_id if session else None)
+        if target is not None:
+            self._trace.emit(target, kind, **data)
+        return target
+
+    def _begin_trace(self, session: _Session) -> None:
+        session.run_id = uuid.uuid4().hex
+        self._trace.emit(session.run_id, "run_started", participant_id=session.participant_id,
+                         guide_sha256=session.guide.sha256, state=dict(session.state))
+
+    def _end_trace(self, session: _Session, reason: str) -> None:
+        self._trace.emit(session.run_id, "run_ended", reason=reason, state=dict(session.state),
+                         step=session.step_id, skipped=session.skipped)
+        session.run_id = None
+
     def _enter_step(self, session: _Session) -> None:
+        session.last_verification = None
+        self._trace.emit(session.run_id, "step_entered", step=session.step_id,
+                         revision=session.revision, state=dict(session.state))
         session.observed_frames.clear()
         session.timer = None
         session.timer_error = None
@@ -515,12 +569,19 @@ class _Guide:
             session.next_tick = now + step.trigger.interval_s
         try:
             observation = await self._trigger(session, step, state)
-        except Exception:
+        except Exception as exc:
             # A failed observation breaks consecutive evidence, but an old
             # observation must not clear progress after a step transition.
             async with session.lock:
                 if self._current(session, step, revision):
                     session.evidence_hits = 0
+                    session.last_verification = {
+                        "step_id": step.id, "revision": revision, "verdict": None,
+                        "observed_monotonic": time.monotonic(),
+                        "error": {"type": type(exc).__name__, "message": str(exc)},
+                    }
+                    self._trace.emit(session.run_id, "observation_unavailable", step=step.id,
+                                     revision=revision, error=session.last_verification["error"])
             raise
         run_model = True
         async with session.lock:
@@ -528,6 +589,11 @@ class _Guide:
                 return
             if not observation.available:
                 session.evidence_hits = 0
+                session.last_verification = {
+                    "step_id": step.id, "revision": revision, "verdict": None,
+                    "observed_monotonic": time.monotonic(), "error": "current observation unavailable",
+                }
+                self._trace.emit(session.run_id, "observation_unavailable", step=step.id, revision=revision)
                 return
             if step.trigger.function == "current_view":
                 frame = observation.frame
@@ -548,6 +614,8 @@ class _Guide:
         async with session.lock:
             if not self._current(session, step, revision):
                 return
+            self._trace.emit(session.run_id, "timer_observation", step=step.id, revision=revision,
+                             result=observation.value)
             evidence = step.evidence
             if evidence is not None:
                 value = observation.value if isinstance(observation.value, str) else json.dumps(
@@ -567,34 +635,50 @@ class _Guide:
     async def _verify_visual(
         self, session: _Session, step: Step, revision: int, observation: _Observation,
     ) -> VisualCheckTrace | None:
-        assert step.evidence is not None and step.evidence.condition is not None
-        assert observation.frame is not None
+        assert step.evidence is not None and observation.frame is not None
         async with session.lock:
             if not self._current(session, step, revision):
-                return
+                return None
             previous_hits = session.evidence_hits
-            # An unavailable, invalid, failed, or cancelled decision breaks the
-            # streak. Only a valid result for this revision can restore it.
             session.evidence_hits = 0
+            session.last_verification = None
+            run_id = session.run_id
         trace = VisualCheckTrace()
+        error = None
+        before = time.monotonic()
+        question = _CurrentViewRequest.model_validate(self._resolve(step.trigger.arguments, session.state)).question
+        frame = observation.frame.model_dump()
+        self._trace.emit(run_id, "observation_started", image=observation.value,
+                         step=step.id, revision=revision, frame=frame, question=question,
+                         condition=step.evidence.condition,
+                         measurement=step.evidence.measurement.model_dump() if step.evidence.measurement else None)
         try:
-            question = _CurrentViewRequest.model_validate(self._resolve(step.trigger.arguments, session.state)).question
-            result = await verify_image(
+            await verify_image(
                 self._decisions, self._image_query, images=self._current_frame.images,
                 image=observation.value, condition=step.evidence.condition, question=question,
-                frame=observation.frame.model_dump(), step_id=step.id, revision=revision,
+                frame=frame, step_id=step.id, revision=revision,
                 decision_timeout_s=self._decision_timeout_s, vision_timeout_s=self._vision_timeout_s, trace=trace,
+                measurement=step.evidence.measurement, measurement_query=self._measurement_query,
             )
-            matched = result.choice == "yes"
-        except Exception as exc:  # noqa: BLE001 — An unavailable decision cannot authorize progress.
-            # Keep per-stage deadlines and the streak reset; cancellation must reach
-            # the monitor owner instead of becoming an ordinary failed check.
-            logger.warning("Guide decision unavailable pid={!r} step={} revision={}: {}: {}",
-                           session.participant_id, step.id, revision, type(exc).__name__, exc)
-            return trace
+        except asyncio.CancelledError:
+            error = {"type": "CancelledError", "message": "observation cancelled"}
+            raise
+        except Exception as exc:  # noqa: BLE001 — Failed checks never authorize progress.
+            error = {"type": type(exc).__name__, "message": str(exc)}
+            logger.warning("Guide decision unavailable pid={!r} step={}: {}", session.participant_id, step.id, exc)
+        finally:
+            self._trace.emit(run_id, "observation_finished", step=step.id, revision=revision,
+                             frame=frame, latency_s=time.monotonic() - before, error=error, **trace.record())
         async with session.lock:
             if not self._current(session, step, revision):
                 return trace
+            session.last_verification = {
+                **trace.record(), "step_id": step.id, "frame": frame, "error": error,
+                "condition": step.evidence.condition, "question": question,
+                "measurement": step.evidence.measurement.model_dump() if step.evidence.measurement else None,
+                "observed_monotonic": time.monotonic(),
+            }
+            matched = error is None and trace.accepted is True
             session.evidence_hits = previous_hits + 1 if matched else 0
             if step.evidence.commit and session.evidence_hits >= step.evidence.consecutive:
                 self._commit(session, step, step.evidence.commit, "")
@@ -692,6 +776,8 @@ class _Guide:
         if not changes:
             return True, step.is_complete(session.state), "state unchanged"
         session.state.update(copy.deepcopy(changes))
+        self._trace.emit(session.run_id, "state_committed", step=step.id, revision=session.revision,
+                         changes=changes, state=dict(session.state), complete=complete)
         session.revision += 1
         if complete:
             session.notices.append(step.complete_message)
@@ -709,6 +795,13 @@ class _Guide:
                 # Pin the selected input before inference. Both decision paths
                 # must inspect this frame, even when the camera keeps streaming.
                 image = self._current_frame.images.resolve(frame.image)
+                if isinstance(image, Path):
+                    image = await asyncio.to_thread(image.read_bytes)
+                elif isinstance(image, str):
+                    header, separator, encoded = image.partition(",")
+                    if not separator or not header.startswith("data:image/") or not header.endswith(";base64"):
+                        raise ValueError("selected guide frame must be local encoded image data")
+                    image = base64.b64decode(encoded, validate=True)
                 return _Observation(True, image, _FrameIdentity(
                     participant_id=frame.participant_id, track_id=frame.track_id,
                     timestamp_us=frame.timestamp_us, sequence=frame.sequence,
@@ -805,7 +898,7 @@ class _Guide:
                 await self._invalidate(session.participant_id)
                 message = ("Guide ended with skipped steps." if session.skipped
                            else session.workflow.complete_message)
-                self._reset_progress(session, active=False)
+                self._reset_progress(session, active=False, reason="skipped" if session.skipped else "completed")
                 await self._announce(session.participant_id, f"{message} Say start guide to begin again.")
                 return
             # A transition invalidates already queued speech under this same lock.

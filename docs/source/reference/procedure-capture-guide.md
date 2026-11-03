@@ -514,15 +514,16 @@ tea sample's workflow YAML:
   blend names such as **Chamomile Lemon**, regardless of brand. The brand does
   not need to be visible. The brewing settings are fixed in the guide; the
   brewing reference is not retrieved at runtime.
-- Its three visual steps require two distinct fresh frames and two affirmative
-  CLEF decisions. CLEF first judges the selected image against the condition.
-  Use its chosen yes or no directly only when confidence is **strictly above
+- Its visual steps require two distinct fresh frames and two accepted checks.
+  Identity and immersion use CLEF; temperature uses typed readings and native ranges. CLEF first judges the selected image against the condition.
+  Use its chosen accepted, rejected, or unknown result directly only when confidence is **strictly above
   80%**. At 80% or below, Cosmos describes the same frame using the step's
   required `trigger.arguments.question`, and CLEF judges only that description
-  against the condition. There is no second confidence cutoff. The
+  against the condition. Caption acceptance requires an affirmative majority over rejected and unknown combined. The
   runtime applies the predefined completion patch after confirmation. Neither
   a plain YES from Cosmos nor an incidental matching word completes a step.
-  The foreground LLM handles conversation and controls. Both perception and
+  The foreground LLM answers with read-only tools. CLEF classifies guide controls
+  and separately authorizes their exact native operation. Both perception and
   decision models can make mistakes; inspect their separate outputs during
   evaluation rather than interpreting a well-formed reply as proof of accuracy.
 - The heating check accepts a visible **100 C or 212 F** reading. It requires
@@ -531,7 +532,7 @@ tea sample's workflow YAML:
   not whether the displayed setting measures the water's actual temperature.
   If an explicitly measured water temperature is also visible, it must match
   100 C or 212 F; a target cannot override a conflicting measured reading.
-  Guide does not expose the tea sample's typed temperature tools.
+  The generic measurement policy also supports other units and display ranges.
 - Immersion detection does not start the timer. Say **next** promptly after
   immersion is confirmed to enter the timer step. The runtime then measures a
   full 300 seconds; time spent waiting at the immersion step is not subtracted.
@@ -856,17 +857,23 @@ even when their `task.status` is `approved`.
   detail can affect small-text or fine-part recognition; evaluate such checks
   with the prepared image path. Oversized prompt text or stricter external
   service limits can still cause admission errors and are reported as unavailable.
-- Visual `evidence` requires a prose `condition`, positive `consecutive` count,
+- Visual `evidence` requires exactly one of prose `condition` or numeric
+  `measurement`, a positive `consecutive` count,
   and a bounded `commit` mapping for approved guides. The question asks Cosmos
   for observable facts; the condition tells CLEF which facts must all hold.
-  Do not ask Cosmos for a YES/NO or readiness token. CLEF first receives the
-  selected image and condition, without conversation history. Its chosen yes or
-  no is used directly only at confidence **strictly above 0.80**. Otherwise,
+  Numeric policies use the structured extraction and comparison described below.
+  For semantic checks, do not ask Cosmos for a YES/NO or readiness token. CLEF first receives the
+  selected image and condition, without conversation history. Its chosen
+  accepted, rejected, or unknown result is used directly only at
+  confidence **strictly above 0.80**. Otherwise,
   Cosmos describes the original selected image using the step's required
   question, and CLEF judges that description and condition without the image or
-  prior decision. The caption judgment has no additional confidence threshold.
-  Only yes counts toward completion. Ambiguity, missing facts, or contradictory
-  evidence should yield no. Admission and inference failures are unavailable
+  prior decision. Caption acceptance requires an affirmative majority over
+  rejected and unknown combined.
+  Only accepted counts toward completion. Missing or ambiguous facts yield unknown;
+  visible contradictions yield rejected. An accepted choice also needs more probability
+  than rejected and unknown combined. Admission and inference failures are
+  unavailable
   evidence, not low-confidence decisions that trigger caption fallback.
   Visual steps reject `evidence.pattern` and observation `agent` policies.
 - Timer `evidence` retains its full-match `pattern` (normally `^true$` on
@@ -1001,3 +1008,64 @@ with controlled model responses, including visual-only and visual-and-timer guid
 These tests establish runtime behavior, not model accuracy. Run the standalone
 `example-guides/tea-making/evaluation/run_scenario.py` scenarios above against existing model servers to measure live
 tool routing and visual judgments; the runner never manages their lifecycle.
+
+### Typed measurement checks and guide-run evidence
+
+A visual step can declare `evidence.measurement` instead of `condition`:
+
+```yaml
+measurement:
+  prefer_current: true
+  ranges:
+    - {unit: N, minimum: 45, maximum: 55}
+```
+
+Cosmos extracts visible numbers, units, and current/target/unlabeled roles using
+a JSON-schema decoding contract on the existing VLM endpoint. Native comparisons
+use finite numbers, inclusive bounds, and exact case-sensitive units. Declare
+alternative units with their corresponding bounds explicitly. With
+`prefer_current: true`, identified current readings take precedence and all must
+qualify; otherwise any relevant qualifying reading suffices. Empty readings are
+unknown. Invalid responses and unsupported structured-output endpoints produce
+unavailable checks rather than silently reverting to prose parsing. Neither
+unknown nor unavailable checks count toward completion. The Tea Making example
+uses this policy for its 100 C / 212 F display check; its semantic checks retain
+CLEF. Capture captioning is unchanged.
+
+The foreground receives the latest verification of its current step, including
+frame identity, observation age, descriptive or typed evidence, verdict, and
+errors. Transitions clear this context. A previous observation is not a fresh
+camera inspection. Image-only decisions do not create a synthetic description.
+
+Guide controls use bounded CLEF classification followed by independent
+transaction authorization. Native tools retain readiness and revision checks.
+Informational LLM turns expose only declared read-only tools and guide status.
+Unknown authorization or a non-majority affirmative authorization cannot mutate
+the guide. Model-based interpretation can still make mistakes; evaluate controls
+separately from visual verification.
+
+`traces_dir` in `yaml/guide-agent-config.yaml` defaults to
+`artifacts/guide-runs/`, resolved relative to the YAML. Set it to `null` to disable.
+Each started run gets a unique directory containing the pinned `guide.yaml`,
+a `packet.json` with `kind: guide-run`, `events.jsonl`, and consumed image bytes
+under `frames/`, named by content hash. Events retain questions, frame identity,
+raw decisions and probabilities, descriptions/readings, errors and cancellations,
+controls, and state transitions. Image bytes preserve the selected original;
+CLEF image preparation is separate. Only observations actually consumed by the
+guide are saved, not a continuous audio/video recording.
+
+Run packets are diagnostic traces, distinct from procedure capture packets. The
+recorded-packet authoring evaluator consumes procedure capture packets; it does
+not interpret a guide-run trace as a narrated demonstration. Inspect run events
+and their frame references to construct labeled evaluation cases. Model verdicts,
+skips, and elapsed time on a step are clues, not human ground truth. A run-ended
+event marks a logical transition; cancelled in-flight work can subsequently log
+its outcome under the original run. Worker shutdown drains owned trace writes.
+A forcibly terminated process can leave an active/incomplete trace. Files remain
+until manually removed and contain user requests and camera images.
+
+Visual evaluation reports unknown verdicts separately from unavailable requests.
+Gate correctness measures acceptance versus non-acceptance, so an unknown result
+on a negative example can be gate-correct without proving the model recognized
+the contradiction. Inspect unknown counts and raw evidence alongside false accepts
+and false rejects; valid structured JSON does not guarantee a correct reading.

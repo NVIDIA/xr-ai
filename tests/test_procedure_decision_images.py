@@ -94,7 +94,7 @@ async def test_camera_inputs_pass_real_adapter_and_default_server_limits(fmt, si
             )
     finally:
         await backend.close()
-    assert result.choice == "yes" and trace.source == "image"
+    assert result.verdict == "accepted" and trace.source == "image"
     query.execute.assert_not_awaited()
     assert len(backend.calls) == 1 and bodies[-1] < config.max_body_bytes
     assert frame == {"participant_id": "alice", "track": "camera", "sequence": 42, "timestamp_us": 1234}
@@ -119,7 +119,7 @@ async def test_low_confidence_uses_original_webp_for_caption():
     await verify_image(decisions, Mock(execute=AsyncMock(side_effect=describe)), images=registry, image=original,
                        condition="100 C", question="Read display.", frame={"sequence": 42}, step_id="heat",
                        revision=1, decision_timeout_s=5, vision_timeout_s=5, trace=trace)
-    assert trace.source == "caption" and trace.answer.choice == "yes"
+    assert trace.source == "caption" and trace.answer.choice == "accepted"
     prepared = decisions.decide.await_args_list[0].kwargs["images"][0]
     assert prepared != original and len(prepared) <= 512 * 1024
     assert "images" not in decisions.decide.await_args_list[1].kwargs

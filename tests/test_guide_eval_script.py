@@ -19,6 +19,7 @@ import yaml
 from _procedure_guide_helpers import clef_response, stub_decisions
 from PIL import Image
 from xr_ai_models import ChatResponse, ToolCall
+from xr_ai_tools.vision import ImageQueryResult
 
 _SAMPLE = Path(__file__).resolve().parents[1] / "agent-samples/procedure-capture-guide"
 _TEST_DATA = Path(__file__).resolve().parent
@@ -159,7 +160,7 @@ def test_negative_cases_separate_recognition_and_gate(evaluator, text, available
 def test_empty_and_unavailable_runs_cannot_pass(evaluator):
     assert not evaluator.summarize([])["passed"]
     assert evaluator.summarize([{"status": "unavailable"}]) == {
-        "attempts": 1, "scored": 0, "unavailable": 1,
+        "attempts": 1, "scored": 0, "unavailable": 1, "unknown": 0,
         "recognition_scored": 0, "recognition_correct": 0, "gate_correct": 0,
         "false_accepts": 0, "false_rejects": 0, "passed": False,
     }
@@ -208,7 +209,7 @@ async def test_visual_evaluator_uses_guide_question_not_answer(evaluator, tmp_pa
             assert self.images.resolve(request.image).startswith(b"\x89PNG")
             assert request.image.uri.startswith("xr-image://")
             text = canonical[(len(requests) - 1) % len(canonical)] if correct else "UNKNOWN"
-            return SimpleNamespace(text=text, available=True)
+            return ImageQueryResult(text=text, available=True)
 
     monkeypatch.setattr(evaluator, "ImageQueryTool", FakeTool)
     output = tmp_path / "visual"
@@ -274,7 +275,7 @@ async def test_decision_failure_preserves_visual_evidence_and_finishes_run(
     monkeypatch.setattr(evaluator, "make_decision", lambda *_: decisions)
     descriptions = ["The packet reads chamomile.", "The packet reads green tea."]
     tool = SimpleNamespace(execute=AsyncMock(side_effect=[
-        SimpleNamespace(text=text, available=True) for text in descriptions
+        ImageQueryResult(text=text, available=True) for text in descriptions
     ]))
     monkeypatch.setattr(evaluator, "ImageQueryTool", lambda **_: tool)
     output = tmp_path / "results"
@@ -614,8 +615,12 @@ async def test_runtime_observe_uses_shared_visual_case(
     module = runtime_evaluator
     if direct:
         decisions = stub_decisions()
-        decisions.decide.side_effect = None
-        decisions.decide.return_value = clef_response("no" if expected else "yes", 0.95)
+        scripted = decisions.decide.side_effect
+        async def decide(state, questions, **kwargs):
+            if "condition_met" in questions:
+                return clef_response("no" if expected else "yes", 0.95)
+            return await scripted(state, questions, **kwargs)
+        decisions.decide.side_effect = decide
         monkeypatch.setattr(module.runtime.xr_ai_models, "make_decision", lambda *_: decisions)
     module.runtime.xr_ai_models.make_vlm.return_value.ask_images.return_value = SimpleNamespace(content=answer)
     guide = yaml.safe_load((_TEST_DATA / "test_procedure_indicator_guide.yaml").read_text())

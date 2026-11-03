@@ -161,7 +161,7 @@ def test_shipped_tea_guide_is_selectable_by_example_path():
         if step.trigger.function == "current_view":
             assert not step.finish_on_complete
             assert step.evidence.consecutive == 2
-            assert step.evidence.condition and step.evidence.pattern is None
+            assert (step.evidence.condition or step.evidence.measurement) and step.evidence.pattern is None
             assert step.voice.tools == ("current_view",)
             assert step.complete_on_skip == (step.id != "heat_water")
         else:
@@ -222,6 +222,13 @@ async def test_shipped_tea_guide_verification_and_runtime_timer(engine, monkeypa
 
     for step_id in ("identify", "heat_water", "start_steeping"):
         assert session.step_id == step_id and session.timer is None
+        backend._measurement_query = Mock(execute=AsyncMock())
+        async def read_measurement(_request):
+            answer = backend._current_frame.images.resolve.return_value.decode()
+            readings = [] if answer == "UNKNOWN" else [{"value": 100 if answer == "YES" else 94,
+                                                        "unit": "C", "role": "current"}]
+            return ImageQueryResult(text=json.dumps({"readings": readings}))
+        backend._measurement_query.execute.side_effect = read_measurement
         positive = {"identify": "YES", "heat_water": "YES",
                     "start_steeping": "YES"}[step_id]
         negative = {"identify": "NO", "heat_water": "NO", "start_steeping": "NO"}[step_id]
@@ -944,10 +951,8 @@ async def test_foreground_controls_use_tools_and_cannot_commit(engine):
     )], "tool_calls", {})
     response = await engine._route("Please continue", "alice")
     assert "not complete" in response
-    tools = engine._llm.chat.call_args.kwargs["tools"]
-    assert "workflow__advance" in {tool.name for tool in tools}
-    assert "workflow__commit" not in {tool.name for tool in tools}
-    assert not any("record" in tool.name for tool in tools)
+    engine._llm.chat.assert_not_called()
+    assert engine._decisions.decide.await_count == 2
     engine._llm.chat.return_value = ChatResponse("This step aligns the parts.", None, None, "stop", {})
     before = copy.deepcopy(engine._backend._sessions["alice"].state)
     assert "aligns" in await engine._route("Why would I skip?", "alice")
@@ -965,7 +970,7 @@ async def test_intent_policy_receives_controls_without_lexical_filter(engine, qu
     before = copy.deepcopy(engine._backend._sessions["alice"].state)
     assert await engine._route(query, "alice") == "Explanation."
     names = {tool.name for tool in engine._llm.chat.call_args.kwargs["tools"]}
-    assert {"workflow__advance", "workflow__reset", "workflow__restart"} <= names
+    assert not {"workflow__advance", "workflow__reset", "workflow__restart"} & names
     assert engine._backend._sessions["alice"].state == before
 
 
@@ -980,8 +985,7 @@ async def test_visual_questions_keep_camera_and_use_its_result(engine, query, an
 
     async def chat(messages, *, tools, **kwargs):
         names = {tool.name for tool in tools}
-        assert names == {"current_view", "workflow__status", "workflow__advance",
-                         "workflow__reset", "workflow__restart"}
+        assert names == {"current_view", "workflow__status"}
         assert json.loads(messages[1].content)["active_trigger"] is None
         if messages[-1].role != "tool":
             return ChatResponse("", None, [ToolCall(
@@ -1010,7 +1014,7 @@ async def test_foreground_does_not_grant_undeclared_observation_tools(engine, do
                                                None, None, "stop", {})
     await engine._route("What color is the lid?", "alice")
     assert {tool.name for tool in engine._llm.chat.call_args.kwargs["tools"]} == {
-        "clock__now", "workflow__status", "workflow__advance", "workflow__reset", "workflow__restart",
+        "clock__now", "workflow__status",
     }
     engine._backend._current_frame.execute.assert_not_called()
 
@@ -1046,7 +1050,7 @@ async def test_timer_question_uses_configured_arguments(
     async def chat(messages, *, tools, **kwargs):
         names = {tool.name for tool in tools}
         assert {"clock__timer", "workflow__status"} <= names
-        assert "workflow__advance" in names
+        assert "workflow__advance" not in names
         # Cover the composed system prompt on informational and command-shaped turns.
         system = messages[0].content
         assert "call clock__timer with no arguments ({})" in system
@@ -1095,7 +1099,8 @@ async def test_missing_timer_state_does_not_block_reset(engine, document):
         id="restart", name="workflow__restart", arguments="{}",
     )], "tool_calls", {})
     assert await engine._route("start guide", "alice") == "Do base."
-    trigger = json.loads(engine._llm.chat.call_args.args[0][1].content)["active_trigger"]
+    assert engine._decisions.decide.call_args_list[0].args[0] == {"request": "start guide", "guide_active": True}
+    trigger = (await engine._backend.guidance("alice")).context["active_trigger"]
     assert "arguments" not in trigger
     assert "duration_s" in trigger["unavailable_reason"]
     assert engine._backend._sessions["alice"].revision > revision
@@ -1148,8 +1153,12 @@ async def test_stop_cancels_verification_and_restart_begins_fresh(engine):
 
     backend._current_frame.execute.return_value = camera_frame(1)
     backend._image_query.execute.side_effect = inspect
-    backend._decisions.decide.side_effect = None
-    backend._decisions.decide.return_value = clef_response("yes", 0.8)
+    scripted = stub_decisions().decide
+    async def decide(state, questions, **kwargs):
+        if "condition_met" in questions:
+            return clef_response("yes", 0.8)
+        return await scripted(state, questions, **kwargs)
+    backend._decisions.decide.side_effect = decide
     backend._start_monitor = _Guide._start_monitor.__get__(backend)
     backend._start_monitor("alice")
     await asyncio.wait_for(entered.wait(), 2)
@@ -1278,6 +1287,7 @@ async def test_foreground_uses_only_backend_lifecycle_and_guidance_interface(eng
     backend = engine._backend
     engine._backend = SimpleNamespace(
         join=backend.join, leave=backend.leave, stop=backend.stop, guidance=backend.guidance,
+        record_event=backend.record_event,
     )
     engine._llm.chat.return_value = ChatResponse("Align the marked edges.", None, None, "stop", {})
     await engine.participant_joined(None, context("bob"))
@@ -1301,7 +1311,8 @@ async def test_cancelled_foreground_retains_transition_response_and_next_snapsho
     engine._llm.chat.return_value = ChatResponse("", None, [ToolCall(
         id="control", name=f"workflow__{action}", arguments="{}",
     )], "tool_calls", {})
-    turn = asyncio.create_task(engine._route("Act now", "alice"))
+    text = {"advance": "next", "restart": "start guide", "reset": "stop guide"}[action]
+    turn = asyncio.create_task(engine._route(text, "alice"))
     await asyncio.wait_for(entered.wait(), 2)
     turn.cancel()
     snapshot = asyncio.create_task(backend.guidance("alice"))
@@ -1476,10 +1487,13 @@ async def test_timer_unavailability_is_a_tool_result(engine, document, missing):
 
 
 def test_tea_temperature_condition_accepts_display_reading_without_label():
+    from procedure_capture_guide_worker.guide.measurements import compare_measurements
     step = load_guide(_SAMPLE / "example-guides/tea-making/guide.yaml").workflow.steps["heat_water"]
-    assert step.evidence.pattern is None
-    for requirement in ("100 C", "212 F", "absent label", "no probe", "unit"):
-        assert requirement in step.evidence.condition
+    assert step.evidence.pattern is None and step.evidence.condition is None
+    for role in ("current", "target", "unlabeled"):
+        for value, unit in ((100, "C"), (212, "F")):
+            text = json.dumps({"readings": [{"value": value, "unit": unit, "role": role}]})
+            assert compare_measurements(text, step.evidence.measurement).verdict == "accepted"
     assert not step.complete_on_skip
     assert step.next_step == "start_steeping"
 
@@ -1972,15 +1986,23 @@ async def test_transition_withdraws_notice_queued_during_foreground_turn(documen
 
     entered, release = asyncio.Event(), asyncio.Event()
 
-    async def chat(*_args, **_kwargs):
-        entered.set()
-        await release.wait()
-        return ChatResponse("", None, [ToolCall(id="control", name=control_name, arguments="{}")], "tool_calls", {})
-
-    llm = Mock(chat=AsyncMock(side_effect=chat))
+    from xr_ai_models import DecisionAnswer, DecisionResponse
+    scripted = stub_decisions().decide
+    async def decide(state, questions, **kwargs):
+        if "action" in questions:
+            entered.set()
+            await release.wait()
+            label = {"workflow__advance": "advance", "workflow__restart": "restart",
+                     "workflow__reset": "reset"}[control_name]
+            return DecisionResponse(answers={"action": DecisionAnswer(
+                label, 1.0, {key: float(key == label) for key in questions["action"].criteria})},
+                model="test", usage={}, raw={})
+        return await scripted(state, questions, **kwargs)
+    llm = Mock(chat=AsyncMock())
+    decisions = Mock(decide=AsyncMock(side_effect=decide))
     runtime = AgentRuntime()
     agent = runtime.register("guide", GuideAgent(
-        decisions=stub_decisions(),
+        decisions=decisions,
         guide=selected(document), llm=llm, current_frame=Mock(), image_query=Mock(),
         vision_timeout_s=1,
     ))
@@ -2125,7 +2147,7 @@ async def test_clef_receives_selected_image_and_condition_not_chat_or_caption(en
     assert call.args[0] == {"condition": session.step.evidence.condition,
                             "image_role": "The single image is the selected current camera frame."}
     question = call.args[1]["condition_met"]
-    assert set(question.criteria) == {"yes", "no"}
+    assert set(question.criteria) == {"accepted", "rejected", "unknown"}
     assert call.kwargs["images"] == (b"Two edges touch; the far side is obscured.",)
     backend._image_query.execute.assert_not_awaited()
     engine._llm.chat.assert_not_called()
@@ -2181,7 +2203,7 @@ async def test_visual_evidence_is_logged_even_when_decision_fails(failure):
     results = [message for message in messages if "Guide visual decision" in message]
     assert len(results) == (0 if failure else 1)
     if results:
-        assert "choice=yes" in results[0] and "confidence=" in results[0]
+        assert "choice=accepted" in results[0] and "confidence=" in results[0]
 
 
 @pytest.mark.parametrize("choice", ["yes", "no"])
@@ -2226,8 +2248,9 @@ async def test_image_first_cutoff_and_caption_only_fallback(choice, confidence):
     assert query.execute.await_count == int(fallback)
     assert trace.source == ("caption" if fallback else "image")
     assert trace.image_answer.confidence == confidence
-    assert trace.answer is result
-    assert result.choice == (("no" if choice == "yes" else "yes") if fallback else choice)
+    assert trace is result
+    expected = ("no" if choice == "yes" else "yes") if fallback else choice
+    assert result.verdict == {"yes": "accepted", "no": "rejected"}[expected]
     assert (trace.caption is not None) is fallback
 
 
