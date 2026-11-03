@@ -15,7 +15,7 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 from pathlib import Path
 
 import nemo_relay
@@ -24,7 +24,7 @@ from loguru import logger
 from xr_ai_conversation import ContextManager, Conversation
 from xr_ai_logging import setup_logging
 from xr_ai_models import load_models_config, make_decision, make_llm, make_tts, make_vlm
-from xr_ai_routing import AgentRouter, RoutingAid
+from xr_ai_routing import AgentRouter, ParticipantAgentFactory, RoutingAid
 from xr_ai_runtime import AgentRuntime
 from xr_ai_tools.current_frame import CurrentFrameTool
 from xr_ai_tools.image import ImageRegistry
@@ -115,147 +115,176 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
         ready_file: Optional launcher signal written by voice after readiness checks.
     """
 
-    # Create services before the runtime. Voice owns closing their underlying
-    # connections; recording wrappers below delegate to these same services.
+    # Shared model clients outlive every participant runner. Voice owns only
+    # its speech clients; application cleanup follows successful workflow drain.
     setup_logging("worker")
     models = load_models_config(config.models_config)
     voice_gate = load_voice_gate_config(config.voice_gate_yaml)
-    llm = make_llm(models, "llm")
-    decisions = make_decision(models, "decision")
-    vlm = make_vlm(models, "vlm")
-    tts = make_tts(models, "tts")
-    rag = RAGTools(config.rag_endpoint)
-    transport = HubVoiceTransport()
-    voice = VoiceAgent.from_models(
-        query_topic=USER_QUERY_TOPIC,
-        models=models,
-        tts=tts,
-        vad=VadConfig(
-            silence_duration=config.silence_duration,
-            min_speech=config.min_speech,
-            silero_threshold=config.silero_threshold,
-        ),
-        voice_gate=voice_gate,
-        probes={"rag": rag.health, "clef": decisions.health},
-        ready_file=ready_file,
-        closeables=(llm, vlm, decisions, rag),
-        text_topic=_CLIENT_TEXT_TOPIC,
-        idle_timeout_secs=config.idle_timeout_secs,
-        transport=transport,
-        participant_joined_topic=PARTICIPANT_JOINED_TOPIC,
-        participant_left_topic=PARTICIPANT_LEFT_TOPIC,
-        interrupted_topic=INTERRUPTED_TOPIC,
-        interrupt_on_supersede=True,
-    )
-
-    # Snapshot the complete effective configuration before any agent produces
-    # evidence. All later model calls inherit this capture scope.
-    capture = _SOPCapture(config.artifacts_dir, enabled=config.capture_enabled)
-    await capture.start(
-        configuration_snapshots={
-            "worker": config,
-            "models": json.loads(config.models_config.read_text()),
-            "voice_gate": yaml.safe_load(config.voice_gate_yaml.read_text()),
-        },
-        source_directory=Path(__file__).resolve().parents[1],
-        workflow_name="tea making",
-        steps=("identify", "fill_water", "heat_water", "start_steeping", "steep_timer"),
-    )
-    conversation_llm = llm
-    llm = _RecordedLanguage(llm)
-    decisions = _RecordedDecisions(decisions)
-    vlm = _RecordedVision(vlm)
-    async with capture.activate():
-        runtime = AgentRuntime()
-        web_events = runtime.register(
-            "web-events",
-            WebEventsAgent(
-                host=config.web_events_host,
-                port=config.web_events_port,
-                max_events=config.web_events_max_events,
-                title="Tea-making agent events",
-            ),
-        )
-        runtime.register("web-event-adapter", TeaWebEventsAgent())
-        images = ImageRegistry()
-        frames = CurrentFrameTool(
-            endpoint=transport.endpoint,
-            images=images,
-            frame_max_age_s=config.frame_max_age_s,
-            frame_timeout_s=config.frame_timeout_s,
-        )
-        # Conversation owns dialogue. Only the runner supplies the replaceable
-        # SOP source; independent flows never connect to this manager.
-        context = ContextManager(
-            conversation_llm,
-            summary_context_topics=(SOP_CONTEXT_SOURCE,),
-            dialogue_budget_bytes=config.context_budget_bytes,
-            topic_budget_bytes=config.sop_context_budget_bytes,
-            compaction_input_budget_bytes=config.compaction_input_budget_bytes,
-        )
-        runtime.register("sop-conversation-context", context.subscriber())
-        conversation = Conversation(
-            conversation_llm,
-            context=context,
-            system_prompt=config.conversation_system_prompt,
-            instructions=config.sop.conversation_instructions,
-            routing=RoutingAid("conversation", config.sop.conversation_description),
-            runtime=runtime,
-            output_topic=VOICE_OUTPUT_TOPIC,
-        )
-        sop = runtime.register(
-            "sop",
-            SOPAgent(
-                config=config.sop,
-                llm=llm,
-                decisions=decisions,
-                frames=frames,
-                image_query=ImageQueryTool(
-                    images=images,
-                    vlm=vlm,
-                    system_prompt=config.current_view_prompt,
-                ),
-                rag=rag,
-                context=context,
-                runtime=runtime,
-            ),
-        )
-
-        async def cleanup_participant(participant_id: str) -> None:
-            """Drain SOP work before releasing SDK frames; the router serializes rejoins."""
-            await sop.participant_left(participant_id)
-            frames.release(participant_id)
-
-        router = AgentRouter(
-            {"workflow": sop, "conversation": conversation},
-            decisions,
+    shared_clients = []
+    shared_work_drained = True
+    try:
+        llm = make_llm(models, "llm")
+        shared_clients.append(llm)
+        decisions = make_decision(models, "decision")
+        shared_clients.append(decisions)
+        vlm = make_vlm(models, "vlm")
+        shared_clients.append(vlm)
+        tts = make_tts(models, "tts")
+        rag = RAGTools(config.rag_endpoint)
+        shared_clients.append(rag)
+        transport = HubVoiceTransport()
+        voice = VoiceAgent.from_models(
             query_topic=USER_QUERY_TOPIC,
-            output_topic=VOICE_OUTPUT_TOPIC,
+            models=models,
+            tts=tts,
+            vad=VadConfig(
+                silence_duration=config.silence_duration,
+                min_speech=config.min_speech,
+                silero_threshold=config.silero_threshold,
+            ),
+            voice_gate=voice_gate,
+            probes={"rag": rag.health, "clef": decisions.health},
+            ready_file=ready_file,
+            text_topic=_CLIENT_TEXT_TOPIC,
+            idle_timeout_secs=config.idle_timeout_secs,
+            transport=transport,
             participant_joined_topic=PARTICIPANT_JOINED_TOPIC,
             participant_left_topic=PARTICIPANT_LEFT_TOPIC,
             interrupted_topic=INTERRUPTED_TOPIC,
-            initialize_participant=sop.participant_joined,
-            cleanup_participant=cleanup_participant,
-            set_status=transport.endpoint.set_status,
+            interrupt_on_supersede=True,
         )
-        runtime.register("routing", router.runtime_subscriber())
-        runtime.register("voice", voice)
 
-        logger.info("SOP run bundle → {}", capture.directory)
-        logger.info("tea-making starting with Omni for language and vision")
-        async with _relay_event_log(capture.directory):
-            async with web_events:
-                logger.info("live events → {}", web_events.url)
-                async with runtime:
-                    try:
-                        await voice.run(runtime)
-                    finally:
-                        await router.stop()
-                        await sop.stop()
-                        await conversation.close()
-                        await context.close()
+        # Snapshot the complete effective configuration before any agent produces
+        # evidence. All later model calls inherit this capture scope.
+        capture = _SOPCapture(config.artifacts_dir, enabled=config.capture_enabled)
+        await capture.start(
+            configuration_snapshots={
+                "worker": config,
+                "models": json.loads(config.models_config.read_text()),
+                "voice_gate": yaml.safe_load(config.voice_gate_yaml.read_text()),
+            },
+            source_directory=Path(__file__).resolve().parents[1],
+            workflow_name="tea making",
+            steps=("identify", "fill_water", "heat_water", "start_steeping", "steep_timer"),
+        )
+        conversation_llm = llm
+        llm = _RecordedLanguage(llm)
+        decisions = _RecordedDecisions(decisions)
+        vlm = _RecordedVision(vlm)
+        async with capture.activate():
+            runtime = AgentRuntime()
+            web_events = runtime.register(
+                "web-events",
+                WebEventsAgent(
+                    host=config.web_events_host,
+                    port=config.web_events_port,
+                    max_events=config.web_events_max_events,
+                    title="Tea-making agent events",
+                ),
+            )
+            runtime.register("web-event-adapter", TeaWebEventsAgent())
+            images = ImageRegistry()
+            frames = CurrentFrameTool(
+                endpoint=transport.endpoint,
+                images=images,
+                frame_max_age_s=config.frame_max_age_s,
+                frame_timeout_s=config.frame_timeout_s,
+            )
+            # Conversation owns dialogue. Only the runner supplies the replaceable
+            # SOP source; independent flows never connect to this manager.
+            context = ContextManager(
+                conversation_llm,
+                summary_context_topics=(SOP_CONTEXT_SOURCE,),
+                dialogue_budget_bytes=config.context_budget_bytes,
+                topic_budget_bytes=config.sop_context_budget_bytes,
+                compaction_input_budget_bytes=config.compaction_input_budget_bytes,
+            )
+            runtime.register("sop-conversation-context", context.subscriber())
+            conversation = Conversation(
+                conversation_llm,
+                context=context,
+                system_prompt=config.conversation_system_prompt,
+                instructions=config.sop.conversation_instructions,
+                routing=RoutingAid("conversation", config.sop.conversation_description),
+                runtime=runtime,
+                output_topic=VOICE_OUTPUT_TOPIC,
+            )
+            image_query = ImageQueryTool(
+                images=images,
+                vlm=vlm,
+                system_prompt=config.current_view_prompt,
+            )
 
-                        images.clear()
+            async def create_sop(participant_id: str) -> SOPAgent:
+                """Initialize one focused runner using process-shared model/tool clients."""
+                sop = SOPAgent(
+                    participant_id=participant_id,
+                    config=config.sop,
+                    llm=llm,
+                    decisions=decisions,
+                    frames=frames,
+                    image_query=image_query,
+                    rag=rag,
+                    context=context,
+                    runtime=runtime,
+                )
+                try:
+                    await sop.initialize()
+                except BaseException:
+                    await sop.close()
+                    raise
+                return sop
+
+            async def close_sop(sop: SOPAgent) -> None:
+                """Dispose only this runner; shared services outlive participant departure."""
+                await sop.close()
+
+            async def cleanup_participant(participant_id: str) -> None:
+                """Release shared participant data only after scoped work has drained."""
+                await context.clear(participant_id)
+                frames.release(participant_id)
+
+            router = AgentRouter(
+                {"workflow": ParticipantAgentFactory(create=create_sop, close=close_sop), "conversation": conversation},
+                decisions,
+                query_topic=USER_QUERY_TOPIC,
+                output_topic=VOICE_OUTPUT_TOPIC,
+                participant_joined_topic=PARTICIPANT_JOINED_TOPIC,
+                participant_left_topic=PARTICIPANT_LEFT_TOPIC,
+                interrupted_topic=INTERRUPTED_TOPIC,
+                cleanup_participant=cleanup_participant,
+                set_status=transport.endpoint.set_status,
+            )
+            runtime.register("routing", router.runtime_subscriber())
+            runtime.register("voice", voice)
+
+            logger.info("SOP run bundle → {}", capture.directory)
+            logger.info("tea-making starting with Omni for language and vision")
+            async with _relay_event_log(capture.directory):
+                async with web_events:
+                    logger.info("live events → {}", web_events.url)
+                    async with runtime:
+                        try:
+                            shared_work_drained = False
+                            await voice.run(runtime)
+                        finally:
+                            await router.stop()
+                            await conversation.close()
+                            await context.close()
+
+                            images.clear()
+                            shared_work_drained = True
+
+    finally:
+        # A failed scoped close retains its clients: it does not authorize
+        # destroying services that outstanding workflow work may still use.
+        if shared_work_drained:
+            async with AsyncExitStack() as service_cleanup:
+                registered_clients = set()
+                for client in shared_clients:
+                    if id(client) not in registered_clients:
+                        registered_clients.add(id(client))
+                        service_cleanup.push_async_callback(client.close)
 
     logger.info("tea-making stopped")
 

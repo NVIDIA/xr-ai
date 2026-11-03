@@ -96,6 +96,19 @@ A question or voice interruption cancels answer work, not that procedure.
 Stop/reset cancels and drains the runner's work. Explicit skip cancels the current
 step; ordinary next cannot bypass an unconfirmed step.
 
+The workflow route uses `ParticipantAgentFactory`: each participant receives one
+initialized `SOPAgent` with its own session, control lock and flow records.
+Conversation, model clients, transport, image registry and retrieval services stay
+shared. Disconnect closes and drains that exact SOP instance before the application
+clears its existing participant context and releases its frames. Reconnecting
+creates a fresh instance. Starting again after reset or completion creates a new
+run within the same instance and preserves the existing conversation/history
+handoff behavior.
+Voice may stop its input transport first; owned image handles and shared model
+clients remain available until SOP and conversation work drains. The application
+closes shared clients once, after successful drain. A failed scoped disposal is
+reported and retains those clients instead of closing them under live work.
+
 The runner owns latest labeled state per flow. A flow intentionally spanning
 several steps keeps its own active label until its Python scope ends. Completed,
 skipped and previous-run data are labeled separately from active evidence. Flows
@@ -115,6 +128,10 @@ Import `SOPAgent` from `tea_making_worker.application.tea_sop_agent`,
 tea result schemas from `application.tea_data_models` under the same package.
 These are application-local APIs, not SDK promotion. The package root is a marker;
 importing reusable components does not load the tea application.
+Construct `SOPAgent(participant_id=..., ...)` inside the route factory, await
+`initialize()` before returning it, and use `close()` as the factory disposer.
+Its `context_snapshot()` describes that bound participant; the agent does not
+maintain a participant registry or own shared service shutdown.
 
 Import `run_vision_rag_retrieval_flow`, `run_visual_verification_flow` and
 `run_timer_flow` from `tea_making_worker.components`. Supply all dependencies,

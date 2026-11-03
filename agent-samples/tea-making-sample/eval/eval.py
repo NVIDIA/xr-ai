@@ -19,7 +19,7 @@ from tea_making_worker.application.tea_sop_agent import SOP_CONTEXT_SOURCE, SOPA
 from xr_ai_conversation import ContextManager, Conversation
 from xr_ai_hub import FrameUnavailable
 from xr_ai_models import load_models_config, make_decision, make_llm
-from xr_ai_routing import AgentRouter, AgentTurn, RoutingAid
+from xr_ai_routing import AgentRouter, AgentTurn, ParticipantAgentFactory, RoutingAid
 from xr_ai_runtime import AgentRuntime
 from xr_ai_tools.rag import RetrieveResult
 from xr_ai_voice import VOICE_OUTPUT_TOPIC
@@ -93,16 +93,34 @@ async def main():
     async def control_output(_turn, _route, _text):
         """Destinations still publish their normal SDK outputs to this local runtime."""
 
-    sop = SOPAgent(
-        config=config.sop,
-        llm=llm,
-        decisions=decisions,
-        frames=SimpleNamespace(execute=no_camera),
-        image_query=SimpleNamespace(),
-        rag=SimpleNamespace(retrieve=SimpleNamespace(execute=no_passages)),
-        context=context,
-        runtime=runtime,
-    )
+    current_sop = None
+
+    async def create_sop(participant_id):
+        nonlocal current_sop
+        current_sop = SOPAgent(
+            participant_id=participant_id,
+            config=config.sop,
+            llm=llm,
+            decisions=decisions,
+            frames=SimpleNamespace(execute=no_camera),
+            image_query=SimpleNamespace(),
+            rag=SimpleNamespace(retrieve=SimpleNamespace(execute=no_passages)),
+            context=context,
+            runtime=runtime,
+        )
+        try:
+            await current_sop.initialize()
+        except BaseException:
+            await current_sop.close()
+            raise
+        return current_sop
+
+    async def close_sop(sop):
+        await sop.close()
+
+    async def cleanup_participant(participant_id):
+        await context.clear(participant_id)
+
     conversation = Conversation(
         SimpleNamespace(stream_events=record_conversation_stream),
         context=context,
@@ -113,65 +131,69 @@ async def main():
         output_topic=VOICE_OUTPUT_TOPIC,
     )
     router = AgentRouter(
-        {"workflow": sop, "conversation": conversation},
+        {"workflow": ParticipantAgentFactory(create=create_sop, close=close_sop), "conversation": conversation},
         decisions,
         query_topic=USER_QUERY_TOPIC,
         output_topic=VOICE_OUTPUT_TOPIC,
         output=control_output,
-        initialize_participant=sop.participant_joined,
-        cleanup_participant=sop.participant_left,
+        cleanup_participant=cleanup_participant,
     )
     runtime.register("routing", router.runtime_subscriber())
     rows = []
     try:
         async with runtime:
-            for index, case in enumerate(cases):
-                participant = f"eval-{index}"
-                for setup_index, query in enumerate(case.get("setup_requests", [])):
-                    await router.handle(AgentTurn(participant, f"setup-{index}-{setup_index}", query))
-                first_call = len(decisions.calls)
-                first_answer_request = len(conversation_requests)
-                started = time.perf_counter()
-                result = await router.handle(AgentTurn(participant, f"case-{index}", case["query"]))
-                calls = decisions.calls[first_call:]
-                destinations = [call["answers"]["destination"] for call in calls if "destination" in call["answers"]]
-                controls = [call["answers"]["control"] for call in calls if "control" in call["answers"]]
-                authorized = any(
-                    call["answers"].get("authorization") == "command"
-                    and call["probabilities"]["authorization"]["command"]
-                    > sum(
-                        probability
-                        for label, probability in call["probabilities"]["authorization"].items()
-                        if label != "command"
+            try:
+                for index, case in enumerate(cases):
+                    participant = f"eval-{index}"
+                    for setup_index, query in enumerate(case.get("setup_requests", [])):
+                        await router.handle(AgentTurn(participant, f"setup-{index}-{setup_index}", query))
+                    first_call = len(decisions.calls)
+                    first_answer_request = len(conversation_requests)
+                    started = time.perf_counter()
+                    result = await router.handle(AgentTurn(participant, f"case-{index}", case["query"]))
+                    calls = decisions.calls[first_call:]
+                    destinations = [
+                        call["answers"]["destination"] for call in calls if "destination" in call["answers"]
+                    ]
+                    controls = [call["answers"]["control"] for call in calls if "control" in call["answers"]]
+                    authorized = any(
+                        call["answers"].get("authorization") == "command"
+                        and call["probabilities"]["authorization"]["command"]
+                        > sum(
+                            probability
+                            for label, probability in call["probabilities"]["authorization"].items()
+                            if label != "command"
+                        )
+                        for call in calls
                     )
-                    for call in calls
-                )
-                executed_control = controls[-1] if controls and controls[-1] != "none" and authorized else None
-                destination = "conversation" if len(conversation_requests) > first_answer_request else destinations[-1]
-                passed = destination == case["expected_destination"] and executed_control == case.get(
-                    "expected_control"
-                )
-                row = {
-                    "case": case["name"],
-                    "query": case["query"],
-                    "passed": passed,
-                    "destination": destination,
-                    "control": executed_control,
-                    "response": result.text,
-                    "duration_ms": (time.perf_counter() - started) * 1000,
-                    "sop": sop.context_snapshot(participant),
-                    "decisions": calls,
-                    "conversation_messages": [
-                        {"role": message.role, "content": message.content}
-                        for request in conversation_requests[first_answer_request:]
-                        for message in request
-                    ],
-                }
-                rows.append(row)
-                print(json.dumps(row, ensure_ascii=False))
-                await sop.participant_left(participant)
-            await router.stop()
-            await sop.stop()
+                    executed_control = controls[-1] if controls and controls[-1] != "none" and authorized else None
+                    destination = (
+                        "conversation" if len(conversation_requests) > first_answer_request else destinations[-1]
+                    )
+                    passed = destination == case["expected_destination"] and executed_control == case.get(
+                        "expected_control"
+                    )
+                    row = {
+                        "case": case["name"],
+                        "query": case["query"],
+                        "passed": passed,
+                        "destination": destination,
+                        "control": executed_control,
+                        "response": result.text,
+                        "duration_ms": (time.perf_counter() - started) * 1000,
+                        "sop": current_sop.context_snapshot(),
+                        "decisions": calls,
+                        "conversation_messages": [
+                            {"role": message.role, "content": message.content}
+                            for request in conversation_requests[first_answer_request:]
+                            for message in request
+                        ],
+                    }
+                    rows.append(row)
+                    print(json.dumps(row, ensure_ascii=False))
+                    await router.participant_left(participant)
+            finally:
+                await router.stop()
     finally:
         await conversation.close()
         await context.close()

@@ -29,7 +29,7 @@ from xr_ai_hub import FrameUnavailable
 from xr_ai_interaction import ResponseOutputs
 from xr_ai_models import DecisionQuestion, DecisionService, LLMService
 from xr_ai_routing import Admission, AgentTurn, DestinationResult, RoutingAid
-from xr_ai_runtime import Agent, AgentRuntime, RuntimeClosedError
+from xr_ai_runtime import AgentRuntime, RuntimeClosedError
 from xr_ai_tools.current_frame import CurrentFrameRequest, CurrentFrameTool
 from xr_ai_tools.rag import RAGTools
 from xr_ai_tools.vision import ImageQueryTool
@@ -92,10 +92,11 @@ class _Session:
     identification_pending: tuple[str, ...] | None = None
 
 
-class SOPAgent(Agent):
-    """Control-only SOP runner and owner of flow state supplied to conversation.
+class SOPAgent:
+    """One participant's SOP runner and owner of flow state supplied to conversation.
 
     Args:
+        participant_id: Participant bound to this instance for its complete lifetime.
         config: Ordinary Python application arguments for the explicit tea procedure.
         llm: Settings extraction/generation service.
         decisions: Semantic control authorization and visual judgment service.
@@ -109,6 +110,7 @@ class SOPAgent(Agent):
     def __init__(
         self,
         *,
+        participant_id: str,
         config: SOPConfig,
         llm: LLMService,
         decisions: DecisionService,
@@ -118,7 +120,6 @@ class SOPAgent(Agent):
         context: ContextManager,
         runtime: AgentRuntime,
     ) -> None:
-        super().__init__()
         self.config = config
         self._llm = llm
         self._decisions = decisions
@@ -133,43 +134,39 @@ class SOPAgent(Agent):
             source="sop",
             closed_errors=(RuntimeClosedError,),
         )
-        self._sessions: dict[str, _Session] = {}
-        self._closing = False
-        self._participant_locks: dict[str, asyncio.Lock] = {}
+        self._session = _Session(participant_id)
+        self._control_lock = asyncio.Lock()
 
-    async def participant_joined(self, participant_id: str) -> None:
-        """Admit a new participant; late callbacks retain their old session identity."""
-        async with self._participant_locks.setdefault(participant_id, asyncio.Lock()):
-            if not self._closing and participant_id not in self._sessions:
-                session = _Session(participant_id)
-                self._sessions[participant_id] = session
-                await self._publish_context(session)
+    async def initialize(self) -> None:
+        """Publish initial state before the factory makes this instance routable."""
+        if not self._session.connected:
+            raise RuntimeError("a closed SOP instance cannot be initialized again")
+        await self._publish_context(self._session)
 
-    async def participant_left(self, participant_id: str) -> None:
-        """Close admission before draining owned flow work and clearing context."""
-        async with self._participant_locks.setdefault(participant_id, asyncio.Lock()):
-            session = self._sessions.pop(participant_id, None)
-            if session is None:
-                return
-            session.connected = False
+    async def close(self) -> None:
+        """Close admission, then drain this instance's work before shared cleanup."""
+        session = self._session
+        session.connected = False
+        async with self._control_lock:
             session.accepted_control = None
             await self._stop_run(session)
-            await self._context.clear(participant_id)
 
     def routing_aid(self, participant_id: str) -> RoutingAid:
         """Describe controls without taking focus over general SOP questions."""
-        session = self._sessions.get(participant_id)
+        session = self._session
+        if participant_id != session.participant_id:
+            raise ValueError("participant does not match this SOP instance")
         return RoutingAid(
             "workflow",
             self.config.workflow_description,
-            eligibility=session.status if session else "participant not admitted",
+            eligibility=session.status if session.connected else "participant not admitted",
         )
 
     async def admit(self, turn: AgentTurn, *, focused: bool) -> Admission:
         """Recognize an explicit control and retain a revision-bound authorized proposal."""
         del focused
-        session = self._sessions.get(turn.participant_id)
-        if self._closing or session is None or not session.connected:
+        session = self._session
+        if turn.participant_id != session.participant_id or not session.connected:
             return Admission("decline")
         revision = session.revision
         admitted_run_id = session.run_id
@@ -199,28 +196,24 @@ class SOPAgent(Agent):
             probability for label, probability in answer.probabilities.items() if label != "command"
         ):
             return Admission("decline")
-        if (
-            self._sessions.get(turn.participant_id) is not session
-            or not session.connected
-            or asyncio.current_task().cancelling()
-        ):
+        if not session.connected or asyncio.current_task().cancelling():
             return Admission("decline")
         session.accepted_control = _AcceptedControl(turn.turn_id, revision, admitted_run_id, control)
         return Admission("accept")
 
     async def answer(self, turn: AgentTurn, *, started: Callable[[], Awaitable[None]]) -> DestinationResult:
         """Apply only a still-current admitted control, then publish its native acknowledgment."""
-        session = self._sessions.get(turn.participant_id)
-        if session is None or session.accepted_control is None:
+        session = self._session
+        if turn.participant_id != session.participant_id or not session.connected or session.accepted_control is None:
             return DestinationResult("answer")
         proposal = session.accepted_control
         if proposal.turn_id != turn.turn_id:
             return DestinationResult("answer")
         session.accepted_control = None
         control = proposal.operation
-        async with self._participant_locks.setdefault(turn.participant_id, asyncio.Lock()):
+        async with self._control_lock:
             if (
-                self._sessions.get(turn.participant_id) is not session
+                not session.connected
                 or session.run_id != proposal.run_id
                 or (control in {"next", "skip"} and session.revision != proposal.revision)
             ):
@@ -252,14 +245,10 @@ class SOPAgent(Agent):
                 await reply.send(response_text)
         return DestinationResult("answer", response_text)
 
-    async def release(self, _participant_id: str) -> None:
+    async def release(self, participant_id: str) -> None:
         """Routing focus changes do not cancel the independently running SOP."""
-
-    async def stop(self) -> None:
-        """Close admission and drain every participant's owned procedure."""
-        self._closing = True
-        for participant_id in tuple(self._sessions):
-            await self.participant_left(participant_id)
+        if participant_id != self._session.participant_id:
+            raise ValueError("participant does not match this SOP instance")
 
     async def _control(self, session: _Session, control: str) -> str:
         """Keep next/skip distinct and defaults outside the independent flow functions."""
@@ -331,7 +320,7 @@ class SOPAgent(Agent):
             session.issue = str(error)
             if self._step_id(session) is not None:
                 session.flows[self._step_id(session)].status = "failed"
-            if self._sessions.get(session.participant_id) is session:
+            if session.connected:
                 await self._publish_context(session)
         finally:
             owned_flow_tasks = tuple(record.task for record in session.flows.values() if record.task is not None)
@@ -514,11 +503,10 @@ class SOPAgent(Agent):
                 session.participant_id,
                 "flow",
                 step_id=step_id,
-                snapshot=lambda: self.context_snapshot(session.participant_id),
+                snapshot=lambda: self.context_snapshot(),
             ):
                 if (
-                    self._sessions.get(session.participant_id) is not session
-                    or not session.connected
+                    not session.connected
                     or session.status != "running"
                     or session.run_id != record.run_id
                     or session.flows.get(step_id) is not record
@@ -561,8 +549,7 @@ class SOPAgent(Agent):
 
         def owns_execution():
             return (
-                self._sessions.get(session.participant_id) is session
-                and session.connected
+                session.connected
                 and session.run_id == record.run_id
                 and session.status == "running"
                 and session.flows.get(flow_id) is record
@@ -646,11 +633,9 @@ class SOPAgent(Agent):
             },
         }
 
-    def context_snapshot(self, participant_id: str) -> dict[str, Any]:
+    def context_snapshot(self) -> dict[str, Any]:
         """Expose entered steps, never turn future configuration into observed state."""
-        session = self._sessions.get(participant_id)
-        if session is None:
-            return {"status": "idle", "active_flows": {}}
+        session = self._session
         if session.status == "idle":
             return {
                 "status": "idle",
@@ -695,21 +680,19 @@ class SOPAgent(Agent):
 
     async def _publish_context(self, session: _Session) -> None:
         """Replace the SDK SOP-status source; the conversation agent owns its dialogue."""
-        if self._sessions.get(session.participant_id) is not session or not session.connected:
+        if not session.connected:
             return
         await self._context.update(
             session.participant_id,
             SOP_CONTEXT_SOURCE,
-            ConversationContextUpdate(
-                text=json.dumps(self.context_snapshot(session.participant_id), ensure_ascii=False)
-            ),
+            ConversationContextUpdate(text=json.dumps(self.context_snapshot(), ensure_ascii=False)),
             mode="summary",
             timestamp_us=time.time_ns() // 1000,
         )
 
     async def _notice(self, session: _Session, text: str) -> None:
         """Publish native step instructions without involving conversation generation."""
-        if self._sessions.get(session.participant_id) is session and session.connected:
+        if session.connected:
             timestamp_us = time.time_ns() // 1000
             await self._responses.update(session.participant_id, text, timestamp_us=timestamp_us)
             await self._runtime.publish(

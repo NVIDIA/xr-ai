@@ -28,11 +28,12 @@ async def test_sample_does_not_register_model_health_probes(
     service = SimpleNamespace(
         health=AsyncMock(side_effect=AssertionError("unexpected model health probe")),
         chat=AsyncMock(),
+        close=AsyncMock(),
     )
     for factory in ("make_llm", "make_vlm", "make_stt", "make_tts"):
         if hasattr(app, factory):
             monkeypatch.setattr(app, factory, lambda *_args: service)
-    decision = SimpleNamespace(health=AsyncMock(return_value=True))
+    decision = SimpleNamespace(health=AsyncMock(return_value=True), close=AsyncMock())
     if hasattr(app, "make_decision"):
         monkeypatch.setattr(app, "make_decision", lambda *_args: decision)
     monkeypatch.setattr(app, "setup_logging", Mock())
@@ -45,7 +46,7 @@ async def test_sample_does_not_register_model_health_probes(
         rag_endpoint="unused", scene_endpoint="unused", openxr_endpoint="unused",
         text_memory_dir=tmp_path, video_history_enabled=False,
     )
-    rag = SimpleNamespace(health=AsyncMock(return_value=True))
+    rag = SimpleNamespace(health=AsyncMock(return_value=True), close=AsyncMock())
     if sample == "tea-making-sample":
         monkeypatch.setattr(app, "RAGTools", Mock(return_value=rag))
     if sample == "simple-vlm-example":
@@ -117,13 +118,16 @@ async def test_shipped_speaker_mode_never_constructs_batch_client(
     monkeypatch.setattr(app, "load_models_config", lambda *_args: profile)
     monkeypatch.setattr(app, "setup_logging", Mock())
     monkeypatch.setattr(_runtime, "make_stt", lambda *_args: pytest.fail("unused batch client constructed"))
-    service = SimpleNamespace(chat=AsyncMock(), close=AsyncMock())
+    service = SimpleNamespace(chat=AsyncMock(), close=AsyncMock(), health=AsyncMock())
     for factory in ("make_llm", "make_vlm", "make_tts"):
         if hasattr(app, factory):
             monkeypatch.setattr(app, factory, lambda *_args: service)
     monkeypatch.setattr(app, "HubVoiceTransport", Mock())
     if sample == "tea-making-sample":
-        monkeypatch.setattr(app, "RAGTools", Mock())
+        monkeypatch.setattr(app, "make_decision", lambda *_args: service)
+        monkeypatch.setattr(
+            app, "RAGTools", Mock(return_value=SimpleNamespace(health=AsyncMock(), close=AsyncMock()))
+        )
     if sample == "xr-render-demo":
         for constructor in ("SceneTools", "TrackingTools", "TextMemoryTools", "ImageRegistry",
                             "CurrentFrameTool", "SceneSupervisor", "RenderAgent"):

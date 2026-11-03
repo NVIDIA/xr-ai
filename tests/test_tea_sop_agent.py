@@ -18,7 +18,7 @@ import nemo_relay
 import pytest
 from xr_ai_conversation import ContextManager, Conversation
 from xr_ai_models import ChatResponse, ChatStreamEvent, DecisionAnswer, DecisionResponse
-from xr_ai_routing import AgentRouter, AgentTurn, RoutingAid
+from xr_ai_routing import AgentRouter, AgentTurn, ParticipantAgentFactory, RoutingAid
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, subscribe
 from xr_ai_tools.current_frame import CurrentFrameTool, ImageFrame
 from xr_ai_tools.image import ImageRegistry
@@ -32,8 +32,10 @@ sys.path.insert(0, str(_SAMPLE / "worker"))
 from tea_making_worker.application.application_config import load_config  # noqa: E402
 from tea_making_worker.application.tea_events import (  # noqa: E402
     GUIDANCE_NOTICE_TOPIC,
+    GUIDANCE_RECORD_TOPIC,
     USER_QUERY_TOPIC,
     GuidanceNotice,
+    GuidanceRecord,
 )
 from tea_making_worker.application.tea_sop_agent import (  # noqa: E402
     SOP_CONTEXT_SOURCE,
@@ -140,6 +142,7 @@ def _runner(*, config=None, observer=None, llm=None, frames=None):
     if frames is not None:
         frames.execute = acquire
     sop = SOPAgent(
+        participant_id="p",
         config=config,
         llm=llm,
         decisions=_Decisions(),
@@ -173,7 +176,7 @@ class _ConversationLanguage:
         yield ChatStreamEvent(kind="finish", finish_reason="stop")
 
 
-def _router(sop, runtime, context, conversation_language=None, **router_options):
+def _router(sop, runtime, context, conversation_language=None, *, scoped_instances=None, **router_options):
     language = conversation_language or _ConversationLanguage()
     conversation = Conversation(
         language,
@@ -184,14 +187,47 @@ def _router(sop, runtime, context, conversation_language=None, **router_options)
         runtime=runtime,
         output_topic=VOICE_OUTPUT_TOPIC,
     )
+    created = False
+
+    async def create_sop(participant_id):
+        nonlocal created
+        if not created and participant_id == sop._session.participant_id:
+            scoped_sop = sop
+            created = True
+        else:
+            scoped_sop = SOPAgent(
+                participant_id=participant_id,
+                config=sop.config,
+                llm=sop._llm,
+                decisions=sop._decisions,
+                frames=sop._frames,
+                image_query=sop._image_query,
+                rag=sop._rag,
+                context=context,
+                runtime=runtime,
+            )
+        try:
+            await scoped_sop.initialize()
+        except BaseException:
+            await scoped_sop.close()
+            raise
+        if scoped_instances is not None:
+            scoped_instances.append(scoped_sop)
+        return scoped_sop
+
+    async def close_sop(scoped_sop):
+        await scoped_sop.close()
+
+    async def cleanup_participant(participant_id):
+        await context.clear(participant_id)
+
     router = AgentRouter(
-        {"workflow": sop, "conversation": conversation},
+        {"workflow": ParticipantAgentFactory(create=create_sop, close=close_sop), "conversation": conversation},
         sop._decisions,
         query_topic=USER_QUERY_TOPIC,
         output_topic=VOICE_OUTPUT_TOPIC,
         output=AsyncMock(),
-        initialize_participant=sop.participant_joined,
-        cleanup_participant=sop.participant_left,
+        cleanup_participant=cleanup_participant,
         **router_options,
     )
     runtime.register("routing", router.runtime_subscriber())
@@ -212,8 +248,8 @@ async def test_actual_python_procedure_completes_all_five_steps():
         try:
             result = await router.handle(AgentTurn("p", "start", "start tea making"))
             assert result.text == sop.config.messages["start"]
-            await _until(lambda: sop._sessions["p"].status == "completed")
-            snapshot = sop.context_snapshot("p")
+            await _until(lambda: sop._session.status == "completed")
+            snapshot = sop.context_snapshot()
             assert snapshot["resolved_settings"]["temperature_c"] == 80
             assert snapshot["resolved_settings"]["sources"]["temperature"]["kind"] == "retrieved"
             assert list(snapshot["completed_or_skipped_flows"]) == [
@@ -229,7 +265,7 @@ async def test_actual_python_procedure_completes_all_five_steps():
             assert timer["updated_at_us"] >= timer["started_at_us"]
         finally:
             await router.stop()
-            await sop.stop()
+            await sop.close()
             await conversation.close()
             await context.close()
 
@@ -253,10 +289,10 @@ async def test_questions_reach_sdk_conversation_while_sop_runs_and_stop_is_a_con
         try:
             await router.handle(AgentTurn("p", "start", "start tea making"))
             await asyncio.wait_for(water_started.wait(), 1)
-            procedure = sop._sessions["p"].procedure
+            procedure = sop._session.procedure
             response = await router.handle(AgentTurn("p", "qa", "What tea did we identify?"))
             assert "latest SOP context" in response.text
-            assert sop._sessions["p"].procedure is procedure and not procedure.done()
+            assert sop._session.procedure is procedure and not procedure.done()
             messages = "\n".join(message.content for message in language.messages[-1])
             assert "Northwind White Tea" in messages
             assert '"temperature_c": 80.0' in messages
@@ -264,11 +300,11 @@ async def test_questions_reach_sdk_conversation_while_sop_runs_and_stop_is_a_con
             assert '"kind": "retrieved"' in messages
             await router.handle(AgentTurn("p", "stop", "stop tea making"))
             assert procedure.done()
-            assert sop.context_snapshot("p")["status"] == "stopped"
-            assert sop.context_snapshot("p")["active_flows"] == {}
+            assert sop.context_snapshot()["status"] == "stopped"
+            assert sop.context_snapshot()["active_flows"] == {}
         finally:
             await router.stop()
-            await sop.stop()
+            await sop.close()
             await conversation.close()
             await context.close()
 
@@ -316,7 +352,7 @@ async def test_skip_retains_partial_settings_and_defaults_only_missing_fields():
             await asyncio.wait_for(fallback_started.wait(), 1)
             await router.handle(AgentTurn("p", "skip", "skip"))
             await asyncio.wait_for(water_started.wait(), 1)
-            snapshot = sop.context_snapshot("p")
+            snapshot = sop.context_snapshot()
             assert snapshot["current_step"] == "fill_water"
             assert snapshot["resolved_settings"]["temperature_c"] == 80
             assert snapshot["resolved_settings"]["duration_seconds"] == 180
@@ -325,7 +361,7 @@ async def test_skip_retains_partial_settings_and_defaults_only_missing_fields():
             assert snapshot["completed_or_skipped_flows"]["identify"]["outcome"] == "skipped"
         finally:
             await router.stop()
-            await sop.stop()
+            await sop.close()
             await conversation.close()
             await context.close()
 
@@ -338,19 +374,19 @@ async def test_manual_next_cannot_bypass_incomplete_step():
     async with runtime:
         try:
             await router.handle(AgentTurn("p", "start", "start tea making"))
-            await _until(lambda: sop._sessions["p"].ready)
-            assert sop.context_snapshot("p")["current_step"] == "identify"
+            await _until(lambda: sop._session.ready)
+            assert sop.context_snapshot()["current_step"] == "identify"
             await router.handle(AgentTurn("p", "next", "next step"))
-            await _until(lambda: sop.context_snapshot("p")["current_step"] == "fill_water")
+            await _until(lambda: sop.context_snapshot()["current_step"] == "fill_water")
             # Block this step before it can become ready; a query never skips it.
-            session = sop._sessions["p"]
+            session = sop._session
             if not session.ready:
                 response = await router.handle(AgentTurn("p", "early-next", "next step"))
                 assert response.text == sop.config.messages["not_ready"]
             assert session.status == "running"
         finally:
             await router.stop()
-            await sop.stop()
+            await sop.close()
             await conversation.close()
             await context.close()
 
@@ -373,10 +409,10 @@ async def test_informational_negated_and_reported_controls_are_questions(query_t
         try:
             await router.handle(AgentTurn("p", "question", query_text))
             assert language.messages
-            assert sop.context_snapshot("p")["status"] == "idle"
+            assert sop.context_snapshot()["status"] == "idle"
         finally:
             await router.stop()
-            await sop.stop()
+            await sop.close()
             await conversation.close()
             await context.close()
 
@@ -389,8 +425,8 @@ async def test_scoped_parallel_flow_keeps_its_own_state_across_foreground_steps(
     async with runtime:
         try:
             await router.handle(AgentTurn("p", "start", "start tea making"))
-            await _until(lambda: sop._sessions["p"].ready)
-            session = sop._sessions["p"]
+            await _until(lambda: sop._session.ready)
+            session = sop._session
             async with asyncio.TaskGroup() as tasks:
                 spanning_record = sop._launch_flow(
                     session,
@@ -403,20 +439,18 @@ async def test_scoped_parallel_flow_keeps_its_own_state_across_foreground_steps(
                     task_group=tasks,
                 )
                 spanning_flow = spanning_record.task
-                await _until(lambda: "spanning_timer" in sop.context_snapshot("p")["active_flows"])
+                await _until(lambda: "spanning_timer" in sop.context_snapshot()["active_flows"])
                 await router.handle(AgentTurn("p", "next", "next step"))
-                await _until(
-                    lambda: sop._sessions["p"].ready and sop.context_snapshot("p")["current_step"] == "fill_water"
-                )
+                await _until(lambda: sop._session.ready and sop.context_snapshot()["current_step"] == "fill_water")
                 await router.handle(AgentTurn("p", "next2", "next step"))
-                await _until(lambda: sop.context_snapshot("p")["current_step"] == "heat_water")
-                assert "spanning_timer" in sop.context_snapshot("p")["active_flows"]
+                await _until(lambda: sop.context_snapshot()["current_step"] == "heat_water")
+                assert "spanning_timer" in sop.context_snapshot()["active_flows"]
                 await router.handle(AgentTurn("p", "stop", "stop tea making"))
                 assert spanning_flow.done()
-            assert sop.context_snapshot("p")["active_flows"] == {}
+            assert sop.context_snapshot()["active_flows"] == {}
         finally:
             await router.stop()
-            await sop.stop()
+            await sop.close()
             await conversation.close()
             await context.close()
 
@@ -457,32 +491,55 @@ async def test_runtime_departure_drains_work_before_releasing_frames_and_readmit
         instructions=sop.config.conversation_instructions,
     )
     released_participants = []
+    instances = []
+
+    async def create_sop(participant_id):
+        scoped_sop = (
+            sop
+            if not instances
+            else SOPAgent(
+                participant_id=participant_id,
+                config=sop.config,
+                llm=sop._llm,
+                decisions=sop._decisions,
+                frames=frames,
+                image_query=sop._image_query,
+                rag=sop._rag,
+                context=context,
+                runtime=runtime,
+            )
+        )
+        instances.append(scoped_sop)
+        await scoped_sop.initialize()
+        return scoped_sop
+
+    async def close_sop(scoped_sop):
+        await scoped_sop.close()
 
     async def cleanup_participant(participant_id):
-        await sop.participant_left(participant_id)
+        await context.clear(participant_id)
         frames.release(participant_id)
         released_participants.append(participant_id)
 
     router = AgentRouter(
-        {"workflow": sop, "conversation": conversation},
+        {"workflow": ParticipantAgentFactory(create=create_sop, close=close_sop), "conversation": conversation},
         sop._decisions,
         query_topic=USER_QUERY_TOPIC,
         output_topic=VOICE_OUTPUT_TOPIC,
         participant_joined_topic=PARTICIPANT_JOINED_TOPIC,
         participant_left_topic=PARTICIPANT_LEFT_TOPIC,
-        initialize_participant=sop.participant_joined,
         cleanup_participant=cleanup_participant,
     )
     runtime.register("routing", router.runtime_subscriber())
     async with runtime:
         try:
             await runtime.publish(PARTICIPANT_JOINED_TOPIC, ParticipantJoined(), participant_id="p")
-            await _until(lambda: "p" in sop._sessions)
+            await _until(lambda: len(instances) == 1)
             await runtime.publish(
                 USER_QUERY_TOPIC, UserQuery(text="start tea making", timestamp_us=100), participant_id="p"
             )
             await asyncio.wait_for(inference_started.wait(), 1)
-            old_session = sop._sessions["p"]
+            old_session = sop._session
             leave_task = asyncio.create_task(
                 runtime.publish(
                     PARTICIPANT_LEFT_TOPIC,
@@ -508,9 +565,11 @@ async def test_runtime_departure_drains_work_before_releasing_frames_and_readmit
             )
             backend_released.set()
             await asyncio.wait_for(asyncio.gather(leave_task, rejoin_task), 1)
-            await _until(lambda: "p" in sop._sessions and sop._sessions["p"] is not old_session)
-            assert sop.context_snapshot("p")["status"] == "idle"
-            assert sop.context_snapshot("p")["active_flows"] == {}
+            await _until(lambda: len(instances) == 2)
+            assert instances[1] is not instances[0]
+            assert instances[1].context_snapshot()["status"] == "idle"
+            assert instances[1].context_snapshot()["active_flows"] == {}
+            assert not instances[0]._session.connected
             assert released_participants == ["p"]
             assert len(registry) == 0
             new_image = registry.put(b"new session image", owner="p")
@@ -519,7 +578,7 @@ async def test_runtime_departure_drains_work_before_releasing_frames_and_readmit
         finally:
             backend_released.set()
             await router.stop()
-            await sop.stop()
+            await sop.close()
             await conversation.close()
             await context.close()
 
@@ -556,13 +615,13 @@ async def test_superseding_stop_acknowledgment_does_not_abandon_committed_stop()
                 1,
             )
             assert isinstance(results[0], asyncio.CancelledError)
-            assert sop.context_snapshot("p")["status"] == "stopped"
-            assert sop.context_snapshot("p")["active_flows"] == {}
+            assert sop.context_snapshot()["status"] == "stopped"
+            assert sop.context_snapshot()["active_flows"] == {}
             assert language.messages
         finally:
             backend_released.set()
             await router.stop()
-            await sop.stop()
+            await sop.close()
             await conversation.close()
             await context.close()
 
@@ -619,17 +678,17 @@ async def test_delayed_controls_bind_step_or_run_as_appropriate(control):
             result = await asyncio.wait_for(control_task, 1)
             if control == "skip":
                 assert result.text == sop.config.messages["changed"]
-                assert sop.context_snapshot("p")["current_step"] == "heat_water"
-                assert sop.context_snapshot("p")["status"] == "running"
+                assert sop.context_snapshot()["current_step"] == "heat_water"
+                assert sop.context_snapshot()["status"] == "running"
             else:
                 assert result.text == sop.config.messages["stop"]
-                assert sop.context_snapshot("p")["status"] == "stopped"
+                assert sop.context_snapshot()["status"] == "stopped"
         finally:
             water_released.set()
             heat_released.set()
             classification_released.set()
             await router.stop()
-            await sop.stop()
+            await sop.close()
             await conversation.close()
             await context.close()
 
@@ -678,7 +737,7 @@ async def test_sdk_conversation_receives_full_recent_flow_context_not_only_a_com
             assert len(messages.encode()) < 64000
         finally:
             await router.stop()
-            await sop.stop()
+            await sop.close()
             await conversation.close()
             await context.close()
 
@@ -703,14 +762,14 @@ async def test_skipping_unconfirmed_tea_contact_does_not_start_a_timer():
             await router.handle(AgentTurn("p", "start", "start tea making"))
             await asyncio.wait_for(contact_started.wait(), 1)
             await router.handle(AgentTurn("p", "skip", "skip"))
-            await _until(lambda: sop.context_snapshot("p")["status"] == "completed")
-            snapshot = sop.context_snapshot("p")
+            await _until(lambda: sop.context_snapshot()["status"] == "completed")
+            snapshot = sop.context_snapshot()
             assert snapshot["flow_outcomes"]["start_steeping"] == "skipped"
             assert snapshot["flow_outcomes"]["steep_timer"] == "skipped"
-            assert sop._sessions["p"].flows["steep_timer"].state is None
+            assert sop._session.flows["steep_timer"].state is None
         finally:
             await router.stop()
-            await sop.stop()
+            await sop.close()
             await conversation.close()
             await context.close()
 
@@ -745,7 +804,7 @@ async def test_stopping_runner_drains_every_parallel_child_before_returning():
         try:
             await router.handle(AgentTurn("p", "start", "start tea making"))
             await asyncio.wait_for(water_started.wait(), 1)
-            session = sop._sessions["p"]
+            session = sop._session
             children = [
                 sop._launch_flow(
                     session,
@@ -770,7 +829,7 @@ async def test_stopping_runner_drains_every_parallel_child_before_returning():
         finally:
             release_children.set()
             await router.stop()
-            await sop.stop()
+            await sop.close()
             await conversation.close()
             await context.close()
 
@@ -791,14 +850,14 @@ async def test_type_only_identity_labels_runner_context_without_a_missing_name()
         try:
             await router.handle(AgentTurn("p", "start", "start tea making"))
             await asyncio.wait_for(water_started.wait(), 1)
-            snapshot = sop.context_snapshot("p")
+            snapshot = sop.context_snapshot()
             assert snapshot["resolved_settings"]["tea_name"] == "white tea"
             assert snapshot["current_step"] == "fill_water"
             query = sop._rag.retrieve.execute.await_args.args[0].query
             assert query == "white tea " + sop.config.retrieval_query_suffix
         finally:
             await router.stop()
-            await sop.stop()
+            await sop.close()
             await conversation.close()
             await context.close()
 
@@ -828,7 +887,7 @@ async def test_conversation_context_exposes_only_entered_steps_and_established_s
     async with runtime:
         try:
             messages = await ask("What can you do?", "capabilities")
-            assert sop.context_snapshot("p") == {
+            assert sop.context_snapshot() == {
                 "status": "idle",
                 "active_flows": {},
                 "historical_previous_run": None,
@@ -840,7 +899,7 @@ async def test_conversation_context_exposes_only_entered_steps_and_established_s
             await router.handle(AgentTurn("p", "start", "start tea making"))
             await asyncio.wait_for(identification_started.wait(), 1)
             messages = await ask("What are we doing?", "identifying")
-            snapshot = sop.context_snapshot("p")
+            snapshot = sop.context_snapshot()
             assert list(snapshot["entered_step_instructions"]) == ["identify"]
             assert "resolved_settings" not in snapshot
             assert "Hold the tea package" in messages
@@ -849,18 +908,18 @@ async def test_conversation_context_exposes_only_entered_steps_and_established_s
             release_identification.set()
             await asyncio.wait_for(water_started.wait(), 1)
             messages = await ask("What is the current step?", "water")
-            snapshot = sop.context_snapshot("p")
+            snapshot = sop.context_snapshot()
             assert list(snapshot["entered_step_instructions"]) == ["identify", "fill_water"]
             assert snapshot["resolved_settings"]["temperature_c"] == 80
             assert "Northwind White Tea" in messages and "Fill a kettle" in messages
             assert "Heat the water" not in messages and "Steep for" not in messages
 
             await router.handle(AgentTurn("p", "stop", "stop tea making"))
-            snapshot = sop.context_snapshot("p")
+            snapshot = sop.context_snapshot()
             assert snapshot["status"] == "stopped" and snapshot["active_flows"] == {}
             await router.handle(AgentTurn("p", "reset", "reset"))
             messages = await ask("Is guidance running?", "after-reset")
-            snapshot = sop.context_snapshot("p")
+            snapshot = sop.context_snapshot()
             assert snapshot["status"] == "idle" and snapshot["active_flows"] == {}
             assert "resolved_settings" not in snapshot and "entered_step_instructions" not in snapshot
             assert snapshot["historical_previous_run"]["status"] == "stopped"
@@ -868,7 +927,7 @@ async def test_conversation_context_exposes_only_entered_steps_and_established_s
         finally:
             release_identification.set()
             await router.stop()
-            await sop.stop()
+            await sop.close()
             await conversation.close()
             await context.close()
 
@@ -896,8 +955,8 @@ async def test_consecutive_timer_questions_receive_fresh_native_samples_and_life
     router, conversation, language = _router(sop, runtime, context, participant_joined_topic=PARTICIPANT_JOINED_TOPIC)
     async with runtime:
         try:
-            await sop.participant_joined("p")
-            session = sop._sessions["p"]
+            await sop.initialize()
+            session = sop._session
             session.status = "running"
             session.run_id = "timer-regression"
             session.step_index = 4
@@ -936,8 +995,8 @@ async def test_consecutive_timer_questions_receive_fresh_native_samples_and_life
             await router.handle(AgentTurn("p", "stop-timer", "stop tea making"))
             assert timer.done()
             await router.handle(AgentTurn("p", "reset-timer", "reset"))
-            assert sop.context_snapshot("p")["active_flows"] == {}
-            assert sop.context_snapshot("p")["historical_previous_run"]["run_id"] == "timer-regression"
+            assert sop.context_snapshot()["active_flows"] == {}
+            assert sop.context_snapshot()["historical_previous_run"]["run_id"] == "timer-regression"
             await router.participant_left("p")
             await runtime.publish(PARTICIPANT_JOINED_TOPIC, ParticipantJoined(), participant_id="p")
             await router.handle(AgentTurn("p", "fresh-session", "What can you do?"))
@@ -945,7 +1004,7 @@ async def test_consecutive_timer_questions_receive_fresh_native_samples_and_life
             assert "103 seconds remaining" not in messages and "timer-regression" not in messages
         finally:
             await router.stop()
-            await sop.stop()
+            await sop.close()
             await conversation.close()
             await context.close()
 
@@ -961,20 +1020,20 @@ async def test_public_router_can_start_after_reset_and_after_each_completed_proc
             for number in range(3):
                 response = await router.handle(AgentTurn("p", f"start-{number}", "start tea making"))
                 assert response.text == sop.config.messages["start"]
-                await _until(lambda: sop.context_snapshot("p")["status"] == "completed")
-                session = sop._sessions["p"]
+                await _until(lambda: sop.context_snapshot()["status"] == "completed")
+                session = sop._session
                 run_ids.append(session.run_id)
                 await _until(lambda: session.procedure.done())
                 assert all(record.task is None for record in session.flows.values())
                 if number == 0:
                     response = await router.handle(AgentTurn("p", "reset-between", "reset"))
                     assert response.text == sop.config.messages["reset"]
-                    assert sop.context_snapshot("p")["status"] == "idle"
+                    assert sop.context_snapshot()["status"] == "idle"
             assert len(set(run_ids)) == 3
-            assert sop.context_snapshot("p")["historical_previous_run"]["run_id"] == run_ids[-2]
+            assert sop.context_snapshot()["historical_previous_run"]["run_id"] == run_ids[-2]
         finally:
             await router.stop()
-            await sop.stop()
+            await sop.close()
             await conversation.close()
             await context.close()
 
@@ -1009,8 +1068,8 @@ async def test_start_queued_during_active_reset_waits_for_old_inference_cleanup(
         try:
             await router.handle(AgentTurn("p", "start-old", "start tea making"))
             await asyncio.wait_for(first_water.wait(), 1)
-            old_run = sop._sessions["p"].run_id
-            old_procedure = sop._sessions["p"].procedure
+            old_run = sop._session.run_id
+            old_procedure = sop._session.procedure
             resetting = asyncio.create_task(router.handle(AgentTurn("p", "reset-active", "reset")))
             await asyncio.wait_for(cancellation_seen.wait(), 1)
             restarting = asyncio.create_task(router.handle(AgentTurn("p", "start-new", "start tea making")))
@@ -1019,12 +1078,12 @@ async def test_start_queued_during_active_reset_waits_for_old_inference_cleanup(
             response = await asyncio.wait_for(restarting, 1)
             await asyncio.wait_for(second_water.wait(), 1)
             assert response.text == sop.config.messages["start"]
-            assert old_procedure.done() and sop._sessions["p"].run_id != old_run
-            assert "A late old-run observation." not in json.dumps(sop.context_snapshot("p"))
+            assert old_procedure.done() and sop._session.run_id != old_run
+            assert "A late old-run observation." not in json.dumps(sop.context_snapshot())
         finally:
             release_old_inference.set()
             await router.stop()
-            await sop.stop()
+            await sop.close()
             await conversation.close()
             await context.close()
 
@@ -1079,7 +1138,7 @@ async def test_unresolved_identification_notifies_once_without_defaults_or_wordi
             assert "skip" in pending_notices[0] and "Show the tea type" in pending_notices[0]
             assert language.chat.await_count == 2
             sop._rag.retrieve.execute.assert_awaited_once()
-            state = sop.context_snapshot("p")
+            state = sop.context_snapshot()
             assert "resolved_settings" not in state
             assert state["active_flows"]["identify"]["visual_data"]["tea_name"] == "Moon Orchard"
             assert state["active_flows"]["identify"]["resolved_data"]["temperature"] is None
@@ -1093,7 +1152,7 @@ async def test_unresolved_identification_notifies_once_without_defaults_or_wordi
             assert len([text for text in notices if text.startswith("I can read")]) == 2
         finally:
             await router.stop()
-            await sop.stop()
+            await sop.close()
             await conversation.close()
             await context.close()
 
@@ -1117,18 +1176,18 @@ async def test_explicit_restart_launches_new_first_inference_while_start_keeps_a
         try:
             await router.handle(AgentTurn("p", "first", "let's make tea"))
             await _until(lambda: len(first_inferences) == 1)
-            old_run = sop._sessions["p"].run_id
-            old_procedure = sop._sessions["p"].procedure
+            old_run = sop._session.run_id
+            old_procedure = sop._session.procedure
             await router.handle(AgentTurn("p", "restart-first", "restart tea making"))
             await _until(lambda: len(first_inferences) == 2)
-            new_run = sop._sessions["p"].run_id
+            new_run = sop._session.run_id
             assert old_procedure.done() and new_run != old_run
             response = await router.handle(AgentTurn("p", "already-active", "let's make tea"))
             assert response.text == sop.config.messages["already_running"]
-            assert sop._sessions["p"].run_id == new_run and len(first_inferences) == 2
+            assert sop._session.run_id == new_run and len(first_inferences) == 2
         finally:
             await router.stop()
-            await sop.stop()
+            await sop.close()
             await conversation.close()
             await context.close()
 
@@ -1154,8 +1213,8 @@ async def test_reset_then_no_tea_starts_without_previous_identity_settings_or_ra
         try:
             await router.handle(AgentTurn("p", "identified-run", "start tea making"))
             await asyncio.wait_for(previous_step_started.wait(), 1)
-            previous_run = sop._sessions["p"].run_id
-            previous_procedure = sop._sessions["p"].procedure
+            previous_run = sop._session.run_id
+            previous_procedure = sop._session.procedure
             sop._rag.retrieve.execute.assert_awaited_once()
             sop._llm.chat.assert_awaited_once()
 
@@ -1163,8 +1222,8 @@ async def test_reset_then_no_tea_starts_without_previous_identity_settings_or_ra
             show_tea = False
             await router.handle(AgentTurn("p", "no-tea-run", "start tea making"))
             await asyncio.wait_for(no_tea_seen.wait(), 1)
-            await _until(lambda: bool(sop.context_snapshot("p")["active_flows"]["identify"]["observations"]))
-            snapshot = sop.context_snapshot("p")
+            await _until(lambda: bool(sop.context_snapshot()["active_flows"]["identify"]["observations"]))
+            snapshot = sop.context_snapshot()
             current = snapshot["active_flows"]["identify"]
             assert snapshot["run_id"] != previous_run and previous_procedure.done()
             assert current["visual_data"] is None
@@ -1176,7 +1235,7 @@ async def test_reset_then_no_tea_starts_without_previous_identity_settings_or_ra
             assert snapshot["historical_previous_run"]["run_id"] == previous_run
         finally:
             await router.stop()
-            await sop.stop()
+            await sop.close()
             await conversation.close()
             await context.close()
 
@@ -1186,8 +1245,8 @@ async def test_step_entry_failure_does_not_construct_flow(monkeypatch):
     """Failed entry side effects cannot leave an unawaited flow coroutine."""
     sop, runtime, context = _runner()
     await runtime.start()
-    await sop.participant_joined("p")
-    session = sop._sessions["p"]
+    await sop.initialize()
+    session = sop._session
     session.status = "running"
     session.run_id = "entry-failure"
     factory = Mock(side_effect=AssertionError("flow must remain lazy"))
@@ -1198,7 +1257,7 @@ async def test_step_entry_failure_does_not_construct_flow(monkeypatch):
         factory.assert_not_called()
         assert session.flows["identify"].task is None
     finally:
-        await sop.stop()
+        await sop.close()
         await runtime.stop()
         await context.close()
 
@@ -1215,8 +1274,8 @@ async def test_old_flow_callback_cannot_replace_new_execution_state():
 
     sop, runtime, context = _runner()
     await runtime.start()
-    await sop.participant_joined("p")
-    session = sop._sessions["p"]
+    await sop.initialize()
+    session = sop._session
     session.status = "running"
     session.run_id = "same-run"
     callbacks = []
@@ -1242,7 +1301,7 @@ async def test_old_flow_callback_cannot_replace_new_execution_state():
     finally:
         release_replacement.set()
         await replacement_record.task
-        await sop.stop()
+        await sop.close()
         await runtime.stop()
         await context.close()
 
@@ -1276,14 +1335,14 @@ async def test_required_parallel_failure_reaches_procedure_supervisor(monkeypatc
     async with runtime:
         try:
             await router.handle(AgentTurn("p", "start", "start tea making"))
-            await _until(lambda: sop._sessions["p"].status == "failed")
+            await _until(lambda: sop._session.status == "failed")
             await asyncio.wait_for(sibling_cancelled.wait(), 1)
-            await sop._sessions["p"].procedure
-            assert all(record.task is None for record in sop._sessions["p"].flows.values())
-            assert "TaskGroup" in sop._sessions["p"].issue
+            await sop._session.procedure
+            assert all(record.task is None for record in sop._session.flows.values())
+            assert "TaskGroup" in sop._session.issue
         finally:
             await router.stop()
-            await sop.stop()
+            await sop.close()
             await conversation.close()
             await context.close()
 
@@ -1315,7 +1374,7 @@ async def test_repeated_procedure_cancellation_drains_child_cleanup(monkeypatch)
         try:
             await router.handle(AgentTurn("p", "start", "start tea making"))
             await asyncio.wait_for(child_started.wait(), 1)
-            session = sop._sessions["p"]
+            session = sop._session
             procedure_task = session.procedure
             record = session.flows["identify"]
             procedure_task.cancel()
@@ -1332,7 +1391,7 @@ async def test_repeated_procedure_cancellation_drains_child_cleanup(monkeypatch)
         finally:
             finish_cleanup.set()
             await router.stop()
-            await sop.stop()
+            await sop.close()
             await conversation.close()
             await context.close()
 
@@ -1376,15 +1435,142 @@ async def test_control_during_step_entry_never_constructs_abandoned_flow(monkeyp
             release_entry.set()
             if operation == "skip":
                 await asyncio.wait_for(next_started.wait(), 1)
-                assert sop._sessions["p"].flows["identify"].status == "skipped"
-                assert sop.context_snapshot("p")["current_step"] == "fill_water"
+                assert sop._session.flows["identify"].status == "skipped"
+                assert sop.context_snapshot()["current_step"] == "fill_water"
             else:
-                assert sop.context_snapshot("p")["status"] == "idle"
+                assert sop.context_snapshot()["status"] == "idle"
                 assert not next_started.is_set()
             first_factory.assert_not_called()
         finally:
             release_entry.set()
             await router.stop()
-            await sop.stop()
+            await sop.close()
             await conversation.close()
+            await context.close()
+
+
+@pytest.mark.asyncio
+async def test_scoped_sop_instances_isolate_runs_and_keep_shared_clients_open(monkeypatch):
+    """Leaving one participant drains only its runner, including never-routed joins."""
+    from tea_making_worker.application.tea_events import PARTICIPANT_JOINED_TOPIC
+    from xr_ai_interaction import ParticipantJoined
+
+    template, runtime, context = _runner()
+    instances = []
+    records = []
+
+    class Capture(Agent):
+        @subscribe(GUIDANCE_RECORD_TOPIC)
+        async def record(self, message: GuidanceRecord, delivery: RuntimeContext):
+            records.append((delivery.metadata.participant_id, message.run_id))
+
+    runtime.register("scoped-records", Capture())
+    template._llm.close = AsyncMock()
+    template._decisions.close = AsyncMock()
+    template._rag.close = AsyncMock()
+    template._image_query.close = AsyncMock()
+
+    async def procedure(sop, session):
+        await sop._run_step(
+            session,
+            4,
+            lambda on_state: run_timer_flow(
+                duration_seconds=100,
+                update_interval_seconds=100,
+                on_state=on_state,
+            ),
+        )
+
+    monkeypatch.setattr(SOPAgent, "_procedure", procedure)
+    router, conversation, language = _router(
+        template,
+        runtime,
+        context,
+        scoped_instances=instances,
+        participant_joined_topic=PARTICIPANT_JOINED_TOPIC,
+    )
+    async with runtime:
+        try:
+            for participant in ("p", "q", "joined-only"):
+                await runtime.publish(PARTICIPANT_JOINED_TOPIC, ParticipantJoined(), participant_id=participant)
+            await _until(lambda: len(instances) == 3)
+            first, second, joined_only = instances
+            assert len({id(instance) for instance in instances}) == 3
+            for instance in instances:
+                assert instance._llm is template._llm
+                assert instance._decisions is template._decisions
+                assert instance._frames is template._frames
+                assert instance._image_query is template._image_query
+                assert instance._rag is template._rag
+            await router.handle(AgentTurn("p", "start-p", "start tea making"))
+            await router.handle(AgentTurn("q", "start-q", "start tea making"))
+            await _until(
+                lambda: all(
+                    "steep_timer" in instance.context_snapshot()["active_flows"] for instance in (first, second)
+                )
+            )
+            assert first._session.run_id != second._session.run_id
+            assert ("p", first._session.run_id) in records
+            assert ("q", second._session.run_id) in records
+            second_task = second._session.flows["steep_timer"].task
+            first_record = first._session.flows["steep_timer"]
+            first_state = first_record.state
+            await router.participant_left("p")
+            assert not first._session.connected and first_record.task is None
+            assert not second_task.done() and second._session.connected
+            assert second.context_snapshot()["status"] == "running"
+            await router.handle(AgentTurn("q", "question-q", "What is the current step?"))
+            current_messages = "\n".join(message.content for message in language.messages[-1])
+            assert second._session.run_id in current_messages
+            assert first._session.run_id not in current_messages
+            await first._flow_state(
+                first._session, "steep_timer", first_record, replace(first_state, remaining_seconds=1)
+            )
+            assert first_record.state is first_state
+            await router.participant_left("joined-only")
+            assert not joined_only._session.connected and joined_only._session.procedure is None
+            await runtime.publish(PARTICIPANT_JOINED_TOPIC, ParticipantJoined(), participant_id="p")
+            await _until(lambda: len(instances) == 4)
+            replacement = instances[-1]
+            assert replacement is not first and replacement.context_snapshot()["status"] == "idle"
+            assert replacement._session.flows == {}
+            await first._flow_state(
+                first._session, "steep_timer", first_record, replace(first_state, remaining_seconds=2)
+            )
+            assert replacement.context_snapshot()["active_flows"] == {}
+            assert not second_task.done()
+            for client in (template._llm, template._decisions, template._rag, template._image_query):
+                client.close.assert_not_called()
+        finally:
+            await router.stop()
+            await conversation.close()
+            await context.close()
+
+
+@pytest.mark.asyncio
+async def test_bound_sop_rejects_other_participants_and_cannot_reopen_after_close():
+    """Direct callers cannot bypass the instance's participant or lifetime boundary."""
+    sop, runtime, context = _runner()
+    async with runtime:
+        try:
+            await sop.initialize()
+            snapshot = sop.context_snapshot()
+            with pytest.raises(ValueError, match="participant does not match"):
+                sop.routing_aid("other")
+            with pytest.raises(ValueError, match="participant does not match"):
+                await sop.release("other")
+            admission = await sop.admit(AgentTurn("other", "wrong-admit", "start tea making"), focused=False)
+            assert admission.disposition == "decline"
+            started = AsyncMock()
+            await sop.answer(AgentTurn("other", "wrong-answer", "start tea making"), started=started)
+            started.assert_not_awaited()
+            assert sop.context_snapshot() == snapshot
+            await sop.close()
+            with pytest.raises(RuntimeError, match="closed SOP instance"):
+                await sop.initialize()
+            admission = await sop.admit(AgentTurn("p", "late", "start tea making"), focused=False)
+            assert admission.disposition == "decline"
+            assert not sop._session.connected and sop._session.procedure is None
+        finally:
+            await sop.close()
             await context.close()
