@@ -1,0 +1,9 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+title: Routed question, first destination declines
+description: The first destination declines and the router decides again before an answer starts.
+stages:
+  - {kind: endpoint, name: End of speech to final transcript}
+  - {kind: route, name: Router (misroute caught), path: misroute_declined_once, history_bytes: 12000, admit_ms: 150}
+  - {kind: speak, name: LLM to first audio, prompt_tokens: 4000, cached: true, out_tokens: 80, first_sentence_tokens: 20, strategy: sentence, playback_ms: 140}

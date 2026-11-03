@@ -1,0 +1,10 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+title: Look at the scene and answer
+description: Single-candidate routing, one frame to the VLM, and a streamed spoken answer.
+stages:
+  - {kind: endpoint, name: End of speech to final transcript}
+  - {kind: route, name: Router, path: single_candidate}
+  - {kind: fixed, name: Frame fetch and JPEG encode, p50: 40, p90: 80, basis: assumed}
+  - {kind: vlm_speak, name: VLM stream to first audio, res: 1280x720, images: 1, out_tokens: 40, first_sentence_tokens: 20, playback_ms: 140}
