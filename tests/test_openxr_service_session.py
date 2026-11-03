@@ -145,3 +145,30 @@ def test_pose_source_reports_unavailable_until_a_headset_connects(load_session):
         "open_attempts": 2,
         "last_open_error": "_FormFactorUnavailableError: no headset",
     }
+
+
+@pytest.mark.parametrize("flags", [0, 1, 2, 3])
+def test_hardware_pose_source_converts_located_head_to_wire_pose(load_session, flags):
+    xr = _fake_xr([], location_flags=flags)
+    pose = SimpleNamespace(
+        position=SimpleNamespace(x=1.0, y=1.7, z=-2.0),
+        orientation=SimpleNamespace(x=0.0, y=0.0, z=0.0, w=1.0),
+    )
+    xr.Posef = lambda: SimpleNamespace(
+        position=SimpleNamespace(x=0.0, y=0.0, z=0.0),
+        orientation=SimpleNamespace(x=0.0, y=0.0, z=0.0, w=1.0),
+    )
+    xr.locate_space = lambda *_: SimpleNamespace(location_flags=flags, pose=pose)
+    module = load_session(xr)
+    source = module.HardwarePoseSource()
+
+    try:
+        result = source.get_pose()
+    finally:
+        source.close()
+
+    assert result["is_valid"] is (flags == 3)
+    assert result["position"] == (
+        {"x": 1.0, "y": 1.7, "z": -2.0} if flags == 3 else {"x": 0.0, "y": 0.0, "z": 0.0}
+    )
+    assert result["forward"] == {"x": 0.0, "y": 0.0, "z": -1.0}
