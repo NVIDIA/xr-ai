@@ -164,7 +164,7 @@ review notes; it does not make the guide tool incapable of checking the result.
 This includes an explicitly instructed count or orientation: absent visual
 corroboration is not an unresolved instruction. Decide from the required result.
 For example, an explicit placement instruction with an unavailable saved image
-can still have a `current_view` placement check with `^ready$` evidence.
+can still have a `current_view` placement check with `(?i)^ready$` evidence.
 
 Reserve a blocked step for an unresolved required condition or an unsupported
 verification, such as proving past ordering or a hidden fit from one image.
