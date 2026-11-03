@@ -101,6 +101,13 @@ several steps keeps its own active label until its Python scope ends. Completed,
 skipped and previous-run data are labeled separately from active evidence. Flows
 do not import conversation, recording, the runner or application configuration.
 
+Each runner-owned flow has one private record containing its task, latest state
+and outcome. The runner registers that execution before its state callback can
+run; callbacks report only to their original record and run. Step functions are
+constructed lazily after entry publication succeeds. Parallel flows use the same
+explicit launch boundary and belong to their caller's Python task scope, so a
+required sibling failure propagates normally rather than being hidden by cleanup.
+
 ## Sample-local APIs and prompt ownership
 
 Import `SOPAgent` from `tea_making_worker.application.tea_sop_agent`,

@@ -8,7 +8,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from functools import partial
 from pathlib import Path
 from types import SimpleNamespace
@@ -392,13 +392,17 @@ async def test_scoped_parallel_flow_keeps_its_own_state_across_foreground_steps(
             await _until(lambda: sop._sessions["p"].ready)
             session = sop._sessions["p"]
             async with asyncio.TaskGroup() as tasks:
-                spanning_flow = tasks.create_task(
-                    run_timer_flow(
+                spanning_record = sop._launch_flow(
+                    session,
+                    "spanning_timer",
+                    lambda on_state: run_timer_flow(
                         duration_seconds=100,
                         update_interval_seconds=100,
-                        on_state=partial(sop._flow_state, session, session.run_id, "spanning_timer"),
-                    )
+                        on_state=on_state,
+                    ),
+                    task_group=tasks,
                 )
+                spanning_flow = spanning_record.task
                 await _until(lambda: "spanning_timer" in sop.context_snapshot("p")["active_flows"])
                 await router.handle(AgentTurn("p", "next", "next step"))
                 await _until(
@@ -488,6 +492,9 @@ async def test_runtime_departure_drains_work_before_releasing_frames_and_readmit
                 context=nemo_relay.fork_asyncio_context(),
             )
             await asyncio.wait_for(cancellation_seen.wait(), 1)
+            old_session.procedure.cancel()
+            await asyncio.sleep(0)
+            assert old_session.flows["fill_water"].task.cancelling() == 1
             assert not leave_task.done()
             assert released_participants == []
             assert len(registry) == 1
@@ -508,7 +515,7 @@ async def test_runtime_departure_drains_work_before_releasing_frames_and_readmit
             assert len(registry) == 0
             new_image = registry.put(b"new session image", owner="p")
             assert registry.resolve(new_image) == b"new session image"
-            assert not old_session.active_tasks
+            assert all(record.task is None for record in old_session.flows.values())
         finally:
             backend_released.set()
             await router.stop()
@@ -700,7 +707,7 @@ async def test_skipping_unconfirmed_tea_contact_does_not_start_a_timer():
             snapshot = sop.context_snapshot("p")
             assert snapshot["flow_outcomes"]["start_steeping"] == "skipped"
             assert snapshot["flow_outcomes"]["steep_timer"] == "skipped"
-            assert "steep_timer" not in sop._sessions["p"].flow_states
+            assert sop._sessions["p"].flows["steep_timer"].state is None
         finally:
             await router.stop()
             await sop.stop()
@@ -724,9 +731,8 @@ async def test_stopping_runner_drains_every_parallel_child_before_returning():
     child_cancelled = [asyncio.Event(), asyncio.Event()]
     release_children = asyncio.Event()
 
-    async def receive(index, state):
-        session = sop._sessions["p"]
-        await sop._flow_state(session, session.run_id, f"parallel-{index}", state)
+    async def receive(index, on_state, state):
+        await on_state(state)
         child_started[index].set()
         try:
             await asyncio.Event().wait()
@@ -741,13 +747,15 @@ async def test_stopping_runner_drains_every_parallel_child_before_returning():
             await asyncio.wait_for(water_started.wait(), 1)
             session = sop._sessions["p"]
             children = [
-                asyncio.create_task(
-                    run_timer_flow(
+                sop._launch_flow(
+                    session,
+                    f"parallel-{index}",
+                    lambda on_state, index=index: run_timer_flow(
                         duration_seconds=100,
                         update_interval_seconds=100,
-                        on_state=partial(receive, index),
-                    )
-                )
+                        on_state=partial(receive, index, on_state),
+                    ),
+                ).task
                 for index in range(2)
             ]
             await asyncio.wait_for(asyncio.gather(*(event.wait() for event in child_started)), 1)
@@ -758,7 +766,7 @@ async def test_stopping_runner_drains_every_parallel_child_before_returning():
             release_children.set()
             await asyncio.wait_for(stop_task, 1)
             assert all(task.done() for task in children)
-            assert session.active_tasks == {}
+            assert all(record.task is None for record in session.flows.values())
         finally:
             release_children.set()
             await router.stop()
@@ -893,19 +901,20 @@ async def test_consecutive_timer_questions_receive_fresh_native_samples_and_life
             session.status = "running"
             session.run_id = "timer-regression"
             session.step_index = 4
-            session.flow_statuses["steep_timer"] = "running"
             # Native timer begins at this monotonic origin, then advances under
             # the test clock. The actual callback/SDK context path is unchanged.
-            timer = asyncio.create_task(
-                run_timer_flow(
+            timer_record = sop._launch_flow(
+                session,
+                "steep_timer",
+                lambda on_state: run_timer_flow(
                     duration_seconds=150,
                     update_interval_seconds=0.001,
-                    on_state=partial(sop._flow_state, session, session.run_id, "steep_timer"),
+                    on_state=on_state,
                 ),
-                context=nemo_relay.fork_asyncio_context(),
             )
+            timer = timer_record.task
             session.procedure = timer
-            await _until(lambda: "steep_timer" in session.flow_states)
+            await _until(lambda: timer_record.state is not None)
             for number, (advance, remaining, question) in enumerate(
                 (
                     (47, 103, "How long do I have?"),
@@ -914,7 +923,7 @@ async def test_consecutive_timer_questions_receive_fresh_native_samples_and_life
                 )
             ):
                 elapsed = 47 + advance
-                await _until(lambda: session.flow_states["steep_timer"].remaining_seconds == remaining)
+                await _until(lambda: timer_record.state.remaining_seconds == remaining)
                 language.response = f"{remaining} seconds remaining"
                 response = await router.handle(AgentTurn("p", f"timer-{number}", question))
                 assert response.text == language.response
@@ -956,7 +965,7 @@ async def test_public_router_can_start_after_reset_and_after_each_completed_proc
                 session = sop._sessions["p"]
                 run_ids.append(session.run_id)
                 await _until(lambda: session.procedure.done())
-                assert not session.active_tasks
+                assert all(record.task is None for record in session.flows.values())
                 if number == 0:
                     response = await router.handle(AgentTurn("p", "reset-between", "reset"))
                     assert response.text == sop.config.messages["reset"]
@@ -1166,6 +1175,215 @@ async def test_reset_then_no_tea_starts_without_previous_identity_settings_or_ra
             sop._llm.chat.assert_awaited_once()
             assert snapshot["historical_previous_run"]["run_id"] == previous_run
         finally:
+            await router.stop()
+            await sop.stop()
+            await conversation.close()
+            await context.close()
+
+
+@pytest.mark.asyncio
+async def test_step_entry_failure_does_not_construct_flow(monkeypatch):
+    """Failed entry side effects cannot leave an unawaited flow coroutine."""
+    sop, runtime, context = _runner()
+    await runtime.start()
+    await sop.participant_joined("p")
+    session = sop._sessions["p"]
+    session.status = "running"
+    session.run_id = "entry-failure"
+    factory = Mock(side_effect=AssertionError("flow must remain lazy"))
+    monkeypatch.setattr(sop, "_notice", AsyncMock(side_effect=RuntimeError("notice failed")))
+    try:
+        with pytest.raises(RuntimeError, match="notice failed"):
+            await sop._run_step(session, 0, factory)
+        factory.assert_not_called()
+        assert session.flows["identify"].task is None
+    finally:
+        await sop.stop()
+        await runtime.stop()
+        await context.close()
+
+
+@pytest.mark.asyncio
+async def test_old_flow_callback_cannot_replace_new_execution_state():
+    """A label and run ID do not authorize a callback from a replaced record."""
+
+    @dataclass
+    class State:
+        status: str
+        updated_at_us: int
+        evidence: str
+
+    sop, runtime, context = _runner()
+    await runtime.start()
+    await sop.participant_joined("p")
+    session = sop._sessions["p"]
+    session.status = "running"
+    session.run_id = "same-run"
+    callbacks = []
+    release_replacement = asyncio.Event()
+
+    async def original(on_state):
+        callbacks.append(on_state)
+
+    async def replacement(on_state):
+        callbacks.append(on_state)
+        await on_state(State(status="running", updated_at_us=1, evidence="new"))
+        await release_replacement.wait()
+
+    try:
+        original_record = sop._launch_flow(session, "monitor", original)
+        await original_record.task
+        replacement_record = sop._launch_flow(session, "monitor", replacement)
+        await _until(lambda: replacement_record.state is not None)
+        await callbacks[0](State(status="completed", updated_at_us=2, evidence="old"))
+        assert session.flows["monitor"] is replacement_record
+        assert replacement_record.state.evidence == "new"
+        assert original_record.state is None
+    finally:
+        release_replacement.set()
+        await replacement_record.task
+        await sop.stop()
+        await runtime.stop()
+        await context.close()
+
+
+@pytest.mark.asyncio
+async def test_required_parallel_failure_reaches_procedure_supervisor(monkeypatch):
+    """TaskGroup failure remains an execution failure, not a cleanup-only result."""
+    sop, runtime, context = _runner()
+    router, conversation, _language = _router(sop, runtime, context)
+    sibling_started = asyncio.Event()
+    sibling_cancelled = asyncio.Event()
+
+    async def sibling(_on_state):
+        sibling_started.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            sibling_cancelled.set()
+
+    async def failing(_on_state):
+        await sibling_started.wait()
+        raise RuntimeError("required monitor failed")
+
+    async def procedure(session):
+        async with asyncio.TaskGroup() as tasks:
+            sop._launch_flow(session, "monitor", sibling, task_group=tasks)
+            sop._launch_flow(session, "required", failing, task_group=tasks)
+            await asyncio.Event().wait()
+
+    monkeypatch.setattr(sop, "_procedure", procedure)
+    async with runtime:
+        try:
+            await router.handle(AgentTurn("p", "start", "start tea making"))
+            await _until(lambda: sop._sessions["p"].status == "failed")
+            await asyncio.wait_for(sibling_cancelled.wait(), 1)
+            await sop._sessions["p"].procedure
+            assert all(record.task is None for record in sop._sessions["p"].flows.values())
+            assert "TaskGroup" in sop._sessions["p"].issue
+        finally:
+            await router.stop()
+            await sop.stop()
+            await conversation.close()
+            await context.close()
+
+
+@pytest.mark.asyncio
+async def test_repeated_procedure_cancellation_drains_child_cleanup(monkeypatch):
+    """A second cancellation cannot tear down an already-cleaning-up flow."""
+    sop, runtime, context = _runner()
+    router, conversation, _language = _router(sop, runtime, context)
+    child_started = asyncio.Event()
+    cleanup_started = asyncio.Event()
+    finish_cleanup = asyncio.Event()
+    cleanup_finished = asyncio.Event()
+
+    async def flow(_on_state):
+        child_started.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cleanup_started.set()
+            await finish_cleanup.wait()
+            cleanup_finished.set()
+
+    async def procedure(session):
+        await sop._run_step(session, 0, flow)
+
+    monkeypatch.setattr(sop, "_procedure", procedure)
+    async with runtime:
+        try:
+            await router.handle(AgentTurn("p", "start", "start tea making"))
+            await asyncio.wait_for(child_started.wait(), 1)
+            session = sop._sessions["p"]
+            procedure_task = session.procedure
+            record = session.flows["identify"]
+            procedure_task.cancel()
+            await asyncio.wait_for(cleanup_started.wait(), 1)
+            procedure_task.cancel()
+            await asyncio.sleep(0)
+            assert not procedure_task.done() and not record.task.done()
+            assert record.task.cancelling() == 1
+            finish_cleanup.set()
+            with pytest.raises(asyncio.CancelledError):
+                await procedure_task
+            assert cleanup_finished.is_set()
+            assert record.task is None
+        finally:
+            finish_cleanup.set()
+            await router.stop()
+            await sop.stop()
+            await conversation.close()
+            await context.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("advancement", ("automatic", "manual"))
+@pytest.mark.parametrize("operation", ("skip", "reset"))
+async def test_control_during_step_entry_never_constructs_abandoned_flow(monkeypatch, advancement, operation):
+    """Skip and reset apply before launch, under either advancement policy."""
+    sop, runtime, context = _runner()
+    sop.config = replace(sop.config, advancement=advancement)
+    router, conversation, _language = _router(sop, runtime, context)
+    entry_started = asyncio.Event()
+    release_entry = asyncio.Event()
+    next_started = asyncio.Event()
+    first_factory = Mock(side_effect=AssertionError("skipped flow must remain lazy"))
+    original_notice = sop._notice
+
+    async def notice(session, text):
+        if text == sop.config.messages["identify"].format_map(sop._resolved_settings(session)):
+            entry_started.set()
+            await release_entry.wait()
+        await original_notice(session, text)
+
+    async def next_flow(_on_state):
+        next_started.set()
+        await asyncio.Event().wait()
+
+    async def procedure(session):
+        await sop._run_step(session, 0, first_factory)
+        await sop._run_step(session, 1, next_flow)
+
+    monkeypatch.setattr(sop, "_notice", notice)
+    monkeypatch.setattr(sop, "_procedure", procedure)
+    async with runtime:
+        try:
+            await router.handle(AgentTurn("p", "start", "start tea making"))
+            await asyncio.wait_for(entry_started.wait(), 1)
+            response = await router.handle(AgentTurn("p", "control-entry", operation))
+            assert response.text == sop.config.messages[operation]
+            release_entry.set()
+            if operation == "skip":
+                await asyncio.wait_for(next_started.wait(), 1)
+                assert sop._sessions["p"].flows["identify"].status == "skipped"
+                assert sop.context_snapshot("p")["current_step"] == "fill_water"
+            else:
+                assert sop.context_snapshot("p")["status"] == "idle"
+                assert not next_started.is_set()
+            first_factory.assert_not_called()
+        finally:
+            release_entry.set()
             await router.stop()
             await sop.stop()
             await conversation.close()

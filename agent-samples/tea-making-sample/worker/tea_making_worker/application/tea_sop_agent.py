@@ -52,6 +52,26 @@ _LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
+class _AcceptedControl:
+    """One authorized proposal, bound to its original turn and execution boundary."""
+
+    turn_id: str
+    revision: int
+    run_id: str | None
+    operation: str
+
+
+@dataclass(slots=True)
+class _FlowRecord:
+    """One runner-owned execution; callbacks cannot acquire or transfer ownership."""
+
+    run_id: str | None
+    status: str = "running"
+    state: Any = None
+    task: asyncio.Task[Any] | None = None
+
+
+@dataclass(slots=True)
 class _Session:
     """Runner-owned participant state; flow internals arrive only through snapshots."""
 
@@ -62,9 +82,8 @@ class _Session:
     step_index: int = -1
     connected: bool = True
     procedure: asyncio.Task[None] | None = None
-    active_tasks: dict[str, asyncio.Task[Any]] = field(default_factory=dict)
-    flow_states: dict[str, Any] = field(default_factory=dict)
-    flow_statuses: dict[str, str] = field(default_factory=dict)
+    flows: dict[str, _FlowRecord] = field(default_factory=dict)
+    accepted_control: _AcceptedControl | None = None
     advance_requested: asyncio.Event = field(default_factory=asyncio.Event)
     ready: bool = False
     skipping: bool = False
@@ -115,7 +134,6 @@ class SOPAgent(Agent):
             closed_errors=(RuntimeClosedError,),
         )
         self._sessions: dict[str, _Session] = {}
-        self._pending: dict[str, tuple[str, _Session, int, str | None, str]] = {}
         self._closing = False
         self._participant_locks: dict[str, asyncio.Lock] = {}
 
@@ -134,7 +152,7 @@ class SOPAgent(Agent):
             if session is None:
                 return
             session.connected = False
-            self._pending.pop(participant_id, None)
+            session.accepted_control = None
             await self._stop_run(session)
             await self._context.clear(participant_id)
 
@@ -187,20 +205,24 @@ class SOPAgent(Agent):
             or asyncio.current_task().cancelling()
         ):
             return Admission("decline")
-        self._pending[turn.participant_id] = (turn.turn_id, session, revision, admitted_run_id, control)
+        session.accepted_control = _AcceptedControl(turn.turn_id, revision, admitted_run_id, control)
         return Admission("accept")
 
     async def answer(self, turn: AgentTurn, *, started: Callable[[], Awaitable[None]]) -> DestinationResult:
         """Apply only a still-current admitted control, then publish its native acknowledgment."""
-        pending_admission = self._pending.pop(turn.participant_id, None)
-        if pending_admission is None or pending_admission[0] != turn.turn_id:
+        session = self._sessions.get(turn.participant_id)
+        if session is None or session.accepted_control is None:
             return DestinationResult("answer")
-        _, session, admitted_revision, admitted_run_id, control = pending_admission
+        proposal = session.accepted_control
+        if proposal.turn_id != turn.turn_id:
+            return DestinationResult("answer")
+        session.accepted_control = None
+        control = proposal.operation
         async with self._participant_locks.setdefault(turn.participant_id, asyncio.Lock()):
             if (
                 self._sessions.get(turn.participant_id) is not session
-                or session.run_id != admitted_run_id
-                or (control in {"next", "skip"} and session.revision != admitted_revision)
+                or session.run_id != proposal.run_id
+                or (control in {"next", "skip"} and session.revision != proposal.revision)
             ):
                 response_text = self.config.messages["changed"]
             else:
@@ -238,7 +260,6 @@ class SOPAgent(Agent):
         self._closing = True
         for participant_id in tuple(self._sessions):
             await self.participant_left(participant_id)
-        self._pending.clear()
 
     async def _control(self, session: _Session, control: str) -> str:
         """Keep next/skip distinct and defaults outside the independent flow functions."""
@@ -252,8 +273,7 @@ class SOPAgent(Agent):
             session.revision += 1
             session.status = "running"
             session.step_index = -1
-            session.flow_states.clear()
-            session.flow_statuses.clear()
+            session.flows.clear()
             session.issue = ""
             session.identification_pending = None
             session.procedure = asyncio.create_task(
@@ -271,8 +291,7 @@ class SOPAgent(Agent):
             if control == "reset":
                 session.run_id = None
                 session.step_index = -1
-                session.flow_states.clear()
-                session.flow_statuses.clear()
+                session.flows.clear()
                 session.identification_pending = None
             await self._publish_context(session)
             return self.config.messages[control]
@@ -287,9 +306,11 @@ class SOPAgent(Agent):
                 # may already enter its next step while the child drains.
                 session.advance_requested.set()
                 active_step = self._step_id(session)
-                step_task = session.active_tasks.get(active_step)
+                step_record = session.flows.get(active_step)
+                step_task = step_record.task if step_record else None
                 if step_task is not None:
-                    step_task.cancel()
+                    if not step_task.cancelling():
+                        step_task.cancel()
                     await self._drain(step_task)
             else:
                 session.advance_requested.set()
@@ -309,30 +330,25 @@ class SOPAgent(Agent):
             session.status = "failed"
             session.issue = str(error)
             if self._step_id(session) is not None:
-                session.flow_statuses[self._step_id(session)] = "failed"
+                session.flows[self._step_id(session)].status = "failed"
             if self._sessions.get(session.participant_id) is session:
                 await self._publish_context(session)
         finally:
-            owned_flow_tasks = tuple(session.active_tasks.values())
+            owned_flow_tasks = tuple(record.task for record in session.flows.values() if record.task is not None)
             for flow_task in owned_flow_tasks:
-                flow_task.cancel()
+                if not flow_task.cancelling():
+                    flow_task.cancel()
             # Drain every child, including spanning flows, before releasing the
             # run. This is cleanup, not an exception-swallowing execution policy:
             # normal required work is awaited or owned by its TaskGroup.
             drain = asyncio.gather(*owned_flow_tasks, return_exceptions=True)
-            cancelled_during_cleanup = False
-            while not drain.done():
-                try:
-                    await asyncio.shield(drain)
-                except asyncio.CancelledError:
-                    cancelled_during_cleanup = True
-            drain.result()
-            for flow_id, status in tuple(session.flow_statuses.items()):
-                if status == "running":
-                    session.flow_statuses[flow_id] = "stopped"
-            session.active_tasks.clear()
-            if cancelled_during_cleanup:
-                raise asyncio.CancelledError
+            try:
+                await self._drain(drain)
+            finally:
+                for record in session.flows.values():
+                    if record.status == "running":
+                        record.status = "stopped"
+                    record.task = None
 
     async def _procedure(self, session: _Session) -> None:
         """Read the actual tea procedure front to back: ordinary Python calls and results."""
@@ -340,7 +356,7 @@ class SOPAgent(Agent):
         await self._run_step(
             session,
             0,
-            run_vision_rag_retrieval_flow(
+            lambda on_state: run_vision_rag_retrieval_flow(
                 **flow_arguments,
                 llm=self._llm,
                 retrieval=self._rag.retrieve,
@@ -354,14 +370,14 @@ class SOPAgent(Agent):
                 ),
                 max_retrieved_passages=self.config.max_retrieved_passages,
                 retrieved_text_limit=self.config.retrieved_text_limit,
-                on_state=partial(self._flow_state, session, session.run_id, "identify"),
+                on_state=on_state,
             ),
         )
 
         # Skip defaults are applied here, after preserving validated partial
         # values reported by identification. They are never flow-internal guesses.
         resolved_settings = self._resolved_settings(session)
-        await self._run_step(session, 1, self._verify(session, "fill_water", self.config.water))
+        await self._run_step(session, 1, lambda on_state: self._verify(session, self.config.water, on_state))
 
         # Only this application builds tea-specific wording. The visual function
         # receives an ordinary completed question/DecisionQuestion.
@@ -382,32 +398,32 @@ class SOPAgent(Agent):
                 },
             ),
         )
-        await self._run_step(session, 2, self._verify(session, "heat_water", temperature))
+        await self._run_step(session, 2, lambda on_state: self._verify(session, temperature, on_state))
         steeping_confirmation = await self._run_step(
             session,
             3,
-            self._verify(session, "start_steeping", self.config.tea_bag),
+            lambda on_state: self._verify(session, self.config.tea_bag, on_state),
         )
         if steeping_confirmation is not None:
             await self._run_step(
                 session,
                 4,
-                run_timer_flow(
+                lambda on_state: run_timer_flow(
                     duration_seconds=resolved_settings["duration_seconds"],
                     update_interval_seconds=self.config.timer_update_interval_seconds,
-                    on_state=partial(self._flow_state, session, session.run_id, "steep_timer"),
+                    on_state=on_state,
                 ),
             )
         else:
             # Explicitly skipping tea-water detection does not establish a
             # steeping start time. Preserve the existing associated-timer skip.
-            session.flow_statuses["steep_timer"] = "skipped"
+            session.flows["steep_timer"] = _FlowRecord(session.run_id, status="skipped")
         session.status = "completed"
         session.revision += 1
         await self._publish_context(session)
         await self._notice(session, self.config.messages["complete"])
 
-    def _verify(self, session, flow_id, instructions):
+    def _verify(self, session, instructions, on_state):
         """Supply only this visual check's question, criteria and runtime inputs."""
         return run_visual_verification_flow(
             **self._observation_arguments(session),
@@ -416,7 +432,7 @@ class SOPAgent(Agent):
             completion=instructions.completion,
             required_positives=self.config.required_positives,
             window_size=self.config.confirmation_window_size,
-            on_state=partial(self._flow_state, session, session.run_id, flow_id),
+            on_state=on_state,
         )
 
     def _observation_arguments(self, session: _Session) -> dict[str, Any]:
@@ -440,16 +456,57 @@ class SOPAgent(Agent):
         await _frame(frame)
         return frame
 
-    async def _run_step(self, session: _Session, step_index: int, execution: Coroutine[Any, Any, Any]):
-        """Own one step task and close even an execution cancelled before task creation."""
+    def _launch_flow(
+        self,
+        session: _Session,
+        flow_id: str,
+        create_flow: Callable[[Callable[[Any], Awaitable[None]]], Coroutine[Any, Any, Any]],
+        *,
+        record: _FlowRecord | None = None,
+        task_group: asyncio.TaskGroup | None = None,
+    ) -> _FlowRecord:
+        """Register an execution explicitly before its lazy factory can report state.
+
+        Required parallel work belongs to the caller's TaskGroup or must be
+        awaited by the procedure. The registry owns cleanup, not error policy.
+        """
+        if record is None:
+            previous = session.flows.get(flow_id)
+            if previous is not None and previous.task is not None and not previous.task.done():
+                raise RuntimeError("flow is still running; drain it before replacement")
+            record = _FlowRecord(session.run_id)
+            session.flows[flow_id] = record
+        elif session.flows.get(flow_id) is not record:
+            raise RuntimeError("flow ownership changed before launch")
+
+        async def execute():
+            return await create_flow(partial(self._flow_state, session, flow_id, record))
+
+        launch = task_group.create_task if task_group is not None else asyncio.create_task
+        execution = execute()
+        try:
+            record.task = launch(
+                execution,
+                name=f"sop:{session.participant_id}:{flow_id}",
+                context=nemo_relay.fork_asyncio_context(),
+            )
+        except BaseException:
+            # Task creation has not taken ownership of this wrapper coroutine.
+            execution.close()
+            record.status = "failed"
+            raise
+        return record
+
+    async def _run_step(self, session: _Session, step_index: int, create_flow):
+        """Enter one step, lazily launch it, then apply readiness/skip policy."""
         step_id = _STEP_IDS[step_index]
-        flow_task = None
+        record = _FlowRecord(session.run_id)
+        session.flows[step_id] = record
         session.step_index = step_index
         session.revision += 1
         session.ready = False
         session.skipping = False
         session.advance_requested.clear()
-        session.flow_statuses[step_id] = "running"
         try:
             await self._publish_context(session)
             await self._notice(session, self.config.messages[step_id].format_map(self._resolved_settings(session)))
@@ -459,22 +516,33 @@ class SOPAgent(Agent):
                 step_id=step_id,
                 snapshot=lambda: self.context_snapshot(session.participant_id),
             ):
-                flow_task = asyncio.create_task(
-                    execution,
-                    name=f"sop:{session.participant_id}:{step_id}",
-                    context=nemo_relay.fork_asyncio_context(),
-                )
-                session.active_tasks[step_id] = flow_task
-                try:
-                    result = await flow_task
-                except asyncio.CancelledError:
-                    current_task = asyncio.current_task()
-                    if current_task is not None and current_task.cancelling():
-                        raise
-                    if not session.skipping:
-                        raise
+                if (
+                    self._sessions.get(session.participant_id) is not session
+                    or not session.connected
+                    or session.status != "running"
+                    or session.run_id != record.run_id
+                    or session.flows.get(step_id) is not record
+                    or asyncio.current_task().cancelling()
+                ):
+                    raise asyncio.CancelledError
+                if session.skipping:
+                    # A control can arrive while entry publication is suspended.
+                    # Honor it before constructing or starting any flow work.
                     result = None
-                session.flow_statuses[step_id] = "skipped" if session.skipping else "completed"
+                else:
+                    self._launch_flow(session, step_id, create_flow, record=record)
+                    try:
+                        # The runner cancels owned children once, then drains them.
+                        # Repeated owner cancellation must not interrupt their cleanup.
+                        result = await asyncio.shield(record.task)
+                    except asyncio.CancelledError:
+                        current_task = asyncio.current_task()
+                        if current_task is not None and current_task.cancelling():
+                            raise
+                        if not session.skipping:
+                            raise
+                        result = None
+                record.status = "skipped" if session.skipping else "completed"
                 session.ready = True
                 await self._publish_context(session)
                 await _event("step.finished", skipped=session.skipping, result=result)
@@ -482,50 +550,42 @@ class SOPAgent(Agent):
                     await session.advance_requested.wait()
                 return result
         finally:
-            # Entry publication/capture can fail before create_task takes ownership.
-            if flow_task is None:
-                execution.close()
-            elif not flow_task.done():
-                flow_task.cancel()
-                await self._drain(flow_task)
-            session.active_tasks.pop(step_id, None)
+            if record.task is not None and not record.task.done():
+                if not record.task.cancelling():
+                    record.task.cancel()
+                await self._drain(record.task)
+            record.task = None
 
-    async def _flow_state(self, session: _Session, run_id: str | None, flow_id: str, state: Any) -> None:
-        """Store complete labeled state only while this exact participant/run still owns it."""
-        if (
-            self._sessions.get(session.participant_id) is not session
-            or not session.connected
-            or session.run_id != run_id
-            or session.status != "running"
-        ):
+    async def _flow_state(self, session: _Session, flow_id: str, record: _FlowRecord, state: Any) -> None:
+        """Report state only for the exact execution already registered by the runner."""
+
+        def owns_execution():
+            return (
+                self._sessions.get(session.participant_id) is session
+                and session.connected
+                and session.run_id == record.run_id
+                and session.status == "running"
+                and session.flows.get(flow_id) is record
+                and record.status not in {"skipped", "stopped"}
+                and record.task is not None
+                and not record.task.done()
+                and not record.task.cancelling()
+            )
+
+        if not owns_execution():
             return
-        reporting_task = asyncio.current_task()
-        if reporting_task is None or reporting_task.cancelling():
-            return
-        owned_task = session.active_tasks.get(flow_id)
-        if owned_task is not None and owned_task is not reporting_task:
-            return
-        if session.flow_statuses.get(flow_id) in {"skipped", "stopped"}:
-            return
-        if reporting_task is not session.procedure:
-            session.active_tasks[flow_id] = reporting_task
-        session.flow_statuses[flow_id] = state.status
-        session.flow_states[flow_id] = state
+        record.status = state.status
+        record.state = state
         await _event("flow.state", flow_id=flow_id, state=state)
-        if self._sessions.get(session.participant_id) is not session or session.run_id != run_id:
+        if not owns_execution():
             return
         await self._publish_context(session)
-        if (
-            self._sessions.get(session.participant_id) is not session
-            or not session.connected
-            or session.run_id != run_id
-            or reporting_task.cancelling()
-        ):
+        if not owns_execution():
             return
         await self._runtime.publish(
             GUIDANCE_RECORD_TOPIC,
             GuidanceRecord(
-                run_id=run_id,
+                run_id=record.run_id,
                 timestamp_us=time.time_ns() // 1000,
                 event="flow.state",
                 step_id=flow_id,
@@ -541,7 +601,7 @@ class SOPAgent(Agent):
             and state.phase == "observing"
             and state.visual_data is not None
             and state.issue
-            and session.run_id == run_id
+            and session.run_id == record.run_id
         ):
             missing_fields = tuple(name for name, value in state.resolved_data.model_dump().items() if value is None)
             if missing_fields and missing_fields != session.identification_pending:
@@ -559,7 +619,8 @@ class SOPAgent(Agent):
 
     def _resolved_settings(self, session: _Session) -> dict[str, Any]:
         """Use valid partial results and label only missing values as runner defaults."""
-        identification = session.flow_states.get("identify")
+        identification_record = session.flows.get("identify")
+        identification = identification_record.state if identification_record else None
         settings = (
             identification.resolved_data if isinstance(identification, VisionRAGRetrievalState) else BrewingSettings()
         )
@@ -605,30 +666,30 @@ class SOPAgent(Agent):
             "entered_step_instructions": {
                 step_id: self.config.messages[step_id].format_map(self._resolved_settings(session))
                 for step_id in _STEP_IDS
-                if step_id in session.flow_statuses
+                if step_id in session.flows
             },
-            "flow_outcomes": dict(session.flow_statuses),
+            "flow_outcomes": {flow_id: record.status for flow_id, record in session.flows.items()},
             "active_flows": {
                 flow_id: {
-                    **_json(state),
-                    "sampled_at_utc": datetime.fromtimestamp(state.updated_at_us / 1_000_000, UTC).isoformat(
+                    **_json(record.state),
+                    "sampled_at_utc": datetime.fromtimestamp(record.state.updated_at_us / 1_000_000, UTC).isoformat(
                         timespec="seconds"
                     ),
                 }
-                for flow_id, state in session.flow_states.items()
-                if session.flow_statuses.get(flow_id) == "running" and session.status == "running"
+                for flow_id, record in session.flows.items()
+                if record.state is not None and record.status == "running" and session.status == "running"
             },
             "completed_or_skipped_flows": {
-                flow_id: {"outcome": session.flow_statuses.get(flow_id), "state": _json(state)}
-                for flow_id, state in session.flow_states.items()
-                if session.flow_statuses.get(flow_id) != "running"
+                flow_id: {"outcome": record.status, "state": _json(record.state)}
+                for flow_id, record in session.flows.items()
+                if record.state is not None and record.status != "running"
             },
             "issue": session.issue,
             "historical_previous_run": session.last_run,
         }
         # Defaults become execution settings only after identification completes or
         # is explicitly skipped. Partial model values remain in the flow state.
-        if session.flow_statuses.get("identify") in {"completed", "skipped"}:
+        if "identify" in session.flows and session.flows["identify"].status in {"completed", "skipped"}:
             snapshot["resolved_settings"] = self._resolved_settings(session)
         return snapshot
 
@@ -662,17 +723,19 @@ class SOPAgent(Agent):
         if session.status == "running":
             session.status = "stopped"
         if session.procedure is not None and not session.procedure.done():
-            session.procedure.cancel()
+            if not session.procedure.cancelling():
+                session.procedure.cancel()
             await self._drain(session.procedure)
         session.procedure = None
         if session.status == "running":
             session.status = "stopped"
-        for flow_id in session.active_tasks:
-            session.flow_statuses[flow_id] = "stopped"
-        session.active_tasks.clear()
+        for record in session.flows.values():
+            if record.task is not None:
+                record.status = "stopped"
+                record.task = None
 
     @staticmethod
-    async def _drain(task: asyncio.Task[Any]) -> None:
+    async def _drain(task: asyncio.Future[Any]) -> None:
         """Wait for child cleanup while preserving cancellation directed at this owner."""
         try:
             await asyncio.shield(task)
@@ -699,7 +762,7 @@ class SOPAgent(Agent):
             "run_id": session.run_id,
             "status": session.status,
             "settings": self._resolved_settings(session)
-            if session.flow_statuses.get("identify") in {"completed", "skipped"}
+            if "identify" in session.flows and session.flows["identify"].status in {"completed", "skipped"}
             else {},
             "last_step": self._step_id(session),
         }
