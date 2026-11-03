@@ -634,6 +634,25 @@ class SOPAgent(Agent):
                     instruction = self.config.messages[message].format_map({
                         **settings, "next_instruction": instruction,
                     })
+            elif step_index == 3:
+                temperature_outcome = session.flow_statuses.get("heat_water")
+                if temperature_outcome == "skipped":
+                    instruction = self.config.messages["temperature_skipped"].format_map(
+                        {"next_instruction": instruction}
+                    )
+                elif temperature_outcome == "completed":
+                    temperature_state = session.flow_states.get("heat_water")
+                    if temperature_state is not None:
+                        assessment = self._flow_context(session, "heat_water", temperature_state).get("assessment")
+                        # Announce the judge's actual completion evidence. A
+                        # skipped check must never become a verified reading.
+                        if assessment is not None and assessment["judgment"] == "positive":
+                            instruction = self.config.messages["temperature_verified"].format_map({
+                                "reading_value": assessment["reading_value"],
+                                "reading_unit": assessment["effective_unit"].capitalize(),
+                                "minimum_value": assessment["minimum_value"],
+                                "next_instruction": instruction,
+                            })
             await self._announce_entry(session, step_index, instruction)
             async with _attempt(
                 session.participant_id,

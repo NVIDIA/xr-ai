@@ -131,6 +131,8 @@ sop:
     water_verified: "Water is visible in the vessel. {next_instruction}"
     water_skipped: "Water verification was skipped. {next_instruction}"
     heat_water: Heat the water to {temperature_c:g} degrees Celsius.
+    temperature_verified: "The water reads {reading_value:g} degrees {reading_unit}, meeting the minimum of {minimum_value:g} degrees {reading_unit}. {next_instruction}"
+    temperature_skipped: "Temperature verification was skipped. {next_instruction}"
     start_steeping: Put the tea in the water; I will start the timer when I see it immersed.
     steep_timer: I will time {duration_seconds:g} seconds from now.
   default_tea_name: generic tea

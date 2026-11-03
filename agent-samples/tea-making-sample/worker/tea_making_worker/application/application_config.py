@@ -202,6 +202,8 @@ def _sop(data: dict[str, Any]) -> SOPConfig:
         "identification_complete",
         "water_verified",
         "water_skipped",
+        "temperature_verified",
+        "temperature_skipped",
         "heat_water",
         "start_steeping",
         "steep_timer",

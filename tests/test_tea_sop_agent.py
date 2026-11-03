@@ -212,12 +212,43 @@ async def _until(predicate):
 
 
 @pytest.mark.asyncio
-async def test_actual_python_procedure_completes_all_five_steps():
+@pytest.mark.parametrize(
+    ("value", "unit_text", "declared_unit", "expected_confirmation"),
+    (
+        (80, "°C", None, "The water reads 80 degrees Celsius, meeting the minimum of 80 degrees Celsius."),
+        (210, "°F", None, "The water reads 210 degrees Fahrenheit, meeting the minimum of 176 degrees Fahrenheit."),
+        (212, None, "fahrenheit", "The water reads 212 degrees Fahrenheit, meeting the minimum of 176 degrees Fahrenheit."),
+    ),
+)
+async def test_actual_python_procedure_completes_all_five_steps(
+    value, unit_text, declared_unit, expected_confirmation
+):
     sop, runtime, context = _runner()
+    original_observe = sop._image_query.execute
+    announcements = []
+
+    async def observe(request):
+        if request.query.startswith(sop.config.temperature.question):
+            return ImageQueryResult(text=json.dumps({
+                "value": value, "unit_text": unit_text, "role": "unknown", "role_evidence": None,
+            }))
+        return await original_observe(request)
+
+    # These fixture readers share one object, as in _runner's default setup.
+    sop._image_query.execute = observe
+
+    class Capture(Agent):
+        @subscribe(GUIDANCE_NOTICE_TOPIC)
+        async def notice(self, event: GuidanceNotice, _context: RuntimeContext):
+            announcements.append(event.text)
+
+    runtime.register("guidance-capture", Capture())
     router, conversation, _language = _router(sop, runtime, context)
     async with runtime:
         try:
+            await sop.participant_joined("p")
             result = await router.handle(AgentTurn("p", "start", "start tea making"))
+            sop._sessions["p"].display_unit = declared_unit
             assert sop.context_snapshot("p")["status"] in {"running", "completed"}
             await _until(lambda: sop._sessions["p"].status == "completed")
             snapshot = sop.context_snapshot("p")
@@ -234,6 +265,8 @@ async def test_actual_python_procedure_completes_all_five_steps():
             timer = snapshot["completed_or_skipped_flows"]["steep_timer"]["state"]
             assert timer["remaining_seconds"] == 0
             assert timer["updated_at_us"] >= timer["started_at_us"]
+            confirmations = [text for text in announcements if text.startswith("The water reads")]
+            assert confirmations == [expected_confirmation + " " + sop.config.messages["start_steeping"]]
         finally:
             await router.stop()
             await sop.stop()
