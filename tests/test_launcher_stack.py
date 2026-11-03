@@ -246,7 +246,7 @@ class TestRunStackShutdownContract:
         self, stub_stack, tmp_path, monkeypatch, capsys,
     ):
         # Simulate Ctrl-C while waiting for the (persist) server to come up.
-        def _boom(name, ready_file, proc, cancellation):
+        def _boom(name, ready_file, proc, cancellation, *, ready_processes_may_exit, launched):
             raise KeyboardInterrupt
 
         monkeypatch.setattr(_stack, "_wait_ready", _boom)
@@ -299,7 +299,7 @@ class TestRunStackShutdownContract:
         self, stub_stack, tmp_path, monkeypatch, capsys,
     ):
         # Ready file appears immediately; no interruption.
-        monkeypatch.setattr(_stack, "_wait_ready", lambda *args: None)
+        monkeypatch.setattr(_stack, "_wait_ready", lambda *args, **kwargs: None)
 
         processes = [
             _stack.Process(
@@ -325,7 +325,7 @@ class TestRunStackShutdownContract:
     ):
         # Stacks that own no model must not probe the Hub or change the
         # Hugging Face environment their children inherit.
-        monkeypatch.setattr(_stack, "_wait_ready", lambda *args: None)
+        monkeypatch.setattr(_stack, "_wait_ready", lambda *args, **kwargs: None)
         connect = Mock(side_effect=AssertionError("run_stack opened a socket"))
         monkeypatch.setattr(socket, "create_connection", connect)
         monkeypatch.setattr(socket.socket, "connect", connect)
@@ -352,13 +352,15 @@ class TestRunStackShutdownContract:
     ):
         allowed_exits = []
 
-        def _wait(group, ready_processes_may_exit, cancellation):
+        def _wait(group, cancellation, *, ready_processes_may_exit, launched):
             allowed_exits.append(ready_processes_may_exit)
 
         monkeypatch.setattr(_stack, "_wait_ready_parallel", _wait)
+        monkeypatch.setattr(_stack, "_wait_ready", lambda *args, **kwargs: None)
 
         _stack.run_stack(
             [
+                _stack.Process("llm", ".", "llm", launch_mode="persist"),
                 _stack.Parallel(
                     [
                         _stack.Process(
@@ -375,13 +377,13 @@ class TestRunStackShutdownContract:
             exit_after_ready=True,
         )
 
-        assert allowed_exits == [{"vlm"}]
-        assert stub_stack["spawn_options"] == {"vlm": True, "worker": False}
+        assert allowed_exits == [{"llm", "vlm"}]
+        assert stub_stack["spawn_options"] == {"llm": True, "vlm": True, "worker": False}
 
     def test_runtime_summary_interrupt_preserves_exit_and_persist_ownership(
         self, stub_stack, tmp_path, monkeypatch,
     ):
-        monkeypatch.setattr(_stack, "_wait_ready", lambda *args: None)
+        monkeypatch.setattr(_stack, "_wait_ready", lambda *args, **kwargs: None)
 
         def _monitor(procs, cancellation):
             proc = procs["vlm"]
@@ -414,7 +416,7 @@ class TestRunStackShutdownContract:
     def test_unexpected_zero_runtime_exit_is_failure(
         self, stub_stack, tmp_path, monkeypatch,
     ):
-        monkeypatch.setattr(_stack, "_wait_ready", lambda *args: None)
+        monkeypatch.setattr(_stack, "_wait_ready", lambda *args, **kwargs: None)
 
         def _monitor(procs, cancellation):
             proc = procs["worker"]
@@ -447,7 +449,7 @@ class TestRunStackShutdownContract:
         monkeypatch.setattr(
             _stack,
             "_wait_ready",
-            lambda name, rf, proc, cancellation: (_ for _ in ()).throw(
+            lambda name, rf, proc, cancellation, *, ready_processes_may_exit, launched: (_ for _ in ()).throw(
                 _stack._ReadinessFailure(name, -15)
             ),
         )
