@@ -5,15 +5,19 @@
 
 # xr-ai-conversation
 
-`xr-ai-conversation` provides an application-instructed
-conversation agent and a `ContextManager` that holds participant-scoped
-history and named background-context sources for it and for any other agent.
-It does not contain turn selection, focus
-management, or tools; routing contracts are provided by
-[`xr-ai-routing`](agent-sdk-routing.md), and other capabilities, such as
-questions about the camera view, belong in separate routed destinations.
+## Overview
+
+Add conversation that uses earlier dialogue and information supplied by other
+agents, such as saved notes or background observations. The conversation agent
+combines that context with your application's instructions to answer follow-up
+questions.
 
 ## Compose a conversation
+
+Compose `Conversation` with a `ContextManager` for participant-scoped history
+and named background-context sources. Turn selection and focus management
+belong to {doc}`agent-sdk-routing`; tools and capabilities such as camera
+questions belong in separate routed destinations.
 
 `Conversation` implements `xr_ai_routing.RoutableAgent`, so it can be passed to
 `AgentRouter` alongside application-specific agents.
