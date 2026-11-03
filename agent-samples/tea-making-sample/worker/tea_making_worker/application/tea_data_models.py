@@ -45,7 +45,9 @@ def _validate_quantity_source(value: float, unit: str, info: ValidationInfo) -> 
 
     This application-level check recognizes numeric ranges in its brewing sources;
     it does not pick a value. A selected point is generated, never a literal
-    retrieved scalar. The reusable flow knows neither tea nor these units.
+    retrieved scalar. An explicit range in the recommendation's unit is
+    authoritative; a rounded secondary-unit rendering must not tighten it.
+    The reusable flow knows neither tea nor these units.
     """
     context = info.context or {}
     quote = context.get("source_quote", "")
@@ -69,13 +71,21 @@ def _validate_quantity_source(value: float, unit: str, info: ValidationInfo) -> 
         source_unit = "minutes" if source_unit.startswith("min") else source_unit
         source_unit = "seconds" if source_unit.startswith("sec") else source_unit
         if (source_unit in {"celsius", "fahrenheit"}) == temperature:
-            ranges.append((base(float(match[1]), source_unit), base(float(match[2]), source_unit)))
+            ranges.append((source_unit, float(match[1]), float(match[2])))
     if not ranges:
         return
     if context.get("source_kind") == "retrieved":
         raise ValueError("A cited range requires a generated recommendation, not a literal retrieved value.")
-    point = base(value, unit)
-    if any(not lower <= point <= upper for lower, upper in ranges):
+    same_unit_ranges = [(lower, upper) for source_unit, lower, upper in ranges if source_unit == unit]
+    if same_unit_ranges:
+        point = value
+        applicable_ranges = same_unit_ranges
+    else:
+        point = base(value, unit)
+        applicable_ranges = [
+            (base(lower, source_unit), base(upper, source_unit)) for source_unit, lower, upper in ranges
+        ]
+    if any(not lower <= point <= upper for lower, upper in applicable_ranges):
         raise ValueError("The recommendation is outside the cited source range.")
 
 
