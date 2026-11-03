@@ -65,7 +65,7 @@ Speech uses the reused TTS endpoint in `yaml/models.local.json`. Voice-gate
 behavior comes from `voice_gate_yaml` in `yaml/tea_making_worker.yaml`.
 The default `mode: hybrid` uses speaker STT. Say `Start talking to me` to begin
 a conversation, then speak naturally until `Stop talking to me`. For one-off
-questions outside a conversation, say `Hey Computer` followed by the question.
+questions outside a conversation, say `Assistant` followed by the question.
 Follow-up speech can begin within five seconds without repeating the wake phrase.
 Set `mode: always_on` for immediate, ungated speech dispatch.
 The advanced `conversation.require_wake_phrase: true` policy applies only inside an open

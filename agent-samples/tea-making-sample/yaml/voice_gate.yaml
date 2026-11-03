@@ -3,7 +3,7 @@
 
 mode: hybrid
 magic_phrases:
-  - hey computer
+  - assistant
 listening_chime: true
 followup_grace_s: 5.0
 

@@ -30,7 +30,7 @@ automatically:
 
 The default hybrid mode uses speaker STT. Say “Start talking to me” to begin
 a conversation and “Stop talking to me” to end it. For a one-off question,
-say “Hey Computer” followed by the question. A five-second follow-up window allows
+say “Assistant” followed by the question. A five-second follow-up window allows
 another utterance without repeating the wake phrase.
 
 This is configured in `yaml/voice_gate.yaml`:

@@ -62,7 +62,7 @@ def test_hybrid_speaker_stt_configuration_matches_model_stack() -> None:
     gate = load_voice_gate_config(_SAMPLE / "yaml/voice_gate.yaml")
     gate_yaml = yaml.safe_load((_SAMPLE / "yaml/voice_gate.yaml").read_text())
     assert gate_yaml["mode"] == "hybrid"
-    assert gate.magic_phrases == ("hey computer",)
+    assert gate.magic_phrases == ("assistant",)
     assert gate_yaml["conversation"]["start_phrase"] == "Start talking to me"
     assert gate_yaml["conversation"]["stop_phrase"] == "Stop talking to me"
     assert gate_yaml["speaker"]["enabled"] is True
