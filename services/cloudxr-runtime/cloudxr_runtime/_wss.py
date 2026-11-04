@@ -30,17 +30,11 @@ from websockets.asyncio.client import connect as ws_connect
 from websockets.asyncio.server import ServerConnection
 from websockets.asyncio.server import serve as ws_serve
 from websockets.datastructures import Headers
-from websockets.http11 import Request, Response, parse_headers
+from websockets.http11 import Request, Response
 
 PROXY_PORT = 48322
 BACKEND_URI = "ws://localhost:49100"
 
-_CORS_HEADERS = {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "*",
-    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-    "Access-Control-Expose-Headers": "*",
-}
 # Hop-by-hop and handshake headers the backend connection sets itself.
 _UNFORWARDED_HEADERS = {
     "host",
@@ -74,31 +68,6 @@ _CONNECTION_OPTIONS = {
 }
 
 
-def _allow_cors_preflight() -> None:
-    """Let HTTP OPTIONS requests reach ``process_request``.
-
-    websockets >= 14 rejects any method but GET while parsing the request. A
-    browser sends an OPTIONS preflight before a cross-origin request, so the
-    parser is wrapped to surface it as an ordinary request instead.
-    """
-    original = Request.parse.__func__
-
-    @classmethod
-    def parse(cls, read_line):
-        try:
-            return (yield from original(cls, read_line))
-        except ValueError as exc:
-            if "got OPTIONS" not in str(exc):
-                raise
-            headers = yield from parse_headers(read_line)
-            return cls("/__cors_preflight__", headers)
-
-    Request.parse = parse
-
-
-_allow_cors_preflight()
-
-
 def ensure_certificate(cert_dir: Path) -> tuple[Path, Path]:
     """Return ``(certificate, key)``, generating a self-signed pair if absent."""
     cert, key = cert_dir / "server.crt", cert_dir / "server.key"
@@ -114,15 +83,20 @@ def ensure_certificate(cert_dir: Path) -> tuple[Path, Path]:
     if openssl is None:
         raise RuntimeError("openssl is not on PATH; it is needed to create the proxy's TLS certificate")
     cert_dir.mkdir(parents=True, exist_ok=True)
-    subprocess.run(
-        [
-            openssl, "req", "-x509", "-newkey", "rsa:2048",
-            "-keyout", str(key), "-out", str(cert),
-            "-days", "365", "-nodes", "-subj", "/CN=localhost",
-        ],
-        check=True,
-        capture_output=True,
-    )
+    try:
+        subprocess.run(
+            [
+                openssl, "req", "-x509", "-newkey", "rsa:2048",
+                "-keyout", str(key), "-out", str(cert),
+                "-days", "365", "-nodes", "-subj", "/CN=localhost",
+            ],
+            check=True,
+            capture_output=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError(
+            f"could not create the proxy TLS certificate: {exc.stderr.decode(errors='replace').strip()}"
+        ) from exc
     key.chmod(0o600)
     logger.info("Generated a self-signed TLS certificate in {}", cert_dir)
     return cert, key
@@ -131,13 +105,7 @@ def ensure_certificate(cert_dir: Path) -> tuple[Path, Path]:
 async def _answer_http(_connection: ServerConnection, request: Request) -> Response | None:
     if request.headers.get("Upgrade", "").lower() == "websocket":
         return None
-    content_type = "text/plain" if request.headers.get("Access-Control-Request-Method") else "text/html; charset=utf-8"
-    body = b"OK" if content_type == "text/plain" else _CERT_ACCEPTED_PAGE
-    return Response(200, "OK", Headers({"Content-Type": content_type, **_CORS_HEADERS}), body)
-
-
-def _add_cors_headers(_connection: ServerConnection, _request: Request, response: Response) -> None:
-    response.headers.update(_CORS_HEADERS)
+    return Response(200, "OK", Headers({"Content-Type": "text/html; charset=utf-8"}), _CERT_ACCEPTED_PAGE)
 
 
 async def _pipe(source, destination) -> None:
@@ -214,7 +182,6 @@ async def run(
             port=port,
             ssl=context,
             process_request=_answer_http,
-            process_response=_add_cors_headers,
             **_CONNECTION_OPTIONS,
         )
         async with server:
@@ -222,5 +189,8 @@ async def run(
             await stop
     except OSError as exc:
         if exc.errno == errno.EADDRINUSE:
-            raise RuntimeError(f"WSS proxy port {port} is already in use") from exc
+            raise RuntimeError(
+                f"WSS proxy port {port} is already in use; stop the process owning it first "
+                f"(inspect with: fuser {port}/tcp)"
+            ) from exc
         raise

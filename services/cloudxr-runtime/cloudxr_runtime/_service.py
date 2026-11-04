@@ -21,7 +21,7 @@ import ctypes
 import os
 import signal
 import sys
-import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 _FILE_LOGGING_OFF = ("false", "off", "no", "n", "f", "0")
@@ -44,24 +44,46 @@ def serve(native_dir: Path, logs_dir: Path) -> None:
 
     lib = ctypes.CDLL(str(native_dir / "libcloudxr.so"), mode=os.RTLD_DEEPBIND)
     service = ctypes.c_void_p()
-    lib.nv_cxr_service_create(ctypes.byref(service))
+    _check_result("nv_cxr_service_create", lib.nv_cxr_service_create(ctypes.byref(service)))
+    started = False
+    stop_requested = False
+    stopping = False
+    stop_result = 0
+    joined = False
 
     def stop(_signum: int, _frame: object) -> None:
-        lib.nv_cxr_service_stop(service)
+        nonlocal stop_requested, stopping, stop_result
+        stop_requested = True
+        if started and not stopping:
+            stopping = True
+            stop_result = lib.nv_cxr_service_stop(service)
 
     signal.signal(signal.SIGINT, stop)
     signal.signal(signal.SIGTERM, stop)
-    lib.nv_cxr_service_start(service)
+    try:
+        _check_result("nv_cxr_service_start", lib.nv_cxr_service_start(service))
+        started = True
+        if stop_requested:
+            stop(0, None)
 
-    # join() blocks in native code; run it on a worker so the main thread
-    # stays in Python and can handle the stop signals.
-    def join_then_destroy() -> None:
-        lib.nv_cxr_service_join(service)
-        lib.nv_cxr_service_destroy(service)
+        # Only stop may run concurrently with native join. The owner destroys
+        # the handle after join completes and signal admission is closed.
+        with ThreadPoolExecutor(max_workers=1) as worker:
+            result = worker.submit(lib.nv_cxr_service_join, service).result()
+        _check_result("nv_cxr_service_join", result, allow_stopped=True)
+        joined = True
+        _check_result("nv_cxr_service_stop", stop_result, allow_stopped=True)
+    finally:
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        if not started or joined:
+            lib.nv_cxr_service_destroy(service)
 
-    worker = threading.Thread(target=join_then_destroy)
-    worker.start()
-    worker.join()
+
+def _check_result(operation: str, result: int, *, allow_stopped: bool = False) -> None:
+    # The SDK permits NOT_STARTED when the runtime stops by external factors.
+    if result != 0 and not (allow_stopped and result == -6):
+        raise RuntimeError(f"{operation} failed with CloudXR result {result}; see the native runtime log")
 
 
 if __name__ == "__main__":
