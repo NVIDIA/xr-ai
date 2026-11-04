@@ -168,6 +168,14 @@ Failures, interruption, and departure release the scope without committing an
 unfinished summary. Direct callers can use `async with context.foreground()`
 around their routing and inference instead.
 
+Compaction has no progress guarantee during sustained live traffic. Repeated
+preemption can prevent summaries from completing, including when queries come
+from different participants. Prompt budgets still apply: the oldest uncompacted
+entries are omitted from the prompt with a warning, but remain stored for later
+compaction. Those budgets do not bound stored history; its memory usage can grow
+while compaction is deferred. Compaction needs an idle interval long enough to
+finish a request.
+
 This policy does not coordinate separate workers or unrelated model clients.
 It starts at an admitted query, not microphone activity, and ends when the
 routed answer finishes, not when downstream audio playback drains. Request

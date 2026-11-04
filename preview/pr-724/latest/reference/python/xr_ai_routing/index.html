@@ -845,10 +845,11 @@ whether called directly or published. An interrupted initialization runs again o
 <li><p><strong>cleanup_participant</strong> – Optional idempotent application cleanup after destination work is drained.
 Used also for initialized participants who never selected a route; failed cleanup can be retried.</p></li>
 <li><p><strong>turn_scope</strong> – Optional factory for an asynchronous context manager around each owned turn,
-including direct and runtime calls. Entered before initialization and routing; exited after
-the destination and failure handling finish, including cancellation. Use it to reserve shared
-resources or preempt background work. Entry failures prevent routing. It does not cover
-downstream audio playback and must not suppress exceptions or reenter router operations.</p></li>
+including direct and runtime calls. Entered after admission and before initialization and
+routing; exited after the destination and failure handling finish, including cancellation.
+Use it to reserve shared resources or preempt background work. Entry failures use the normal
+turn failure output. It does not cover downstream audio playback and must not suppress
+exceptions or reenter router operations.</p></li>
 <li><p><strong>set_status</strong> – Optional asynchronous callback receiving <code class="docutils literal notranslate"><span class="pre">processing</span></code> or <code class="docutils literal notranslate"><span class="pre">idle</span></code>, then the participant ID,
 around each runtime turn. Its failures are logged and do not fail the turn.
 All callbacks run on the delivery event loop and must not reenter this router’s operations.</p></li>
