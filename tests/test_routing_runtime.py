@@ -943,3 +943,103 @@ async def test_canceled_join_waiter_does_not_interrupt_initializer_cleanup():
         await asyncio.gather(joined, return_exceptions=True)
         assert cleanup_finished.is_set()
         assert router._join_tasks == {}
+
+
+@pytest.mark.parametrize("published", [False, True])
+async def test_turn_scope_precedes_initialization_routing_and_visual_response(published):
+    active = set()
+    order = []
+
+    @asynccontextmanager
+    async def priority(turn):
+        active.add(turn.participant_id)
+        order.append("enter")
+        try:
+            yield
+        finally:
+            order.append("exit")
+            active.remove(turn.participant_id)
+
+    async def initialize(participant):
+        assert participant in active
+        order.append("initialize")
+
+    class Decisions(_Decisions):
+        async def decide(self, state, questions, **kwargs):
+            assert "alice" in active
+            order.append("route")
+            return await super().decide(state, questions, **kwargs)
+
+    class Visual(_Destination):
+        async def answer(self, turn, *, started):
+            assert turn.participant_id in active
+            order.append("vision")
+            return await super().answer(turn, started=started)
+
+    async with _app(
+        lambda runtime: {"conversation": _Destination(runtime), "observation": Visual(runtime, "observation")},
+        Decisions("observation"), initialize_participant=initialize, turn_scope=priority,
+    ) as (runtime, router, *_):
+        if published:
+            await _query(runtime, "describe the current view")
+            await _settled(router)
+        else:
+            await router.handle(AgentTurn("alice", "turn", "describe the current view"))
+        assert order == ["enter", "initialize", "route", "vision", "exit"]
+        assert not active
+
+
+async def test_turn_scopes_release_on_replacement_departure_and_failure():
+    active = set()
+    exits = []
+    entered = asyncio.Queue()
+
+    @asynccontextmanager
+    async def priority(turn):
+        key = (turn.participant_id, turn.query)
+        active.add(key)
+        try:
+            yield
+        finally:
+            exits.append(key)
+            active.remove(key)
+
+    class Blocking(_Destination):
+        async def answer(self, turn, *, started):
+            key = (turn.participant_id, turn.query)
+            assert key in active
+            await entered.put(key)
+            if turn.query == "fail":
+                raise RuntimeError("failed answer")
+            await asyncio.Event().wait()
+
+    async with _app(lambda runtime: {"conversation": Blocking(runtime)}, turn_scope=priority) as (
+        runtime, router, *_
+    ):
+        await _query(runtime, "first")
+        assert await asyncio.wait_for(entered.get(), 1) == ("alice", "first")
+        await _query(runtime, "other", participant="bob")
+        assert await asyncio.wait_for(entered.get(), 1) == ("bob", "other")
+        assert len(active) == 2
+        await _query(runtime, "replacement")
+        assert await asyncio.wait_for(entered.get(), 1) == ("alice", "replacement")
+        assert ("alice", "first") in exits
+        assert active == {("alice", "replacement"), ("bob", "other")}
+        await router.participant_left("alice")
+        assert active == {("bob", "other")}
+        await _query(runtime, "fail", participant="bob")
+        await _settled(router)
+        assert not active
+        assert set(exits) == {("alice", "first"), ("alice", "replacement"), ("bob", "other"), ("bob", "fail")}
+
+
+async def test_turn_scope_entry_failure_never_starts_routing():
+    @asynccontextmanager
+    async def unavailable(_turn):
+        raise RuntimeError("priority reservation failed")
+        yield
+
+    async with _app(turn_scope=unavailable) as (_runtime, router, destinations, *_):
+        with pytest.raises(RuntimeError, match="priority reservation failed"):
+            await router.handle(AgentTurn("alice", "turn", "hello"))
+        assert not destinations["conversation"].turns

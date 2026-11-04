@@ -38,7 +38,12 @@ conversation = Conversation(
     runtime=runtime,
     output_topic=VOICE_OUTPUT_TOPIC,
 )
-front_end = AgentRouter({"conversation": conversation}, decisions, output=publish_router_control)
+front_end = AgentRouter(
+    {"conversation": conversation},
+    decisions,
+    output=publish_router_control,
+    turn_scope=lambda _turn: context.foreground(),
+)
 
 
 async def participant_left(participant_id: str) -> None:
@@ -149,8 +154,25 @@ rendered text rather than model tokens:
   the largest section budget plus 256 bytes. A larger backlog is compacted
   oldest first in several requests.
 - The newest dialogue exchange always stays verbatim. Compaction runs in the
-  background and never delays an answer.
+  background without awaiting its result in the answer path. Concurrent
+  inference can still compete for shared GPU resources.
 - A summary topic is not compacted: each update replaces its state.
+
+To give live queries priority, pass `turn_scope=lambda _turn: context.foreground()`
+to `AgentRouter`, as in the composition above. Before routing starts, this scope
+cancels and drains active compaction requests owned by the manager. It keeps
+compaction paused through the destination response, across all participants and
+incremental sources sharing that manager. Uncommitted entries remain intact;
+preempted requests retry after the last overlapping foreground scope exits.
+Failures, interruption, and departure release the scope without committing an
+unfinished summary. Direct callers can use `async with context.foreground()`
+around their routing and inference instead.
+
+This policy does not coordinate separate workers or unrelated model clients.
+It starts at an admitted query, not microphone activity, and ends when the
+routed answer finishes, not when downstream audio playback drains. Request
+cancellation depends on the serving backend; client cleanup does not guarantee
+that an already executing GPU kernel has stopped.
 
 | Situation | Handling |
 |---|---|

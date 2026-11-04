@@ -10,8 +10,10 @@ agent owns its prompt and its answer.
 
 from __future__ import annotations
 
+import asyncio
 import logging
-from collections.abc import Mapping, Sequence
+from collections.abc import AsyncIterator, Mapping, Sequence
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Literal
 
@@ -97,9 +99,9 @@ class ContextManager:
     incremental topic and the dialogue keep recent entries verbatim and fold
     older ones into a rolling summary written by ``llm``.
 
-    Every method runs on the event loop and none yields between reading and
-    writing a participant's context, so a participant's context is never
-    observed half-updated. Compaction runs as a background task per section.
+    Participant context updates run atomically on the delivery event loop.
+    Compaction runs as a background task per section; :meth:`foreground`
+    preempts its model requests while live work uses the same resources.
 
     The owner creates the manager, registers ``subscriber()`` with the runtime
     that delivers context updates, calls ``clear()`` when a participant leaves,
@@ -165,6 +167,71 @@ class ContextManager:
         self._compaction_input_budget_bytes = compaction_input_budget_bytes
         self._prompts = compaction_prompts or CompactionPrompts()
         self._closing = False
+        # Foreground work in any participant takes priority over every model
+        # request owned by this manager. Values mark requests preempted by it.
+        self._compaction_requests: dict[asyncio.Task[ChatResponse], bool] = {}
+        self._foreground_count = 0
+        self._background_ready = asyncio.Event()
+        self._background_ready.set()
+
+    @asynccontextmanager
+    async def foreground(self) -> AsyncIterator[None]:
+        """Suspend this manager's background inference for a live request.
+
+        Enter before routing or model inference. Entry cancels and drains active
+        compaction requests across all participants and context sources; their
+        uncommitted inputs remain stored. Pending work retries when the last
+        overlapping scope exits, including on failure or cancellation.
+
+        This controls requests owned by this manager, not other processes or
+        unrelated model clients. Cancellation support depends on the model
+        service: entry waits for its client request cleanup before yielding.
+
+        :raises RuntimeError: If the manager is closing.
+        """
+
+        if self._closing:
+            raise RuntimeError("conversation context is closing")
+        self._foreground_count += 1
+        self._background_ready.clear()
+        requests = tuple(self._compaction_requests)
+        for request in requests:
+            if not request.done():
+                self._compaction_requests[request] = True
+                _cancel_once(request)
+        try:
+            await _drain_requests(requests)
+            if self._closing:
+                raise RuntimeError("conversation context is closing")
+            yield
+        finally:
+            self._foreground_count -= 1
+            if not self._foreground_count and not self._closing:
+                self._background_ready.set()
+
+    async def _background_chat(self, messages: Sequence[ChatMessage]) -> ChatResponse:
+        while True:
+            # A waiter may wake after another foreground scope clears the gate.
+            while self._foreground_count:
+                await self._background_ready.wait()
+            if self._closing:
+                raise asyncio.CancelledError
+            request = asyncio.create_task(self._llm.chat(messages))
+            self._compaction_requests[request] = False
+            try:
+                response = await asyncio.shield(request)
+                if not self._compaction_requests[request]:
+                    return response
+            except asyncio.CancelledError:
+                owner = asyncio.current_task()
+                if owner is not None and owner.cancelling():
+                    _cancel_once(request)
+                    await _drain_requests((request,))
+                    raise
+                if not self._compaction_requests[request]:
+                    raise
+            finally:
+                self._compaction_requests.pop(request, None)
 
     def subscriber(self) -> Agent:
         """Return an Agent that applies the configured context topics to this manager.
@@ -351,7 +418,7 @@ class ContextManager:
                 ),
             ),
         )
-        return _summary_text(await self._llm.chat(messages))
+        return _summary_text(await self._background_chat(messages))
 
     async def _compact_dialogue(
         self,
@@ -379,7 +446,7 @@ class ContextManager:
                 ),
             ),
         )
-        return _summary_text(await self._llm.chat(messages))
+        return _summary_text(await self._background_chat(messages))
 
     async def _condense_summary(self, summary: str, limit_bytes: int) -> str:
         messages = (
@@ -389,7 +456,27 @@ class ContextManager:
             ),
             ChatMessage(role="user", content=summary),
         )
-        return _summary_text(await self._llm.chat(messages))
+        return _summary_text(await self._background_chat(messages))
+
+
+
+def _cancel_once(request: asyncio.Task) -> None:
+    if not request.done() and not request.cancelling():
+        request.cancel()
+
+
+async def _drain_requests(requests: tuple[asyncio.Task, ...]) -> None:
+    """Retain request cleanup ownership even when the foreground caller leaves."""
+
+    drain = asyncio.gather(*requests, return_exceptions=True)
+    cancelled = False
+    while not drain.done():
+        try:
+            await asyncio.shield(drain)
+        except asyncio.CancelledError:
+            cancelled = True
+    if cancelled:
+        raise asyncio.CancelledError
 
 
 def _instructions(prompt: str, limit_bytes: int) -> str:
