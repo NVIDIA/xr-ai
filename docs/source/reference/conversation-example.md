@@ -307,8 +307,9 @@ to use wake-addressed turns without a persistent conversation. Refer to
 {ref}`voice-conversation-controls`. Relative paths in the worker YAML are resolved from `yaml/`, not
 from the shell's current directory.
 
-The optional `acknowledgment_delay_secs` setting enables route-aware intention
-acknowledgments when set to a positive number; it is disabled when omitted.
+The `acknowledgment_delay_secs` setting enables route-aware intention
+acknowledgments when set to a positive number; the sample YAML sets it to 2.0,
+and it is disabled when omitted.
 The delay is measured from accepted destination execution until its first
 nonblank answer text is ready for emission, excluding routing, admission, and
 any acknowledgment-output serialization. Confident predictions of a slower
