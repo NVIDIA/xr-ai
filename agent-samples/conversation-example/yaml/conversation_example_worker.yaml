@@ -42,7 +42,7 @@ compaction_input_budget_bytes: 12000
 # and acknowledgment. The delay is in seconds. The selected destination starts
 # immediately; a confident slow prediction can speak an acknowledgment early,
 # otherwise the delay is the fallback threshold.
-acknowledgment_delay_secs: 2.0
+acknowledgment_delay_secs: 1.0
 
 # Background visual alerts pace their frame checks. Every frame is first screened
 # by a cheap Clef image call; only a frame that may show the alert's subject also

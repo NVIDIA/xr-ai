@@ -308,7 +308,7 @@ to use wake-addressed turns without a persistent conversation. Refer to
 from the shell's current directory.
 
 The `acknowledgment_delay_secs` setting enables route-aware intention
-acknowledgments when set to a positive number; the sample YAML sets it to 2.0,
+acknowledgments when set to a positive number; the sample YAML sets it to 1.0,
 and it is disabled when omitted.
 The delay is measured from accepted destination execution until its first
 nonblank answer text is ready for emission, excluding routing, admission, and
