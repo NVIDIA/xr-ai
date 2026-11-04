@@ -17,7 +17,7 @@ To generate a guide from a captured packet, start with
 `guide-generation-skills/SKILL.md`, which coordinates drafting, evaluation, and
 revision. Refer to the
 [guide-generation reference](https://nvidia.github.io/xr-ai/latest/reference/procedure-capture-guide.html#generate-a-draft-guide)
-for the authoring request, validation, and human review workflow.
+for the full request, the evaluation command, and the human-review checklist.
 
 ## Directory map
 
