@@ -10,9 +10,12 @@ agent owns its prompt and its answer.
 
 from __future__ import annotations
 
+import asyncio
 import logging
-from collections.abc import Mapping, Sequence
+from collections.abc import AsyncIterator, Mapping, Sequence
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from time import monotonic
 from typing import Literal
 
 from xr_ai_models import ChatMessage, ChatResponse, LLMService
@@ -39,7 +42,16 @@ _SUMMARY_HEADER_BYTES = 256
 _DEFAULT_DIALOGUE_BUDGET_BYTES = 8_000
 _DEFAULT_TOPIC_BUDGET_BYTES = 4_000
 _DEFAULT_COMPACTION_INPUT_BUDGET_BYTES = 12_000
+# One aged batch may overlap live inference; space promotions to avoid draining
+# an overdue backlog at foreground priority.
+_COMPACTION_DEFER_SECONDS = 30.0
 _logger = logging.getLogger(__name__)
+
+
+@dataclass(slots=True)
+class _CompactionRequest:
+    owner: asyncio.Task
+    preempted: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,9 +109,10 @@ class ContextManager:
     incremental topic and the dialogue keep recent entries verbatim and fold
     older ones into a rolling summary written by ``llm``.
 
-    Every method runs on the event loop and none yields between reading and
-    writing a participant's context, so a participant's context is never
-    observed half-updated. Compaction runs as a background task per section.
+    Participant context updates run atomically on the delivery event loop.
+    Compaction runs as a background task per section; :meth:`foreground`
+    normally preempts its model requests while live work uses the same resources.
+    Aged batches get occasional progress alongside live work.
 
     The owner creates the manager, registers ``subscriber()`` with the runtime
     that delivers context updates, calls ``clear()`` when a participant leaves,
@@ -165,6 +178,133 @@ class ContextManager:
         self._compaction_input_budget_bytes = compaction_input_budget_bytes
         self._prompts = compaction_prompts or CompactionPrompts()
         self._closing = False
+        # Each owner is one byte-bounded batch, including its optional condense
+        # request. Its age survives request retries and starts before gate entry.
+        self._compaction_pending: dict[asyncio.Task, float] = {}
+        self._compaction_requests: dict[asyncio.Task[ChatResponse], _CompactionRequest] = {}
+        # Only this owner is exempt from foreground preemption. Departure and
+        # shutdown still cancel it; completion releases the slot and starts a
+        # quiet interval before another overdue batch can be promoted.
+        self._promoted_compaction: asyncio.Task | None = None
+        self._next_promotion_at = 0.0
+        self._foreground_count = 0
+        self._background_changed = asyncio.Event()
+
+    @asynccontextmanager
+    async def foreground(self) -> AsyncIterator[None]:
+        """Give live work priority over this manager's background inference.
+
+        Entry cancels and drains ordinary compaction requests across all
+        participants and context sources. Uncommitted inputs remain stored;
+        requests normally retry after the last overlapping scope exits.
+
+        After 30 seconds pending, the oldest eligible batch may run alongside
+        live work, including its optional summary-shortening request. Only one
+        batch is promoted at a time, with 30 seconds between its completion and
+        the next promotion. Foreground callers do not wait for promoted work,
+        but can experience inference contention. Clear and close still cancel it.
+
+        This controls requests owned by this manager, not other processes or
+        unrelated model clients. Cancellation support depends on the model
+        service: entry waits for ordinary client request cleanup before yielding.
+
+        :raises RuntimeError: If the manager is closing.
+        """
+
+        if self._closing:
+            raise RuntimeError("conversation context is closing")
+        self._foreground_count += 1
+        self._promote_overdue()
+        requests = tuple(
+            request for request, state in self._compaction_requests.items()
+            if state.owner is not self._promoted_compaction
+        )
+        for request in requests:
+            if not request.done():
+                self._compaction_requests[request].preempted = True
+                _cancel_once(request)
+        try:
+            await _drain_requests(requests)
+            if self._closing:
+                raise RuntimeError("conversation context is closing")
+            yield
+        finally:
+            self._foreground_count -= 1
+            self._background_changed.set()
+
+    def _promote_overdue(self) -> float | None:
+        """Promote the oldest eligible batch or return seconds until it is eligible."""
+
+        if self._closing or self._promoted_compaction is not None:
+            return None
+        oldest = next((job for job in self._compaction_pending if not job.done() and not job.cancelling()), None)
+        if oldest is None:
+            return None
+        now = monotonic()
+        due = max(self._compaction_pending[oldest] + _COMPACTION_DEFER_SECONDS, self._next_promotion_at)
+        if now < due:
+            return due - now
+        self._promoted_compaction = oldest
+        self._background_changed.set()
+        _logger.info("promoting context compaction batch job=%r pending_seconds=%.1f",
+                     oldest.get_name(), now - self._compaction_pending[oldest])
+        return None
+
+    def _finish_compaction(self, owner: asyncio.Task) -> None:
+        self._compaction_pending.pop(owner, None)
+        if self._promoted_compaction is owner:
+            self._promoted_compaction = None
+            self._next_promotion_at = monotonic() + _COMPACTION_DEFER_SECONDS
+        self._background_changed.set()
+
+    async def _background_chat(self, messages: Sequence[ChatMessage]) -> ChatResponse:
+        owner = asyncio.current_task()
+        assert owner is not None
+        if owner not in self._compaction_pending:
+            self._compaction_pending[owner] = monotonic()
+            owner.add_done_callback(self._finish_compaction)
+        while True:
+            while self._foreground_count and owner is not self._promoted_compaction:
+                self._background_changed.clear()
+                delay = self._promote_overdue()
+                if owner is self._promoted_compaction:
+                    break
+                # Wake without cancelling the owner: cancelling owners are
+                # ineligible for promotion because clear/close take precedence.
+                wake = (
+                    asyncio.get_running_loop().call_later(delay, self._background_changed.set)
+                    if delay is not None else None
+                )
+                try:
+                    await self._background_changed.wait()
+                finally:
+                    if wake is not None:
+                        wake.cancel()
+            if self._closing:
+                raise asyncio.CancelledError
+            request = asyncio.create_task(self._llm.chat(messages))
+            state = _CompactionRequest(owner)
+            self._compaction_requests[request] = state
+            try:
+                response = await asyncio.shield(request)
+                if not state.preempted:
+                    return response
+            except asyncio.CancelledError:
+                if owner.cancelling():
+                    _cancel_once(request)
+                    await _drain_requests((request,))
+                    raise
+                if not state.preempted:
+                    raise
+            except Exception:  # noqa: BLE001
+                # A cancelled transport can report an error instead of cancellation.
+                # Only explicitly preempted requests may discard that failure and retry.
+                if owner.cancelling():
+                    raise asyncio.CancelledError from None
+                if not state.preempted:
+                    raise
+            finally:
+                self._compaction_requests.pop(request, None)
 
     def subscriber(self) -> Agent:
         """Return an Agent that applies the configured context topics to this manager.
@@ -351,7 +491,7 @@ class ContextManager:
                 ),
             ),
         )
-        return _summary_text(await self._llm.chat(messages))
+        return _summary_text(await self._background_chat(messages))
 
     async def _compact_dialogue(
         self,
@@ -379,7 +519,7 @@ class ContextManager:
                 ),
             ),
         )
-        return _summary_text(await self._llm.chat(messages))
+        return _summary_text(await self._background_chat(messages))
 
     async def _condense_summary(self, summary: str, limit_bytes: int) -> str:
         messages = (
@@ -389,7 +529,26 @@ class ContextManager:
             ),
             ChatMessage(role="user", content=summary),
         )
-        return _summary_text(await self._llm.chat(messages))
+        return _summary_text(await self._background_chat(messages))
+
+
+def _cancel_once(request: asyncio.Task) -> None:
+    if not request.done() and not request.cancelling():
+        request.cancel()
+
+
+async def _drain_requests(requests: tuple[asyncio.Task, ...]) -> None:
+    """Retain request cleanup ownership even when the foreground caller leaves."""
+
+    drain = asyncio.gather(*requests, return_exceptions=True)
+    cancelled = False
+    while not drain.done():
+        try:
+            await asyncio.shield(drain)
+        except asyncio.CancelledError:
+            cancelled = True
+    if cancelled:
+        raise asyncio.CancelledError
 
 
 def _instructions(prompt: str, limit_bytes: int) -> str:

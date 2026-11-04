@@ -1404,3 +1404,558 @@ async def test_stream_does_not_commit_context_when_model_suppresses_cancellation
     assert closed.is_set() and output == ["partial"]
     assert manager._context.transcript("alice") == ()
     await conversation.close()
+
+
+@pytest.mark.asyncio
+async def test_foreground_preempts_all_participants_and_defers_new_context_work():
+    started, cancelled = asyncio.Event(), asyncio.Event()
+    calls = []
+
+    class Model(_LLM):
+        async def chat(self, messages, **_kwargs):
+            calls.append(messages)
+            if len(calls) == 1:
+                started.set()
+                try:
+                    await asyncio.Event().wait()
+                finally:
+                    cancelled.set()
+            return _response("Saved facts.")
+
+    manager = ContextManager(Model(), dialogue_budget_bytes=1000,
+                             incremental_context_topics=("notes",), topic_budget_bytes=1000)
+    manager.reconcile_history("alice", [("a" * 300, "reply", None), ("b" * 300, "reply", None)],
+                              exchange_ids=["a", "b"])
+    await asyncio.wait_for(started.wait(), 1)
+    try:
+        async with manager.foreground():
+            assert cancelled.is_set()
+            assert len(manager._context.transcript("alice")) == 2
+            await manager.update("bob", "notes", ConversationContextUpdate(text="n" * 600), mode="incremental")
+            with pytest.raises(ValueError, match="foreground failed"):
+                async with manager.foreground():
+                    raise ValueError("foreground failed")
+            for _ in range(3):
+                await asyncio.sleep(0)
+            assert len(calls) == 1
+        await _settle(manager, "alice")
+        await _settle(manager, "bob")
+        assert len(calls) == 3
+        assert manager._context.dialogue_snapshot("alice")[0].text == "Saved facts."
+        assert [entry.user for entry in manager._context.transcript("alice")] == ["b" * 300]
+        assert manager._context.sections("bob")[0][1] == "Saved facts."
+    finally:
+        await manager.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["dialogue", "source", "condense"])
+async def test_preemption_discards_cancellation_suppressing_summary_and_retries(kind):
+    started = asyncio.Event()
+    calls = 0
+
+    class Model(_LLM):
+        async def chat(self, _messages, **_kwargs):
+            nonlocal calls
+            calls += 1
+            if kind == "condense" and calls == 1:
+                return _response("oversized summary " * 30)
+            blocked_call = 2 if kind == "condense" else 1
+            if calls == blocked_call:
+                started.set()
+                try:
+                    await asyncio.Event().wait()
+                except asyncio.CancelledError:
+                    return _response("Stale cancelled result.")
+            return _response("Fresh summary.")
+
+    manager = ContextManager(Model(), dialogue_budget_bytes=1000,
+                             incremental_context_topics=("notes",), topic_budget_bytes=1000)
+    if kind == "source":
+        await manager.update("alice", "notes", ConversationContextUpdate(text="n" * 600), mode="incremental")
+    else:
+        manager.reconcile_history("alice", [("a" * 300, "reply", None), ("b" * 300, "reply", None)],
+                                  exchange_ids=["a", "b"])
+    await asyncio.wait_for(started.wait(), 1)
+    try:
+        async with manager.foreground():
+            for _ in range(3):
+                await asyncio.sleep(0)
+            rendered = " ".join(block.text for block in manager.blocks("alice"))
+            assert "Stale cancelled result" not in rendered
+            assert "Fresh summary" not in rendered
+        await _settle(manager, "alice")
+        rendered = " ".join(block.text for block in manager.blocks("alice"))
+        assert "Fresh summary." in rendered
+        assert "Stale cancelled result" not in rendered
+        assert calls == (3 if kind == "condense" else 2)
+    finally:
+        await manager.close()
+
+
+@pytest.mark.asyncio
+async def test_cancelled_foreground_entry_drains_cleanup_before_background_resumes():
+    started, cleaning, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    calls = 0
+    yielded = False
+
+    class Model(_LLM):
+        async def chat(self, _messages, **_kwargs):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                started.set()
+                try:
+                    await asyncio.Event().wait()
+                finally:
+                    cleaning.set()
+                    await release.wait()
+            return _response("Saved facts.")
+
+    manager = ContextManager(Model(), incremental_context_topics=("notes",), topic_budget_bytes=1000)
+    await manager.update("alice", "notes", ConversationContextUpdate(text="n" * 600), mode="incremental")
+    await asyncio.wait_for(started.wait(), 1)
+
+    async def foreground():
+        nonlocal yielded
+        async with manager.foreground():
+            yielded = True
+
+    task = asyncio.create_task(foreground())
+    try:
+        await asyncio.wait_for(cleaning.wait(), 1)
+        task.cancel()
+        await asyncio.sleep(0)
+        task.cancel()
+        await asyncio.sleep(0)
+        assert not task.done() and not yielded and calls == 1
+        release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        await _settle(manager, "alice")
+        assert calls == 2 and not yielded
+    finally:
+        release.set()
+        await asyncio.gather(task, return_exceptions=True)
+        await manager.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("cleanup", ["clear", "close"])
+async def test_context_cleanup_while_foreground_paused_does_not_restart_deleted_work(cleanup):
+    started = asyncio.Event()
+    calls = 0
+
+    class Model(_LLM):
+        async def chat(self, _messages, **_kwargs):
+            nonlocal calls
+            calls += 1
+            started.set()
+            await asyncio.Event().wait()
+
+    manager = ContextManager(Model(), incremental_context_topics=("notes",), topic_budget_bytes=1000)
+    await manager.update("alice", "notes", ConversationContextUpdate(text="n" * 600), mode="incremental")
+    await asyncio.wait_for(started.wait(), 1)
+    async with manager.foreground():
+        if cleanup == "clear":
+            await manager.clear("alice")
+        else:
+            await manager.close()
+    for _ in range(3):
+        await asyncio.sleep(0)
+    assert calls == 1
+    assert manager._context.sections("alice") == ()
+    assert not manager._compaction_requests
+    await manager.close()
+    with pytest.raises(RuntimeError, match="closing"):
+        async with manager.foreground():
+            pytest.fail("closed manager admitted foreground work")
+
+
+@pytest.mark.asyncio
+async def test_model_cancellation_without_foreground_preemption_is_not_retried():
+    calls = 0
+
+    class Model(_LLM):
+        async def chat(self, _messages, **_kwargs):
+            nonlocal calls
+            calls += 1
+            raise asyncio.CancelledError
+
+    manager = ContextManager(Model(), incremental_context_topics=("notes",), topic_budget_bytes=1000)
+    try:
+        await manager.update("alice", "notes", ConversationContextUpdate(text="n" * 600), mode="incremental")
+        await _settle(manager, "alice")
+        assert calls == 1
+        assert "n" * 600 in manager._context.sections("alice")[0][1]
+    finally:
+        await manager.close()
+
+
+@pytest.mark.asyncio
+async def test_overlapping_foreground_scopes_resume_only_after_last_caller_exits():
+    calls = []
+
+    class Model(_LLM):
+        async def chat(self, messages, **_kwargs):
+            calls.append(messages)
+            return _response("Saved facts.")
+
+    manager = ContextManager(Model(), incremental_context_topics=("notes",), topic_budget_bytes=1000)
+    entered = [asyncio.Event(), asyncio.Event()]
+    release = [asyncio.Event(), asyncio.Event()]
+
+    async def foreground(index):
+        async with manager.foreground():
+            entered[index].set()
+            await release[index].wait()
+
+    first = asyncio.create_task(foreground(0))
+    second = asyncio.create_task(foreground(1))
+    try:
+        await asyncio.gather(*(event.wait() for event in entered))
+        await manager.update("bob", "notes", ConversationContextUpdate(text="n" * 600), mode="incremental")
+        release[0].set()
+        await first
+        await asyncio.sleep(0)
+        assert not calls
+        release[1].set()
+        await second
+        await _settle(manager, "bob")
+        assert len(calls) == 1
+    finally:
+        for event in release:
+            event.set()
+        await asyncio.gather(first, second, return_exceptions=True)
+        await manager.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("cleanup", ["clear", "close"])
+@pytest.mark.parametrize("outcome", ["cancel", "response", "error"])
+async def test_context_cleanup_cancels_and_drains_inflight_model_request(cleanup, outcome):
+    started, cleaning, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    requests = []
+
+    class Model(_LLM):
+        async def chat(self, _messages, **_kwargs):
+            requests.append(asyncio.current_task())
+            started.set()
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                cleaning.set()
+                await release.wait()
+                if outcome == "response":
+                    return _response("Cancelled summary.")
+                if outcome == "error":
+                    raise ConnectionError("aborted connection") from None
+                raise
+
+    manager = ContextManager(Model(), incremental_context_topics=("notes",), topic_budget_bytes=1000)
+    await manager.update("alice", "notes", ConversationContextUpdate(text="n" * 600), mode="incremental")
+    await asyncio.wait_for(started.wait(), 1)
+    task = asyncio.create_task(manager.clear("alice") if cleanup == "clear" else manager.close())
+    try:
+        await asyncio.wait_for(cleaning.wait(), 1)
+        assert not task.done() and not requests[0].done()
+        release.set()
+        await asyncio.wait_for(task, 1)
+        assert len(requests) == 1 and requests[0].done()
+        assert not manager._compaction_requests
+        assert manager._context.sections("alice") == ()
+    finally:
+        release.set()
+        for request in requests:
+            if not request.done():
+                request.cancel()
+        await asyncio.gather(task, *requests, return_exceptions=True)
+        await manager.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("preempted", [False, True])
+async def test_compaction_transport_error_retries_only_when_preempted(preempted):
+    started, fail = asyncio.Event(), asyncio.Event()
+    calls = 0
+
+    class Model(_LLM):
+        async def chat(self, _messages, **_kwargs):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                started.set()
+                try:
+                    await fail.wait()
+                except asyncio.CancelledError:
+                    raise ConnectionError("aborted connection") from None
+                raise ConnectionError("independent connection failure")
+            return _response("Fresh summary.")
+
+    manager = ContextManager(Model(), incremental_context_topics=("notes",), topic_budget_bytes=1000)
+    try:
+        await manager.update("alice", "notes", ConversationContextUpdate(text="n" * 600), mode="incremental")
+        await asyncio.wait_for(started.wait(), 1)
+        if preempted:
+            async with manager.foreground():
+                assert calls == 1
+                assert "n" * 600 in manager._context.sections("alice")[0][1]
+        else:
+            fail.set()
+        await _settle(manager, "alice")
+        assert calls == (2 if preempted else 1)
+        expected = "Fresh summary." if preempted else "n" * 600
+        assert expected in manager._context.sections("alice")[0][1]
+    finally:
+        await manager.close()
+
+
+def _compaction_clock(monkeypatch):
+    """Advance both admission age and asyncio deadlines without waiting in real time."""
+    from xr_ai_conversation import _manager
+
+    loop = asyncio.get_running_loop()
+    original_time = loop.time
+    offset = 0.0
+
+    def now():
+        return original_time() + offset
+
+    def advance(seconds):
+        nonlocal offset
+        offset += seconds
+
+    monkeypatch.setattr(loop, "time", now)
+    monkeypatch.setattr(_manager, "monotonic", now)
+    return advance
+
+
+async def _compaction_waiters_settle():
+    # Let tasks reach gate waits and let owner completion callbacks run. No
+    # wall-clock delay or model throughput is part of the policy assertions.
+    for _ in range(10):
+        await asyncio.sleep(0)
+
+
+@pytest.mark.asyncio
+async def test_aged_unstarted_batch_progresses_during_foreground_without_draining_backlog(monkeypatch):
+    advance = _compaction_clock(monkeypatch)
+    started = asyncio.Queue()
+    calls = []
+
+    class Model(_LLM):
+        async def chat(self, messages, **_kwargs):
+            release = asyncio.Event()
+            calls.append(messages)
+            await started.put(release)
+            await release.wait()
+            return _response("Saved facts.")
+
+    manager = ContextManager(Model(), dialogue_budget_bytes=1000, incremental_context_topics=("notes",),
+                             topic_budget_bytes=1000, compaction_input_budget_bytes=1000)
+    try:
+        async with manager.foreground():
+            for text in ("a" * 600, "b" * 600, "c" * 600):
+                await manager.update("alice", "notes", ConversationContextUpdate(text=text), mode="incremental")
+            await manager.update("bob", "notes", ConversationContextUpdate(text="d" * 600), mode="incremental")
+            alice = manager._context._participants["alice"].context_jobs["notes"]
+            bob = manager._context._participants["bob"].context_jobs["notes"]
+            await _compaction_waiters_settle()
+            advance(29)
+            await _compaction_waiters_settle()
+            assert not calls
+            advance(2)
+            # The timer must wake a job that has never started, even with no new query.
+            release = await asyncio.wait_for(started.get(), 1)
+            assert len(calls) == 1 and "a" * 600 in calls[0][-1].content
+            async with manager.foreground():
+                assert not alice.done()
+                release.set()
+                assert await asyncio.wait_for(asyncio.shield(alice), 1)
+            await _compaction_waiters_settle()
+            assert len(calls) == 1 and not bob.done()
+            assert "b" * 600 in manager._context.sections("alice")[0][1]
+            advance(29)
+            await _compaction_waiters_settle()
+            assert len(calls) == 1
+            advance(2)
+            release = await asyncio.wait_for(started.get(), 1)
+            assert len(calls) == 2 and "d" * 600 in calls[1][-1].content
+            release.set()
+            assert await asyncio.wait_for(asyncio.shield(bob), 1)
+            await _compaction_waiters_settle()
+            assert len(calls) == 2  # Alice's next batch does not inherit promotion.
+            await manager.close()
+        assert not manager._compaction_pending and manager._promoted_compaction is None
+    finally:
+        await manager.close()
+
+
+@pytest.mark.asyncio
+async def test_repeated_preemption_preserves_age_until_running_batch_is_promoted(monkeypatch):
+    advance = _compaction_clock(monkeypatch)
+    started = asyncio.Queue()
+    cancelled = []
+
+    class Model(_LLM):
+        async def chat(self, _messages, **_kwargs):
+            release = asyncio.Event()
+            await started.put(release)
+            try:
+                await release.wait()
+            except asyncio.CancelledError:
+                cancelled.append(release)
+                raise
+            return _response("Saved facts.")
+
+    manager = ContextManager(Model(), incremental_context_topics=("notes",), topic_budget_bytes=1000)
+    try:
+        await manager.update("alice", "notes", ConversationContextUpdate(text="n" * 600), mode="incremental")
+        job = manager._context._participants["alice"].context_jobs["notes"]
+        request = await asyncio.wait_for(started.get(), 1)
+        for _ in range(4):
+            advance(6)
+            async with manager.foreground():
+                assert request in cancelled
+                assert not job.done()
+            request = await asyncio.wait_for(started.get(), 1)
+        advance(7)
+        async with manager.foreground():
+            # Promotion protects the already running attempt without delaying entry.
+            assert len(cancelled) == 4 and request not in cancelled
+            request.set()
+            assert await asyncio.wait_for(asyncio.shield(job), 1)
+            assert manager._context.sections("alice")[0][1] == "Saved facts."
+    finally:
+        await manager.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["dialogue", "source"])
+async def test_promotion_covers_condense_until_batch_commits(monkeypatch, kind):
+    advance = _compaction_clock(monkeypatch)
+    condensing, release = asyncio.Event(), asyncio.Event()
+    calls = 0
+
+    class Model(_LLM):
+        async def chat(self, _messages, **_kwargs):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                return _response("oversized summary " * 30)
+            condensing.set()
+            await release.wait()
+            return _response("Saved facts.")
+
+    manager = ContextManager(Model(), dialogue_budget_bytes=1000,
+                             incremental_context_topics=("notes",), topic_budget_bytes=1000)
+    try:
+        async with manager.foreground():
+            if kind == "source":
+                await manager.update("alice", "notes", ConversationContextUpdate(text="n" * 600), mode="incremental")
+                job = manager._context._participants["alice"].context_jobs["notes"]
+            else:
+                manager.reconcile_history("alice", [("a" * 300, "reply", None), ("b" * 300, "reply", None)],
+                                          exchange_ids=["a", "b"])
+                job = manager._context._participants["alice"].dialogue_job
+            await _compaction_waiters_settle()
+            advance(31)
+            await asyncio.wait_for(condensing.wait(), 1)
+            async with manager.foreground():
+                assert calls == 2 and not job.done()
+                release.set()
+                assert await asyncio.wait_for(asyncio.shield(job), 1)
+            assert "Saved facts." in " ".join(block.text for block in manager.blocks("alice"))
+            assert manager._promoted_compaction is None
+    finally:
+        await manager.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("cleanup", ["clear", "close"])
+@pytest.mark.parametrize("outcome", ["response", "error"])
+async def test_cleanup_cancels_and_drains_promoted_work_without_stale_commit(monkeypatch, cleanup, outcome):
+    advance = _compaction_clock(monkeypatch)
+    started, cleaning, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    requests = []
+
+    class Model(_LLM):
+        async def chat(self, _messages, **_kwargs):
+            requests.append(asyncio.current_task())
+            started.set()
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                cleaning.set()
+                await release.wait()
+                if outcome == "error":
+                    raise ConnectionError("aborted promoted connection") from None
+                return _response("Stale promoted summary.")
+
+    manager = ContextManager(Model(), incremental_context_topics=("notes",), topic_budget_bytes=1000)
+    cleanup_task = None
+    try:
+        async with manager.foreground():
+            await manager.update("alice", "notes", ConversationContextUpdate(text="n" * 600), mode="incremental")
+            await _compaction_waiters_settle()
+            advance(31)
+            await asyncio.wait_for(started.wait(), 1)
+            cleanup_task = asyncio.create_task(manager.clear("alice") if cleanup == "clear" else manager.close())
+            await asyncio.wait_for(cleaning.wait(), 1)
+            assert not cleanup_task.done() and not requests[0].done()
+            release.set()
+            await asyncio.wait_for(cleanup_task, 1)
+            assert requests[0].done()
+            assert manager._context.sections("alice") == ()
+            assert not manager._compaction_pending and manager._promoted_compaction is None
+        await _compaction_waiters_settle()
+        assert len(requests) == 1
+    finally:
+        release.set()
+        if cleanup_task is not None:
+            await asyncio.gather(cleanup_task, return_exceptions=True)
+        await manager.close()
+
+
+@pytest.mark.asyncio
+async def test_failed_promotion_releases_slot_and_other_participant_progresses(monkeypatch):
+    advance = _compaction_clock(monkeypatch)
+    started = asyncio.Queue()
+    calls = 0
+
+    class Model(_LLM):
+        async def chat(self, _messages, **_kwargs):
+            nonlocal calls
+            calls += 1
+            release = asyncio.Event()
+            await started.put(release)
+            await release.wait()
+            if calls == 1:
+                raise ConnectionError("model unavailable")
+            return _response("Saved facts.")
+
+    manager = ContextManager(Model(), incremental_context_topics=("notes",), topic_budget_bytes=1000)
+    try:
+        async with manager.foreground():
+            for participant in ("alice", "bob"):
+                await manager.update(
+                    participant, "notes", ConversationContextUpdate(text="n" * 600), mode="incremental",
+                )
+            alice = manager._context._participants["alice"].context_jobs["notes"]
+            bob = manager._context._participants["bob"].context_jobs["notes"]
+            await _compaction_waiters_settle()
+            advance(31)
+            release = await asyncio.wait_for(started.get(), 1)
+            release.set()
+            with pytest.raises(ConnectionError):
+                await asyncio.wait_for(asyncio.shield(alice), 1)
+            await _compaction_waiters_settle()
+            assert manager._promoted_compaction is None and calls == 1
+            assert "n" * 600 in manager._context.sections("alice")[0][1]
+            advance(31)
+            release = await asyncio.wait_for(started.get(), 1)
+            release.set()
+            assert await asyncio.wait_for(asyncio.shield(bob), 1)
+            assert calls == 2
+    finally:
+        await manager.close()
