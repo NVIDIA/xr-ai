@@ -69,6 +69,10 @@ updating the checkout. If you changed ports in a GPU profile, pass the same
 
 ## Output destination
 
+Recorded procedures are saved under
+`agent-samples/procedure-capture-guide/artifacts/sessions/<session-id>/` (frames, captions,
+transcript, and summary).
+
 Choose an output root at launch without editing configuration:
 
 ```bash
@@ -107,7 +111,8 @@ and then starts rendering while the recorder remains running.
 
 `yaml/media_capture.yaml` selects `session_mode: participant` and the `demo`
 profile. It saves recordings under
-`~/.local/share/xr-ai/captures/procedure-capture-guide/`, retaining raw media and
+`~/.local/share/xr-ai/captures/procedure-capture-guide/` (not the capture
+packets in `artifacts/sessions/`), retaining raw media and
 rendering a captioned MP4 after disconnect. This option requires an NVIDIA GPU with NVENC support
 and `ffmpeg` on `PATH`. Refer to {doc}`../components/server-runtime` for the shared
 recorder's output and encoding contract.
@@ -171,7 +176,7 @@ progress indicators.
 | `artifacts/sessions/<session-id>/frames/` | JPEG samples targeting 2 fps and timestamped `index.jsonl` |
 | `artifacts/sessions/<session-id>/captions.jsonl` | Timestamped captions, activities, phases, and visible changes |
 | `artifacts/sessions/<session-id>/transcript.jsonl` | Final user transcripts inside the task recording boundary |
-| `artifacts/sessions/<session-id>/summary.md` | Human-readable activity and phase summary |
+| `artifacts/sessions/<session-id>/summary.md` | Human-readable activity and phase summary, plus a combined timeline of narration (**Heard**) and captions (**Saw**) in time order |
 | `artifacts/sessions/<session-id>/errors.jsonl` | Frame, caption, or persistence errors, when present |
 
 ### Evidence-packet contract
@@ -279,6 +284,11 @@ to the generation workflow. No separate sample regression suite is needed.
 The authoring model observes runtime results and edits the
 guide. It does not replace the runtime VLM, invent tool answers, compile a plan
 into YAML, or approve the result. The capture worker does not invoke the skills.
+
+Start from `summary.md`: its combined timeline places narration and captions side
+by side and deliberately does not reconcile them. Where they disagree (for example,
+a caption names a different tool than the narrator), the drafting agent resolves the
+conflict using the original frames and records the correction in `review.md`.
 
 From the repository root, give the agent this request:
 
