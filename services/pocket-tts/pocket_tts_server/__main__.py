@@ -31,7 +31,9 @@ Config keys
 """
 import argparse
 import asyncio
+import http.client
 import io
+import json
 import math
 import os
 import socket
@@ -48,6 +50,7 @@ import yaml
 from loguru import logger
 from xr_ai_logging import setup_logging
 
+_SERVICE = "pocket_tts_server"
 _DEFAULT_PORT = 8105
 _DEFAULT_STARTUP_TIMEOUT_S = 600.0
 _PROCESS_GROUP_ENV = "_XR_AI_POCKET_PROCESS_GROUP"
@@ -363,7 +366,7 @@ def _build_app(cfg: dict, _model_cache: Path):
     def health():
         if not backend.ready:
             raise HTTPException(status_code=503, detail="model not loaded")
-        return {"status": "ok"}
+        return {"status": "ok", "service": _SERVICE}
 
     @app.get("/v1/models")
     def list_models():
@@ -492,11 +495,15 @@ def _build_app(cfg: dict, _model_cache: Path):
 
 
 def _health_url_ok(health_url: str) -> bool:
-    """Return True if *health_url* answers successfully."""
+    """Return True if *health_url* identifies a healthy Pocket TTS service."""
     try:
         with urllib.request.urlopen(health_url, timeout=2) as response:
-            return response.status == 200
-    except Exception:
+            if response.status != 200:
+                return False
+            body = json.load(response)
+            return isinstance(body, dict) and body.get("service") == _SERVICE
+    except (OSError, http.client.HTTPException, ValueError):
+        # ignored: unavailable or invalid health responses cannot establish reuse.
         return False
 
 
@@ -559,7 +566,7 @@ def _monitor_reused_server(health_url: str, poll_s: float = 5.0) -> None:
         failures += 1
         if failures < _REUSE_HEALTH_FAILURE_LIMIT:
             print(
-                f"[pocket_tts_server] reused server health endpoint unreachable "
+                f"[pocket_tts_server] reused server health check failed "
                 f"({failures}/{_REUSE_HEALTH_FAILURE_LIMIT}); retrying",
                 flush=True,
             )
@@ -715,7 +722,9 @@ def run() -> None:
     if _port_open(probe_host, port):
         raise SystemExit(
             f"[pocket_tts_server] port {port} is already in use, but its "
-            "/health endpoint is not healthy"
+            "/health endpoint does not identify a healthy Pocket TTS server. "
+            "Stop the listener before launching again (use your model-server "
+            "launcher with --stop for a managed server)."
         )
 
     cmd = [sys.executable, "-m", "pocket_tts_server", "--_serve"]

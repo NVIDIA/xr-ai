@@ -54,6 +54,7 @@ from ._health import stack_health
 
 _READY_INTERVAL = 5.0   # seconds between progress lines
 _STOP_TIMEOUT   = 20.0  # seconds before SIGKILL during shutdown
+_KILL_TIMEOUT = 5.0
 _OUTPUT_DRAIN_TIMEOUT = 1.0
 _PROCESS_GROUP_OWNER_ENV = "_XR_AI_LAUNCHER_PROCESS_GROUP_OWNER"
 _READY_PROCESS_MAY_EXIT_ENV = "_XR_AI_LAUNCHER_READY_PROCESS_MAY_EXIT"
@@ -119,8 +120,8 @@ class Parallel:
 
     The launcher spawns every member at once and waits for *all* of them to
     signal readiness before advancing to the next item in the stack sequence.
-    A member that signals readiness remains monitored until the whole group is
-    ready. An unexpected exit during that interval stops owned processes and
+    Every launched child remains monitored until the whole stack is ready.
+    An unexpected exit during that interval stops owned processes and
     persistent processes that have not signaled readiness. A successful
     ``persist`` process may exit after readiness only when
     ``run_stack(..., exit_after_ready=True)`` permits bootstrap wrappers to
@@ -351,35 +352,42 @@ class _ReadinessFailure(SystemExit):
         self.returncode = returncode
 
 
+def _check_startup_processes(
+    launched: dict[str, subprocess.Popen],
+    ready_dir: Path,
+    allowed_exits: set[str],
+) -> None:
+    for name, proc in launched.items():
+        rc = proc.poll()
+        if rc is None:
+            continue
+        ready = (ready_dir / f"{name}.ready").exists()
+        if rc == 0 and name in allowed_exits and ready:
+            continue
+        if ready:
+            reason = "after signaling ready during startup"
+        elif name in allowed_exits:
+            reason = "with no ready file present"
+        else:
+            reason = "before signaling ready"
+        log.error("[%s] exited (rc=%s) %s", name, rc, reason)
+        raise _ReadinessFailure(name, rc)
+
+
 def _wait_ready(
     name: str,
     ready_file: Path,
     proc: subprocess.Popen,
     cancellation: _Cancellation | None = None,
+    *,
+    ready_processes_may_exit: set[str],
+    launched: dict[str, subprocess.Popen],
 ) -> None:
-    """Block until *ready_file* exists. Print a progress line every 5 s."""
-    t0          = time.monotonic()
-    last_report = -_READY_INTERVAL  # force first line immediately
-
-    while True:
-        if cancellation is not None:
-            cancellation.check()
-        elapsed = time.monotonic() - t0
-
-        if ready_file.exists():
-            log.info("[%s] ready (%.0fs)", name, elapsed)
-            return
-
-        rc = proc.poll()
-        if rc is not None:
-            log.error("[%s] exited (rc=%s) before signaling ready", name, rc)
-            raise _ReadinessFailure(name, rc)
-
-        if elapsed - last_report >= _READY_INTERVAL:
-            log.debug("[%s] waiting... (%.0fs)", name, elapsed)
-            last_report = elapsed
-
-        time.sleep(0.5)
+    """Wait for one child while supervising every child launched so far."""
+    _wait_ready_parallel(
+        [(name, ready_file, proc)], cancellation,
+        ready_processes_may_exit=ready_processes_may_exit, launched=launched,
+    )
 
 
 _ReadyEntry = tuple[str, Path, subprocess.Popen]
@@ -387,11 +395,12 @@ _ReadyEntry = tuple[str, Path, subprocess.Popen]
 
 def _wait_ready_parallel(
     group: list[_ReadyEntry],
-    ready_processes_may_exit: set[str] | None = None,
     cancellation: _Cancellation | None = None,
+    *,
+    ready_processes_may_exit: set[str],
+    launched: dict[str, subprocess.Popen],
 ) -> None:
-    """Wait for the whole group while monitoring members that are already ready."""
-    allowed_exits = ready_processes_may_exit or set()
+    """Wait for the group while supervising every process launched so far."""
     ready: set[str] = set()
     t0 = time.monotonic()
     last_report = {name: -_READY_INTERVAL for name, _, _ in group}
@@ -399,25 +408,12 @@ def _wait_ready_parallel(
     while len(ready) < len(group):
         if cancellation is not None:
             cancellation.check()
+        _check_startup_processes(launched, group[0][1].parent, ready_processes_may_exit)
         elapsed = time.monotonic() - t0
-        for name, ready_file, proc in group:
+        for name, ready_file, _proc in group:
             if name not in ready and ready_file.exists():
                 ready.add(name)
                 log.info("[%s] ready (%.0fs)", name, elapsed)
-
-            rc = proc.poll()
-            if rc is not None:
-                if name in ready and name in allowed_exits and rc == 0:
-                    continue
-                if name in ready:
-                    log.error(
-                        "[%s] exited (rc=%s) before its parallel group was ready",
-                        name,
-                        rc,
-                    )
-                else:
-                    log.error("[%s] exited (rc=%s) before signaling ready", name, rc)
-                raise _ReadinessFailure(name, rc)
 
             if name not in ready and elapsed - last_report[name] >= _READY_INTERVAL:
                 log.debug("[%s] waiting... (%.0fs)", name, elapsed)
@@ -503,17 +499,30 @@ def _shutdown(
             break
         if p.poll() is None:
             try:
-                p.wait(timeout=max(0.1, remaining))
+                p.wait(timeout=remaining)
             except (subprocess.TimeoutExpired, KeyboardInterrupt):
-                log.warning("[%s] force-killing", name)
-                _killpg(p, signal.SIGKILL)
-                try:
-                    p.wait(timeout=5.0)
-                except Exception as exc:
-                    log.warning(
-                        "[%s] wait() failed after SIGKILL: %s — process may be zombie",
-                        name, exc,
-                    )
+                break
+
+    # Escalate every remaining child before waiting on any one of them.
+    for name, p in procs.items():
+        if name not in skip and p.poll() is None:
+            log.warning("[%s] force-killing", name)
+            _killpg(p, signal.SIGKILL)
+
+    deadline = time.monotonic() + _KILL_TIMEOUT
+    for name, p in procs.items():
+        if name in skip or p.poll() is not None:
+            continue
+        try:
+            p.wait(timeout=max(0.0, deadline - time.monotonic()))
+        except KeyboardInterrupt:
+            break
+        except Exception as exc:
+            # isolation boundary: a failed reap must not mask the stack failure or skip peers.
+            log.warning(
+                "[%s] wait() failed after SIGKILL: %s — process may be zombie",
+                name, exc,
+            )
 
 
 # ── readiness banner ───────────────────────────────────────────────────────────
@@ -571,6 +580,9 @@ def run_stack(
     The JSON body reports ``status``, spawned ``processes`` (running or exited),
     and ``unchecked_reuse`` process names. HEAD is also supported.
 
+    Every launched child is supervised throughout startup. Only a ``persist``
+    wrapper under ``exit_after_ready=True`` may exit with status 0 after creating
+    its ready file; all other exits abort startup.
     After all processes are ready the launcher monitors them: if any exits,
     the remaining foreground processes are terminated. The launcher preserves
     a positive child status, maps a signal to ``128 + signal``, and maps an
@@ -613,6 +625,7 @@ def run_stack(
     declared = [p for item in processes for p in (item.processes if isinstance(item, Parallel) else [item])]
     _no_kill = {p.name for p in declared if p.launch_mode in ("persist", "reuse")}
     unchecked_reuse = tuple(p.name for p in declared if p.launch_mode == "reuse")
+    allowed_exits = {p.name for p in declared if exit_after_ready and p.launch_mode == "persist"}
 
     launched: dict[str, subprocess.Popen] = {}
     failure_contexts: dict[str, FailureContext] = {}
@@ -659,13 +672,8 @@ def run_stack(
                     print(f"  [parallel] starting: {', '.join(p.name for p in to_spawn)}",
                           flush=True)
                     _wait_ready_parallel(
-                        group,
-                        {
-                            proc.name
-                            for proc in to_spawn
-                            if exit_after_ready and proc.launch_mode == "persist"
-                        },
-                        cancellation,
+                        group, cancellation,
+                        ready_processes_may_exit=allowed_exits, launched=launched,
                     )
                 else:
                     if item.launch_mode == "reuse":
@@ -681,9 +689,13 @@ def run_stack(
                         failure_contexts=failure_contexts,
                         output_readers=output_readers,
                     )
-                    _wait_ready(item.name, ready_file, launched[item.name], cancellation)
+                    _wait_ready(
+                        item.name, ready_file, launched[item.name], cancellation,
+                        ready_processes_may_exit=allowed_exits, launched=launched,
+                    )
 
             cancellation.check()
+            _check_startup_processes(launched, tmpdir, allowed_exits)
             initialized.set()
             log.info("All processes ready.")
             _print_ready_banner(list(launched.keys()))
