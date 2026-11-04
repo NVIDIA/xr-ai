@@ -11,7 +11,7 @@
 # while closed, natural conversation after start. Backend choice is separate.
 mode: always_on
 
-# Required and non-empty in wake_only and hybrid modes, e.g. ["hey agent"].
+# Required and non-empty in wake_only and hybrid modes, e.g. ["hey assistant"].
 # Ignored by always_on. Matches start a sentence, not a mid-sentence mention.
 magic_phrases: []
 # After a bare wake phrase, the next utterance may begin this many seconds later
@@ -27,8 +27,8 @@ stop_commands_enabled: true
 # Conversation controls apply in conversation and hybrid modes. Mode selects
 # activation; these fields only tune controls and the active-session policy.
 conversation:
-  start_phrase: "Hey agent, let's start talking"
-  stop_phrase: "Hey agent, let's stop talking"
+  start_phrase: "Start talking to me"
+  stop_phrase: "Stop talking to me"
   # Advanced: true requires addressing even after the conversation opens.
   # This does not enable wake-addressed queries while closed; hybrid does that.
   require_wake_phrase: false

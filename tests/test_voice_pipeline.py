@@ -586,12 +586,12 @@ async def test_vad_stt_stop_probe_schedules_on_speech_start(monkeypatch):
 @pytest.mark.asyncio
 async def test_vad_stt_retries_partial_probe_until_gate_aware_stop_matches(monkeypatch):
     _StagedVad.instances.clear()
-    stt = _StagedStt(texts=["hey", "hey agent stop"])
+    stt = _StagedStt(texts=["hey", "hey assistant stop"])
     partials: list[tuple[str, str]] = []
 
     async def on_partial(pid: str, text: str) -> bool:
         partials.append((pid, text))
-        return text == "hey agent stop"
+        return text == "hey assistant stop"
 
     monkeypatch.setattr("xr_ai_voice._processors.vad_stt.VadDetector", _StagedVad)
     proc = VadSttProcessor(
@@ -610,7 +610,7 @@ async def test_vad_stt_retries_partial_probe_until_gate_aware_stop_matches(monke
 
     assert partials == [
         ("web-client", "hey"),
-        ("web-client", "hey agent stop"),
+        ("web-client", "hey assistant stop"),
     ]
     assert len(stt.calls) == 2
 
@@ -620,10 +620,10 @@ async def test_vad_stt_retries_partial_probe_after_background_sentence(monkeypat
     _StagedVad.instances.clear()
     stt = _StagedStt(texts=[
         "background.",
-        "background. hey agent place a cube",
+        "background. hey assistant place a cube",
     ])
     gate = VoiceGateProcessor(
-        cfg=VoiceGateConfig(magic_phrases=("hey agent",)),
+        cfg=VoiceGateConfig(magic_phrases=("hey assistant",)),
         tts=_FakeTts(),
     )
 
@@ -721,7 +721,7 @@ async def test_stop_policy_with_probes_and_final_transcripts(
     _StagedVad.instances.clear()
     monkeypatch.setattr("xr_ai_voice._processors.vad_stt.VadDetector", _StagedVad)
     cfg = VoiceGateConfig(
-        magic_phrases=("hey agent",) if wake_phrase else (),
+        magic_phrases=("hey assistant",) if wake_phrase else (),
         listening_chime=False,
         stop_commands_enabled=stop_enabled,
     )
@@ -751,7 +751,7 @@ async def test_stop_policy_with_probes_and_final_transcripts(
         gate._conversation_active.add("web-client")
     frame = InputAudioRawFrame(audio=b"\x00\x00" * 320, sample_rate=16000, num_channels=1)
     frame.transport_source = "web-client"
-    final_text = f"hey agent {text}" if wake_phrase and conversation == "off" else text
+    final_text = f"hey assistant {text}" if wake_phrase and conversation == "off" else text
     active = conversation != "closed"
     try:
         await proc._handle_audio(frame)
@@ -782,11 +782,11 @@ async def test_stop_policy_with_probes_and_final_transcripts(
 @pytest.mark.asyncio
 async def test_disabling_stop_preserves_partial_wake_acknowledgment():
     gate = VoiceGateProcessor(
-        cfg=VoiceGateConfig(magic_phrases=("hey agent",), stop_commands_enabled=False),
+        cfg=VoiceGateConfig(magic_phrases=("hey assistant",), stop_commands_enabled=False),
         tts=_FakeTts(),
     )
     gate._emit_chime = AsyncMock()
-    assert not await gate.handle_partial_transcript("web-client", "hey agent")
+    assert not await gate.handle_partial_transcript("web-client", "hey assistant")
     gate._emit_chime.assert_awaited_once_with("web-client", early=True)
 
 
@@ -859,18 +859,18 @@ async def test_vad_stt_bare_partial_stop_interrupts_and_preserves_scoped_final_c
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(("partials", "final", "expected_query", "chime"), [
-    (("agent stop",), "agent stop", None, False),
-    (("hey agent stop",), "hey agent stop", None, True),
+    (("assistant stop",), "assistant stop", None, False),
+    (("hey assistant stop",), "hey assistant stop", None, True),
     (
-        ("hey agent stop",),
-        "hey agent stop monitoring xyz",
+        ("hey assistant stop",),
+        "hey assistant stop monitoring xyz",
         "stop monitoring xyz",
         True,
     ),
-    (("hey agent", "hey agent stop"), "hey agent stop", None, True),
-    (("hey agent", "hey agent stop"), "hey agent stop", None, False),
-    (("hey agent st", "hey agent stop"), "hey agent stop", None, True),
-    (("hey agent st", "hey agent stop"), "hey agent stop", None, False),
+    (("hey assistant", "hey assistant stop"), "hey assistant stop", None, True),
+    (("hey assistant", "hey assistant stop"), "hey assistant stop", None, False),
+    (("hey assistant st", "hey assistant stop"), "hey assistant stop", None, True),
+    (("hey assistant st", "hey assistant stop"), "hey assistant stop", None, False),
 ])
 async def test_vad_stt_gate_aware_stop_probe_preserves_final_intent(
     monkeypatch,
@@ -918,7 +918,7 @@ async def test_vad_stt_gate_aware_stop_probe_preserves_final_intent(
     stt = _SignaledStt()
     gate = VoiceGateProcessor(
         cfg=VoiceGateConfig(
-            magic_phrases=("agent", "hey agent"),
+            magic_phrases=("assistant", "hey assistant"),
             listening_chime=chime,
         ),
         tts=_FakeTts(),
@@ -1039,7 +1039,7 @@ async def test_vad_stt_final_transcription_waits_for_inflight_probe(monkeypatch)
                 if call_number == 1:
                     self.first_started.set()
                     await self.release_first.wait()
-                return "hey agent place a cube"
+                return "hey assistant place a cube"
             finally:
                 self.active -= 1
 
@@ -1084,9 +1084,9 @@ async def test_vad_stt_final_transcription_waits_for_inflight_probe(monkeypatch)
 
     assert len(stt.calls) == 2
     assert stt.max_active == 1
-    assert partials == ["hey agent place a cube"]
+    assert partials == ["hey assistant place a cube"]
     transcripts = [item for item in sink.frames if isinstance(item, TranscriptionFrame)]
-    assert [item.text for item in transcripts] == ["hey agent place a cube"]
+    assert [item.text for item in transcripts] == ["hey assistant place a cube"]
 
 
 @pytest.mark.asyncio
@@ -1110,7 +1110,7 @@ async def test_vad_stt_final_transcription_cancels_stalled_probe(monkeypatch):
             if len(self.calls) == 1:
                 self.probe_started.set()
                 await asyncio.Event().wait()
-            return "hey agent place a cube"
+            return "hey assistant place a cube"
 
     stt = _StalledProbeStt()
     monkeypatch.setattr("xr_ai_voice._processors.vad_stt.VadDetector", _StagedVad)
@@ -1150,7 +1150,7 @@ async def test_vad_stt_final_transcription_cancels_stalled_probe(monkeypatch):
 
     assert len(stt.calls) == 2
     transcripts = [item for item in sink.frames if isinstance(item, TranscriptionFrame)]
-    assert [item.text for item in transcripts] == ["hey agent place a cube"]
+    assert [item.text for item in transcripts] == ["hey assistant place a cube"]
 
 
 @pytest.mark.asyncio
@@ -1563,7 +1563,7 @@ async def test_voice_gate_processor_synthetic_query_chimes_after_empty_speech_tu
 @pytest.mark.asyncio
 async def test_voice_gate_processor_chimes_on_partial_wake_without_dispatching_early():
     cfg = VoiceGateConfig(
-        magic_phrases=("agent", "hey agent"),
+        magic_phrases=("assistant", "hey assistant"),
         listening_chime=True,
     )
     proc = VoiceGateProcessor(cfg=cfg, tts=_FakeTts())
@@ -1584,7 +1584,7 @@ async def test_voice_gate_processor_chimes_on_partial_wake_without_dispatching_e
         nonlocal early_audio_count
         await asyncio.sleep(0.05)
         stop_matched = await proc.handle_partial_transcript(
-            "pid-1", "hey agent place a blue sphere",
+            "pid-1", "hey assistant place a blue sphere",
         )
         assert stop_matched is False
         early_audio_count = sum(
@@ -1592,7 +1592,7 @@ async def test_voice_gate_processor_chimes_on_partial_wake_without_dispatching_e
         )
         assert not any(isinstance(frame, GatedQueryFrame) for frame in sink.frames)
         transcript = TranscriptionFrame(
-            text="hey agent place a blue sphere",
+            text="hey assistant place a blue sphere",
             user_id="pid-1",
             timestamp="t",
         )
@@ -1616,27 +1616,27 @@ async def test_voice_gate_processor_chimes_on_partial_wake_without_dispatching_e
 @pytest.mark.asyncio
 async def test_voice_gate_processor_keeps_partial_wake_probes_open():
     cfg = VoiceGateConfig(
-        magic_phrases=("agent", "hey agent"),
+        magic_phrases=("assistant", "hey assistant"),
         listening_chime=True,
     )
     proc = VoiceGateProcessor(cfg=cfg, tts=_FakeTts())
 
     assert await proc.handle_partial_transcript("pid-1", "hey") is False
-    assert await proc.handle_partial_transcript("pid-1", "hey agent") is False
-    assert await proc.handle_partial_transcript("pid-1", "hey agent st") is False
+    assert await proc.handle_partial_transcript("pid-1", "hey assistant") is False
+    assert await proc.handle_partial_transcript("pid-1", "hey assistant st") is False
     assert await proc.handle_partial_transcript("pid-1", "room conversation") is False
     assert await proc.handle_partial_transcript("pid-1", "background.") is False
 
 
 @pytest.mark.asyncio
 async def test_voice_gate_processor_phrase_only_falls_back_to_final_chime():
-    cfg = VoiceGateConfig(magic_phrases=("hey agent",), listening_chime=True)
+    cfg = VoiceGateConfig(magic_phrases=("hey assistant",), listening_chime=True)
     proc = VoiceGateProcessor(cfg=cfg, tts=_FakeTts())
     proc.gate.observe_tts_wav(_silence_wav(24000))
 
     started = UserStartedSpeakingFrame()
     started.transport_source = "pid-1"
-    transcript = TranscriptionFrame(text="hey agent", user_id="pid-1", timestamp="t")
+    transcript = TranscriptionFrame(text="hey assistant", user_id="pid-1", timestamp="t")
     transcript.transport_source = "pid-1"
     sink = await _run_chain(proc, sends=[
         started,
@@ -3454,7 +3454,7 @@ def test_private_pipeline_assembly_wires_partial_handler_for_magic_phrases():
             io_processor=_EchoAssistant(),
             vad_cfg=VadConfig(),
             voice_gate_cfg=VoiceGateConfig(
-                magic_phrases=("hey agent",),
+                magic_phrases=("hey assistant",),
                 listening_chime=False,
             ),
         )

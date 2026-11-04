@@ -78,7 +78,9 @@ def test_diagnostics_preserve_primary_mode_decisions(_streaming_models, monkeypa
     models, activity, _calls, _masks, _allocations, text = _streaming_models
 
     def trace(diagnostics):
-        cfg = _SpeakerConfig(mode=mode, magic_phrases=("hey agent",), diagnostics=diagnostics, silence_duration=0.16)
+        cfg = _SpeakerConfig(
+            mode=mode, magic_phrases=("hey assistant",), diagnostics=diagnostics, silence_duration=0.16,
+        )
         session = _Session(models, cfg, audio_origin_us=0)
         recognized, primary, display, states = {}, [], [], []
         original = session._step_native
@@ -102,37 +104,37 @@ def test_diagnostics_preserve_primary_mode_decisions(_streaming_models, monkeypa
 
         # An already-speaking bystander cannot reserve the addressed user's turn.
         feed([1], {1: "ordinary background speech"})
-        feed([1, 7], {7: "hey agent first question"})
+        feed([1, 7], {7: "hey assistant first question"})
         feed([1])
         assert session.selection.owner is None
         feed([])
         utter(7, "plain followup")
-        utter(7, "hey agent")
+        utter(7, "hey assistant")
         utter(1, "bystander followup")
         utter(7, "same speaker followup")
-        # Partial wake/control fragments are not independent addressed turns.
-        utter(7, "hey")
-        utter(7, "agent")
+        # Partial control fragments are not independent addressed turns.
+        utter(7, "start")
+        utter(7, "talking")
         utter(7, "unaddressed after fragments")
         feed([2, 7], {2: cfg.start_phrase, 7: cfg.start_phrase})
         feed([])
         assert session.selection.owner is None
         if mode in {"conversation", "hybrid"}:
-            utter(7, "hey agent let's")
             utter(7, "start talking")
+            utter(7, "to me")
             assert session.selection.owner == 7
-            utter(1, "hey agent bystander takeover")
+            utter(1, "hey assistant bystander takeover")
             utter(7, "natural owner query")
             utter(7, cfg.stop_phrase)
             assert session.selection.owner is None
         utter(7, "stop")
-        utter(7, "hey agent after stop")
+        utter(7, "hey assistant after stop")
         if diagnostics:
             assert display
             if mode != "conversation":
-                assert not any(event["speaker_id"] == 7 and event["text"] == "hey agent first question"
+                assert not any(event["speaker_id"] == 7 and event["text"] == "hey assistant first question"
                                for event in display)
-                assert not any(event["speaker_id"] == 7 and event["text"] == "hey agent" for event in display)
+                assert not any(event["speaker_id"] == 7 and event["text"] == "hey assistant" for event in display)
         else:
             assert not display
         return primary, states
@@ -156,7 +158,7 @@ async def test_actual_speaker_wire_modes_reach_shared_display_and_runtime(
     tmp_path, _streaming_models, monkeypatch, mode, diagnostics,
 ):
     models, activity, _calls, _masks, _allocations, text = _streaming_models
-    recognized = {1: "unrelated background speech", 7: "hey agent describe this"}
+    recognized = {1: "unrelated background speech", 7: "hey assistant describe this"}
     original_decode = _Session._step_native
 
     def decode(self, *args):
@@ -179,7 +181,7 @@ async def test_actual_speaker_wire_modes_reach_shared_display_and_runtime(
     serving = asyncio.create_task(http.serve(sockets=[listener]))
     path = tmp_path / "voice.yaml"
     path.write_text(yaml.safe_dump({
-        "mode": mode, "magic_phrases": ["hey agent"], "listening_chime": False,
+        "mode": mode, "magic_phrases": ["hey assistant"], "listening_chime": False,
         "speaker": {"enabled": True, "backend": "required", "diagnostics": diagnostics},
     }))
     cfg = load_voice_gate_config(path)
@@ -254,10 +256,10 @@ async def test_actual_speaker_wire_modes_reach_shared_display_and_runtime(
                     await asyncio.sleep(0)
             await audio.process_frame(ParticipantJoinedFrame("a"), FrameDirection.DOWNSTREAM)
             await feed([1])
-            await utter("hey agent describe this")
+            await utter("hey assistant describe this")
             assert allocated[0].selection.cfg.diagnostics is diagnostics
             assert allocated[0].selection.owner is None and not gate._conversation_active
-            accepted = "hey agent describe this" if mode == "always_on" else "describe this"
+            accepted = "hey assistant describe this" if mode == "always_on" else "describe this"
             assert [q[1] for q in recorder.queries] == ([] if mode == "conversation" else [accepted])
             await utter("plain followup")
             assert len(recorder.queries) == (2 if mode == "always_on" else 0 if mode == "conversation" else 1)
@@ -279,7 +281,7 @@ async def test_actual_speaker_wire_modes_reach_shared_display_and_runtime(
             ignored = [message for message in messages if message.topic == "voice.speaker-diagnostic"]
             assert bool(ignored) is diagnostics
             if mode != "conversation":
-                assert not any(message.data.decode().endswith(": hey agent describe this") for message in ignored)
+                assert not any(message.data.decode().endswith(": hey assistant describe this") for message in ignored)
             assert [call.args[1] for call in captions.await_args_list] == [q[1] for q in recorder.queries]
             assert gate._feeding_speaker_id is None
             await audio.process_frame(ParticipantLeftFrame("a"), FrameDirection.DOWNSTREAM)

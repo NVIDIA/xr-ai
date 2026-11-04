@@ -86,8 +86,8 @@ uv run simple_vlm_example --session-recording
 
 Open the authenticated web-client URL printed by DeviceIOHub, allow microphone
 and camera access, and connect. After the agent reports ready, say
-“Hey agent, let's start talking,” then speak questions without a wake phrase.
-Say “Hey agent, let's stop talking” to close the conversation. Typed questions
+“Start talking to me,” then speak questions without a wake phrase.
+Say “Stop talking to me” to close the conversation. Typed questions
 remain available without opening a voice conversation. With `--session-recording`, each connection is recorded under
 `~/.local/share/xr-ai/captures/simple-vlm-example/` and its raw bundle is finalized when the
 participant disconnects or the stack stops. For a captioned MP4, disconnect the

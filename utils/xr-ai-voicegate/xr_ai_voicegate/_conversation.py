@@ -9,6 +9,8 @@ import math
 import re
 from dataclasses import dataclass, fields
 
+from ._phrases import STOP_RE
+
 
 def _normalize(text: str) -> str:
     words = re.findall(r"\w+", text.casefold().replace("'", "").replace("’", ""))
@@ -21,8 +23,8 @@ def _letters(text: str) -> str:
 
 @dataclass(frozen=True)
 class _ConversationConfig:
-    start_phrase: str = "Hey agent, let's start talking"
-    stop_phrase: str = "Hey agent, let's stop talking"
+    start_phrase: str = "Start talking to me"
+    stop_phrase: str = "Stop talking to me"
     require_wake_phrase: bool = False
     phrase_window_s: float = 6.0
 
@@ -62,6 +64,10 @@ class _ConversationConfig:
         return _normalize(text) == _normalize(self.stop_phrase)
 
     def _could_be_control(self, text: str) -> bool:
+        # A global STOP such as "stop" or "stop talking" also opens the stop phrase. It interrupts at once; only
+        # the complete stop phrase closes the conversation.
+        if STOP_RE.match(text):
+            return False
         words = _normalize(text)
         return any(_normalize(p).startswith(words) for p in (self.start_phrase, self.stop_phrase))
 
@@ -89,10 +95,16 @@ class _ControlMatcher:
     def _feed(self, text: str, *, key: object, at_s: float) -> str | None:
         self._released = ""
         # Fragments join on letters, not words: an utterance boundary can fall
-        # inside a word ("hey ag" + "ent, let's start talking").
+        # inside a word ("start tal" + "king to me").
         words = _letters(text)
         if not words:
             self._reset()
+            return None
+        if STOP_RE.match(text):
+            # A global STOP is never part of a control; fragments held before it are released unchanged.
+            held = self._held
+            self._reset()
+            self._released = held
             return None
         controls = {
             "start": _letters(self.cfg.start_phrase),

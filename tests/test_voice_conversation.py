@@ -25,42 +25,59 @@ from xr_ai_voicegate._conversation import _ControlMatcher, _ConversationConfig
 def _config(tmp_path, *, require_wake=False, enabled=True):
     path = tmp_path / "voice.yaml"
     path.write_text(yaml.safe_dump({
-        "magic_phrases": ["hey agent"], "listening_chime": False,
+        "magic_phrases": ["hey assistant"], "listening_chime": False,
         "conversation": {"enabled": enabled, "require_wake_phrase": require_wake,
-                         "start_phrase": "Hey agent, let's start talking", "phrase_window_s": 6},
+                         "start_phrase": "Start talking to me", "phrase_window_s": 6},
     }))
     return load_voice_gate_config(path)
 
 
 @pytest.mark.parametrize("parts", [
-    ["Hey agent.", "Let's start talking."],
-    ["Hey agent", "let us", "start talking"],
+    ["Start talking.", "To me."],
+    ["Start", "talking", "to me"],
     # An utterance boundary can split a word.
-    ["Hey ag", "ent, let's start talking."],
-    ["Hey agent, let's start talk", "ing."],
+    ["Start tal", "king to me."],
+    ["Start talking to m", "e."],
     # Word boundaries inside the phrase do not matter.
-    ["Hey a gent, let's start talking"],
+    ["Sta rt talk ing to me"],
 ])
 def test_controls_join_phrase_prefixes(parts):
     matcher = _ControlMatcher(_ConversationConfig())
     actions = [matcher._feed(text, key="a", at_s=i) for i, text in enumerate(parts)]
     assert actions == ["pending"] * (len(parts) - 1) + ["start"]
-    assert matcher._feed("hey agent let's stop talking about that", key="a", at_s=4) is None
-    assert matcher._feed("someone said hey agent let's start talking", key="a", at_s=5) is None
+    assert matcher._feed("stop talking to me about that", key="a", at_s=4) is None
+    assert matcher._feed("someone said start talking to me", key="a", at_s=5) is None
+
+
+@pytest.mark.parametrize("text,could_be", [
+    ("stop", False), ("Stop talking.", False), ("stop talking please", False),  # a global STOP, not a control
+    ("stop talking to", True), ("start", True), ("Start talking to me", True), ("what time is it", False),
+])
+def test_global_stop_words_are_not_control_prefixes(text, could_be):
+    assert _ConversationConfig()._could_be_control(text) is could_be
+
+
+def test_global_stop_is_never_withheld_and_releases_held_fragments():
+    matcher = _ControlMatcher(_ConversationConfig())
+    assert matcher._feed("stop", key="a", at_s=0) is None and matcher._released == ""
+    assert matcher._feed("Star.", key="a", at_s=1) == "pending"
+    assert matcher._feed("stop talking", key="a", at_s=2) is None
+    assert matcher._released == "Star."
+    assert matcher._feed("stop talking to me", key="a", at_s=3) == "stop"
 
 
 @pytest.mark.parametrize("key,seconds", [("b", 1), ("a", 6.1), ("a", -1)])
 def test_control_fragments_do_not_cross_source_or_time_window(key, seconds):
     matcher = _ControlMatcher(_ConversationConfig())
-    assert matcher._feed("hey agent", key="a", at_s=0) == "pending"
-    assert matcher._feed("let's start talking", key=key, at_s=seconds) is None
-    assert matcher._feed("hey agent let's start talking", key=key, at_s=10) == "start"
+    assert matcher._feed("start talking", key="a", at_s=0) == "pending"
+    assert matcher._feed("to me", key=key, at_s=seconds) is None
+    assert matcher._feed("start talking to me", key=key, at_s=10) == "start"
 
 
-@pytest.mark.parametrize("key,seconds,released", [("a", 1, "Hey."), ("b", 1, ""), ("a", 6.1, "")])
+@pytest.mark.parametrize("key,seconds,released", [("a", 1, "Star."), ("b", 1, ""), ("a", 6.1, "")])
 def test_withheld_fragments_that_are_not_a_control_are_released(key, seconds, released):
     matcher = _ControlMatcher(_ConversationConfig())
-    assert matcher._feed("Hey.", key="a", at_s=0) == "pending"
+    assert matcher._feed("Star.", key="a", at_s=0) == "pending"
     assert matcher._feed("How are you?", key=key, at_s=seconds) is None
     assert matcher._released == released
     assert matcher._feed("what time is it", key="a", at_s=10) is None
@@ -68,8 +85,8 @@ def test_withheld_fragments_that_are_not_a_control_are_released(key, seconds, re
 
 
 @pytest.mark.parametrize("parts,released", [
-    (["He."], "He."),
-    (["He.", "Hey."], "He. Hey."),
+    (["Sta."], "Sta."),
+    (["Sta.", "Star."], "Sta. Star."),
 ])
 def test_partial_word_fragment_is_withheld_then_released(parts, released):
     matcher = _ControlMatcher(_ConversationConfig())
@@ -82,9 +99,9 @@ def test_partial_word_fragment_is_withheld_then_released(parts, released):
 def test_unrelated_and_empty_transcripts_clear_fragments():
     matcher = _ControlMatcher(_ConversationConfig())
     for text in ("what time is it", "", "   "):
-        assert matcher._feed("hey agent", key="a", at_s=0) == "pending"
+        assert matcher._feed("start talking", key="a", at_s=0) == "pending"
         assert matcher._feed(text, key="a", at_s=1) is None
-        assert matcher._feed("let's start talking", key="a", at_s=2) is None
+        assert matcher._feed("to me", key="a", at_s=2) is None
 
 
 @pytest.fixture
@@ -148,30 +165,33 @@ async def test_conversation_workflow_with_optional_wake_gate(harness):
     assert not h.accepted and h.captions.await_count == 0
     h.output.push_frame.assert_not_awaited()
     assert not await h.gate.handle_partial_transcript("a", "stop")
-    for part in ("hey agent", "let us", "start talking"):
+    for part in ("start", "talking", "to me"):
         await h.speak(part)
     assert "a" in h.gate._conversation_active
     assert not h.accepted and h.captions.await_count == 0
-    assert not await h.gate.handle_partial_transcript("a", "hey agent let's stop")
+    assert not await h.gate.handle_partial_transcript("a", "stop talking to")
     assert await h.gate.handle_partial_transcript("a", "stop")
 
     await h.speak("what is that")
     assert len(h.accepted) == (0 if h.gate._conversation_cfg.require_wake_phrase else 1)
-    # A withheld wake phrase leads the next transcript, as if spoken unsplit,
-    # unless wake phrases are required and it opened its follow-up window.
-    await h.speak("hey agent")
+    # A withheld control fragment leads the next transcript, as if spoken unsplit,
+    # unless wake phrases are required and a bare wake phrase opened its follow-up window.
+    require_wake = h.gate._conversation_cfg.require_wake_phrase
+    await h.speak("hey assistant" if require_wake else "start")
     await h.speak("describe this")
-    query = "describe this" if h.gate._conversation_cfg.require_wake_phrase else "hey agent describe this"
+    query = "describe this" if require_wake else "start describe this"
     assert h.accepted[-1].text == query
     await h.speak("stop")
     assert "a" in h.gate._conversation_active
     count = len(h.accepted)
-    await h.speak("hey agent")
-    await h.speak("let's stop talking")
+    await h.speak("stop talking to")
+    await h.speak("me")
     assert "a" not in h.gate._conversation_active and len(h.accepted) == count
     await h.speak("do not send this")
     assert len(h.accepted) == count
-    assert [call.args[1] for call in h.captions.await_args_list] == ["what is that", query, "stop"]
+    # A bare wake phrase is its own final transcript; a withheld control fragment is not.
+    expected = ["what is that", *(["hey assistant"] if require_wake else []), query, "stop"]
+    assert [call.args[1] for call in h.captions.await_args_list] == expected
 
 
 @pytest.mark.parametrize("failure", ["", RuntimeError("STT failed")])
@@ -179,33 +199,33 @@ async def test_conversation_workflow_with_optional_wake_gate(harness):
 async def test_failed_or_empty_final_stt_invalidates_pending_control(harness, failure, active):
     h = harness
     if active:
-        await h.speak("hey agent let's start talking")
-    await h.speak("hey agent")
+        await h.speak("start talking to me")
+    prefix, suffix = ("stop talking to", "me") if active else ("start talking", "to me")
+    await h.speak(prefix)
     await h.speak(failure)
-    suffix = "let's stop talking" if active else "let's start talking"
     await h.speak(suffix)
     assert ("a" in h.gate._conversation_active) is active
-    await h.speak(f"hey agent {suffix}")
+    await h.speak(f"{prefix} {suffix}")
     assert ("a" in h.gate._conversation_active) is not active
 
 
 async def test_failed_stt_and_disconnect_reset_only_affected_participant(harness):
     h = harness
-    await h.speak("hey agent", "a")
-    await h.speak("hey agent", "b")
+    await h.speak("start talking", "a")
+    await h.speak("start talking", "b")
     await h.speak(RuntimeError("STT failed"), "a")
-    await h.speak("let's start talking", "b")
-    await h.speak("let's start talking", "a")
+    await h.speak("to me", "b")
+    await h.speak("to me", "a")
     assert h.gate._conversation_active == {"b"}
-    await h.speak("hey agent", "a")
+    await h.speak("start talking", "a")
     await h.gate.process_frame(ParticipantLeftFrame(participant_id="a"), FrameDirection.DOWNSTREAM)
-    await h.speak("let's start talking", "a")
+    await h.speak("to me", "a")
     assert h.gate._conversation_active == {"b"}
 
 
 async def test_closed_participant_cannot_interrupt_another_conversation(harness):
     h = harness
-    await h.speak("hey agent let's start talking", "a")
+    await h.speak("start talking to me", "a")
     h.emitted.clear()
     await h.speak("stop", "b")
     assert not h.accepted and not any(isinstance(frame, InterruptionFrame) for frame in h.emitted)
@@ -215,12 +235,12 @@ async def test_closed_participant_cannot_interrupt_another_conversation(harness)
 
 async def test_natural_speech_preserves_complete_queries(harness):
     h = harness
-    await h.speak("hey agent let's start talking")
+    await h.speak("start talking to me")
 
     utterances = [
-        "Hey agent, explain the current reading",
-        "Compare the current and previous readings. Hey agent, explain the difference.",
-        "What is the current pressure? Hey agent.",
+        "Hey assistant, explain the current reading",
+        "Compare the current and previous readings. Hey assistant, explain the difference.",
+        "What is the current pressure? Hey assistant.",
     ]
     for utterance in utterances:
         await h.speak(utterance)
@@ -230,16 +250,16 @@ async def test_natural_speech_preserves_complete_queries(harness):
 
 async def test_natural_speech_partial_stop_uses_the_complete_transcript(harness):
     h = harness
-    await h.speak("hey agent let's start talking")
+    await h.speak("start talking to me")
 
     assert await h.gate.handle_partial_transcript("a", "stop")
-    assert not await h.gate.handle_partial_transcript("a", "Keep explaining. Hey agent, stop")
+    assert not await h.gate.handle_partial_transcript("a", "Keep explaining. Hey assistant, stop")
 
 
 def test_disabled_conversation_preserves_legacy_gate_config(tmp_path):
     cfg = _config(tmp_path, enabled=False)
     assert cfg._conversation is None
-    assert cfg.magic_phrases == ("hey agent",)
+    assert cfg.magic_phrases == ("hey assistant",)
     path = tmp_path / "voice.yaml"
     path.write_text("magic_phrases: []\n")
     assert load_voice_gate_config(path)._conversation is None
@@ -248,7 +268,7 @@ def test_disabled_conversation_preserves_legacy_gate_config(tmp_path):
 @pytest.mark.parametrize("raw", [
     {"enabled": "true"}, {"phrase_window_s": 0}, {"phrase_window_s": float("inf")},
     {"require_wake_phrase": "false"}, {"unknown": True},
-    {"start_phrase": "!"}, {"stop_phrase": "Hey agent, let's start talking"},
+    {"start_phrase": "!"}, {"stop_phrase": "start talking to me"},
 ])
 def test_invalid_conversation_settings_fail_early(raw):
     with pytest.raises(ValueError):

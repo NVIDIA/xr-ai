@@ -255,12 +255,12 @@ def test_config_loads_packaged_prompts_and_file_output_defaults() -> None:
     assert config.voice_gate_yaml == _SAMPLE / "yaml" / "voice_gate.yaml"
     assert yaml.safe_load(config.voice_gate_yaml.read_text()) == {
         "mode": "conversation",
-        "magic_phrases": ["agent", "hey agent"],
+        "magic_phrases": ["assistant", "hey assistant"],
         "listening_chime": True,
         "followup_grace_s": 5.0,
         "conversation": {
-            "start_phrase": "Hey agent, let's start talking",
-            "stop_phrase": "Hey agent, let's stop talking",
+            "start_phrase": "Start talking to me",
+            "stop_phrase": "Stop talking to me",
             "require_wake_phrase": False,
             "phrase_window_s": 6.0,
         },
