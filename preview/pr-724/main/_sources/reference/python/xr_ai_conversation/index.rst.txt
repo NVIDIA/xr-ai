@@ -187,7 +187,8 @@ Package Contents
 
    Participant context updates run atomically on the delivery event loop.
    Compaction runs as a background task per section; :meth:`foreground`
-   preempts its model requests while live work uses the same resources.
+   normally preempts its model requests while live work uses the same resources.
+   Aged batches get occasional progress alongside live work.
 
    The owner creates the manager, registers ``subscriber()`` with the runtime
    that delivers context updates, calls ``clear()`` when a participant leaves,
@@ -212,16 +213,21 @@ Package Contents
       :async:
 
 
-      Suspend this manager's background inference for a live request.
+      Give live work priority over this manager's background inference.
 
-      Enter before routing or model inference. Entry cancels and drains active
-      compaction requests across all participants and context sources; their
-      uncommitted inputs remain stored. Pending work retries when the last
-      overlapping scope exits, including on failure or cancellation.
+      Entry cancels and drains ordinary compaction requests across all
+      participants and context sources. Uncommitted inputs remain stored;
+      requests normally retry after the last overlapping scope exits.
+
+      After 30 seconds pending, the oldest eligible batch may run alongside
+      live work, including its optional summary-shortening request. Only one
+      batch is promoted at a time, with 30 seconds between its completion and
+      the next promotion. Foreground callers do not wait for promoted work,
+      but can experience inference contention. Clear and close still cancel it.
 
       This controls requests owned by this manager, not other processes or
       unrelated model clients. Cancellation support depends on the model
-      service: entry waits for its client request cleanup before yielding.
+      service: entry waits for ordinary client request cleanup before yielding.
 
       :raises RuntimeError: If the manager is closing.
 

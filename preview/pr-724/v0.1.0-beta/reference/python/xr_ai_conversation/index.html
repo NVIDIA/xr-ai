@@ -646,7 +646,8 @@ incremental topic and the dialogue keep recent entries verbatim and fold
 older ones into a rolling summary written by <code class="docutils literal notranslate"><span class="pre">llm</span></code>.</p>
 <p>Participant context updates run atomically on the delivery event loop.
 Compaction runs as a background task per section; <a class="reference internal" href="#xr_ai_conversation.ContextManager.foreground" title="xr_ai_conversation.ContextManager.foreground"><code class="xref py py-meth docutils literal notranslate"><span class="pre">foreground()</span></code></a>
-preempts its model requests while live work uses the same resources.</p>
+normally preempts its model requests while live work uses the same resources.
+Aged batches get occasional progress alongside live work.</p>
 <p>The owner creates the manager, registers <code class="docutils literal notranslate"><span class="pre">subscriber()</span></code> with the runtime
 that delivers context updates, calls <code class="docutils literal notranslate"><span class="pre">clear()</span></code> when a participant leaves,
 and calls <code class="docutils literal notranslate"><span class="pre">close()</span></code> at shutdown. Agents that share a manager use its
@@ -671,14 +672,18 @@ must be unique within and across both lists.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="xr_ai_conversation.ContextManager.foreground">
 <em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">foreground</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">collections.abc.AsyncIterator</span><span class="p"><span class="pre">[</span></span><span class="pre">None</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#xr_ai_conversation.ContextManager.foreground" title="Link to this definition">#</a></dt>
-<dd><p>Suspend this manager’s background inference for a live request.</p>
-<p>Enter before routing or model inference. Entry cancels and drains active
-compaction requests across all participants and context sources; their
-uncommitted inputs remain stored. Pending work retries when the last
-overlapping scope exits, including on failure or cancellation.</p>
+<dd><p>Give live work priority over this manager’s background inference.</p>
+<p>Entry cancels and drains ordinary compaction requests across all
+participants and context sources. Uncommitted inputs remain stored;
+requests normally retry after the last overlapping scope exits.</p>
+<p>After 30 seconds pending, the oldest eligible batch may run alongside
+live work, including its optional summary-shortening request. Only one
+batch is promoted at a time, with 30 seconds between its completion and
+the next promotion. Foreground callers do not wait for promoted work,
+but can experience inference contention. Clear and close still cancel it.</p>
 <p>This controls requests owned by this manager, not other processes or
 unrelated model clients. Cancellation support depends on the model
-service: entry waits for its client request cleanup before yielding.</p>
+service: entry waits for ordinary client request cleanup before yielding.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Raises<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>RuntimeError</strong> – If the manager is closing.</p>

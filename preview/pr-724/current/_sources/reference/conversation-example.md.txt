@@ -170,10 +170,12 @@ evenly between the two sections; with the default 12,000 bytes, each gets 6,000.
 `compaction_input_budget_bytes` separately limits one summary request; its
 default is 12,000 bytes. These are UTF-8 byte budgets, not token limits.
 
-Live queries pause background context compaction before Clef runs and through
-the routed response, including visual answers. Background visual alert watches
-run independently. Refer to [Context compaction](agent-sdk-conversation.md#context-compaction)
-for cancellation, retry behavior, and the effects of sustained live traffic.
+Live queries normally pause background context compaction before Clef runs and
+through the routed response, including visual answers. Occasionally, one aged
+compaction batch runs alongside live inference to preserve progress, which can
+increase query latency on shared GPUs. Background visual alert watches run
+independently. Refer to [Context compaction](agent-sdk-conversation.md#context-compaction)
+for cancellation, promotion, and retry behavior.
 
 Conversation prompts show the current time and coarse minute-rounded timestamps
 for completed exchanges and named context where available. Completed
