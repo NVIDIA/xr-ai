@@ -74,7 +74,7 @@ def test_scenes_are_reproducible_and_distinct(evaluator, tmp_path):
         if scene["kind"] == "packet":
             assert set(scene) <= {"kind", "blend", "color", "covered"}
     identification = guide.workflow.steps["identify"]
-    assert identification.evidence.pattern == r"(?i)^YES$"
+    assert identification.evidence.source == "model" and identification.agent is not None
     pixels = set()
     for case in cases:
         rendered = evaluator.render_scene(scenes[case["scene"]])
@@ -107,25 +107,24 @@ def test_visual_entry_point_renders_tea_manifest_without_models(tmp_path, monkey
     assert str(_TEA_EVAL / "_visual_expectations.py") in provenance["source_sha256"]
 
 
-@pytest.mark.parametrize("text,available,recognition,gate", [
-    ("TARGET | 100 C", True, True, True),
-    ("UNKNOWN", True, False, True),
-    ("CURRENT | 100 C", True, False, False),
-    ("model unavailable", False, None, None),
+@pytest.mark.parametrize("text,available,recognition", [
+    ("The TARGET setting is 100 C.", True, True),
+    ("The label is obscured.", True, False),
+    ("CURRENT reads 100 C.", True, False),
+    ("model unavailable", False, None),
 ])
-def test_negative_cases_separate_recognition_and_gate(evaluator, text, available, recognition, gate):
-    case = {"answer": r"TARGET\s*\|\s*100 C", "accept": False}
-    row = evaluator.score(case, r"CURRENT\s*\|\s*100 C", text, available)
-    assert row["recognition"] is recognition
-    assert row["gate_correct"] is gate
+def test_visual_diagnostic_scores_facts_not_completion(evaluator, text, available, recognition):
+    case = {"answer": r".*TARGET.*100 C.*", "accept": False}
+    row = evaluator.score(case, text, available)
+    assert row["text_match"] is recognition
+    assert "accepted" not in row and "gate_correct" not in row
 
 
 def test_empty_and_unavailable_runs_cannot_pass(evaluator):
     assert not evaluator.summarize([])["passed"]
     assert evaluator.summarize([{"status": "unavailable"}]) == {
         "attempts": 1, "scored": 0, "unavailable": 1,
-        "recognition_correct": 0, "gate_correct": 0,
-        "false_accepts": 0, "false_rejects": 0, "passed": False,
+        "evidence_text_matches": 0, "passed": False,
     }
 
 
@@ -145,12 +144,19 @@ async def test_visual_evaluator_uses_guide_question_not_answer(evaluator, tmp_pa
     manifest = yaml.safe_load((_TEA_EVAL / "fixtures/visual_expectations.yaml").read_text())
     scenes = evaluator.load_scenes(_TEA_EVAL / "fixtures/visual_expectations.yaml", manifest)
     canonical = []
+    cups = {"empty": "The cup is empty.", "dry_bag": "A dry bag sits in an empty cup.",
+            "water": "There is water in the cup.", "above": "The bag is above the water.",
+            "immersed": "The bag is immersed in water.", "floating": "The bag floats on the surface.",
+            "obscured": "The contents are obscured."}
     for case in manifest["cases"]:
-        if case["step"] == "heat_water" and case["answer"] != "UNKNOWN":
-            reading = scenes[case["scene"]]["readings"][-1]
-            canonical.append(f'{reading["label"]} | {reading["value"]}')
+        scene = scenes[case["scene"]]
+        if scene["kind"] == "kettle":
+            text = "; ".join(f'{r["label"] or "unlabeled"} reads {r["value"]}' for r in scene["readings"])
+        elif scene["kind"] == "packet":
+            text = "The text is covered." if scene.get("covered") else f'The packet reads {scene["blend"]}.'
         else:
-            canonical.append(case["answer"])
+            text = cups[case["scene"]]
+        canonical.append(text)
 
     class FakeTool:
         def __init__(self, *, images, vlm, system_prompt):
@@ -170,11 +176,9 @@ async def test_visual_evaluator_uses_guide_question_not_answer(evaluator, tmp_pa
     summary = await evaluator.evaluate(_TEA_EVAL / "fixtures/visual_expectations.yaml", output,
                                       _SAMPLE / "yaml/models.json", 2, 1)
     assert summary["attempts"] == 50
-    assert summary["false_rejects"] == (0 if correct else 10)
-    assert summary["gate_correct"] == (50 if correct else 40)
     assert summary["passed"] is correct
     if correct:
-        assert summary["recognition_correct"] == 50
+        assert summary["evidence_text_matches"] == 50
         assert all(step["passed"] for step in summary["by_step"].values())
     rows = [json.loads(line) for line in (output / "results.jsonl").read_text().splitlines()]
     guide = evaluator.load_guide(_SAMPLE / "example-guides/tea-making/guide.yaml")
@@ -201,7 +205,7 @@ async def test_timeout_is_not_a_correct_negative(evaluator, tmp_path, monkeypatc
         _SAMPLE / "yaml/models.json", 1, 1,
     )
     assert summary["unavailable"] == 25
-    assert summary["scored"] == summary["gate_correct"] == 0
+    assert summary["scored"] == summary["evidence_text_matches"] == 0
     assert not summary["passed"]
     fake_vlm.close.assert_awaited_once()
 
@@ -301,33 +305,30 @@ def test_inline_scene_manifest_preserves_provenance(evaluator, tmp_path):
     assert len(cases) == len(provenance["images"]) == 25
 
 
-@pytest.mark.parametrize("scene,text,recognition,accepted", [
-    ("current100", "CURRENT | 100.0 C", True, True),
-    ("current100", "CURRENT | 100℃", True, True),
-    ("actual212", "ACTUAL | 212.00℉", True, True),
-    ("current100", "CURRENT\n|\t100 C", True, True),
-    ("current100", "CURRENT | 100.1 C", False, False),
-    ("current100", "TARGET | 100 C", False, False),
-    ("target100", "CURRENT | 100 C", False, True),
-    ("chamomile", "NO CHAMOMILE", False, False),
-    ("chamomile", "YES\n", True, True),
+@pytest.mark.parametrize("scene,text,recognition", [
+    ("current100", "CURRENT reads 100.0 C.", True),
+    ("current100", "CURRENT reads 100℃", True),
+    ("actual212", "ACTUAL reads 212.00℉", True),
+    ("current100", "CURRENT\nreads\t100 C.", True),
+    ("current100", "CURRENT reads 100.1 C.", False),
+    ("current100", "TARGET reads 100 C.", False),
+    ("target100", "CURRENT reads 100 C.", False),
+    ("chamomile", "The package reads chamomile.", True),
+    ("chamomile", "YES", False),
 ])
-def test_recognition_and_runtime_gate_have_distinct_contracts(evaluator, scene, text, recognition, accepted):
+def test_descriptive_evidence_diagnostics(evaluator, scene, text, recognition):
     manifest = yaml.safe_load((_TEA_EVAL / "fixtures/visual_expectations.yaml").read_text())
     case = evaluator.visual_cases(manifest)[scene]
-    guide = evaluator.load_guide(_TEA_EVAL / "fixtures" / manifest["guide_path"])
-    pattern = guide.workflow.steps[case["step"]].evidence.pattern
-    row = evaluator.score(case, pattern, text, True)
-    assert row["recognition"] is recognition
-    assert row["accepted"] is accepted
-    assert row["gate_correct"] is (accepted == case["accept"])
+    row = evaluator.score(case, text, True)
+    assert row["text_match"] is recognition
+    assert "accepted" not in row
 
 
-def test_recognition_normalization_does_not_relax_evidence_gate(evaluator):
-    case = {"answer": "BREAKFAST BLACK", "accept": True}
-    row = evaluator.score(case, "^BREAKFAST BLACK$", "BREAKFAST\nBLACK", True)
-    assert row["recognition"]
-    assert not row["accepted"]
+def test_recognition_normalizes_layout_without_claiming_verification(evaluator):
+    case = {"answer": "BREAKFAST BLACK", "accept": False}
+    row = evaluator.score(case, "BREAKFAST\nBLACK", True)
+    assert row["text_match"]
+    assert "accepted" not in row
 
 
 @pytest.fixture

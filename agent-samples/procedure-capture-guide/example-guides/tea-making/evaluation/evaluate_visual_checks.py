@@ -4,8 +4,9 @@
 """Evaluate a guide's visual checks against a manifest of generated image scenes.
 
 Run each step independently so an early recognition failure cannot hide later
-cases. Save image and prompt provenance, raw responses, and separate recognition
-and evidence-gate scores. Use the adjacent run_scenario.py for conversational and execution coverage.
+cases. Save image and prompt provenance, raw responses, and evidence-recognition
+scores. This diagnostic does not judge completion: run_scenario.py exercises
+the observation LLM, runtime confirmation, conversation, and execution together.
 No model server processes are started or stopped here.
 """
 
@@ -15,7 +16,6 @@ import argparse
 import asyncio
 import hashlib
 import json
-import re
 import time
 from pathlib import Path
 
@@ -31,15 +31,12 @@ _SAMPLE = Path(__file__).resolve().parents[3]
 _PROMPT = _SAMPLE / "worker/procedure_capture_guide_worker/guide/prompts/guide_vision.txt"
 
 
-def score(case: dict, evidence_pattern: str, text: str, available: bool) -> dict:
+def score(case: dict, text: str, available: bool) -> dict:
     if not available:
         # An unavailable model is not a correct rejection of a negative fixture.
-        return {"recognition": None, "gate_correct": None, "accepted": None, "status": "unavailable"}
-    accepted = re.fullmatch(evidence_pattern, text.strip()) is not None
+        return {"text_match": None, "status": "unavailable"}
     return {
-        "recognition": matches_answer(case["answer"], text),
-        "gate_correct": accepted == case["accept"],
-        "accepted": accepted,
+        "text_match": matches_answer(case["answer"], text),
         "status": "scored",
     }
 
@@ -50,12 +47,9 @@ def summarize(rows: list[dict]) -> dict:
         "attempts": len(rows),
         "scored": len(scored),
         "unavailable": len(rows) - len(scored),
-        "recognition_correct": sum(row["recognition"] is True for row in scored),
-        "gate_correct": sum(row["gate_correct"] is True for row in scored),
-        "false_accepts": sum(row["accepted"] is True and not row["expected_accept"] for row in scored),
-        "false_rejects": sum(row["accepted"] is False and row["expected_accept"] for row in scored),
+        "evidence_text_matches": sum(row["text_match"] is True for row in scored),
         "passed": bool(rows) and len(scored) == len(rows)
-        and all(row["recognition"] and row["gate_correct"] for row in scored),
+        and all(row["text_match"] for row in scored),
     }
 
 
@@ -66,8 +60,8 @@ def prepare(manifest_path: Path, output: Path) -> tuple:
     cases = list(visual_cases(manifest).values())
     for case in cases:
         step = guide.workflow.steps[case["step"]]
-        if step.trigger.function != "current_view" or step.evidence is None:
-            raise ValueError("visual cases require a current_view step with an evidence gate")
+        if step.trigger.function != "current_view":
+            raise ValueError("visual cases require a current_view step")
         if case["scene"] not in scenes:
             raise ValueError("case scene must name a safe, defined scene")
     sources = [manifest_path, Path(__file__), Path(__file__).with_name("_scene_rendering.py"),
@@ -122,9 +116,8 @@ async def evaluate(manifest_path: Path, output: Path, models_path: Path, repeats
                     "scene": case["scene"], "step": case["step"], "trial": trial + 1,
                     "question": question, "answer": text, "available": available,
                     "expected_answer": case["answer"], "expected_accept": case["accept"],
-                    "evidence_pattern": step.evidence.pattern,
                     "latency_s": time.monotonic() - before,
-                    **score(case, step.evidence.pattern, text, available),
+                    **score(case, text, available),
                 }
                 rows.append(row)
                 with (output / "results.jsonl").open("a") as stream:
@@ -141,8 +134,9 @@ async def evaluate(manifest_path: Path, output: Path, models_path: Path, repeats
         "guide_sha256": guide.sha256,
         "models_config_sha256": hashlib.sha256(models_path.read_bytes()).hexdigest(),
         "elapsed_s": time.monotonic() - started,
-        "coverage": "Real configured VLM, production prompt and selected guide; isolated single-frame evidence gates.",
-        "not_scored": ["consecutive-frame enforcement", "conversation", "transitions", "timer", "STT", "TTS"],
+        "coverage": "Real configured VLM and guide questions; factual-text diagnostics, not completion judgments.",
+        "not_scored": ["LLM judgment", "completion", "consecutive-frame enforcement",
+                       "conversation", "transitions", "timer", "STT", "TTS"],
     }
     (output / "result.json").write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(result), flush=True)

@@ -41,6 +41,9 @@ Evaluation must run the real XR-AI guide runtime with the checkout's configured
 local models, prompts, tools, and clock. The authoring model is an observer,
 not a replacement VLM or tool executor. Read actual frame selections, model
 responses, tool calls, guidance state, and agent output before revising.
+For visual steps, Cosmos supplies descriptive evidence and the configured
+observation LLM judges completion through `workflow__commit`. Verify both stages;
+the authoring model must not substitute its own judgments for either model.
 Report unavailable infrastructure as blocked evaluation, not a pass or a reason
 to weaken a guide requirement.
 

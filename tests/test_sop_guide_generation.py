@@ -89,18 +89,17 @@ def visual():
     return yaml.safe_load((_REFERENCES / "example.yaml").read_text())
 
 
-def test_visual_example_uses_same_writable_boolean_and_closed_answers():
+def test_visual_example_uses_llm_judgment_of_visual_evidence():
     workflow = load_workflow(_REFERENCES / "example.yaml")
     step = workflow.steps[workflow.start_step]
     assert workflow.status == "draft"
     assert not workflow.runnable
     assert not step.is_complete(workflow.initial_state())
-    assert step.evidence.commit == step.complete_when == {step.writes[0]: True}
-    assert step.is_complete({**workflow.initial_state(), **step.evidence.commit})
+    assert step.complete_when == {step.writes[0]: True}
+    assert step.is_complete({**workflow.initial_state(), **step.complete_when})
+    assert step.evidence.source == "model" and step.agent is not None
+    assert not step.evidence.commit and step.evidence.pattern is None
     assert step.evidence.consecutive >= 2
-    assert re.fullmatch(step.evidence.pattern, "ready")
-    for response in ("not ready", "unclear", "ready, but still held", "unavailable"):
-        assert not re.fullmatch(step.evidence.pattern, response)
     assert step.next_step == "attach_clips"
     assert step.trigger.result_field == "text"
 
@@ -114,10 +113,9 @@ def test_visual_example_requires_fresh_evidence_for_each_linked_step():
         step = workflow.steps[step_id]
         assert not step.is_complete(state), "Earlier completion must not satisfy a later step"
         assert step.trigger.function == "current_view"
-        assert step.evidence.commit == step.complete_when == {step.writes[0]: True}
-        for response in ("not ready", "unclear", "unavailable"):
-            assert not re.fullmatch(step.evidence.pattern, response)
-        state.update(step.evidence.commit)
+        assert step.evidence.source == "model" and step.agent is not None
+        assert step.complete_when == {step.writes[0]: True}
+        state.update(step.complete_when)
         assert step.is_complete(state)
         visited.append(step_id)
         step_id = step.next_step
@@ -131,7 +129,7 @@ def test_timer_example_requires_live_setup_before_elapsed_only_wait():
     wait = workflow.steps[setup.next_step]
     assert setup.trigger.function == "current_view"
     assert setup.agent.tools == ()
-    assert setup.evidence.commit == {"placement_done": True}
+    assert setup.evidence.source == "model" and not setup.evidence.commit
     assert setup.complete_on_skip
     assert not setup.state_on_skip
     assert setup.writes == ("placement_done",)
@@ -141,7 +139,7 @@ def test_timer_example_requires_live_setup_before_elapsed_only_wait():
     assert wait.trigger.arguments == {"duration_s": 10}
     assert wait.reads == ()
     assert wait.trigger.result_field == "expired"
-    assert wait.agent.tools == ()
+    assert wait.agent is None
     assert wait.voice.tools == ("clock__timer",)
     assert wait.evidence.commit == wait.complete_when == {"wait_done": True}
     assert re.fullmatch(wait.evidence.pattern, "true")
@@ -149,12 +147,10 @@ def test_timer_example_requires_live_setup_before_elapsed_only_wait():
 
 
 def test_examples_follow_current_replay_completion_contract(visual):
-    for step in visual["steps"]:
-        step.pop("agent")  # Direct evidence commits do not need an observation policy.
     visual["steps"][-1]["finish_on_complete"] = True
     workflow = parse_workflow(yaml.safe_dump(visual))
     assert workflow.steps["attach_clips"].finish_on_complete
-    assert workflow.steps["attach_clips"].agent is None
+    assert workflow.steps["attach_clips"].agent is not None
     visual["steps"][0]["finish_on_complete"] = True
     with pytest.raises(ValueError, match="requires a terminal step"):
         parse_workflow(yaml.safe_dump(visual))
@@ -173,7 +169,8 @@ def test_completion_must_require_new_evidence(visual):
 
 
 def test_direct_commit_must_satisfy_completion(visual):
-    visual["steps"][0]["evidence"]["commit"]["workpiece_positioned"] = False
+    visual["steps"][0]["evidence"] = {"pattern": "ready", "consecutive": 1,
+                                        "commit": {"workpiece_positioned": False}}
     with pytest.raises(ValueError, match="must satisfy complete_when"):
         parse_workflow(yaml.safe_dump(visual))
 
@@ -196,7 +193,8 @@ def test_unresolved_identity_example_preserves_action_without_false_success():
 
 @pytest.mark.parametrize("mutation,diagnostic", [
     (lambda root: root.update(review_blockers=[]), "unknown fields"),
-    (lambda root: root["steps"][0]["evidence"].update(commit={"done_field": True}), "writable"),
+    (lambda root: root["steps"][0].update(evidence={"pattern": "ready", "consecutive": 1,
+                                                 "commit": {"done_field": True}}), "writable"),
     (lambda root: root["steps"][0].update(complete_when={"workpiece_positioned": "true"}), "boolean"),
     (lambda root: root["steps"][0]["trigger"].update(function="sequence_view"), "unsupported trigger"),
     (lambda root: root["steps"][0]["trigger"].update(arguments={}), "question"),
@@ -228,6 +226,8 @@ def test_validator_rejects_model_authoring_errors(visual, mutation, diagnostic):
 ])
 @pytest.mark.parametrize("value", [["ready"], {"ready": True}, True, 23, 1.5, None])
 def test_text_fields_reject_non_strings(visual, path, value):
+    if path[-1] == "pattern":
+        visual["steps"][0]["evidence"] = {"pattern": "ready", "consecutive": 1}
     target = visual
     for key in path[:-1]:
         target = target[key]
@@ -237,7 +237,7 @@ def test_text_fields_reject_non_strings(visual, path, value):
 
 
 def test_actual_string_regex_and_whitespace_preserve_existing_meaning(visual):
-    visual["steps"][0]["evidence"]["pattern"] = "  [ready]  "
+    visual["steps"][0]["evidence"] = {"pattern": "  [ready]  ", "consecutive": 1}
     visual["steps"][0]["agent"]["prompt"] = "  Observe carefully.  "
     workflow = parse_workflow(yaml.safe_dump(visual))
     step = workflow.steps[workflow.start_step]
@@ -256,8 +256,8 @@ def test_actual_string_regex_and_whitespace_preserve_existing_meaning(visual):
     (lambda source: source.replace(
         "    evidence:\n", "    evidence: {pattern: wrong, consecutive: 1}\n    evidence:\n"),
      "evidence"),
-    (lambda source: source.replace("      pattern: '^ready$'", "      pattern: '^ready$'\n      pattern: '^ready$'"),
-     "pattern"),
+    (lambda source: source.replace("      source: model", "      source: model\n      source: model"),
+     "source"),
     (lambda source: source.replace("    initial: false", "    initial: false\n    \"initial\": true"), "initial"),
 ])
 def test_duplicate_keys_rejected_at_every_level(edit, key):

@@ -30,15 +30,15 @@ actions:
   - {action: say, text: Stop guide, expect: Guide stopped, tools: [workflow__reset]}
   - {action: image, scene: green}
   - {action: say, text: Start guide, expect: Show the tea packet, tools: [workflow__restart]}
-  - {action: observe, answers: ['NO', 'No', 'no'], count: 2}
+  - {action: observe, expect_evidence: '.*\bgreen\b.*', count: 2}
   - {action: say, text: 'What is my status?', expect: 'current step: Read the tea packet\.$', tools: [workflow__status]}
   - {action: image, scene: breakfast}
-  - {action: observe, answers: ['NO', 'No', 'no'], count: 2}
+  - {action: observe, expect_evidence: '.*\bbreakfast\b.*', count: 2}
   - {action: image, scene: ginger}
-  - {action: observe, answers: ['NO', 'No', 'no'], count: 2}
+  - {action: observe, expect_evidence: '.*\bginger\b.*', count: 2}
   - {action: image, scene: mint}
-  - {action: observe, answers: ['NO', 'No', 'no'], count: 2}
+  - {action: observe, expect_evidence: '.*\bmint\b.*', count: 2}
   - {action: image, scene: unreadable}
-  - {action: observe, answers: ['UNKNOWN', 'Unknown', 'unknown'], count: 2}
+  - {action: observe, expect_evidence: '.*(?:unread|no.*(?:text|packet)|cannot|blank|no legib|not.*(?:text|legib)).*', count: 2}
   - {action: say, text: Next, expect: not complete, tools: [workflow__advance], arguments: [{skip: false}]}
   - {action: say, text: Stop guide, expect: Guide stopped, tools: [workflow__reset]}

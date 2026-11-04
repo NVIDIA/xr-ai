@@ -130,8 +130,15 @@ test environment, not evidence that a guide's condition is wrong.
 3. Read executed tool requests and results, guidance state snapshots,
    completion notices, and conversation responses. Do not claim internal
    evidence-hit counts or commits that the trace does not expose.
-   Distinguish a declared tool from a called tool. Direct `evidence.commit`
-   bypasses the observation LLM. Timer starts belong to the runtime on entry
+   Distinguish a declared tool from a called tool. Normal visual steps must run
+   the local observation LLM on Cosmos's descriptive evidence. Inspect the
+   LLM's `workflow__commit` proposals and actual accepted state changes; a
+   proposal can be rejected while waiting for another fresh confirmation.
+   Check that two calls on one frame do not count as two observations and that
+   incomplete, ambiguous, or failed judgments break the confirmation sequence.
+   Direct `evidence.commit` bypasses the observation LLM and is appropriate for
+   deterministic timer results, not the normal visual-step authoring pattern.
+   Timer starts belong to the runtime on entry
    to the wait step, never to model-written state or a spoken acknowledgment.
 4. Check that the engine did not accept incomplete states, inherit a previous
    step's completion, advance without its configured control, or claim more

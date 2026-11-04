@@ -40,18 +40,16 @@ steps:
       interval_s: 3
       result_field: text
       arguments:
-        question: "Is the workpiece resting flat inside the marked area? Answer exactly ready, not ready, or unclear."
+        question: "Describe the workpiece's position relative to the marked area and its contact with the surface. State whether it is held above the surface and which details are obscured."
     agent:
-      prompt: "Use the direct visual classification; unclear is not completion."
+      prompt: "Commit placement_done true only if the observation shows the workpiece resting flat inside the marked area. Held above, outside the area, or obscured contact is insufficient; use empty updates."
       tools: []
     voice:
       prompt: "Explain placement inside the marked area. The clock starts on entry to the waiting step."
       tools: [current_view]
     evidence:
-      pattern: '^ready$'
+      source: model
       consecutive: 2
-      commit:
-        placement_done: true
     complete_when:
       placement_done: true
     next: wait_elapsed
@@ -71,9 +69,6 @@ steps:
       arguments:
         duration_s: 10
       result_field: expired
-    agent:
-      prompt: "Use only the deterministic timer result; no visual check or estimated time."
-      tools: []
     voice:
       prompt: "Call clock__timer with no arguments to read the runtime-owned timer. Report remaining_s or expired. Do not inspect the scene or claim continuous contact."
       tools: [clock__timer]

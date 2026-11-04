@@ -97,7 +97,7 @@ and completion messages; do not copy the worked example's wording.
 | `reads`, `writes` | Lists of declared state fields; `writes` cannot be empty |
 | `trigger` | `function`, positive `interval_s`, `arguments`, optional `result_field` |
 | `agent`, `voice` | Each has a nonempty `prompt` and an allowed `tools` list; `agent` may be omitted with direct `evidence.commit` |
-| `evidence` | Optional mapping: full-match regex `pattern`, positive integer `consecutive`, optional typed `commit` mapping |
+| `evidence` | Optional mapping: `source` (`model` or default `observation`) and positive integer `consecutive`; observation source also requires `pattern` and permits a typed `commit` mapping |
 | `complete_when` | Nonempty typed mapping using only this step's writable fields |
 | `next` | Next step ID, or `null` for the last step |
 | `complete_on_skip` | Optional boolean, default false; true ends the run if this incomplete step is skipped |
@@ -105,7 +105,17 @@ and completion messages; do not copy the worked example's wording.
 | `state_on_skip` | Optional typed mapping using only writable fields; defaults to `{}` |
 | `messages` | Nonempty `enter`, `complete`, and `skip` strings |
 
-`evidence.commit` uses writable fields, not a literal placeholder like
+For normal visual steps use `evidence: {source: model, consecutive: 2}` and a
+required `agent` policy. The VLM supplies descriptive evidence; the observation
+LLM calls `workflow__commit` with supported writable values or empty updates.
+Code counts valid completion proposals, once per distinct fresh frame. It
+withholds a completing update until the required consecutive confirmations.
+Negative, uncertain, invalid, missing, cancelled, or failed judgments reset the
+count. Model-source evidence supports `current_view` and forbids `pattern` and
+`commit`; those fields would conflate visual evidence with the LLM's judgment.
+
+`source: observation` (also the default for existing guides) matches the raw
+tool result with `pattern`. `evidence.commit` uses writable fields, not a literal placeholder like
 `done_field`. With it, matching evidence commits directly without an observation
 LLM; that agent's prompt and tools do not execute. Without it, the observation
 agent may call the engine-provided
@@ -164,7 +174,7 @@ review notes; it does not make the guide tool incapable of checking the result.
 This includes an explicitly instructed count or orientation: absent visual
 corroboration is not an unresolved instruction. Decide from the required result.
 For example, an explicit placement instruction with an unavailable saved image
-can still have a `current_view` placement check with `^ready$` evidence.
+can still have a `current_view` placement check with model-source evidence.
 
 Reserve a blocked step for an unresolved required condition or an unsupported
 verification, such as proving past ordering or a hidden fit from one image.
