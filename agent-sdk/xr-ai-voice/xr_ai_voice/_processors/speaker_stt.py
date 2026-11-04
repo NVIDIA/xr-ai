@@ -32,7 +32,11 @@ from .._frames import (
 )
 from .._speaker_client import _SpeakerClient
 
-_COALESCED_AUDIO_BYTES = 5120  # 160 ms of signed 16-bit mono PCM at 16 kHz.
+# Two seconds at the hub's 10 ms cadence, including any retained frame.
+_MAX_QUEUED_FRAMES = 200
+# Cap coalescing at one default-model hop so its events do not wait for
+# another hop: 160 ms of signed 16-bit mono PCM at 16 kHz.
+_COALESCED_AUDIO_BYTES = 5120
 
 
 class _SpeakerSttProcessor(FrameProcessor):
@@ -118,16 +122,17 @@ class _SpeakerSttProcessor(FrameProcessor):
             pts_us = frame.pts // 1_000 if frame.pts is not None else time.time_ns() // 1_000
             queue = self._queues.get(pid)
             if queue is None:
-                # The hub emits 10 ms frames: 200 frames match the two-second
-                # PCM limit below, rather than imposing a one-second limit.
-                queue = asyncio.Queue(maxsize=200)
+                queue = asyncio.Queue(maxsize=_MAX_QUEUED_FRAMES)
                 self._queues[pid] = queue
                 self._queued_bytes[pid] = 0
                 self._queued_frames[pid] = 0
                 self._tasks[pid] = asyncio.create_task(self._run(pid, queue), name=f"speaker-stt-{pid}")
             # Bound both frame count and duration. Replaying delayed control
             # phrases after overload could enroll or release the wrong session.
-            if self._queued_frames[pid] >= 200 or self._queued_bytes[pid] + len(frame.audio) > 64000:
+            if (
+                self._queued_frames[pid] >= _MAX_QUEUED_FRAMES
+                or self._queued_bytes[pid] + len(frame.audio) > 64000
+            ):
                 logger.warning("speaker ASR overloaded; enrollment reset pid={!r}", pid)
                 await self._replace_worker(pid, retry=True)
                 return
@@ -139,6 +144,8 @@ class _SpeakerSttProcessor(FrameProcessor):
 
     async def _run(self, pid: str, queue: asyncio.Queue) -> None:
         task = asyncio.current_task()
+        # A retained frame stays in backlog counts and is discarded with its
+        # owning queue when this worker is cancelled.
         pending = None
         try:
             while True:
@@ -146,8 +153,6 @@ class _SpeakerSttProcessor(FrameProcessor):
                 pending = None
                 parts = [audio]
                 size = len(audio)
-                # Native inference can outlast several hub packets. Drain ready
-                # PCM without introducing a batching timer or losing continuity.
                 while size < _COALESCED_AUDIO_BYTES:
                     try:
                         next_audio, next_pts = queue.get_nowait()

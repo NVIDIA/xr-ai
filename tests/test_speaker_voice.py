@@ -582,7 +582,7 @@ async def test_queued_audio_coalesces_after_slow_inference_without_resetting_enr
 
 
 @pytest.mark.asyncio
-async def test_audio_coalescing_retains_oversized_next_frame_in_order_and_in_backlog():
+async def test_audio_coalescing_retains_next_frame_in_order_and_in_backlog():
     processor = _SpeakerSttProcessor(cfg=_SpeakerConfig())
     received, permits = asyncio.Queue(), asyncio.Queue()
 
@@ -601,10 +601,12 @@ async def test_audio_coalescing_retains_oversized_next_frame_in_order_and_in_bac
 
     packets = [(b"a" * 320, 1_010_000), (b"b" * 32000, 1_020_000),
                (b"c" * 320, 2_020_000), (b"d" * 4800, 2_030_000),
-               (b"e" * 320, 2_180_000)]
-    expected = [(packets[0], 37440, 4), (packets[1], 5440, 3),
-                ((packets[2][0] + packets[3][0], 2_020_000), 320, 1),
-                (packets[4], 0, 0)]
+               (b"e" * 640, 2_180_000), (b"f" * 4800, 2_200_000),
+               (b"g" * 320, 2_350_000)]
+    expected = [(packets[0], 42880, 6), (packets[1], 10880, 5),
+                ((packets[2][0] + packets[3][0], 2_020_000), 5760, 3),
+                (packets[4], 5120, 2),
+                ((packets[5][0] + packets[6][0], 2_200_000), 0, 0)]
     try:
         await processor.process_frame(ParticipantJoinedFrame("wearer"), FrameDirection.DOWNSTREAM)
         processor._enrolled.add("wearer")
