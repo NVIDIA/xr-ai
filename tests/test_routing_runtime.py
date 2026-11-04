@@ -1043,3 +1043,49 @@ async def test_turn_scope_entry_failure_never_starts_routing():
         with pytest.raises(RuntimeError, match="priority reservation failed"):
             await router.handle(AgentTurn("alice", "turn", "hello"))
         assert not destinations["conversation"].turns
+
+
+@pytest.mark.parametrize("factory_failure", [False, True])
+async def test_runtime_turn_scope_entry_failure_publishes_failure_and_idle(factory_failure):
+    initialized = []
+
+    async def initialize(participant):
+        initialized.append(participant)
+
+    @asynccontextmanager
+    async def unavailable(_turn):
+        raise RuntimeError("priority reservation failed")
+        yield
+
+    def scope_factory(turn):
+        if factory_failure:
+            raise RuntimeError("priority factory failed")
+        return unavailable(turn)
+
+    async with _app(turn_scope=scope_factory, initialize_participant=initialize) as (
+        runtime, router, destinations, output, status,
+    ):
+        await _query(runtime, "hello")
+        await asyncio.wait_for(_settled(router), 1)
+        await asyncio.wait_for(output.wait(1), 1)
+        assert len(output.items) == 1
+        assert output.items[0][0].text
+        assert status.items == [("processing", "alice"), ("idle", "alice")]
+        assert not destinations["conversation"].turns and not initialized
+
+
+async def test_turn_refused_after_scheduling_does_not_enter_scope():
+    entered = []
+
+    @asynccontextmanager
+    async def scope(turn):
+        entered.append(turn)
+        yield
+
+    async with _app(turn_scope=scope) as (_runtime, router, destinations, _output, status):
+        # Retire the admitted epoch before its owned task gets its first event-loop turn.
+        task = await router._submit(AgentTurn("alice", "stale", "hello"), emit=_control)
+        router._participant_epochs["alice"] = object()
+        with pytest.raises(RuntimeError, match="lifecycle changed"):
+            await task
+        assert not entered and not destinations["conversation"].turns and not status.items

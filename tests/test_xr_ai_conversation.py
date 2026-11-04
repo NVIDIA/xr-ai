@@ -1628,3 +1628,83 @@ async def test_overlapping_foreground_scopes_resume_only_after_last_caller_exits
             event.set()
         await asyncio.gather(first, second, return_exceptions=True)
         await manager.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("cleanup", ["clear", "close"])
+@pytest.mark.parametrize("outcome", ["cancel", "response", "error"])
+async def test_context_cleanup_cancels_and_drains_inflight_model_request(cleanup, outcome):
+    started, cleaning, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    requests = []
+
+    class Model(_LLM):
+        async def chat(self, _messages, **_kwargs):
+            requests.append(asyncio.current_task())
+            started.set()
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                cleaning.set()
+                await release.wait()
+                if outcome == "response":
+                    return _response("Cancelled summary.")
+                if outcome == "error":
+                    raise ConnectionError("aborted connection") from None
+                raise
+
+    manager = ContextManager(Model(), incremental_context_topics=("notes",), topic_budget_bytes=1000)
+    await manager.update("alice", "notes", ConversationContextUpdate(text="n" * 600), mode="incremental")
+    await asyncio.wait_for(started.wait(), 1)
+    task = asyncio.create_task(manager.clear("alice") if cleanup == "clear" else manager.close())
+    try:
+        await asyncio.wait_for(cleaning.wait(), 1)
+        assert not task.done() and not requests[0].done()
+        release.set()
+        await asyncio.wait_for(task, 1)
+        assert len(requests) == 1 and requests[0].done()
+        assert not manager._compaction_requests
+        assert manager._context.sections("alice") == ()
+    finally:
+        release.set()
+        for request in requests:
+            if not request.done():
+                request.cancel()
+        await asyncio.gather(task, *requests, return_exceptions=True)
+        await manager.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("preempted", [False, True])
+async def test_compaction_transport_error_retries_only_when_preempted(preempted):
+    started, fail = asyncio.Event(), asyncio.Event()
+    calls = 0
+
+    class Model(_LLM):
+        async def chat(self, _messages, **_kwargs):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                started.set()
+                try:
+                    await fail.wait()
+                except asyncio.CancelledError:
+                    raise ConnectionError("aborted connection") from None
+                raise ConnectionError("independent connection failure")
+            return _response("Fresh summary.")
+
+    manager = ContextManager(Model(), incremental_context_topics=("notes",), topic_budget_bytes=1000)
+    try:
+        await manager.update("alice", "notes", ConversationContextUpdate(text="n" * 600), mode="incremental")
+        await asyncio.wait_for(started.wait(), 1)
+        if preempted:
+            async with manager.foreground():
+                assert calls == 1
+                assert "n" * 600 in manager._context.sections("alice")[0][1]
+        else:
+            fail.set()
+        await _settle(manager, "alice")
+        assert calls == (2 if preempted else 1)
+        expected = "Fresh summary." if preempted else "n" * 600
+        assert expected in manager._context.sections("alice")[0][1]
+    finally:
+        await manager.close()

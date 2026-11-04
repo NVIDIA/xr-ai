@@ -230,6 +230,14 @@ class ContextManager:
                     raise
                 if not self._compaction_requests[request]:
                     raise
+            except Exception:  # noqa: BLE001
+                # A cancelled transport can report an error instead of cancellation.
+                # Only explicitly preempted requests may discard that failure and retry.
+                owner = asyncio.current_task()
+                if owner is not None and owner.cancelling():
+                    raise asyncio.CancelledError from None
+                if not self._compaction_requests[request]:
+                    raise
             finally:
                 self._compaction_requests.pop(request, None)
 
@@ -457,7 +465,6 @@ class ContextManager:
             ChatMessage(role="user", content=summary),
         )
         return _summary_text(await self._background_chat(messages))
-
 
 
 def _cancel_once(request: asyncio.Task) -> None:
