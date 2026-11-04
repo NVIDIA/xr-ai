@@ -45,6 +45,7 @@ Exceptions
 
    xr_ai_models.DecisionInputTooLargeError
    xr_ai_models.ModelServiceError
+   xr_ai_models.OCRRequestError
    xr_ai_models.OCRResponseError
 
 
@@ -90,7 +91,6 @@ Classes
    xr_ai_models.TTSSpec
    xr_ai_models.VLMSpec
    xr_ai_models.ThinkingSpec
-   xr_ai_models.OCRRequestError
    xr_ai_models.RivaSTT
    xr_ai_models.RivaTTS
 
@@ -1792,7 +1792,7 @@ Package Contents
    adapter kind.
 
 
-.. py:class:: OCRRequestError(message: str, *, status_code: int | None = None)
+.. py:exception:: OCRRequestError(message: str, *, status_code: int | None = None)
 
 
 
