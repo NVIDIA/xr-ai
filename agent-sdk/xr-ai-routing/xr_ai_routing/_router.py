@@ -12,7 +12,7 @@ import logging
 import math
 import time
 from collections.abc import Awaitable, Callable, Mapping
-from contextlib import nullcontext
+from contextlib import AbstractAsyncContextManager, AsyncExitStack, nullcontext
 from dataclasses import dataclass
 from functools import partial
 from typing import TYPE_CHECKING, Literal
@@ -141,6 +141,12 @@ class AgentRouter:
         whether called directly or published. An interrupted initialization runs again on the next turn.
     :param cleanup_participant: Optional idempotent application cleanup after destination work is drained.
         Used also for initialized participants who never selected a route; failed cleanup can be retried.
+    :param turn_scope: Optional factory for an asynchronous context manager around each owned turn,
+        including direct and runtime calls. Entered after admission and before initialization and
+        routing; exited after the destination and failure handling finish, including cancellation.
+        Use it to reserve shared resources or preempt background work. Entry failures use the normal
+        turn failure output. It does not cover downstream audio playback and must not suppress
+        exceptions or reenter router operations.
     :param set_status: Optional asynchronous callback receiving ``processing`` or ``idle``, then the participant ID,
         around each runtime turn. Its failures are logged and do not fail the turn.
         All callbacks run on the delivery event loop and must not reenter this router's operations.
@@ -170,6 +176,7 @@ class AgentRouter:
         initialize_participant: Callable[[str], Awaitable[None]] | None = None,
         cleanup_participant: Callable[[str], Awaitable[None]] | None = None,
         set_status: Callable[[Literal["processing", "idle"], str], Awaitable[None]] | None = None,
+        turn_scope: Callable[[AgentTurn], AbstractAsyncContextManager[None]] | None = None,
     ) -> None:
         if not destinations or default_destination not in destinations:
             raise ValueError("default destination must be registered")
@@ -209,6 +216,7 @@ class AgentRouter:
         self._initialize_participant = initialize_participant
         self._cleanup_participant = cleanup_participant
         self._set_status = set_status
+        self._turn_scope = turn_scope
         self._runtime = None
         if query_topic is None:
             if any(
@@ -365,7 +373,7 @@ class AgentRouter:
                         turn_output.control_failed = True
                         raise
 
-            async def run_handle() -> DestinationResult:
+            async def run_scoped_handle(turn_scope: AsyncExitStack) -> DestinationResult:
                 scope = self._runtime.scope(current_turn, runtime_turn) if runtime_turn is not None else nullcontext()
                 with scope:
                     timestamp_token = _active_history_timestamps.set(timestamps)
@@ -375,15 +383,19 @@ class AgentRouter:
                     try:
                         if not admitted():
                             raise asyncio.CancelledError
+                        if runtime_turn is not None:
+                            reported_status = True
+                            await self._report_status("processing", participant_id)
+                        if self._turn_scope is not None:
+                            await turn_scope.enter_async_context(self._turn_scope(current_turn))
+                        if not admitted():
+                            raise asyncio.CancelledError
                         # Not under the participant lock, so a replacement turn can still cancel this one.
                         await self._initialize_once(participant_id, generation=generation)
                         if self._generation.get(participant_id) is not generation:
                             raise asyncio.CancelledError
                         if not admitted():
                             raise asyncio.CancelledError
-                        if runtime_turn is not None:
-                            reported_status = True
-                            await self._report_status("processing", participant_id)
                         return await self._handle(
                             current_turn, emit=emit_if_current, generation=generation, turn_output=turn_output,
                         )
@@ -408,6 +420,10 @@ class AgentRouter:
                         _active_history_timestamps.reset(timestamp_token)
                         if reported_status:
                             await self._report_status("idle", participant_id)
+
+            async def run_handle() -> DestinationResult:
+                async with AsyncExitStack() as turn_scope:
+                    return await run_scoped_handle(turn_scope)
 
             task = asyncio.create_task(
                 run_handle(),

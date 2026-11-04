@@ -38,7 +38,12 @@ conversation = Conversation(
     runtime=runtime,
     output_topic=VOICE_OUTPUT_TOPIC,
 )
-front_end = AgentRouter({"conversation": conversation}, decisions, output=publish_router_control)
+front_end = AgentRouter(
+    {"conversation": conversation},
+    decisions,
+    output=publish_router_control,
+    turn_scope=lambda _turn: context.foreground(),
+)
 
 
 async def participant_left(participant_id: str) -> None:
@@ -149,8 +154,48 @@ rendered text rather than model tokens:
   the largest section budget plus 256 bytes. A larger backlog is compacted
   oldest first in several requests.
 - The newest dialogue exchange always stays verbatim. Compaction runs in the
-  background and never delays an answer.
+  background without awaiting its result in the answer path. Concurrent
+  inference can still compete for shared GPU resources.
 - A summary topic is not compacted: each update replaces its state.
+
+To give live queries priority, pass `turn_scope=lambda _turn: context.foreground()`
+to `AgentRouter`, as in the composition above. Before routing starts, this scope
+cancels and drains ordinary compaction requests owned by the manager. It normally
+pauses compaction through the destination response, across all participants and
+incremental sources sharing that manager. Uncommitted entries remain intact;
+preempted requests normally retry after the last overlapping scope exits.
+Direct callers can use `async with context.foreground()` around their routing
+and inference instead.
+
+To prevent indefinite deferral by live queries, the manager tracks each pending
+batch's age, including time waiting before its first request and across retries.
+After 30 seconds, the oldest eligible batch can be promoted to run alongside
+live inference. A timer wakes pending work even if a foreground scope stays open.
+Only one batch is promoted at a time. After it finishes, fails, or is cancelled,
+another promotion waits at least 30 seconds. This prevents an overdue backlog
+from draining at foreground priority; waiting batches retain their age, and a
+follow-on batch starts at normal priority.
+
+Promotion protects one existing byte-bounded batch, including at most one
+summary-shortening request needed to commit it. Live queries continue without
+waiting for the promoted batch, but shared GPU contention can increase their
+latency. The 30-second threshold is eligibility for promotion, not a completion
+deadline or a maximum wait for every batch: older batches and the interval
+between promotions can delay it further. Request duration remains subject to
+the model service's limits. A failing or stalled model cannot be guaranteed to
+make progress. The manager logs promotions with the job name and pending age.
+
+Participant removal and shutdown still cancel and drain promoted work, and do
+not commit stale results. Prompt budgets still omit the oldest uncompacted
+entries with a warning while retaining them for later compaction. These budgets
+do not bound stored history: incoming work that outpaces compaction, or model
+failures, can still grow memory usage.
+
+This policy does not coordinate separate workers or unrelated model clients.
+It starts at an admitted query, not microphone activity, and ends when the
+routed answer finishes, not when downstream audio playback drains. Request
+cancellation depends on the serving backend; client cleanup does not guarantee
+that an already executing GPU kernel has stopped.
 
 | Situation | Handling |
 |---|---|
