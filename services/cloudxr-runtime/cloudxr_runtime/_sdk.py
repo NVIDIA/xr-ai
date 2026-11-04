@@ -23,6 +23,7 @@ import tarfile
 import tempfile
 import urllib.request
 from dataclasses import dataclass
+from http.client import HTTPException
 from pathlib import Path
 
 from loguru import logger
@@ -86,6 +87,8 @@ def ensure_sdk(install_dir: Path) -> SDK:
     with tempfile.TemporaryDirectory(dir=tarball.parent) as staging:
         unpacked = Path(staging) / "native"
         _unpack(tarball, unpacked)
+        if not (unpacked / "libcloudxr.so").is_file():
+            raise SDKError(f"{tarball.name} does not contain libcloudxr.so")
         unpacked.rename(native_dir)
     tarball.unlink()
     logger.info("CloudXR runtime SDK {} installed in {}", SDK_VERSION, native_dir)
@@ -99,7 +102,7 @@ def _download(url: str, target: Path) -> None:
     try:
         with urllib.request.urlopen(url, timeout=60) as response, partial.open("wb") as out:
             shutil.copyfileobj(response, out)
-    except OSError as exc:
+    except (OSError, HTTPException) as exc:
         partial.unlink(missing_ok=True)
         raise SDKError(
             f"could not download the CloudXR runtime SDK: {exc}\n"
@@ -131,4 +134,3 @@ def _unpack(tarball: Path, target: Path) -> None:
             and not member.name.removeprefix("./").startswith(_SKIPPED_DIRS)
         ]
         archive.extractall(target, members=members, filter="data")
-

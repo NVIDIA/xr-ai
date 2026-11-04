@@ -39,7 +39,7 @@ from ._runtime import (
     start_service,
     stop_service,
 )
-from ._sdk import SDK_VERSION, SDKError, ensure_sdk
+from ._sdk import SDK, SDK_VERSION, ensure_sdk
 
 
 async def _wait_with_progress(
@@ -129,11 +129,7 @@ def _append_env_to_file(path: Path, env: dict[str, str]) -> None:
         f.writelines(lines)
 
 
-async def _run(
-    cfg: dict,
-    ready_file: Path | None = None,
-    config_path: Path | None = None,
-) -> None:
+def _prepare(cfg: dict) -> tuple[Layout, SDK]:
     layout   = Layout(Path(cfg.get("cloudxr_install_dir", "~/.cloudxr")).expanduser().absolute())
     env_file = cfg.get("cloudxr_env_config")
 
@@ -163,13 +159,18 @@ async def _run(
     if pinning is not None:
         _append_env_to_file(layout.env_file, pinning)
 
-    try:
-        sdk = ensure_sdk(layout.install_dir)
-    except SDKError as exc:
-        logger.error("{}", exc)
-        sys.exit(1)
+    sdk = ensure_sdk(layout.install_dir)
     check_eula(layout, sdk, accept=bool(cfg.get("accept_eula")))
     prepare_run_dir(layout, sdk)
+    return layout, sdk
+
+
+async def _run(
+    layout: Layout,
+    sdk: SDK,
+    ready_file: Path | None = None,
+    config_path: Path | None = None,
+) -> None:
     logs_dir = layout.logs_dir
 
     # Set up stop signal handling before anything async — so SIGTERM during startup
@@ -225,15 +226,7 @@ async def _run(
             logger.info("native device profile {}, skipping WSS proxy", profile)
             await stop
         else:
-            try:
-                await _wss.run(layout.install_dir / "certs", stop)
-            except RuntimeError as exc:
-                logger.error(
-                    "CloudXR WSS proxy failed: {}\n"
-                    "  If another process owns port 48322, stop it first:\n"
-                    "    sudo fuser -k 48322/tcp",
-                    exc,
-                )
+            await _wss.run(layout.install_dir / "certs", stop)
     finally:
         stop_service(runtime_proc)
 
@@ -255,7 +248,12 @@ def run() -> None:
     if our_ns.config:
         cfg = _load_config(our_ns.config)
 
-    asyncio.run(_run(cfg, ready_file=our_ns.ready_file, config_path=our_ns.config))
+    try:
+        layout, sdk = _prepare(cfg)
+        asyncio.run(_run(layout, sdk, ready_file=our_ns.ready_file, config_path=our_ns.config))
+    except (RuntimeError, OSError) as exc:
+        logger.error("CloudXR runtime failed: {}", exc)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

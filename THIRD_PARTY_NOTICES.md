@@ -280,7 +280,9 @@ public NGC on first run, verifies its pinned SHA-256, and loads its libraries
 unmodified. The SDK is covered by the NVIDIA CloudXR license agreement, which
 the service asks the operator to accept before starting the runtime. XR AI
 does not redistribute the SDK. The SDK archive ships only this agreement; it
-contains no separate notice files for the libraries it bundles.
+contains no separate notice files for the libraries it bundles, including Poco,
+the CUDA runtime, and vendored OpenSSL. Both pinned architecture archives were
+checked for these components and notice files.
 
 | Component | Version | Terms |
 |---|---|---|
