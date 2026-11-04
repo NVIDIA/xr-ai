@@ -633,7 +633,7 @@ progress indicators.</p>
 <td><p>Final user transcripts inside the task recording boundary</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">artifacts/sessions/&lt;session-id&gt;/summary.md</span></code></p></td>
-<td><p>Human-readable activity and phase summary</p></td>
+<td><p>Human-readable activity and phase summary, plus a combined timeline of narration (<strong>Heard</strong>) and captions (<strong>Saw</strong>) in time order</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">artifacts/sessions/&lt;session-id&gt;/errors.jsonl</span></code></p></td>
 <td><p>Frame, caption, or persistence errors, when present</p></td>
@@ -736,6 +736,10 @@ to the generation workflow. No separate sample regression suite is needed.</p>
 <p>The authoring model observes runtime results and edits the
 guide. It does not replace the runtime VLM, invent tool answers, compile a plan
 into YAML, or approve the result. The capture worker does not invoke the skills.</p>
+<p>Start from <code class="docutils literal notranslate"><span class="pre">summary.md</span></code>: its combined timeline places narration and captions side
+by side and deliberately does not reconcile them. Where they disagree (for example,
+a caption names a different tool than the narrator), the drafting agent resolves the
+conflict using the original frames and records the correction in <code class="docutils literal notranslate"><span class="pre">review.md</span></code>.</p>
 <p>From the repository root, give the agent this request:</p>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Read agent-samples/procedure-capture-guide/guide-generation-skills/SKILL.md
 and follow its draft-guide and evaluate-guide child skills, shared schema,
