@@ -262,6 +262,29 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 
 ### Utilities
 
+#### `xr-ai-latency-profiler` — [`utils/latency-profiler/`](utils/latency-profiler/)
+
+- Python: `>=3.11,<3.15`
+- Build dependencies:
+  - `hatchling`
+- Runtime dependencies:
+  - `xr-ai-models` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
+  - `numpy>=1.24`
+  - `pyyaml>=6.0`
+  - `pillow>=10.0`
+- Optional dependency groups:
+  - `router`:
+    - `xr-ai-routing` → [`xr-ai-routing`](agent-sdk/xr-ai-routing/) (local, editable)
+    - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
+    - `xr-ai-interaction` → [`xr-ai-interaction`](agent-sdk/xr-ai-interaction/) (local, editable)
+  - `speech`:
+    - `xr-ai-models[speaker]` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
+    - `xr-ai-voicegate` → [`xr-ai-voicegate`](utils/xr-ai-voicegate/) (local, editable)
+  - `vad`:
+    - `xr-ai-vad` → [`xr-ai-vad`](utils/xr-ai-vad/) (local, editable)
+- Commands:
+  - `xr-latency` → `xr_latency.cli:main`
+
 #### `xr-ai-gpu` — [`utils/xr-ai-gpu/`](utils/xr-ai-gpu/)
 
 - Python: `>=3.11,<3.15`

@@ -1,0 +1,9 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+title: Tool-using agent, three serial hops
+description: Three serial LLM calls each followed by a tool, then the answer. Tool time is an assumption.
+stages:
+  - {kind: endpoint, name: End of speech to final transcript}
+  - {kind: tool_hop, name: Tool loop, prompt_tokens: 3000, hops: 3, tool_ms: 300, cached: true}
+  - {kind: speak, name: Final answer, prompt_tokens: 3900, cached: true, out_tokens: 80, first_sentence_tokens: 20, strategy: sentence, playback_ms: 140}
