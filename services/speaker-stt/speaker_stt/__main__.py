@@ -239,12 +239,10 @@ def _build_app(server: _Server, cfg: dict, ready_file: Path | None = None):
 
     @app.get("/v1/models")
     async def models() -> dict:
+        names = [cfg["asr_model"], cfg["diar_model"], *([cfg["eou_model"]] if cfg.get("eou_model") else [])]
         return {
             "object": "list",
-            "data": [
-                {"id": cfg["asr_model"], "object": "model", "owned_by": "local"},
-                {"id": cfg["diar_model"], "object": "model", "owned_by": "local"},
-            ],
+            "data": [{"id": name, "object": "model", "owned_by": "local"} for name in names],
         }
 
     @app.websocket(_STREAM_PATH)
