@@ -216,7 +216,6 @@ async def run_app(
         # cover participant state that outlives a turn.
         cleanup_participant=_all_of(notes.participant_left, alerts.participant_left, context.clear, release_frames),
         set_status=transport.endpoint.set_status,
-        turn_scope=lambda _turn: context.foreground(),
     )
     runtime.register("conversation-context", context.subscriber())
     runtime.register("conversation-example", router.runtime_subscriber())
