@@ -1155,6 +1155,30 @@ async def test_acknowledgment_client_builds_nonreasoning_bounded_payload() -> No
     }
 
 
+def test_short_request_roles_preserve_unrelated_options_and_the_original_profile() -> None:
+    models = load_models_config(_SAMPLE_DIR / "yaml" / "models.json")
+    original = models.llm("llm")
+    extras = {**original.default_extras, "chat_template_kwargs": {
+        **original.default_extras["chat_template_kwargs"], "thinking_budget": 2048, "keep_detail": "unchanged",
+    }}
+    customized = replace(original, adapter=replace(original.adapter, default_extras=extras))
+    models = replace(models, entries={**models.entries, "llm": customized})
+
+    compiler = app._alert_compile_models(models).llm("alert_compile_llm")
+    acknowledgment = app._acknowledgment_models(models).llm("acknowledgment_llm")
+
+    for role in (compiler, acknowledgment):
+        assert role.default_extras == {"temperature": 0.25, "chat_template_kwargs": {"keep_detail": "unchanged"}}
+        assert role.endpoint == original.endpoint
+    assert compiler.adapter.thinking == original.adapter.thinking
+    assert acknowledgment.adapter.thinking.default is False
+    assert customized.default_extras == extras
+    assert extras["max_tokens"] == 4608
+    assert extras["chat_template_kwargs"] == {
+        "reasoning_budget": 4096, "thinking_budget": 2048, "keep_detail": "unchanged",
+    }
+
+
 def test_config_without_a_file_uses_packaged_defaults(tmp_path) -> None:
     prompt = (_WORKER_DIR / "conversation_example_worker" / "prompts" / "system.txt").read_text()
 
@@ -1698,6 +1722,20 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
             shutdown_order.append("llm.close")
             await super().close()
 
+    class RecordingCompileLLM(_ConversationService):
+        async def close(self) -> None:
+            shutdown_order.append("alert_compile_llm.close")
+            await super().close()
+
+    class RecordingAlerts(app.VisualAlertAgent):
+        def __init__(self, *args, llm, **kwargs):
+            assert llm is alert_compile_llm
+            super().__init__(*args, llm=llm, **kwargs)
+
+        async def stop(self) -> None:
+            await super().stop()
+            shutdown_order.append("alerts.stop")
+
     class RecordingConversation(Conversation):
         async def close(self) -> None:
             shutdown_order.append("conversation.close")
@@ -1722,6 +1760,7 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
             await super().close()
 
     llm = RecordingLLM()
+    alert_compile_llm = RecordingCompileLLM()
     vlm = _Service()
     tts = _Service()
     class ForegroundDecisions(_RouteDecisions):
@@ -1763,14 +1802,16 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     monkeypatch.setattr(app, "AgentRouter", RecordingRouter)
     monkeypatch.setattr(app, "Conversation", RecordingConversation)
     monkeypatch.setattr(app, "ContextManager", RecordingContextManager)
+    monkeypatch.setattr(app, "VisualAlertAgent", RecordingAlerts)
 
     worker_log = tmp_path / "logs" / "worker.log"
     worker_log.parent.mkdir()
     monkeypatch.setattr(app, "setup_logging", lambda _name: worker_log)
-    monkeypatch.setattr(app, "load_models_config", lambda path: path)
+    models = load_models_config(_SAMPLE_DIR / "yaml" / "models.json")
+    monkeypatch.setattr(app, "load_models_config", lambda _path: models)
     monkeypatch.setattr(app, "load_voice_gate_config", lambda _path: VoiceGateConfig())
     monkeypatch.setattr(voice_runtime_module, "make_stt", lambda _models, _name: stt)
-    monkeypatch.setattr(app, "make_llm", lambda _models, _name: llm)
+    monkeypatch.setattr(app, "make_llm", lambda _models, name: llm if name == "llm" else alert_compile_llm)
     monkeypatch.setattr(app, "make_decision", lambda _models, _name: decisions)
     monkeypatch.setattr(app, "make_vlm", lambda _models, _name: vlm)
     monkeypatch.setattr(app, "make_tts", lambda _models, _name: tts)
@@ -1854,7 +1895,7 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     assert set(wired_front_ends[0]) == {"conversation", "observation", "alerts", "notes"}
     assert isinstance(wired_front_ends[0]["conversation"], Conversation)
     assert wired_front_ends[0]["observation"].__class__.__name__ == "VisualObservationAgent"
-    assert wired_front_ends[0]["alerts"].__class__.__name__ == "VisualAlertAgent"
+    assert isinstance(wired_front_ends[0]["alerts"], RecordingAlerts)
     assert wired_front_ends[0]["notes"].__class__.__name__ == "NoteTakingAgent"
 
     assert ready_file.exists()
@@ -1875,6 +1916,7 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     assert decisions.health_calls >= 1
     assert vlm.stream_calls == []
     assert stt.close_calls == tts.close_calls == vlm.close_calls == llm.close_calls == decisions.close_calls == 1
+    assert alert_compile_llm.close_calls == 1
     assert transport.shutdown_calls == 1
     assert sessions[0].text_topic == "vlm.response"
     assert _CurrentFrameTool.instances[0].kwargs["endpoint"] is transport.endpoint
@@ -1902,6 +1944,8 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     assert shutdown_order.index("context.clear") < shutdown_order.index("context.close")
     assert shutdown_order.index("conversation.close") < shutdown_order.index("context.close")
     assert shutdown_order.index("context.close") < shutdown_order.index("llm.close")
+    assert shutdown_order.index("alerts.stop") < shutdown_order.index("alert_compile_llm.close")
+    assert shutdown_order.index("alert_compile_llm.close") < shutdown_order.index("llm.close")
     assert run_options["interrupt_on_supersede"] is True
     assert callable(run_options["on_interrupted"])
 
