@@ -14,6 +14,8 @@ from typing import Any, Generic, TypeVar, cast
 from nemo_relay import ToolExecutionResult, typed
 from pydantic import BaseModel, ValidationError
 
+from ._relay import RelayHandlers
+
 RequestT = TypeVar("RequestT", bound=BaseModel)
 ResultT = TypeVar("ResultT")
 
@@ -69,16 +71,18 @@ class Tool(Generic[RequestT, ResultT]):
 
         Handler exceptions propagate with their original type, instance, and
         cause. Relay records failures before propagating them; middleware can
-        recover from or replace a handler failure. Cancellation propagates.
+        recover from or replace a handler failure. Cancellation propagates once
+        the handler has finished.
         """
 
-        result = await typed.tool_execute(
-            self.name,
-            request,
-            self._execute_handler,
-            self._request_codec,
-            self._result_codec,
-        )
+        async with RelayHandlers() as handlers:
+            result = await typed.tool_execute(
+                self.name,
+                request,
+                handlers.track(self._execute_handler),
+                self._request_codec,
+                self._result_codec,
+            )
         return result.result
 
     async def invoke(self, arguments: str) -> ToolInvocationResult:
