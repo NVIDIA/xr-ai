@@ -1,0 +1,53 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Schema example, not a captured procedure. Replace task-specific limits from evidence.
+schema_version: 2
+task:
+  id: check_force
+  name: Check Force
+  version: 1
+  status: draft
+  start_step: check_force
+  foreground_prompt: "Guide a visible force-display check against the documented 45\u2013\
+    55 N range."
+  complete_message: The displayed force is within the required range.
+state:
+  force_verified:
+    type: boolean
+    initial: false
+    description: The force display is within the required range.
+steps:
+- id: check_force
+  title: Check the force display
+  reads: []
+  writes:
+  - force_verified
+  trigger:
+    function: current_view
+    interval_s: 2
+    arguments:
+      question: Read the force gauge display, copying each visible number, unit, and
+        any CURRENT or TARGET label. Do not infer obscured digits.
+  evidence:
+    measurement:
+      prefer_current: true
+      ranges:
+      - unit: N
+        minimum: 45
+        maximum: 55
+    consecutive: 2
+    commit:
+      force_verified: true
+  voice:
+    prompt: Explain the required force range. Use current_view for fresh visual questions.
+      Do not infer readings from user claims.
+    tools:
+    - current_view
+  complete_when:
+    force_verified: true
+  next: null
+  messages:
+    enter: Show the force display.
+    complete: The displayed force is in range. Say next to finish.
+    skip: Force verification skipped.

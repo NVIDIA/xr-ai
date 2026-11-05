@@ -15,3 +15,6 @@ vlm:
   cuda_visible_devices: '0'
   gpu_memory_utilization: 0.47
   kv_cache_memory_bytes: 1610612736
+
+# CLEF uses the shared service defaults on GPU 0.
+clef: {}

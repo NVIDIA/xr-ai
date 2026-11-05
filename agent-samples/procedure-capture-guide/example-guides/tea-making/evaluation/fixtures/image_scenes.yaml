@@ -20,6 +20,8 @@ current100f: {kind: kettle, readings: [{label: CURRENT, value: '100 F'}]}
 target100: {kind: kettle, readings: [{label: TARGET, value: '100 C'}]}
 set100: {kind: kettle, readings: [{label: SET, value: '100 C'}]}
 unlabeled100: {kind: kettle, readings: [{label: '', value: '100 C'}]}
+unlabeled212: {kind: kettle, readings: [{label: '', value: '212 F'}]}
+missing_unit: {kind: kettle, readings: [{label: '', value: '100'}]}
 mixed94: {kind: kettle, readings: [{label: TARGET, value: '100 C'}, {label: CURRENT, value: '94 C'}]}
 empty: {kind: cup, state: empty}
 dry_bag: {kind: cup, state: dry_bag}
