@@ -237,7 +237,8 @@ source = yaml.safe_load(Path('/tmp/models.nim.yaml').read_text())['models']
 target = Path('agent-samples/simple-vlm-example/yaml/models.json')
 gate_path = Path('agent-samples/simple-vlm-example/yaml/voice_gate.yaml')
 active = json.loads(target.read_text())
-active['models'] = {name: source[name] for name in active['models']}
+# Keep local-only roles, such as Clef decisions, when NIM has no replacement.
+active['models'] = {name: source.get(name, profile) for name, profile in active['models'].items()}
 active['models']['stt'] = source['stt']
 gate = yaml.safe_load(gate_path.read_text())
 gate['speaker']['enabled'] = False

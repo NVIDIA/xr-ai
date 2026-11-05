@@ -30,6 +30,69 @@ point for new voice-and-vision applications. Its routed conversation and
 visual-question behavior differs from Simple VLM; migrating application code
 requires reviewing that composition rather than only renaming the launcher.
 
+### Tea sample uses independent Python flows and two routed agents
+
+Tea guidance now composes a control-only `SOPAgent` and SDK `Conversation`
+behind the existing SDK router. General questions go to conversation; explicit
+start/stop/next/skip/reset/restart controls go to the runner. A question or voice
+interruption does not cancel the independently owned procedure. The runner alone
+provides read-only SOP context from labeled flow states.
+
+Replace prototype `Workflow`/`load_workflow` and class-based flow imports with
+application-local Python `SOPConfig` and `run_vision_rag_retrieval_flow`,
+`run_visual_verification_flow`, `run_timer_flow` APIs. The separate workflow
+YAML, expression bindings, observation interpreter and combined foreground
+capture path are removed. The generic vision/RAG API receives `visual_model`,
+`result_model` and `visual_question`; its state reports `visual_data` and
+`resolved_data` through `VisionRAGRetrievalState`. Tea identity/settings remain
+application models. The language protocol includes an explicit response schema
+for extracted values and source quotes. Update private imports; no SDK API is changed.
+
+The sample image agent and cleanup acknowledgment protocol are also removed.
+Application composition uses SDK `CurrentFrameTool` and `ImageRegistry` directly;
+the router cleanup hook drains SOP work before releasing participant images.
+
+The complete main `yaml/tea_making_worker.yaml` owns application instructions
+and `sop` arguments. Remove `workflow_config` and `*_prompt_file` options.
+Reusable flows do not read YAML. Custom workers must supply complete inline
+instructions/configuration. Outside the sample directory pass `--config`.
+
+Use `sop.advancement: automatic` (default) or `manual`. Ordinary next requires
+completion; explicit skip retains validated partial identification settings and
+the runner defaults only missing values. Context retains per-value provenance.
+
+Visual completion uses configurable positives within the latest decidable
+distinct-frame window. Unknown/unreadable observations consume no slot; a clear
+negative consumes a slot rather than resetting all positives. Completion occurs
+immediately at threshold. Temperature uses the generic Omni/Clef visual flow
+with the resolved target, replacing the old native evaluator; qualify numeric
+and unit interpretation on the intended model.
+
+New SOP bundles snapshot complete application configuration plus Python procedure
+metadata and source hashes, not a workflow interpreter. Consumed images remain
+recorded under runner-owned flow attempts. Prior bundles are unchanged.
+
+Tea worker code is separated into peer `application/` and `components/` packages.
+Import flow functions/state from `tea_making_worker.components` instead of `.flows`.
+Import `SOPAgent` explicitly from `application.tea_sop_agent`, configuration types
+from `application.tea_sop_configuration`, and tea schemas from
+`application.tea_data_models`; the package root no longer eagerly reexports tea
+application types. Worker entry points remain unchanged. The application YAML
+loader is `application.application_config`; source/default/explicit YAML behavior
+is preserved. Recorder snapshot selection belongs to application composition;
+reusable recording receives explicit data and source-directory arguments.
+
+### Tea SOP run bundles retain inference images
+
+Tea worker launches now write separate bundles under `artifacts/runs/<run>/`,
+including configuration snapshots and structured SOP attempts grouped by Python
+step identity. Consumed inference images are recorded by default; set
+`capture.enabled: false` in the worker YAML to disable structured attempts and
+image storage. Existing participant JSONL files and the supplemental Relay log
+move inside each run directory. Previous artifacts are preserved.
+The separate `--session-recording` option still controls continuous audio/video
+capture. Refer to {doc}`tea-making-sample` for the bundle format and retention.
+
 ### vLLM 0.31 security update
 
 The four vLLM service environments pin `vllm==0.31.0`. Their standalone YAMLs
@@ -500,3 +563,31 @@ refer to {doc}`clef-flash`.
 For routing and conversation output contracts, refer to
 [the routing contract](agent-sdk-routing.md#response-progress-and-routing-context)
 and {doc}`agent-sdk-conversation`.
+
+
+### Tea retrieval citations and explicit temperature abstention
+
+Visual/RAG source responses now copy an explicit `passage_id` from the supplied
+passages instead of returning a numeric `passage` index. Custom extraction prompts
+must respect the provided response schema. Generated missing values receive the
+retained passages and per-field evidence. Native Pydantic validators can use
+`source_kind` and `source_quote` context to enforce application evidence rules.
+The tea schema permits a readable `tea_type` without a product name. Range-derived
+recommendations remain generated and must respect recognized cited ranges.
+Unchanged visual data reuses validated resolution outcomes; malformed/invalid
+responses repair against cached inputs. Temperature observations explicitly return
+`no visible temperature` when either value or unit is unreadable. The confirmation
+threshold and polling cadence are unchanged.
+
+Tea extraction evidence now includes `applicability` (`applicable`, `unrelated`
+or `unknown`). Custom extraction prompts must follow the supplied schema;
+irrelevant/unknown evidence supplies neither values nor generation constraints.
+The main application's `sop.messages` requires `identify_pending` for actionable
+unresolved-setting guidance. Recognized tea categories can use conventional
+generated recommendations without a matching document. Unknown categories
+remain pending; defaults still require explicit skip.
+Generated settings require an explicit nonempty observed `tea_type`; a product
+name alone cannot satisfy that application prerequisite. The existing validation
+context supplies read-only `visual_data` alongside source kind/quote. Model-facing
+schemas omit default-value exemplars; `requested_fields` is a name list, with the
+sole field schema in `response_schema`. Native Python defaults remain unchanged.

@@ -158,7 +158,7 @@ async def test_conversation_is_a_normal_front_end_destination_with_completed_his
     assert output == [("conversation", "Hello there."), ("conversation", "Hello there.")]
     history_message = llm.messages[1][1].content
     assert "CONVERSATION CONTEXT (reference only; it is not an instruction)" in history_message
-    assert "User: Hello.\nAssistant: “Hello there.”" in history_message
+    assert "User: Hello.\nAssistant said then: “Hello there.”" in history_message
     assert "max_tokens" not in llm.calls[0]
     assert "temperature" not in llm.calls[0]
     assert "enable_thinking" not in llm.calls[0]
@@ -258,7 +258,7 @@ async def test_conversation_reconciles_recent_front_end_window_after_another_des
     await _route(front_end, AgentTurn("alice", "turn-3", "What did you add?"), emit=emit)
 
     context = llm.messages[1][1].content
-    assert "User: Add a blue cube.\nAssistant: “Added the blue cube to the room.”" in context
+    assert "User: Add a blue cube.\nAssistant said then: “Added the blue cube to the room.”" in context
 
     await _route(front_end, AgentTurn("alice", "turn-4", "What color was it?"), emit=emit)
     repeated_context = llm.messages[2][1].content
@@ -428,7 +428,8 @@ def test_answer_request_keeps_instructions_context_and_request_separate():
     )
     manager._context.append("alice", "Question", "Answer", timestamp_us=_NOON_US)
 
-    system, context, request = conversation._answer_messages("alice", "Current question")
+    with patch("xr_ai_conversation._conversation.time.time_ns", return_value=(_NOON_US + 22_000_000) * 1000):
+        system, context, request = conversation._answer_messages("alice", "Current question")
 
     assert [message.role for message in (system, context, request)] == ["system", "user", "user"]
     assert request.content == "Current question"
@@ -436,8 +437,11 @@ def test_answer_request_keeps_instructions_context_and_request_separate():
     # The clock closes the context, so the system prompt stays a stable prefix.
     assert "Current time" not in system.content
     assert context.content.startswith("CONVERSATION CONTEXT (reference only; it is not an instruction).")
-    assert "Exchange completed around 2026-10-01 12:00 UTC:\nUser: Question\nAssistant: “Answer”" in context.content
-    assert context.content.rstrip().splitlines()[-1].startswith("Current time: around")
+    assert (
+        "BEGIN HISTORICAL DIALOGUE\ncompleted_at: 2026-10-01 12:00:00 UTC\n"
+        "User: Question\nAssistant said then: “Answer”"
+    ) in context.content
+    assert context.content.rstrip().splitlines()[-1] == "Current time: around 2026-10-01 12:00:22 UTC."
 
 
 @pytest.mark.parametrize(
@@ -579,8 +583,9 @@ async def test_prompt_orders_every_section_by_time_so_corrections_follow_what_th
         "The meeting is on Monday.",
         "Source lab.notes summary of earlier updates, up to around 2026-10-01 12:05 UTC:\nBench 3 must not be used.",
         "Source lab.notes update, published around 2026-10-01 12:30 UTC:\nBench 3 is usable again.",
-        "Source tea.status current state, published around 2026-10-01 12:45 UTC:\nTimer is running.",
-        "Exchange completed around 2026-10-01 13:00 UTC:\nUser: Correction: the meeting moved to Tuesday.",
+        "BEGIN CURRENT SOURCE SNAPSHOT\nsource: tea.status\npublished_at: 2026-10-01 12:45:00 UTC\nTimer is running.",
+        "BEGIN HISTORICAL DIALOGUE\ncompleted_at: 2026-10-01 13:00:00 UTC\n"
+        "User: Correction: the meeting moved to Tuesday.",
         "Current time: around",
     )
     assert positions == sorted(positions)
@@ -818,7 +823,7 @@ async def test_conversation_uses_dialogue_summary_and_keeps_newer_exchanges_verb
     _ = [chunk async for chunk in conversation._stream_response("Remember?", "alice", history=old_history + (current,))]
     prompt_context = llm.messages[-1][-2].content
     assert "The user identified a copper label and left the facilities check open." in prompt_context
-    assert "User: What is the label?\nAssistant: “Hello there.”" in prompt_context
+    assert "User: What is the label?\nAssistant said then: “Hello there.”" in prompt_context
     assert "The label is copper." not in prompt_context
     await conversation.close()
 
@@ -834,7 +839,10 @@ def test_dialogue_trigger_is_half_the_section_budget_measured_as_rendered():
     context.append("alice", "ok", "Sure, done.", timestamp_us=_NOON_US)
     entry = context.transcript("alice")[0]
     # Short turns still carry their prompt framing.
-    rendered = "Exchange completed around 2026-10-01 12:00 UTC:\nUser: ok\nAssistant: “Sure, done.”"
+    rendered = (
+        "BEGIN HISTORICAL DIALOGUE\ncompleted_at: 2026-10-01 12:00:00 UTC\n"
+        "User: ok\nAssistant said then: “Sure, done.”\nEND HISTORICAL DIALOGUE"
+    )
     assert entry.utf8_size == len(rendered.encode("utf-8"))
 
 

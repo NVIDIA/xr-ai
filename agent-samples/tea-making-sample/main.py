@@ -128,7 +128,6 @@ def _materialize_worker_config(
         runtime_dir,
         {
             "models_config": _resolve_worker_path("models_config"),
-            "workflow_config": _resolve_worker_path("workflow_config"),
             "voice_gate_yaml": _resolve_worker_path("voice_gate_yaml"),
             "artifacts_dir": _resolve_worker_path("artifacts_dir"),
             "web_events_host": "0.0.0.0" if expose_web_events else "127.0.0.1",
