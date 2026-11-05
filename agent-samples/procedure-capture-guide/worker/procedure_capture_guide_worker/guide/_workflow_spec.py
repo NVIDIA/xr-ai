@@ -22,6 +22,9 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field
 from xr_ai_tools.types import StrictRequest
 
+from .confirmation import ConfirmationPolicy
+from .measurements import MeasurementPolicy
+
 _ID = re.compile(r"^[a-z][a-z0-9_-]*$")
 _TYPES = frozenset({"boolean", "integer", "number", "string"})
 _STATUSES = frozenset({"draft", "approved"})
@@ -60,7 +63,7 @@ _STEP_KEYS = frozenset(
 )
 _TRIGGER_KEYS = frozenset({"function", "interval_s", "arguments", "result_field"})
 _POLICY_KEYS = frozenset({"prompt", "tools"})
-_EVIDENCE_KEYS = frozenset({"pattern", "consecutive", "commit"})
+_EVIDENCE_KEYS = frozenset({"pattern", "condition", "measurement", "consecutive", "confirmation", "commit"})
 _MESSAGE_KEYS = frozenset({"enter", "complete", "skip"})
 
 
@@ -113,9 +116,12 @@ class Policy:
 
 @dataclass(frozen=True, slots=True)
 class Evidence:
-    pattern: str
+    pattern: str | None
     consecutive: int
     commit: dict[str, Any]
+    condition: str | None = None
+    measurement: MeasurementPolicy | None = None
+    confirmation: ConfirmationPolicy | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -204,8 +210,11 @@ def parse_workflow(content: bytes | str) -> Workflow:
     """Validate one captured guide snapshot without rereading its source file."""
     root = _mapping(yaml.load(content, Loader=_GuideLoader) or {}, "workflow")
     _only(root, _ROOT_KEYS, "workflow")
-    if root.get("schema_version") != 1:
-        raise ValueError("schema_version must be 1")
+    if type(root.get("schema_version")) is not int or root["schema_version"] != 2:
+        raise ValueError(
+            "schema_version must be 2; migrate visual steps to evidence.condition "
+            "and remove visual evidence.pattern and observation agent blocks"
+        )
     task = _mapping(root.get("task"), "task")
     _only(task, _TASK_KEYS, "task")
     fields = _fields(_mapping(root.get("state"), "state"))
@@ -230,6 +239,8 @@ def parse_workflow(content: bytes | str) -> Workflow:
     for step in steps:
         if step.next_step is not None and step.next_step not in by_id:
             raise ValueError(f"step {step.id!r} has unknown next step {step.next_step!r}")
+        if status == "approved" and step.trigger.function == "current_view" and not step.evidence.commit:
+            raise ValueError(f"approved visual step {step.id!r} requires evidence.commit; resolve its review blocker")
     _validate_linear_graph(start, by_id)
     _validate_completion(start, by_id, fields)
     return Workflow(
@@ -302,10 +313,15 @@ def _step(value: Any, fields: dict[str, StateField]) -> Step:
     _validate_trigger(function, arguments, result_field, fields, step_id)
 
     voice = _policy(raw.get("voice"), f"steps.{step_id}.voice")
-    evidence = _evidence(raw.get("evidence"), step_id, writes, fields)
+    evidence = _evidence(raw.get("evidence"), step_id, writes, fields, function=function)
     deterministic = evidence is not None and bool(evidence.commit)
-    agent = (_policy(raw.get("agent"), f"steps.{step_id}.agent")
-             if "agent" in raw or not deterministic else None)
+    if function == "current_view":
+        if "agent" in raw:
+            raise ValueError(f"visual step {step_id!r} uses evidence.condition for CLEF, not agent; remove agent")
+        agent = None
+    else:
+        agent = (_policy(raw.get("agent"), f"steps.{step_id}.agent")
+                 if "agent" in raw or not deterministic else None)
     if deterministic and not all(evidence.commit.get(name) == value for name, value in completion.items()):
         raise ValueError(f"step {step_id!r} evidence.commit must satisfy complete_when")
     messages = _mapping(raw.get("messages"), f"steps.{step_id}.messages")
@@ -372,24 +388,49 @@ def _validate_trigger(
         raise ValueError(f"step {step_id!r} invalid {function} trigger arguments: {exc}") from exc
 
 
-def _evidence(value: Any, step_id: str, writes: tuple[str, ...], fields: dict[str, StateField]) -> Evidence | None:
+def _evidence(
+    value: Any, step_id: str, writes: tuple[str, ...], fields: dict[str, StateField], *, function: str,
+) -> Evidence | None:
     if value is None:
+        if function == "current_view":
+            raise ValueError(
+                f"visual step {step_id!r} requires evidence.condition or evidence.measurement for verification"
+            )
         return None
     raw = _mapping(value, f"steps.{step_id}.evidence")
     _only(raw, _EVIDENCE_KEYS, f"steps.{step_id}.evidence")
-    pattern = _required_text(raw.get("pattern"), f"steps.{step_id}.evidence.pattern")
-    try:
-        re.compile(pattern)
-    except re.error as exc:
-        raise ValueError(f"step {step_id!r} has invalid evidence regex: {exc}") from exc
-    consecutive = raw.get("consecutive")
+    pattern = condition = None
+    measurement = None
+    if function == "current_view":
+        if ("condition" in raw) == ("measurement" in raw):
+            raise ValueError(f"steps.{step_id}.evidence requires exactly one of condition or measurement")
+        if "measurement" in raw:
+            measurement = MeasurementPolicy.model_validate(raw["measurement"])
+        else:
+            condition = _required_text(raw.get("condition"), f"steps.{step_id}.evidence.condition")
+        if "pattern" in raw:
+            raise ValueError(f"visual step {step_id!r} cannot use evidence.pattern; use condition or measurement")
+    else:
+        if "condition" in raw or "measurement" in raw:
+            raise ValueError(f"step {step_id!r} evidence.condition or measurement requires current_view")
+        pattern = _required_text(raw.get("pattern"), f"steps.{step_id}.evidence.pattern")
+        try:
+            re.compile(pattern)
+        except re.error as exc:
+            raise ValueError(f"step {step_id!r} has invalid evidence regex: {exc}") from exc
+    confirmation = None
+    if "confirmation" in raw:
+        if function != "current_view" or "consecutive" in raw:
+            raise ValueError("confirmation requires a visual step and excludes consecutive")
+        confirmation = ConfirmationPolicy.model_validate(raw["confirmation"])
+    consecutive = confirmation.required if confirmation is not None else raw.get("consecutive")
     if not isinstance(consecutive, int) or isinstance(consecutive, bool) or consecutive < 1:
         raise ValueError(f"steps.{step_id}.evidence.consecutive must be a positive integer")
     commit = _mapping(raw.get("commit", {}), f"steps.{step_id}.evidence.commit")
     if commit and not commit.keys() <= set(writes):
         raise ValueError(f"step {step_id!r} evidence.commit must only use writable fields")
     _state_values(commit, fields, f"steps.{step_id}.evidence.commit")
-    return Evidence(pattern, consecutive, dict(commit))
+    return Evidence(pattern, consecutive, dict(commit), condition, measurement, confirmation)
 
 
 def _validate_linear_graph(start: str, steps: dict[str, Step]) -> None:

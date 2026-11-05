@@ -5,12 +5,13 @@
 # Generated label cards exercise the real VLM and guide, not photographic accuracy.
 # Expected responses are assertions; they are never supplied to the VLM.
 guide_path: ../../guide.yaml
+visual_cases_file: ../fixtures/visual_expectations.yaml
 scenes:
   green: {text: "TEA PACKET\nGREEN"}
   breakfast: {text: "TEA PACKET\nBREAKFAST BLACK"}
-  ginger: {text: "TEA PACKET\nGINGER"}
+  other_blend: {text: "TEA PACKET\nGINGER"}
   mint: {text: "TEA PACKET\nMOROCCAN MINT"}
-  unreadable: {rectangle: tan}
+  covered_packet: {rectangle: tan}
   chamomile: {text: "TEA PACKET\nchamomile"}
   blend: {text: "TEA PACKET\nCHAMOMILE LEMON"}
   longer_name: {text: "TEA PACKET\nORGANIC CHAMOMILE\nHERBAL TEA"}
@@ -30,15 +31,15 @@ actions:
   - {action: say, text: Stop guide, expect: Guide stopped, tools: [workflow__reset]}
   - {action: image, scene: green}
   - {action: say, text: Start guide, expect: Show the tea packet, tools: [workflow__restart]}
-  - {action: observe, answers: ['NO', 'No', 'no'], count: 2}
+  - {action: observe, case: green, count: 2}
   - {action: say, text: 'What is my status?', expect: 'current step: Read the tea packet\.$', tools: [workflow__status]}
   - {action: image, scene: breakfast}
-  - {action: observe, answers: ['NO', 'No', 'no'], count: 2}
-  - {action: image, scene: ginger}
-  - {action: observe, answers: ['NO', 'No', 'no'], count: 2}
+  - {action: observe, case: breakfast, count: 2}
+  - {action: image, scene: other_blend}
+  - {action: observe, case: other_blend, count: 2}
   - {action: image, scene: mint}
-  - {action: observe, answers: ['NO', 'No', 'no'], count: 2}
-  - {action: image, scene: unreadable}
-  - {action: observe, answers: ['UNKNOWN', 'Unknown', 'unknown'], count: 2}
+  - {action: observe, case: mint, count: 2}
+  - {action: image, scene: covered_packet}
+  - {action: observe, case: covered_packet, count: 2}
   - {action: say, text: Next, expect: not complete, tools: [workflow__advance], arguments: [{skip: false}]}
   - {action: say, text: Stop guide, expect: Guide stopped, tools: [workflow__reset]}

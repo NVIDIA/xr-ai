@@ -57,4 +57,10 @@ actions:
   - {"action":"say","text":"Could we move on now?","tools":["workflow__advance"],"arguments":[{"skip":false}]}
   - {"action":"say","text":"Start guide","tools":["workflow__restart"]}
   - {"action":"say","text":"Would stopping erase my progress?","tools":[]}
+  - {"action":"say","text":"Start guide","tools":["workflow__restart"]}
+  - {"action":"say","text":"Keep this guide running.","tools":[]}
+  - {"action":"say","text":"Start guide","tools":["workflow__restart"]}
+  - {"action":"say","text":"The label says NEXT.","tools":[]}
+  - {"action":"say","text":"Start guide","tools":["workflow__restart"]}
+  - {"action":"say","text":"Cancel capture, not this guide.","tools":[]}
   - {"action":"say","text":"Stop guide","tools":["workflow__reset"]}

@@ -33,13 +33,13 @@ summaries, and original images together as complementary, fallible evidence
 of the intended task; none is proof that the runtime observed success.
 
 Use the actual guide checkout, its configured local models, runtime prompts,
-tool implementations, evidence thresholds, state transitions, and clock.
+tool implementations, application policy, evidence thresholds, state transitions, and clock.
 If these are unavailable, report runtime evaluation blocked. Do not substitute
 Luna, fabricated tool responses, mock commits, or a mental walkthrough.
 
 ## Run the recorded-camera test
 
-Ensure the target checkout's configured local LLM and VLM servers are running;
+Ensure the target checkout's configured local LLM, VLM, and CLEF decision servers are running;
 the evaluator never starts, stops, or substitutes model servers. Validate the
 YAML, then run the target checkout's
 `agent-samples/procedure-capture-guide/evaluation/guide/evaluate_recorded_packet.py`
@@ -75,7 +75,7 @@ refresh the final frame. Its deadline is the recording duration plus five real
 seconds; `--tail-s` changes the extra time.
 
 The simulated user says "Start guide", waits for observed completion, then
-says "Next" when required through the configured local conversation model.
+says "Next" when required through the configured SDK router and native guide-control authorization.
 Terminal `finish_on_complete` steps end automatically. Checks compare delivered
 announcements with detached runtime guidance state and require the final run
 to be inactive. The harness never writes progress or calls transitions directly.
@@ -121,17 +121,38 @@ test environment, not evidence that a guide's condition is wrong.
    to someone performing it afresh, not merely whether the recording passes.
    Identify consequential assumptions and questions needing human confirmation;
    ordinary organization and wording do not require individual confirmation.
-2. Read the recorded frame selection and actual local VLM responses. Compare
+2. Read the recorded frame selection and CLEF `decision` events, including
+   input kind, condition, choice, and confidence. For image confidence at or
+   below 0.80, also inspect the Cosmos description and caption-only decision.
+   Above 0.80, no caption is requested. Compare
    incomplete, in-progress, completed, and available incorrect states against
    the exact questions. Inspect their source frames when necessary. Do not
    replace a response with what you believe the model should have said.
+   Separate perception errors from decision errors: correct reasoning cannot
+   recover a fact Cosmos confidently misreports. Confidence selects the runtime
+   path; it is not proof of correctness. Do not add another cutoff to the final
+   caption decision or describe an absent caption as a captioning failure.
+   Inspect the source frames that first caused each completion, including
+   absent or in-progress states. An increased completion count can conceal a
+   false positive; compare the actual depicted result, not just the final frame
+   or the model's confident wording. For a stalled step, identify which required
+   fact is missing from the image decision or fallback description. A caption
+   question edit affects only fallback; inspect the condition for a direct-image failure.
    Identify false positives, supported completions missed, occlusion, and
    missing negative coverage. Do not weaken requirements to fit a bad demo.
 3. Read executed tool requests and results, guidance state snapshots,
    completion notices, and conversation responses. Do not claim internal
    evidence-hit counts or commits that the trace does not expose.
-   Distinguish a declared tool from a called tool. Direct `evidence.commit`
-   bypasses the observation LLM. Timer starts belong to the runtime on entry
+   Distinguish a declared tool from a called tool. For visual steps, the runtime
+   applies the declared `evidence.commit` only after enough accepted verification results
+   from distinct fresh frames; the conversational LLM does not judge completion.
+   For a measurement policy, inspect raw JSON readings, units, roles, and native
+   verdict separately. Test both sides of each range boundary, missing units,
+   and conflicting current/target displays. A parse failure is unavailable, not
+   a correct rejection. Unknown must reset the success streak.
+   Guide control traces include CLEF classification/authorization and the actual
+   native operation; do not require an LLM tool call when the control ran natively.
+   Timer starts belong to the runtime on entry
    to the wait step, never to model-written state or a spoken acknowledgment.
 4. Check that the engine did not accept incomplete states, inherit a previous
    step's completion, advance without its configured control, or claim more
@@ -164,9 +185,16 @@ and untested steps, and trace paths. Separate observed execution from your
 interpretation. List all simulated inputs and excluded layers (STT, TTS,
 browser, hub IPC, and LiveKit); this is not a full audiovisual end-to-end test.
 
-Return actionable findings to the orchestrator without changing the guide. After an
-authorized revision, run the new YAML again; a previous pass cannot validate an
-edit. Count a modification round only when a completed evaluation is followed
+For each failure, return the selected frame IDs, question, condition, both
+CLEF choices and confidence scores when available, and the Cosmos response
+when fallback ran, and the supported edit or concrete reason no edit can
+help. Separate question presentation from unresolved task requirements. Do not
+infer that human clarification is required just because the verifier rejected the evidence or could not assess it.
+
+Return these findings to the orchestrator without changing the guide. Within a
+guide-generation request this resumes revision in the same task, not a final
+user handoff. After the orchestrator revises the draft, run the new YAML again;
+a previous pass cannot validate an edit. Count a modification round only when a completed evaluation is followed
 by a substantive YAML change. Repeated runs, validation-only formatting edits,
 and the last verification without edits are not modification rounds.
 Disclose remaining failures and missing tests for human review without treating
@@ -199,3 +227,19 @@ Save package hashes, prompt, raw model/tool trace, YAML, validation results,
 action-coverage findings and revision counts. These probes have no images;
 they cannot establish visual replay coverage. Use recorded packets with the
 command above to evaluate image-based refinement.
+
+
+## Check temporal evidence and conversation independently
+
+Record the effective `yaml/guide-policy.yaml` in the evaluation output. If a draft
+uses a visual confirmation window, test distinct fresh positive frames, uncertain
+views, contradictory views, repeated cached frames, and evidence older than its
+maximum age. Compare false accepts as well as missed completions; a longer window
+must not hide a reversible failure.
+
+Ask a follow-up question after a step transition and after stopping/restarting.
+The SDK conversation should retain useful dialogue while using the new detached
+execution snapshot. Prior-run support must not become current verification. For
+timer questions, require an actual read of the runtime-owned timer. Preserve
+prepared-image hashes, per-stage latencies, and any unavailable model stages when
+attributing failures; the authoring LLM remains an observer of actual tool results.

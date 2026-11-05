@@ -9,10 +9,10 @@
 # boundary coverage is untested. Never write a recording timestamp into YAML.
 # The runtime starts its own monotonic timer on entry to the wait step.
 # Do not create a model-written timestamp or reuse the setup completion field.
-# Missing authoring images belong in review notes, not an automatic (?!) gate.
+# Missing authoring images belong in review notes, not an automatic review blocker.
 # Read the blocked example only if the prerequisite or duration is unresolved;
 # an exact instructed wait with a clear placement uses this normal setup.
-schema_version: 1
+schema_version: 2
 task:
   id: pause_after_placement
   name: "Pause After Placement"
@@ -40,15 +40,16 @@ steps:
       interval_s: 3
       result_field: text
       arguments:
-        question: "Is the workpiece resting flat inside the marked area? Answer exactly ready, not ready, or unclear."
-    agent:
-      prompt: "Use the direct visual classification; unclear is not completion."
-      tools: []
+        question: >-
+          Focus on the workpiece and marked boundaries. Describe its position,
+          orientation, contact with the support surface, and whether any hand
+          holds it above the surface. Report hidden edges or contact points.
     voice:
       prompt: "Explain placement inside the marked area. The clock starts on entry to the waiting step."
       tools: [current_view]
     evidence:
-      pattern: '^ready$'
+      condition: >-
+        The workpiece rests flat inside the marked area, not held above it.
       consecutive: 2
       commit:
         placement_done: true

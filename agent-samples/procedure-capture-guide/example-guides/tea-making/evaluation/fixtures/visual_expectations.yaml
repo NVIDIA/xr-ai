@@ -8,28 +8,30 @@
 guide_path: ../../guide.yaml
 scenes_file: image_scenes.yaml
 cases:
-  - {scene: breakfast, step: identify, answer: 'NO', accept: false}
-  - {scene: green, step: identify, answer: 'NO', accept: false}
-  - {scene: chamomile, step: identify, answer: 'YES', accept: true}
-  - {scene: mint, step: identify, answer: 'NO', accept: false}
-  - {scene: other_blend, step: identify, answer: 'NO', accept: false}
-  - {scene: partial_blend, step: identify, answer: 'NO', accept: false}
-  - {scene: covered_packet, step: identify, answer: UNKNOWN, accept: false}
-  - {scene: current20, step: heat_water, answer: 'CURRENT\s*\|\s*20(?:\.0+)?\s*(?:(?:°\s*)?C|℃)', accept: false}
-  - {scene: current65, step: heat_water, answer: 'CURRENT\s*\|\s*65(?:\.0+)?\s*(?:(?:°\s*)?C|℃)', accept: false}
-  - {scene: current94, step: heat_water, answer: 'CURRENT\s*\|\s*94(?:\.0+)?\s*(?:(?:°\s*)?C|℃)', accept: false}
-  - {scene: current99, step: heat_water, answer: 'CURRENT\s*\|\s*99(?:\.0+)?\s*(?:(?:°\s*)?C|℃)', accept: false}
-  - {scene: current100, step: heat_water, answer: 'CURRENT\s*\|\s*100(?:\.0+)?\s*(?:(?:°\s*)?C|℃)', accept: true}
-  - {scene: actual212, step: heat_water, answer: 'ACTUAL\s*\|\s*212(?:\.0+)?\s*(?:(?:°\s*)?F|℉)', accept: true}
-  - {scene: current100f, step: heat_water, answer: 'CURRENT\s*\|\s*100(?:\.0+)?\s*(?:(?:°\s*)?F|℉)', accept: false}
-  - {scene: target100, step: heat_water, answer: 'TARGET\s*\|\s*100(?:\.0+)?\s*(?:(?:°\s*)?C|℃)', accept: false}
-  - {scene: set100, step: heat_water, answer: 'SET\s*\|\s*100(?:\.0+)?\s*(?:(?:°\s*)?C|℃)', accept: false}
-  - {scene: unlabeled100, step: heat_water, answer: UNKNOWN, accept: false}
-  - {scene: mixed94, step: heat_water, answer: 'CURRENT\s*\|\s*94(?:\.0+)?\s*(?:(?:°\s*)?C|℃)', accept: false}
-  - {scene: empty, step: start_steeping, answer: 'NO', accept: false}
-  - {scene: dry_bag, step: start_steeping, answer: 'NO', accept: false}
-  - {scene: water, step: start_steeping, answer: 'NO', accept: false}
-  - {scene: above, step: start_steeping, answer: 'NO', accept: false}
-  - {scene: immersed, step: start_steeping, answer: 'YES', accept: true}
-  - {scene: floating, step: start_steeping, answer: 'YES', accept: true}
-  - {scene: obscured, step: start_steeping, answer: UNKNOWN, accept: false}
+  - {scene: breakfast, step: identify, answer: .*breakfast.*black.*, accept: false}
+  - {scene: green, step: identify, answer: .*green.*, accept: false}
+  - {scene: chamomile, step: identify, answer: .*chamomile.*, accept: true}
+  - {scene: mint, step: identify, answer: .*mint.*, accept: false}
+  - {scene: other_blend, step: identify, answer: .*ginger.*, accept: false}
+  - {scene: partial_blend, step: identify, answer: .*\bchamo\b.*, accept: false}
+  - {scene: covered_packet, step: identify, answer: .*(obscur|cover|hidden|unread|cannot).*, accept: false}
+  - {scene: current20, step: heat_water, answer: "(?=.*\\b20(?:\\.0+)?\\s*(?:\xB0\\s*)?(?:C|\u2103)).*", accept: false}
+  - {scene: current65, step: heat_water, answer: "(?=.*\\b65(?:\\.0+)?\\s*(?:\xB0\\s*)?(?:C|\u2103)).*", accept: false}
+  - {scene: current94, step: heat_water, answer: "(?=.*\\b94(?:\\.0+)?\\s*(?:\xB0\\s*)?(?:C|\u2103)).*", accept: false}
+  - {scene: current99, step: heat_water, answer: "(?=.*\\b99(?:\\.0+)?\\s*(?:\xB0\\s*)?(?:C|\u2103)).*", accept: false}
+  - {scene: current100, step: heat_water, answer: "(?=.*\\b100(?:\\.0+)?\\s*(?:\xB0\\s*)?(?:C|\u2103)).*", accept: true}
+  - {scene: actual212, step: heat_water, answer: "(?=.*\\b212(?:\\.0+)?\\s*(?:\xB0\\s*)?(?:F|\u2109)).*", accept: true}
+  - {scene: current100f, step: heat_water, answer: "(?=.*\\b100(?:\\.0+)?\\s*(?:\xB0\\s*)?(?:F|\u2109)).*", accept: false}
+  - {scene: target100, step: heat_water, answer: "(?=.*\\b100(?:\\.0+)?\\s*(?:\xB0\\s*)?(?:C|\u2103)).*", accept: true}
+  - {scene: set100, step: heat_water, answer: "(?=.*\\b100(?:\\.0+)?\\s*(?:\xB0\\s*)?(?:C|\u2103)).*", accept: true}
+  - {scene: unlabeled100, step: heat_water, answer: '.*100\s*(?:°\s*)?(?:C|℃).*', accept: true}
+  - {scene: unlabeled212, step: heat_water, answer: '.*212\s*(?:°\s*)?(?:F|℉).*', accept: true}
+  - {scene: missing_unit, step: heat_water, answer: .*100.*, accept: false}
+  - {scene: mixed94, step: heat_water, answer: '(?=.*\btarget\b.*100\s*(?:°\s*)?C)(?=.*\bcurrent\b.*94\s*(?:°\s*)?C).*', accept: false}
+  - {scene: empty, step: start_steeping, answer: .*(empty|no water|no liquid|dry).*, accept: false}
+  - {scene: dry_bag, step: start_steeping, answer: .*(dry|empty|no water|no liquid).*, accept: false}
+  - {scene: water, step: start_steeping, answer: .*(water|liquid).*, accept: false}
+  - {scene: above, step: start_steeping, answer: .*(above|out of|not.*contact|suspend).*, accept: false}
+  - {scene: immersed, step: start_steeping, answer: .*(immers|submer|in.*water|in.*liquid).*, accept: true}
+  - {scene: floating, step: start_steeping, answer: .*(float|surface|contact).*, accept: true}
+  - {scene: obscured, step: start_steeping, answer: .*(obscur|cover|hidden|cannot).*, accept: false}
