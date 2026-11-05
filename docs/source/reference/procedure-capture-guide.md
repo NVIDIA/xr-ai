@@ -940,6 +940,14 @@ runtime timers, frame evidence, and background verification.
 evidence; its Relay trace retains the source frame, step, and revision. Transitions clear
 local notices under the session lock, so obsolete completion notices cannot
 follow the new step's instruction.
+Read-only answers are validated before delivery. If verification changes progress
+within the same step while an answer is generated, the sample discards that
+answer and regenerates it once from a fresh snapshot. If progress changes again,
+it reports authoritative runtime status instead. Discarded attempts are not
+spoken or stored as completed dialogue. Stop, restart, and step transitions
+still invalidate old answers and controls; refreshing an answer never retries
+a state-changing control.
+
 The foreground receives detached guidance context and scoped tools. Observation
 updates have a state revision; controls have a separate run-and-step revision.
 Completing the same step during inference does not invalidate a stop or advance
