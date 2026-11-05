@@ -209,3 +209,11 @@ image-space polygon with standard magenta. It stores a new lossless PNG, keeps
 the source unchanged, and inherits source ownership. Stale references and
 invalid polygons return a recoverable unavailable result rather than an
 internal tool exception.
+
+## Mono hand landmarks and still images
+
+Install `hand-tracking` for image-based hand landmarks, `frames` for live-frame
+selection and explicit still acquisition, and `image-editing` for rectangular
+cropping. These tools compose through `ImageRegistry` references and do not
+perform inference on each other's behalf. The {doc}`gesture-capture` sample
+combines them with the existing image-query tool for gesture-selected VLM questions.

@@ -28,6 +28,7 @@ marker-tracking = [
     "Pillow>=13.0.0",
     "xr-ai-hub-client",
 ]
+hand-tracking = ["mediapipe==0.10.31", "numpy>=1.24", "Pillow>=13.0.0"]
 services = ["msgpack>=1.0", "pyzmq>=27.0"]
 
 [tool.uv.sources]

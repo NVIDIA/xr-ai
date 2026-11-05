@@ -17,6 +17,7 @@
 
 import {
   StreamSession,
+  capturePhoto,
   ConnectionState,
   StreamError,
   AudioConfig,
@@ -487,8 +488,11 @@ export async function connect(model, {
   };
 
   model.imageCaptureHandler = async ({ signal }) => {
+    if (model.cameraMode === 'live') {
+      return capturePhoto(newSession.cameraTrack, { signal });
+    }
     if (model.cameraMode !== 'on-demand') {
-      throw new Error('On-demand image capture is not enabled.');
+      throw new Error('Camera capture is not enabled.');
     }
     const sequence = ++model.captureSequence;
     model.captureState = model.isCameraActive ? 'capturing' : 'starting';
@@ -529,7 +533,7 @@ export async function connect(model, {
       throw error;
     }
   };
-  newSession.onImageCaptureRequested = model.cameraMode === 'on-demand'
+  newSession.onImageCaptureRequested = model.cameraMode !== 'off'
     ? model.imageCaptureHandler
     : null;
 
@@ -779,7 +783,7 @@ export async function setCameraMode(model, mode, { render, startCamera, stopCame
   model.cameraMode = mode;
   saveCameraMode(mode);
   if (model.session) {
-    model.session.onImageCaptureRequested = mode === 'on-demand'
+    model.session.onImageCaptureRequested = mode !== 'off'
       ? model.imageCaptureHandler
       : null;
   }

@@ -31,3 +31,5 @@ export { AudioConfig, MicrophoneMode }            from './Config/AudioConfig.js'
 export { CameraConfig, CameraFacing, CameraEncodingConfig, VideoQualityPreference } from './Config/CameraConfig.js';
 export { SessionConfig }                          from './Config/SessionConfig.js';
 export { BackendConfiguration, LiveKitConfig }    from './Config/BackendConfiguration.js';
+
+export { capturePhoto } from './PhotoCapture.js';

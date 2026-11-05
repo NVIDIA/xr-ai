@@ -617,10 +617,11 @@ test('camera modes are exclusive and survive disconnect', async () => {
   assert.equal(starts, 0);
 
   await setCameraMode(model, 'live', actions);
-  assert.equal(session.onImageCaptureRequested, null);
+  assert.equal(session.onImageCaptureRequested, handler);
   assert.equal(starts, 1);
 
   await setCameraMode(model, 'off', actions);
+  assert.equal(session.onImageCaptureRequested, null);
   assert.equal(stops, 1);
   assert.equal(saved.get('streamkit.cameraMode'), 'off');
 

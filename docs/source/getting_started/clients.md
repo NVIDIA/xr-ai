@@ -504,3 +504,12 @@ the hub's port 8080, publishes microphone and optional camera tracks, plays the
 remote audio track, and reads data topics such as `agent.response`. Keep the
 transport-specific SDK behind a StreamKit backend and reuse the same status,
 interruption, and participant-routing contracts.
+
+## Still photographs while video is live
+
+The web client's Live camera mode supports separate photograph requests when
+its browser implements native `ImageCapture` photography. Photo dimensions
+follow device capabilities independently of video settings. Custom device
+applications can implement the existing capture callback with a platform photo
+API. Refer to {doc}`/reference/gesture-capture` for the demonstration, browser
+limitations, and photo/video alignment requirements.

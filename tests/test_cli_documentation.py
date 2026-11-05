@@ -20,6 +20,7 @@ def test_sample_command_catalog_matches_top_level_projects() -> None:
     commands = {command.program: command for command in load_cli_catalog(_ROOT)}
 
     assert set(commands) == {
+        "gesture_capture",
         "conversation_example",
         "conversation_example_model_servers",
         "lab_instrument_monitoring",

@@ -49,6 +49,54 @@ qualified lock; the reciprocal-license table records exact resolved versions.
 | `python-multipart` | >=0.0.9 | Apache-2.0 | https://github.com/Kludex/python-multipart |
 | `websockets`   | 12.0     | BSD-3-Clause  | https://github.com/python-websockets/websockets |
 
+### MediaPipe hand landmarks
+
+The optional `xr-ai-tools[hand-tracking]` extra pins `mediapipe==0.10.31`.
+The package is Apache-2.0, with an additional Lucent permissive UTF notice;
+the exact Linux wheel's complete license text is retained in
+[`third_party_licenses/mediapipe-0.10.31/LICENSE`](third_party_licenses/mediapipe-0.10.31/LICENSE).
+That wheel has no separate NOTICE file. The source project is
+[google-ai-edge/mediapipe](https://github.com/google-ai-edge/mediapipe).
+The reviewed Linux x86-64 wheel SHA-256 is
+`360de896205822419b14d7574c2812e08946769228f7548c31dd871b150d9bcc`.
+No MediaPipe binaries or model weights are vendored into this repository.
+
+The sample explicitly provisions the official Hand Landmarker float16 task
+bundle, version 1, containing `hand_detector.tflite` and
+`hand_landmarks_detector.tflite`. The [official model card](https://storage.googleapis.com/mediapipe-assets/Model%20Card%20Hand%20Tracking%20%28Lite_Full%29%20with%20Fairness%20Oct%202021.pdf)
+(page 2, “LICENSED UNDER”) states Apache License 2.0. The versioned
+[model asset](https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task)
+has SHA-256 `fbc2a30080c3c557093b5ddfc334698132eb341044ccee322ccf8bcf3607cde1`.
+This model-specific evidence is separate from the package license. Preserve
+Apache terms and applicable notices when redistributing either artifact.
+
+The following packages resolved in the sample at the existing repository
+qualification cutoff. Attribution files are retained under the linked paths;
+the FlatBuffers license comes from its exact upstream tag because its Python
+wheel lacks a license file. CFFI and pycparser may already be installed through
+other repository features but are also required through sounddevice.
+
+| Package | Resolved version | License | Attribution |
+|---|---|---|---|
+| `absl-py` | 2.5.1 | Apache-2.0 | [license](third_party_licenses/absl-py-2.5.1/LICENSE) |
+| `flatbuffers` | 25.12.19 | Apache-2.0 | [license](third_party_licenses/flatbuffers-25.12.19/LICENSE) |
+| `sounddevice` | 0.5.6 | MIT | [license](third_party_licenses/sounddevice-0.5.6/LICENSE) |
+| `cffi` | 2.1.1 | MIT-0 | [license](third_party_licenses/cffi-2.1.1/LICENSE) |
+| `pycparser` | 3.12 | BSD-3-Clause | [license](third_party_licenses/pycparser-3.12/LICENSE) |
+
+NumPy is also a direct MediaPipe dependency and is already listed above.
+The integration uses no microphone API. On macOS and Windows, sounddevice
+wheels additionally bundle PortAudio under permissive terms; platform wheel
+redistributors must retain those wheel-specific notices. Linux sounddevice
+uses the system PortAudio library when its audio functionality is imported.
+The Linux CPU hand path was exercised without audio initialization. CFFI
+wheels can statically link libffi; the package license alone is not a complete
+license inventory for those native objects. Before redistributing repackaged
+binaries, complete the native component attribution inventory for the chosen
+MediaPipe and CFFI wheels. This
+review covers the stated release and model, not arbitrary replacement models,
+other platform wheels' embedded libraries, or a rebuilt native distribution.
+
 ### Nemotron OCR v2
 
 The local OCR container downloads source and multilingual weights from
@@ -362,6 +410,12 @@ refer to the component disclosures above for applicable license elections.
 
 | Component | Preserved license file |
 |---|---|
+| `absl-py-2.5.1` | [`LICENSE`](third_party_licenses/absl-py-2.5.1/LICENSE) |
+| `cffi-2.1.1` | [`LICENSE`](third_party_licenses/cffi-2.1.1/LICENSE) |
+| `flatbuffers-25.12.19` | [`LICENSE`](third_party_licenses/flatbuffers-25.12.19/LICENSE) |
+| `mediapipe-0.10.31` | [`LICENSE`](third_party_licenses/mediapipe-0.10.31/LICENSE) |
+| `pycparser-3.12` | [`LICENSE`](third_party_licenses/pycparser-3.12/LICENSE) |
+| `sounddevice-0.5.6` | [`LICENSE`](third_party_licenses/sounddevice-0.5.6/LICENSE) |
 | `certifi-2026.10.19` | [`LICENSE`](third_party_licenses/certifi-2026.10.19/LICENSE) |
 | `instanttensor-0.2.2` | [`LICENSE`](third_party_licenses/instanttensor-0.2.2/LICENSE) |
 | `libsndfile-1.2.2` | [`COPYING`](third_party_licenses/libsndfile-1.2.2/COPYING) |

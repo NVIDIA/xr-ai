@@ -208,6 +208,10 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
     - `numpy>=1.24`
     - `Pillow>=13.0.0`
     - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
+  - `hand-tracking`:
+    - `mediapipe==0.10.31`
+    - `numpy>=1.24`
+    - `Pillow>=13.0.0`
   - `image-editing`:
     - `Pillow>=13.0.0`
   - `marker-tracking`:
@@ -688,6 +692,33 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Commands:
   - `conversation_example_worker` → `conversation_example_worker.__main__:run`
 
+#### `gesture-capture` — [`agent-samples/gesture-capture/`](agent-samples/gesture-capture/)
+
+- Python: `>=3.11,<3.15`
+- Build dependencies:
+  - `hatchling`
+- Runtime dependencies:
+  - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
+  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
+- Optional dependency groups: none
+- Commands:
+  - `gesture_capture` → `main:run`
+
+#### `gesture-capture-worker` — [`agent-samples/gesture-capture/worker/`](agent-samples/gesture-capture/worker/)
+
+- Python: `>=3.11,<3.15`
+- Build dependencies:
+  - `hatchling`
+- Runtime dependencies:
+  - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
+  - `xr-ai-models` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
+  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
+  - `xr-ai-tools[frames,hand-tracking,image-editing,vision]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
+  - `pyyaml>=6.0`
+- Optional dependency groups: none
+- Commands:
+  - `gesture_capture_worker` → `gesture_capture_worker.__main__:run`
+
 #### `lab-instrument-monitoring` — [`agent-samples/lab-instrument-monitoring/`](agent-samples/lab-instrument-monitoring/)
 
 - Python: `>=3.11,<3.15`
@@ -962,6 +993,7 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `gesture-capture-worker` → [`gesture-capture-worker`](agent-samples/gesture-capture/worker/) (local, editable)
   - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
   - `xr-ai-interaction` → [`xr-ai-interaction`](agent-sdk/xr-ai-interaction/) (local, editable)
   - `xr-ai-conversation` → [`xr-ai-conversation`](agent-sdk/xr-ai-conversation/) (local, editable)
