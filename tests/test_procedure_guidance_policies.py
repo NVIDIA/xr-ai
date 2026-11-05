@@ -309,7 +309,7 @@ async def test_window_confirmation_is_opt_in_and_deduplicates_frames(engine, doc
     async def observe(value, sequence):
         backend._decisions.decide.return_value = clef_response(value, .95)
         backend._trigger = AsyncMock(return_value=replace(observation(value, sequence), value=image.getvalue()))
-        session.next_tick = 0
+        session.runner.next_poll_at = 0
         await backend._tick(session)
     await observe("yes", 1)
     await observe("yes", 1)

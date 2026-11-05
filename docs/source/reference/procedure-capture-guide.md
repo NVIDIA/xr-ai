@@ -948,8 +948,34 @@ agent is registered. With no mode flag, capture remains the default.
 scheduling, and destination selection. The guide destination classifies and
 authorizes controls; the conversation destination answers questions with detached
 execution context and read-only tools. `guide/conversation.py` adapts the sample's
-tool loop to SDK conversation without exposing state-changing tools. Its `_Guide` backend in `guide/guiding.py` owns guide progress,
-runtime timers, frame evidence, and background verification.
+tool loop to SDK conversation without exposing state-changing tools. Its `_Guide`
+backend in `guide/guiding.py` owns guide progress, scoped state commits, controls,
+and announcements. `guide/step_runner.py` owns the active step's execution task;
+`guide/timer_flow.py` and `guide/visual_verification_flow.py` implement the same
+`Flow.poll() -> FlowUpdate` contract. The runner serializes observations and
+schedules the next one using the flow's requested delay.
+
+A flow returns `pending`, `ready`, or `unavailable` with a typed value. `ready`
+means its evidence requirement is met; only the backend may commit guide state
+or advance the procedure. Timer tools read the same monotonic timer used by the
+flow. Visual flows deduplicate source frames and apply the guide's consecutive
+or windowed confirmation rule; `visual_check.py` retains the configured
+image-first/Cosmos-fallback and measurement policies. The backend no longer
+runs a separate verification polling loop.
+
+Each active step has one flow under the existing guide schema. Stop, skip,
+restart, disconnect, and shutdown cancel and drain owned execution. Step/run
+scope checks reject results that no longer belong to the active step. Expected
+unavailable camera/model evidence does not confirm completion and is retried
+at the observation interval; an unhandled execution error ends that runner as
+`failed`, with diagnostics in logs and guidance context. It does not silently
+restart a broken operation. A new guide run creates fresh flow state.
+
+For a coding agent implementing an additional flow, use the sample's
+`implement-flow/SKILL.md`. It describes the contract, ownership boundaries,
+configuration integration, and tests. These are sample-local components; the
+tea sample keeps its independent flow implementations. Multiple flows within
+one YAML step are not supported by this schema.
 `guide/verification.py` uses the typed decision service to judge descriptive
 evidence; its Relay trace retains the source frame, step, and revision. Transitions clear
 local notices under the session lock, so obsolete completion notices cannot

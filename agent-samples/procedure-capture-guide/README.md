@@ -26,7 +26,8 @@ main.py                         Sample launcher
 worker/                         Capture and guide agents
 yaml/                           Sample configuration
 model-servers/                  Shared local model launcher
-guide-generation-skills/        Coding-agent instructions and references
+guide-generation-skills/        Guide authoring instructions and references
+implement-flow/                 Skill for extending local step execution
 evaluation/
   capture/                      Caption evaluator and cases
   guide/                        Packet evaluator, shared harness, authoring probes

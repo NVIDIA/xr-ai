@@ -25,7 +25,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-import nemo_relay
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field
 from xr_ai_hub import FrameUnavailable
@@ -37,14 +36,23 @@ from xr_ai_tools.types import EmptyRequest, StrictRequest
 from xr_ai_tools.vision import ImageQueryResult, ImageQueryTool
 
 from ._workflow_spec import Step, Workflow, _CurrentViewRequest, _TimerRequest
-from .confirmation import ConfirmationWindow
+from .flow import FlowUpdate
 from .guides import SelectedGuide
 from .policy import load_policy
 from .run_trace import RunTrace
-from .timer import GuideTimer as _Timer
+from .step_runner import StepRunner
+from .timer_flow import TimerFlow
 from .visual_check import VisualCheckTrace, caption_image, verify_image
-
-_POLL_INTERVAL_S = 0.25
+from .visual_verification_flow import (
+    FrameIdentity as _FrameIdentity,
+)
+from .visual_verification_flow import (
+    Observation as _Observation,
+)
+from .visual_verification_flow import (
+    VisualProgress,
+    VisualVerificationFlow,
+)
 
 
 class _AdvanceGuideRequest(StrictRequest):
@@ -92,21 +100,7 @@ class _CommitResult(BaseModel):
     revision: int
 
 
-class _FrameIdentity(BaseModel):
-    participant_id: str
-    track_id: str
-    sequence: int
-    timestamp_us: int
-
-
 class _ViewResult(ImageQueryResult):
-    frame: _FrameIdentity | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class _Observation:
-    available: bool
-    value: Any
     frame: _FrameIdentity | None = None
 
 
@@ -121,7 +115,6 @@ class _Session:
     # controls so a concurrently completed step can still be advanced or stopped.
     revision: int = 1
     control_revision: int = 1
-    next_tick: float = 0.0
     evidence_hits: int = 0
     notices: list[str] = field(default_factory=list)
     skipped: bool = False
@@ -130,11 +123,12 @@ class _Session:
     observation_history: list[dict] = field(default_factory=list)
     completed_steps: list[dict] = field(default_factory=list)
     previous_run: dict | None = None
-    confirmation: ConfirmationWindow = field(default_factory=ConfirmationWindow)
     # Runtime-owned timing never comes from a model commit or a tool argument.
-    timer: _Timer | None = None
+    timer: TimerFlow | None = None
     timer_error: str | None = None
-    observed_frames: dict[tuple[str, str], tuple[int, int]] = field(default_factory=dict)
+    # Each step gets a fresh runner; its flow owns deduplication/confirmation.
+    # timer references that same flow so foreground reads never start another wait.
+    runner: StepRunner | None = None
     lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
 
     @property
@@ -150,9 +144,9 @@ class _Session:
 
 
 class _Guide:
-    """Own progress with one observer per participant and locked transitions.
+    """Own guide progress with one step runner per participant and locked transitions.
 
-    Foreground controls and the observer share each session lock. Frame checks
+    Foreground controls and flow result application share each session lock. Frame checks
     may await inference outside it, but their results must match the same step
     and revision before they can change progress.
     """
@@ -194,7 +188,7 @@ class _Guide:
         self._invalidate = invalidate
         self._connected = connected
         self._sessions: dict[str, _Session] = {}
-        self._monitors: dict[str, asyncio.Task[None]] = {}
+        self._runners: dict[str, StepRunner] = {}
         self._control_tasks: dict[str, set[asyncio.Task[tuple[str, int]]]] = {}
 
     def join(self, participant_id: str) -> str:
@@ -256,6 +250,8 @@ class _Guide:
                 "guide_order": guide_order,
                 "state": copy.deepcopy(workflow.project(step, session.state)) if session.active else {},
                 "active_trigger": active_trigger,
+                "execution_status": (session.runner.status if session.active and session.runner is not None
+                                     else "blocked" if session.active else "inactive"),
                 "last_verification": copy.deepcopy(evidence) if session.active else None,
                 "run_id": session.run_id,
                 "step_id": step.id if session.active else None,
@@ -293,7 +289,7 @@ class _Guide:
     async def leave(self, participant_id: str) -> None:
         await self._drain_controls(participant_id)
         session = self._sessions.pop(participant_id, None)
-        await _cancel(self._monitors, participant_id)
+        await _cancel(self._runners, participant_id)
         if session is not None:
             self._end_trace(session, "disconnect")
         self._current_frame.release(participant_id)
@@ -304,12 +300,10 @@ class _Guide:
         participants = tuple(self._sessions)
         sessions = tuple(self._sessions.values())
         self._sessions.clear()
-        tasks = tuple(self._monitors.values())
-        self._monitors.clear()
-        for task in tasks:
-            task.cancel()
-        if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
+        runners = tuple(self._runners.values())
+        self._runners.clear()
+        if runners:
+            await asyncio.gather(*(runner.stop() for runner in runners))
         for session in sessions:
             self._end_trace(session, "shutdown")
         await self._trace.close()
@@ -446,10 +440,10 @@ class _Guide:
         if action not in {"reset", "restart"}:
             raise ValueError(f"unknown guide control: {action}")
         await self._invalidate(pid)
+        await _cancel(self._runners, pid)
         self._reset_progress(session, active=action == "restart", reason=action)
-        await _cancel(self._monitors, pid)
         if session.active:
-            self._start_monitor(pid)
+            self._start_step(pid)
             return session.step.enter_message
         return "Guide stopped. Say start guide to begin again."
 
@@ -472,16 +466,17 @@ class _Guide:
         session.revision += 1
         session.control_revision += 1
         session.evidence_hits = 0
-        session.next_tick = 0.0
         session.notices.clear()
         if next_step is None:
             message = "Guide ended with skipped steps." if session.skipped else session.workflow.complete_message
             self._reset_progress(session, active=False, reason="skipped" if session.skipped else "completed")
-            await _cancel(self._monitors, session.participant_id)
+            await _cancel(self._runners, session.participant_id)
             return f"{message} Say start guide to begin again."
+        await _cancel(self._runners, session.participant_id)
         session.step_id = next_step
         session.last_verification = None
         self._enter_step(session)
+        self._start_step(session.participant_id)
         if skipping and step.skip_message:
             return f"{step.skip_message} {session.step.enter_message}"
         return session.step.enter_message
@@ -498,7 +493,6 @@ class _Guide:
         session.step_id = session.workflow.start_step
         session.revision += 1
         session.control_revision += 1
-        session.next_tick = 0.0
         session.evidence_hits = 0
         session.notices.clear()
         session.skipped = False
@@ -526,115 +520,120 @@ class _Guide:
 
     def _enter_step(self, session: _Session) -> None:
         session.observation_history.clear()
-        session.confirmation.observations.clear()
         session.last_verification = None
         self._trace.emit(session.run_id, "step_entered", step=session.step_id,
                          revision=session.revision, state=dict(session.state))
-        session.observed_frames.clear()
+        session.runner = None
         session.timer = None
         session.timer_error = None
         if session.active and session.step.trigger.function == "clock__timer":
             try:
                 arguments = _TimerRequest.model_validate(self._resolve(session.step.trigger.arguments, session.state))
-                session.timer = _Timer(time.monotonic(), arguments.duration_s, clock=time.monotonic)
+                session.timer = TimerFlow(arguments.duration_s, session.step.trigger.interval_s, clock=time.monotonic)
             except ValueError as exc:
                 # Missing duration leaves the step blocked, never implicitly expired.
                 session.timer_error = str(exc)
 
-    def _start_monitor(self, participant_id: str) -> None:
-        if participant_id in self._monitors and not self._monitors[participant_id].done():
-            return
-        task = asyncio.create_task(
-            self._monitor(participant_id),
-            name=f"sop-monitor:{participant_id}",
-            context=nemo_relay.fork_asyncio_context(),
-        )
-        self._monitors[participant_id] = task
-        task.add_done_callback(lambda completed, pid=participant_id: _discard(self._monitors, pid, completed))
+        if session.active:
+            self._prepare_runner(session)
 
-    async def _monitor(self, participant_id: str) -> None:
-        while self._connected(participant_id):
-            session = self._sessions.get(participant_id)
-            if session is None or not session.active:
-                return
-            try:
-                await self._tick(session)
-            except asyncio.CancelledError:
-                raise
-            except Exception:  # noqa: BLE001 — Loguru traceback at the observation-task boundary.
-                # isolation boundary: surface a failed observation and keep supervising this guide.
-                logger.opt(exception=True).warning("SOP observation failed pid={!r}", participant_id)
-            await asyncio.sleep(_POLL_INTERVAL_S)
+    def _prepare_runner(self, session: _Session) -> None:
+        step = session.step
+        revision = session.revision
+
+        async def acquire() -> _Observation:
+            nonlocal revision
+            async with session.lock:
+                revision = session.revision
+                state = dict(session.state)
+            return await self._trigger(session, step, state)
+
+        async def verify(observation: _Observation) -> str | None:
+            trace = await self._verify_visual(session, step, revision, observation)
+            async with session.lock:
+                if session.runner is not runner or not self._current(session, step, revision):
+                    return None
+                return trace.verdict if trace is not None and trace.error is None else None
+
+        async def apply(update: FlowUpdate) -> bool:
+            if isinstance(update.value, VisualProgress):
+                async with session.lock:
+                    if session.runner is not runner or not session.active:
+                        return True
+                    if not self._current(session, step, revision):
+                        return False
+                    session.evidence_hits = update.value.hits
+                    if not update.value.observation.available:
+                        self._unavailable(session, step, revision, "current observation unavailable")
+                    if update.status == "ready" and step.evidence.commit:
+                        self._commit(session, step, step.evidence.commit, "")
+            else:
+                await self._apply_timer(session, step, runner, update.value)
+            await self._publish_notices(session)
+            return session.runner is not runner or not session.active or self._is_complete(session)
+
+        if step.trigger.function == "current_view":
+            flow = VisualVerificationFlow(
+                acquire=acquire, verify=verify, interval_s=step.trigger.interval_s,
+                required=step.evidence.consecutive, confirmation=step.evidence.confirmation,
+                clock=time.monotonic,
+            )
+        else:
+            if session.timer is None:
+                return  # An unresolved duration leaves the step explicitly blocked.
+            flow = session.timer
+        runner = StepRunner(flow, apply=apply, clock=time.monotonic)
+        session.runner = runner
+
+    def _start_step(self, participant_id: str) -> None:
+        session = self._sessions.get(participant_id)
+        if session is None or not session.active or session.runner is None:
+            return
+        runner = session.runner
+        self._runners[participant_id] = runner
+        task = runner.start(name=f"guide-step:{participant_id}:{session.step_id}",
+                            poll=lambda: self._tick(session))
+        task.add_done_callback(lambda completed: _discard(self._runners, participant_id, runner, completed))
 
     async def _tick(self, session: _Session) -> None:
+        """Advance the active runner once, preserving evaluation event attribution."""
         async with session.lock:
             if (not session.active or self._sessions.get(session.participant_id) is not session
-                    or self._is_complete(session)):
+                    or self._is_complete(session) or session.runner is None):
                 return
-            now = time.monotonic()
-            if session.next_tick > now:
-                return
-            step = session.step
-            revision = session.revision
-            state = dict(session.state)
-            session.next_tick = now + step.trigger.interval_s
+            runner, step, revision = session.runner, session.step, session.revision
         try:
-            observation = await self._trigger(session, step, state)
+            await runner.poll()
         except Exception as exc:
-            # A failed observation breaks consecutive evidence, but an old
-            # observation must not clear progress after a step transition.
             async with session.lock:
-                if self._current(session, step, revision):
+                if session.runner is runner and self._current(session, step, revision):
                     session.evidence_hits = 0
-                    session.confirmation.observations.clear()
-                    session.last_verification = {
-                        "step_id": step.id, "revision": revision, "verdict": None,
-                        "observed_monotonic": time.monotonic(),
-                        "error": {"type": type(exc).__name__, "message": str(exc)},
-                    }
-                    self._trace.emit(session.run_id, "observation_unavailable", step=step.id,
-                                     revision=revision, error=session.last_verification["error"])
+                    self._unavailable(session, step, revision, {"type": type(exc).__name__, "message": str(exc)})
             raise
-        run_model = True
+
+    def _unavailable(self, session: _Session, step: Step, revision: int, error) -> None:
+        session.last_verification = {
+            "step_id": step.id, "revision": revision, "verdict": None,
+            "observed_monotonic": time.monotonic(), "error": error,
+        }
+        self._trace.emit(session.run_id, "observation_unavailable", step=step.id, revision=revision, error=error)
+
+    async def _apply_timer(self, session: _Session, step: Step, runner: StepRunner, result) -> None:
         async with session.lock:
-            if not self._current(session, step, revision):
+            if session.runner is not runner or not self._current(session, step, session.revision):
                 return
-            if not observation.available:
-                session.evidence_hits = 0
-                session.confirmation.observations.clear()
-                session.last_verification = {
-                    "step_id": step.id, "revision": revision, "verdict": None,
-                    "observed_monotonic": time.monotonic(), "error": "current observation unavailable",
-                }
-                self._trace.emit(session.run_id, "observation_unavailable", step=step.id, revision=revision)
-                return
-            if step.trigger.function == "current_view":
-                frame = observation.frame
-                if frame is None:
-                    session.evidence_hits = 0
-                    return
-                key = (frame.participant_id, frame.track_id)
-                position = (frame.timestamp_us, frame.sequence)
-                previous = session.observed_frames.get(key)
-                # Re-running inference is not another observation of the action.
-                if previous is not None and position <= previous:
-                    return
-                session.observed_frames[key] = position
-        if step.trigger.function == "current_view":
-            await self._verify_visual(session, step, revision, observation)
-            await self._publish_notices(session)
-            return
-        async with session.lock:
-            if not self._current(session, step, revision):
-                return
+            revision = session.revision
+            value = result.model_dump(mode="json")
+            if step.trigger.result_field is not None:
+                value = value[step.trigger.result_field]
+            observation = _Observation(True, value)
             self._trace.emit(session.run_id, "timer_observation", step=step.id, revision=revision,
-                             result=observation.value)
+                             result=value)
+            run_model = True
             evidence = step.evidence
             if evidence is not None:
-                value = observation.value if isinstance(observation.value, str) else json.dumps(
-                    observation.value, separators=(",", ":"),
-                )
-                matched = re.fullmatch(evidence.pattern, value.strip()) is not None
+                text = value if isinstance(value, str) else json.dumps(value, separators=(",", ":"))
+                matched = re.fullmatch(evidence.pattern, text.strip()) is not None
                 session.evidence_hits = session.evidence_hits + 1 if matched else 0
                 if evidence.commit:
                     run_model = False
@@ -643,7 +642,6 @@ class _Guide:
             state = dict(session.state)
         if run_model:
             await self._observation_turn(session, step, revision, state, observation)
-        await self._publish_notices(session)
 
     async def _verify_visual(
         self, session: _Session, step: Step, revision: int, observation: _Observation,
@@ -652,7 +650,6 @@ class _Guide:
         async with session.lock:
             if not self._current(session, step, revision):
                 return None
-            previous_hits = session.evidence_hits
             session.evidence_hits = 0
             session.last_verification = None
             run_id = session.run_id
@@ -685,6 +682,7 @@ class _Guide:
                                  step=step.id, revision=revision, frame=frame)
             self._trace.emit(run_id, "observation_finished", step=step.id, revision=revision,
                              frame=frame, latency_s=time.monotonic() - before, error=error, **trace.record())
+        trace.error = error
         async with session.lock:
             if not self._current(session, step, revision):
                 return trace
@@ -694,17 +692,8 @@ class _Guide:
                 "measurement": step.evidence.measurement.model_dump() if step.evidence.measurement else None,
                 "observed_monotonic": time.monotonic(),
             }
-            matched = error is None and trace.accepted is True
             session.observation_history.append(copy.deepcopy(session.last_verification))
             del session.observation_history[:-self._policy.history_limit]
-            if step.evidence.confirmation is not None:
-                session.evidence_hits = session.confirmation.observe(
-                    trace.verdict if error is None else None, time.monotonic(), step.evidence.confirmation,
-                )
-            else:
-                session.evidence_hits = previous_hits + 1 if matched else 0
-            if step.evidence.commit and session.evidence_hits >= step.evidence.consecutive:
-                self._commit(session, step, step.evidence.commit, "")
         return trace
 
     async def _observation_turn(
@@ -831,14 +820,6 @@ class _Guide:
                 ))
             except (FrameUnavailable, TimeoutError) as exc:
                 return _Observation(False, str(exc))
-        if step.trigger.function == "clock__timer":
-            if session.timer is None:
-                return _Observation(False, session.timer_error)
-            result = session.timer.read()
-            value: Any = result.model_dump(mode="json")
-            if step.trigger.result_field is not None:
-                value = value[step.trigger.result_field]
-            return _Observation(True, value)
         raise ValueError(f"unsupported trigger: {step.trigger.function}")
 
     def _named_tools(self, participant_id: str, names: tuple[str, ...]) -> ToolSet:
@@ -966,28 +947,23 @@ class _Guide:
         return value
 
 
-async def _cancel(tasks: dict[str, asyncio.Task[None]], participant_id: str) -> None:
-    task = tasks.get(participant_id)
-    if task is None:
+async def _cancel(runners: dict[str, StepRunner], participant_id: str) -> None:
+    runner = runners.get(participant_id)
+    if runner is None:
         return
-    task.cancel()
-    await asyncio.gather(task, return_exceptions=True)
-    if tasks.get(participant_id) is task:
-        tasks.pop(participant_id, None)
+    await runner.stop()
+    if runners.get(participant_id) is runner:
+        runners.pop(participant_id, None)
 
 
-def _discard(
-    tasks: dict[str, asyncio.Task[None]],
-    participant_id: str,
-    task: asyncio.Task[None],
-) -> None:
-    if tasks.get(participant_id) is task:
-        tasks.pop(participant_id, None)
+def _discard(runners: dict[str, StepRunner], participant_id: str, runner: StepRunner, task: asyncio.Task) -> None:
+    if runners.get(participant_id) is runner:
+        runners.pop(participant_id, None)
     if task.cancelled():
         return
     with suppress(asyncio.CancelledError):
         if error := task.exception():
-            logger.error("SOP task stopped pid={!r}: {!r}", participant_id, error)
+            logger.error("Guide step failed pid={!r}: {!r}", participant_id, error)
 
 
 def _evidence_context(item):

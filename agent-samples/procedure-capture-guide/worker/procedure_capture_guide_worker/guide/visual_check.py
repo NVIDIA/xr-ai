@@ -4,8 +4,8 @@
 """Verify a selected frame with CLEF and request a focused caption when uncertain.
 
 Image judgment, caption generation, and caption judgment remain separate calls.
-This module composes them into the sample's uniform decision rule; the backend
-owns frame selection, consecutive evidence, and progress updates.
+This module composes them into the sample's uniform decision rule; the visual flow
+owns frame selection and confirmation, and the backend applies guide progress.
 """
 
 from __future__ import annotations
@@ -31,6 +31,7 @@ from .verification import judge_image, judge_observation, verdict
 class VisualCheckTrace:
     """Retain completed stages even when a later inference fails."""
 
+    error: dict[str, str] | None = None
     prepared_image: bytes | None = field(default=None, repr=False)
     latency_s: dict[str, float] = field(default_factory=dict)
 

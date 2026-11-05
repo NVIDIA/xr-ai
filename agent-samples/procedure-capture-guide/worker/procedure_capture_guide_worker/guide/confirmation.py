@@ -3,7 +3,7 @@
 
 """Accumulate distinct visual evidence under an explicit guide confirmation policy.
 
-The backend selects and deduplicates frames. This component owns only the
+The visual flow selects and deduplicates frames. This component owns only the
 bounded evidence window; it cannot commit progress or execute controls.
 """
 

@@ -107,7 +107,7 @@ async def connected_engine(document):
     )
     agent.bind_runtime(Mock(running=True, publish=AsyncMock()))
     # Tick explicitly to make evidence and cancellation tests independent of time.
-    agent._backend._start_monitor = Mock()
+    agent._backend._start_step = Mock()
     await agent._join("alice")
     yield agent
     await agent.stop()
@@ -211,7 +211,7 @@ async def test_shipped_tea_guide_verification_and_runtime_timer(engine, monkeypa
         backend._current_frame.execute.return_value = camera_frame(sequence)
         backend._image_query.execute.return_value = ImageQueryResult(text=answer)
         backend._current_frame.images.resolve.return_value = answer.encode()
-        session.next_tick = 0
+        session.runner.next_poll_at = 0
         await backend._tick(session)
 
     # Malformed negatives must not commit progress even across fresh frames.
@@ -249,12 +249,12 @@ async def test_shipped_tea_guide_verification_and_runtime_timer(engine, monkeypa
     timer = backend._timer_tool("alice")
     assert (await timer.execute(EmptyRequest())).remaining_s == 300
     now += 299
-    session.next_tick = 0
+    session.runner.next_poll_at = 0
     await backend._tick(session)
     assert not backend._is_complete(session)
     assert "not complete" in await control(backend, "advance", skip=False)
     now += 1
-    session.next_tick = 0
+    session.runner.next_poll_at = 0
     backend._announce = AsyncMock()
     await backend._tick(session)
     assert not session.active and not any(session.state.values())
@@ -554,7 +554,7 @@ async def test_starts_on_command_and_completes_twice_without_disconnect(connecte
     assert "Align Parts" in engine._runtime.publish.call_args.args[1].text
     assert "Say start guide" in engine._runtime.publish.call_args.args[1].text
     assert not session.active and session.timer is None
-    engine._backend._start_monitor.assert_not_called()
+    engine._backend._start_step.assert_not_called()
     await engine._backend._tick(session)
     engine._backend._current_frame.execute.assert_not_awaited()
     engine._llm.chat.return_value = ChatResponse("", None, [
@@ -601,7 +601,7 @@ async def test_visual_confirmation_requires_evidence_and_announces_once(engine):
     ])
     assert "not complete" in await control(engine._backend, "advance", skip=False)
     for complete in (False, False, True):
-        session.next_tick = 0
+        session.runner.next_poll_at = 0
         await engine._backend._tick(session)
         assert session.step.is_complete(session.state) is complete
     assert session.step_id == "base"
@@ -618,7 +618,7 @@ async def test_unavailable_and_wrong_direction_never_complete(engine):
         observation("YES", 1), _Observation(False, "no camera"), observation("NO", 3),
     ])
     for _ in range(3):
-        session.next_tick = 0
+        session.runner.next_poll_at = 0
         await engine._backend._tick(session)
     assert not session.state["base"]
     assert session.evidence_hits == 0
@@ -674,7 +674,7 @@ async def test_departure_during_admission_does_not_start_guide(connected_engine)
     await asyncio.wait_for(entered.wait(), 2)
     await engine._router.participant_left("alice")
     await asyncio.gather(turn, return_exceptions=True)
-    assert not engine._backend._sessions and not engine._backend._monitors
+    assert not engine._backend._sessions and not engine._backend._runners
 
 
 async def test_timer_cannot_complete_early_and_does_not_use_camera(engine, document, monkeypatch):
@@ -693,7 +693,7 @@ async def test_timer_cannot_complete_early_and_does_not_use_camera(engine, docum
     session.evidence_hits = 1
     assert engine._backend._commit(session, session.step, {"base": True}, "")[0] is False
     now += 10
-    session.next_tick = 0
+    session.runner.next_poll_at = 0
     await engine._backend._tick(session)
     assert session.state["base"]
     engine._backend._current_frame.execute.assert_not_called()
@@ -736,11 +736,11 @@ async def test_model_written_timestamp_cannot_backdate_runtime_timer(engine, doc
     )
     assert not result.accepted and result.message == "timer has not expired"
     now += 59
-    session.next_tick = 0
+    session.runner.next_poll_at = 0
     await backend._tick(session)
     assert not session.state["lid"]
     now += 1
-    session.next_tick = 0
+    session.runner.next_poll_at = 0
     await backend._tick(session)
     assert session.state["lid"]
     await control(backend, "advance", skip=False)
@@ -818,18 +818,18 @@ async def test_consecutive_visual_evidence_requires_distinct_source_frames(engin
     backend._current_frame.execute.return_value = camera_frame(sequence, timestamp_us=1000, track_id=track_id)
     backend._image_query.execute.return_value = ImageQueryResult(text="YES")
     for _ in range(3):
-        session.next_tick = 0
+        session.runner.next_poll_at = 0
         await backend._tick(session)
     assert session.evidence_hits == 1 and not session.state["base"]
     engine._llm.chat.assert_not_called()
     assert backend._decisions.decide.await_count == 1
     # An older frame cannot supply independent supporting evidence either.
     backend._current_frame.execute.return_value = camera_frame(sequence, timestamp_us=500, track_id=track_id)
-    session.next_tick = 0
+    session.runner.next_poll_at = 0
     await backend._tick(session)
     assert session.evidence_hits == 1
     backend._current_frame.execute.return_value = camera_frame(sequence, timestamp_us=2000, track_id=track_id)
-    session.next_tick = 0
+    session.runner.next_poll_at = 0
     await backend._tick(session)
     assert session.state["base"] and session.evidence_hits == 2
 
@@ -841,7 +841,7 @@ async def test_unavailable_frame_breaks_consecutive_evidence(engine):
         observation("YES", 1), _Observation(False, "no frame"), observation("YES", 2), observation("YES", 3),
     ])
     for hits in (1, 0, 1, 2):
-        session.next_tick = 0
+        session.runner.next_poll_at = 0
         await backend._tick(session)
         assert session.evidence_hits == hits
         assert session.state["base"] is (hits == 2)
@@ -855,16 +855,16 @@ async def test_failed_observation_breaks_consecutive_evidence(engine, error_type
     backend._trigger = AsyncMock(side_effect=[
         observation("YES", 1), error, observation("YES", 2), observation("YES", 3),
     ])
-    session.next_tick = 0
+    session.runner.next_poll_at = 0
     await backend._tick(session)
     assert session.evidence_hits == 1
-    session.next_tick = 0
+    session.runner.next_poll_at = 0
     with pytest.raises(error_type) as raised:
         await backend._tick(session)
     assert raised.value is error
     assert session.evidence_hits == 0
     for hits in (1, 2):
-        session.next_tick = 0
+        session.runner.next_poll_at = 0
         await backend._tick(session)
         assert session.evidence_hits == hits
         assert session.state["base"] is (hits == 2)
@@ -948,7 +948,7 @@ async def test_frame_inference_finishing_after_restart_cannot_change_progress(en
     release.set()
     await tick
     assert not session.state["base"] and session.evidence_hits == 0
-    assert not session.observed_frames
+    assert not session.runner.flow.observed_frames
 
 
 async def test_foreground_controls_use_tools_and_cannot_commit(engine):
@@ -1128,7 +1128,7 @@ async def test_clef_decision_uses_bounded_commit_without_conversation_llm(engine
     session = backend._sessions["alice"]
     backend._trigger = AsyncMock(side_effect=[observation("YES", 1), observation("YES", 2)])
     for _ in range(2):
-        session.next_tick = 0
+        session.runner.next_poll_at = 0
         await backend._tick(session)
     assert session.state == {"base": True, "lid": False}
     assert backend._decisions.decide.await_count == 2
@@ -1165,8 +1165,8 @@ async def test_stop_cancels_verification_and_restart_begins_fresh(engine):
             return clef_response("yes", 0.8)
         return await scripted(state, questions, **kwargs)
     backend._decisions.decide.side_effect = decide
-    backend._start_monitor = _Guide._start_monitor.__get__(backend)
-    backend._start_monitor("alice")
+    backend._start_step = _Guide._start_step.__get__(backend)
+    backend._start_step("alice")
     await asyncio.wait_for(entered.wait(), 2)
     engine._llm.chat.return_value = ChatResponse("", None, [ToolCall(
         id="stop", name="workflow__reset", arguments="{}",
@@ -1175,7 +1175,7 @@ async def test_stop_cancels_verification_and_restart_begins_fresh(engine):
     # Native tool cancellation is delivered through Relay's dispatcher; observe
     # its cleanup rather than assuming it runs before the control reply returns.
     await asyncio.wait_for(cancelled.wait(), 2)
-    assert cancelled.is_set() and "alice" not in backend._monitors
+    assert cancelled.is_set() and "alice" not in backend._runners
     assert not session.active and session.timer is None and session.guide is pinned
     engine._runtime.publish.reset_mock()
     for _ in range(3):
@@ -1197,7 +1197,7 @@ async def test_stop_cancels_verification_and_restart_begins_fresh(engine):
     assert await engine._route("start guide", "alice") == "Do base."
     await asyncio.wait_for(entered.wait(), 2)
     assert session.active and session.step_id == "base" and session.state == {"base": False, "lid": False}
-    assert session.guide is pinned and "alice" in backend._monitors
+    assert session.guide is pinned and "alice" in backend._runners
 
 
 async def test_stopping_discards_timer_and_restart_starts_new_wait(engine, document, monkeypatch):
@@ -1284,7 +1284,7 @@ async def test_accepted_stop_survives_foreground_cancellation_and_is_drained(eng
         else:
             assert result.context["active"] is False
             assert not backend._control_tasks.get("alice")
-        assert not backend._monitors
+        assert not backend._runners
     finally:
         release.set()
 
@@ -1436,7 +1436,7 @@ async def test_tea_skip_heating_preserves_immersion_check_and_full_timer(engine,
         for _ in range(2):
             sequence += 1
             backend._trigger = AsyncMock(return_value=observation("YES", sequence))
-            session.next_tick = 0
+            session.runner.next_poll_at = 0
             await backend._tick(session)
         assert backend._is_complete(session)
 
@@ -1460,12 +1460,12 @@ async def test_tea_skip_heating_preserves_immersion_check_and_full_timer(engine,
     timer = backend._timer_tool("alice")
     assert (await timer.execute(EmptyRequest())).remaining_s == 300
     now += 299
-    session.next_tick = 0
+    session.runner.next_poll_at = 0
     await backend._tick(session)
     assert not backend._is_complete(session)
     now += 1
     backend._announce = AsyncMock()
-    session.next_tick = 0
+    session.runner.next_poll_at = 0
     await backend._tick(session)
     assert not session.active
     backend._announce.assert_awaited_once_with(
@@ -1814,7 +1814,7 @@ async def test_guide_app_composition_starts_and_cleans_up(tmp_path, document, mo
     monkeypatch.setattr(app, "ProcessorEndpoint", lambda **kwargs: endpoint)
     capture = Mock(side_effect=AssertionError("Guide must not create a capture backend"))
     monkeypatch.setattr(app, "_Capture", capture)
-    monkeypatch.setattr(_Guide, "_start_monitor", Mock())
+    monkeypatch.setattr(_Guide, "_start_step", Mock())
     agents = []
 
     def guide(**kwargs):
@@ -1882,7 +1882,7 @@ async def test_actual_runtime_delivers_guide_and_release(document):
                 "alice", "Align Parts is ready. Say start guide to begin.",
             )
             assert not agent._backend._sessions["alice"].active
-            assert not agent._backend._monitors
+            assert not agent._backend._runners
             llm.chat.return_value = ChatResponse("", None, [
                 ToolCall(id="start", name="workflow__restart", arguments="{}"),
             ], "tool_calls", {})
@@ -1895,7 +1895,7 @@ async def test_actual_runtime_delivers_guide_and_release(document):
                                   participant_id="alice")
             assert await asyncio.wait_for(sink.outputs.get(), 2) == ("alice", "Align the marked edges.")
             await runtime.publish(PARTICIPANT_LEFT_TOPIC, ParticipantLeft(), participant_id="alice")
-            assert not agent._backend._sessions and not agent._backend._monitors
+            assert not agent._backend._sessions and not agent._backend._runners
         finally:
             await agent.stop()
 
@@ -1921,7 +1921,7 @@ async def test_interrupted_transition_delivers_guidance_through_runtime(document
         vision_timeout_s=1,
     ))
     backend = agent._backend
-    backend._start_monitor = Mock()
+    backend._start_step = Mock()
     sink = runtime.register("sink", Sink())
     agent.bind_runtime(runtime)
     entered, release = asyncio.Event(), asyncio.Event()
@@ -2013,7 +2013,7 @@ async def test_transition_withdraws_notice_queued_during_foreground_turn(documen
         vision_timeout_s=1,
     ))
     backend = agent._backend
-    backend._start_monitor = Mock()
+    backend._start_step = Mock()
     runtime.register("sink", Sink())
     agent.bind_runtime(runtime)
     async with runtime:
@@ -2045,10 +2045,10 @@ async def test_transition_withdraws_notice_queued_during_foreground_turn(documen
             assert len(spoken) == 2
             if control_name == "workflow__reset":
                 assert output == "Guide stopped. Say start guide to begin again."
-                assert not session.active and "alice" not in backend._monitors
+                assert not session.active and "alice" not in backend._runners
             elif final_step:
                 assert output == "Guide ended with skipped steps. Say start guide to begin again."
-                assert not session.active and "alice" not in backend._monitors
+                assert not session.active and "alice" not in backend._runners
             else:
                 assert output.endswith(f"Do {expected_step}.") and "complete. Say next." not in output
             assert session.step_id == expected_step and not session.state[expected_step]
@@ -2089,7 +2089,7 @@ async def test_clef_failure_breaks_consecutive_confirmation(engine, failure):
         backend._decisions.decide.side_effect = (
             asyncio.CancelledError() if failure == "cancel" else RuntimeError("down")
         )
-    session.next_tick = 0
+    session.runner.next_poll_at = 0
     records = []
     sink = logger.add(lambda message: records.append(message.record), level="WARNING")
     try:
@@ -2109,7 +2109,7 @@ async def test_clef_failure_breaks_consecutive_confirmation(engine, failure):
     assert session.evidence_hits == 0 and not session.state["base"]
     backend._decisions = stub_decisions()
     for hits in (1, 2):
-        session.next_tick = 0
+        session.runner.next_poll_at = 0
         await backend._tick(session)
         assert session.evidence_hits == hits
         assert session.state["base"] is (hits == 2)
@@ -2319,3 +2319,86 @@ def scripted_decision_images(monkeypatch):
     monkeypatch.setattr(
         "procedure_capture_guide_worker.guide.verification._prepare_decision_image", lambda image: image,
     )
+
+
+async def test_skip_drains_owned_visual_flow_before_starting_next_step(engine):
+    backend = engine._backend
+    session = backend._sessions["alice"]
+    entered, cleaning, release, next_started = (asyncio.Event() for _ in range(4))
+
+    async def acquire(_session, step, _state):
+        if step.id == "base":
+            entered.set()
+            try:
+                await asyncio.Future()
+            finally:
+                cleaning.set()
+                await release.wait()
+        next_started.set()
+        return _Observation(False, "camera off")
+
+    backend._trigger = acquire
+    backend._start_step = _Guide._start_step.__get__(backend)
+    backend._start_step("alice")
+    old_runner = session.runner
+    await asyncio.wait_for(entered.wait(), 1)
+    skip = asyncio.create_task(control(backend, "advance", skip=True))
+    await asyncio.wait_for(cleaning.wait(), 1)
+    assert not next_started.is_set() and not skip.done()
+    release.set()
+    assert "Do lid" in await asyncio.wait_for(skip, 1)
+    await asyncio.wait_for(next_started.wait(), 1)
+    assert old_runner.status == "cancelled" and old_runner is not session.runner
+    assert not session.state["base"] and not session.state["lid"]
+
+
+async def test_completed_visual_flow_stops_polling_and_keeps_evidence_context(engine):
+    backend = engine._backend
+    session = backend._sessions["alice"]
+    backend._trigger = AsyncMock(side_effect=[observation("YES", 1), observation("YES", 2)])
+    backend._start_step = _Guide._start_step.__get__(backend)
+    backend._start_step("alice")
+    runner = session.runner
+    async with asyncio.timeout(3):
+        while runner.status != "completed":
+            await asyncio.sleep(.01)
+    context = (await backend.guidance("alice")).context
+    assert context["execution_status"] == "completed"
+    assert len(context["recent_observations"]) == 2
+    assert context["last_verification"]["verdict"] == "accepted"
+    await backend._tick(session)
+    assert backend._trigger.await_count == 2
+    assert session.step_id == "base"  # Readiness does not implicitly advance.
+
+
+async def test_restart_creates_timer_after_old_execution_cleanup(engine, document, monkeypatch):
+    from procedure_capture_guide_worker.guide import guiding
+
+    now = 100.0
+    monkeypatch.setattr(guiding, "time", SimpleNamespace(monotonic=lambda: now))
+    step = document["steps"][0]
+    step["trigger"] = {"function": "clock__timer", "interval_s": 1,
+                       "arguments": {"duration_s": 60}, "result_field": "expired"}
+    step["evidence"] = {"pattern": "true", "consecutive": 1, "commit": {"base": True}}
+    step["voice"]["tools"] = ["clock__timer"]
+    backend = engine._backend
+    backend._guide = selected(document)
+    backend._start("alice")
+    session = backend._sessions["alice"]
+    old_runner = session.runner
+    backend._runners["alice"] = old_runner
+    cleaning, release = asyncio.Event(), asyncio.Event()
+
+    async def drain():
+        cleaning.set()
+        await release.wait()
+
+    old_runner.stop = drain
+    restart = asyncio.create_task(control(backend, "restart"))
+    await asyncio.wait_for(cleaning.wait(), 1)
+    now = 200.0
+    release.set()
+    await asyncio.wait_for(restart, 1)
+    assert session.timer.started == 200.0
+    assert session.timer.read().remaining_s == 60
+    assert session.runner is not old_runner
