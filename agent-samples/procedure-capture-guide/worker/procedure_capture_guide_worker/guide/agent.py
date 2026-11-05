@@ -174,7 +174,7 @@ class GuideAgent(Agent):
                 result = "That control is unavailable in the current guide state."
             else:
                 result = (await tool.execute(tool.request_model.model_validate(arguments))).message
-            result = await guidance.finish(result)
+            result = await guidance.finish(result, refresh=False)
             self._backend.record_event(
                 pid, "user_control_result", run_id=run_id, text=text, tool=name, arguments=arguments, response=result
             )

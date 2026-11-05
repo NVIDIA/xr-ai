@@ -23,7 +23,7 @@ from collections.abc import Awaitable, Callable
 from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field
@@ -63,14 +63,24 @@ class _GuideResult(BaseModel):
     message: str
 
 
+class _ProgressChanged(Exception):
+    """A read-only answer needs a fresh snapshot of the same step's progress."""
+
+
+class _FinishAnswer(Protocol):
+    async def __call__(self, answer: str, *, refresh: bool = True) -> str: ...
+
+
 @dataclass(frozen=True, slots=True)
 class _GuidanceTurn:
     """Detached foreground context and tools scoped to the same guide revision."""
 
+    # Progress can change within this session/control scope; transitions cannot.
+    execution: tuple[int, int]
     instructions: str
     context: dict[str, Any]
     tools: ToolSet
-    finish: Callable[[str], Awaitable[str]]
+    finish: _FinishAnswer
     cancel: Callable[[], Awaitable[None]]
 
 
@@ -261,16 +271,21 @@ class _Guide:
                 "historical_previous_run": copy.deepcopy(session.previous_run),
             }
 
-        async def finish(answer: str) -> str:
+        async def finish(answer: str, *, refresh: bool = True) -> str:
             async with session.lock:
                 if not self._connected(participant_id):
                     return ""
                 if self._sessions.get(participant_id) is not session:
                     return "The guide changed while I was answering. Ask again for the current step."
-                stale = (session.control_revision != results[-1][1] if results
-                         else session.revision != revision)
-                if stale:
+                expected_control = results[-1][1] if results else control_revision
+                if session.control_revision != expected_control:
                     return "The guide changed while I was answering. Ask again for the current step."
+                if not results and session.revision != revision:
+                    # Verification updates progress without changing the selected
+                    # step. Discard the stale answer, not the user's question.
+                    if refresh:
+                        raise _ProgressChanged
+                    return self._status_message(session)
                 return results[-1][0] if results else answer
 
         async def cancel() -> None:
@@ -284,7 +299,7 @@ class _Guide:
                         and self._connected(participant_id)):
                     await self._announce(participant_id, results[-1][0])
 
-        return _GuidanceTurn(instructions, context, tools, finish, cancel)
+        return _GuidanceTurn((id(session), control_revision), instructions, context, tools, finish, cancel)
 
     async def leave(self, participant_id: str) -> None:
         await self._drain_controls(participant_id)
@@ -339,7 +354,8 @@ class _Guide:
             # transition. Retain the operation until execution cleanup drains it.
             async def execute() -> tuple[str, int]:
                 result = await self._control(session, revision, action, skip=skip)
-                results.append(result)
+                if action != "status":
+                    results.append(result)
                 return result
 
             task = asyncio.create_task(execute())
@@ -429,10 +445,7 @@ class _Guide:
         if self._sessions.get(pid) is not session or session.control_revision != revision:
             return "The guide changed while I was answering. Ask again for the current step."
         if action == "status":
-            if not session.active:
-                return f"{session.workflow.name} is inactive. Say start guide to begin."
-            suffix = " Complete; say next when ready." if self._is_complete(session) else ""
-            return f"{session.workflow.name}, current step: {session.step.title}.{suffix}"
+            return self._status_message(session)
         if action == "advance":
             if not session.active:
                 return "Guide is inactive. Say start guide to begin."
@@ -446,6 +459,12 @@ class _Guide:
             self._start_step(pid)
             return session.step.enter_message
         return "Guide stopped. Say start guide to begin again."
+
+    def _status_message(self, session: _Session) -> str:
+        if not session.active:
+            return f"{session.workflow.name} is inactive. Say start guide to begin."
+        suffix = " Complete; say next when ready." if self._is_complete(session) else ""
+        return f"{session.workflow.name}, current step: {session.step.title}.{suffix}"
 
     async def _advance(self, session: _Session, *, skip: bool) -> str:
         step = session.step

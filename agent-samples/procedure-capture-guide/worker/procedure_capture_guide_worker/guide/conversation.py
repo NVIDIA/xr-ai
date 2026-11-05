@@ -9,18 +9,20 @@ A turn-local scope prevents concurrent participants from sharing tools or state.
 """
 
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from xr_ai_models import ChatStreamEvent
 from xr_ai_tools import ToolSet
 
-from .guiding import _GuidanceTurn
+from .guiding import _GuidanceTurn, _ProgressChanged
 
 
 @dataclass(frozen=True)
 class _AnswerScope:
     guidance: _GuidanceTurn
     tools: ToolSet
+    refresh: bool = True
+    previous: _GuidanceTurn | None = None
 
 
 _scope = ContextVar("guide_answer_scope")
@@ -35,8 +37,12 @@ class ReadOnlyLanguage:
 
     async def stream_events(self, messages, **kwargs):
         scope = _scope.get()
-        result = await self._run_tools("", "", scope.tools, foreground=True, messages=messages)
-        result = await scope.guidance.finish(result)
+        if scope.previous is not None and scope.previous.execution != scope.guidance.execution:
+            # A transition between attempts must not retarget the old question.
+            result = await scope.previous.finish("", refresh=False)
+        else:
+            result = await self._run_tools("", "", scope.tools, foreground=True, messages=messages)
+            result = await scope.guidance.finish(result, refresh=scope.refresh)
         if result:
             yield ChatStreamEvent(kind="text", text=result)
 
@@ -52,14 +58,20 @@ class GuideConversation:
         return await self._conversation.admit(turn, focused=focused)
 
     async def answer(self, turn, *, started):
-        scope = await self._prepare(turn)
-        token = _scope.set(scope)
-        try:
-            result = await self._conversation.answer(turn, started=started)
-            self._completed(turn, scope, result)
-            return result
-        finally:
-            _scope.reset(token)
+        previous = None
+        for attempt in range(2):
+            scope = replace(await self._prepare(turn), refresh=attempt == 0, previous=previous)
+            token = _scope.set(scope)
+            try:
+                # The adapter buffers the tool-loop answer until validation, so
+                # a discarded attempt has neither output nor a history entry.
+                result = await self._conversation.answer(turn, started=started)
+                self._completed(turn, scope, result)
+                return result
+            except _ProgressChanged:
+                previous = scope.guidance
+            finally:
+                _scope.reset(token)
 
     async def release(self, pid):
         await self._conversation.release(pid)
