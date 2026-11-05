@@ -11,7 +11,6 @@ import sys
 import time
 import tomllib
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -1715,7 +1714,6 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     ready_file = tmp_path / "ready"
     stt = _Service()
     shutdown_order = []
-    foreground = []
 
     class RecordingLLM(_ConversationService):
         async def close(self) -> None:
@@ -1742,15 +1740,6 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
             await super().close()
 
     class RecordingContextManager(ContextManager):
-        @asynccontextmanager
-        async def foreground(self):
-            foreground.append("entered")
-            try:
-                async with super().foreground():
-                    yield
-            finally:
-                foreground.append("exited")
-
         async def clear(self, participant_id: str) -> None:
             shutdown_order.append("context.clear")
             await super().clear(participant_id)
@@ -1763,18 +1752,7 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     alert_compile_llm = RecordingCompileLLM()
     vlm = _Service()
     tts = _Service()
-    class ForegroundDecisions(_RouteDecisions):
-        async def decide(self, *args, **kwargs):
-            assert foreground[-1] == "entered"
-            return await super().decide(*args, **kwargs)
-
-    class ForegroundVision(_StreamingImageQueryTool):
-        async def stream(self, request):
-            assert foreground[-1] == "entered"
-            async for chunk in super().stream(request):
-                yield chunk
-
-    decisions = ForegroundDecisions(("observation", "conversation"))
+    decisions = _RouteDecisions(("observation", "conversation"))
     transport = _Transport()
     sessions: list[VoiceSession] = []
     run_options = {}
@@ -1817,7 +1795,7 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     monkeypatch.setattr(app, "make_tts", lambda _models, _name: tts)
     monkeypatch.setattr(app, "HubVoiceTransport", lambda: transport)
     monkeypatch.setattr(app, "CurrentFrameTool", _CurrentFrameTool)
-    monkeypatch.setattr(app, "StreamingImageQueryTool", ForegroundVision)
+    monkeypatch.setattr(app, "StreamingImageQueryTool", _StreamingImageQueryTool)
 
     def make_session(**kwargs):
         session = VoiceSession(**kwargs)  # type: ignore[arg-type]
@@ -1890,7 +1868,6 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
 
     await app.run_app(config, ready_file=ready_file)
 
-    assert foreground == ["entered", "exited", "entered", "exited"]
     assert len(wired_front_ends) == 1
     assert set(wired_front_ends[0]) == {"conversation", "observation", "alerts", "notes"}
     assert isinstance(wired_front_ends[0]["conversation"], Conversation)

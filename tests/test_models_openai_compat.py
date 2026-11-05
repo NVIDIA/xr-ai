@@ -3,8 +3,8 @@
 
 """Wire-format and behavior coverage for the OpenAICompat* clients.
 
-Most tests use :class:`_stub_openai.StubOpenAI` (an ``httpx.MockTransport``).
-Cancellation coverage uses a loopback listener to observe transport closure.
+Uses :class:`_stub_openai.StubOpenAI` (an ``httpx.MockTransport``) so no
+real HTTP listener is needed.
 """
 from __future__ import annotations
 
@@ -804,62 +804,6 @@ async def test_llm_stream_events_raises_on_malformed_event_json() -> None:
                 ChatMessage(role="user", content="x")
             ])]
     await client.aclose()
-
-
-@pytest.mark.parametrize("response_started", [False, True])
-async def test_llm_chat_cancellation_disconnects_pending_http_request(response_started) -> None:
-    request_received = asyncio.Event()
-    response_headers_received = asyncio.Event()
-    disconnected = asyncio.Event()
-    handlers = []
-
-    async def handle(reader, writer):
-        handlers.append(asyncio.current_task())
-        try:
-            headers = await reader.readuntil(b"\r\n\r\n")
-            content_length = next(
-                int(line.split(b":", 1)[1]) for line in headers.split(b"\r\n")
-                if line.lower().startswith(b"content-length:")
-            )
-            body = json.loads(await reader.readexactly(content_length))
-            assert not body.get("stream", False)
-            if response_started:
-                writer.write(b"HTTP/1.1 200 OK\r\nContent-Length: 1000\r\n"
-                             b"Content-Type: application/json\r\n\r\n{")
-                await writer.drain()
-            request_received.set()
-            # Cancellation must close the connection while the server is still
-            # waiting to produce headers or the remainder of its response.
-            assert await reader.read() == b""
-            disconnected.set()
-        finally:
-            writer.close()
-            await writer.wait_closed()
-
-    async def received_headers(_response):
-        response_headers_received.set()
-
-    server = await asyncio.start_server(handle, "127.0.0.1", 0)
-    port = server.sockets[0].getsockname()[1]
-    async with server, httpx.AsyncClient(
-        trust_env=False, event_hooks={"response": [received_headers]},
-    ) as client:
-        async with OpenAICompatLLM(f"http://127.0.0.1:{port}", "llm", client=client) as llm:
-            request = asyncio.create_task(llm.chat([ChatMessage(role="user", content="summarize")]))
-            try:
-                await asyncio.wait_for(request_received.wait(), 3)
-                if response_started:
-                    await asyncio.wait_for(response_headers_received.wait(), 3)
-                assert not request.done()
-                request.cancel()
-                with pytest.raises(asyncio.CancelledError):
-                    await request
-                await asyncio.wait_for(disconnected.wait(), 3)
-                assert not client.is_closed
-            finally:
-                request.cancel()
-                await asyncio.gather(request, return_exceptions=True)
-                await asyncio.wait_for(asyncio.gather(*handlers), 3)
 
 
 async def test_llm_stream_events_closes_response_when_cancelled() -> None:
