@@ -22,6 +22,7 @@ from xr_ai_logging import setup_logging
 from xr_ai_models import (
     DecisionService,
     LLMService,
+    LLMSpec,
     ModelsConfig,
     TTSService,
     VLMService,
@@ -64,10 +65,9 @@ NOTES_CONTEXT_TOPIC = Topic("conversation-example.notes", ConversationContextUpd
 ParticipantStep = Callable[[str], Awaitable[None]]
 
 
-def _acknowledgment_models(models: ModelsConfig) -> ModelsConfig:
-    """Clone the configured LLM role with reasoning disabled for brief acks."""
+def _without_generation_limits(spec: LLMSpec) -> LLMSpec:
+    """Let short requests choose limits without changing the conversation role."""
 
-    spec = models.llm("llm")
     extras = dict(spec.adapter.default_extras)
     extras.pop("max_tokens", None)
     template = dict(extras.get("chat_template_kwargs", {}))
@@ -77,10 +77,24 @@ def _acknowledgment_models(models: ModelsConfig) -> ModelsConfig:
         extras["chat_template_kwargs"] = template
     else:
         extras.pop("chat_template_kwargs", None)
+    return replace(spec, adapter=replace(spec.adapter, default_extras=extras))
+
+
+def _alert_compile_models(models: ModelsConfig) -> ModelsConfig:
+    """Keep the compiler's per-call limits independent of conversation defaults."""
+
+    compile_spec = _without_generation_limits(models.llm("llm"))
+    return ModelsConfig({**models.entries, "alert_compile_llm": compile_spec})
+
+
+def _acknowledgment_models(models: ModelsConfig) -> ModelsConfig:
+    """Clone the configured LLM role with reasoning disabled for brief acks."""
+
+    spec = _without_generation_limits(models.llm("llm"))
     thinking = replace(spec.adapter.thinking, default=False)
     acknowledgment_spec = replace(
         spec,
-        adapter=replace(spec.adapter, default_extras=extras, thinking=thinking),
+        adapter=replace(spec.adapter, thinking=thinking),
     )
     return ModelsConfig({**models.entries, "acknowledgment_llm": acknowledgment_spec})
 
@@ -122,6 +136,7 @@ async def run_app(
 
     # This composition root owns shared clients and closes them after the runtime.
     llm = make_llm(models, "llm")
+    alert_compile_llm = make_llm(_alert_compile_models(models), "alert_compile_llm")
     acknowledgment_llm = (
         make_llm(_acknowledgment_models(models), "acknowledgment_llm")
         if config.acknowledgment_delay_secs is not None
@@ -174,7 +189,7 @@ async def run_app(
         images,
         decisions,
         vlm=vlm,
-        llm=llm,
+        llm=alert_compile_llm,
         context=context,
         runtime=runtime,
         output_topic=VOICE_OUTPUT_TOPIC,
@@ -219,6 +234,7 @@ async def run_app(
         await conversation.close()
         await context.close()
         await alerts.stop()
+        await alert_compile_llm.close()
         if acknowledgment_llm is not None:
             await acknowledgment_llm.close()
         await llm.close()
