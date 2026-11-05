@@ -341,7 +341,7 @@ Package Contents
    an active routed turn, it contains ``None`` and empty history tuples.
 
 
-.. py:class:: AgentRouter(destinations: collections.abc.Mapping[str, xr_ai_routing.RoutableAgent], decisions: xr_ai_models.DecisionService, *, output: collections.abc.Callable[[xr_ai_routing.AgentTurn, str, str], collections.abc.Awaitable[None]] | None = None, default_destination: str = 'conversation', context_budget_bytes: int = _DEFAULT_CONTEXT_BUDGET_BYTES, acknowledgment_llm: xr_ai_models.LLMService | None = None, acknowledgment_delay_secs: float | None = None, query_topic: xr_ai_runtime.Topic[xr_ai_interaction.UserQuery] | None = None, output_topic: xr_ai_runtime.Topic[xr_ai_interaction.ResponseOutput] | None = None, participant_joined_topic: xr_ai_runtime.Topic[xr_ai_interaction.ParticipantJoined] | None = None, participant_left_topic: xr_ai_runtime.Topic[xr_ai_interaction.ParticipantLeft] | None = None, interrupted_topic: xr_ai_runtime.Topic[xr_ai_interaction.Interrupted] | None = None, initialize_participant: collections.abc.Callable[[str], collections.abc.Awaitable[None]] | None = None, cleanup_participant: collections.abc.Callable[[str], collections.abc.Awaitable[None]] | None = None, set_status: collections.abc.Callable[[Literal['processing', 'idle'], str], collections.abc.Awaitable[None]] | None = None, turn_scope: collections.abc.Callable[[xr_ai_routing.AgentTurn], contextlib.AbstractAsyncContextManager[None]] | None = None)
+.. py:class:: AgentRouter(destinations: collections.abc.Mapping[str, xr_ai_routing.RoutableAgent], decisions: xr_ai_models.DecisionService, *, output: collections.abc.Callable[[xr_ai_routing.AgentTurn, str, str], collections.abc.Awaitable[None]] | None = None, default_destination: str = 'conversation', context_budget_bytes: int = _DEFAULT_CONTEXT_BUDGET_BYTES, acknowledgment_llm: xr_ai_models.LLMService | None = None, acknowledgment_delay_secs: float | None = None, query_topic: xr_ai_runtime.Topic[xr_ai_interaction.UserQuery] | None = None, output_topic: xr_ai_runtime.Topic[xr_ai_interaction.ResponseOutput] | None = None, participant_joined_topic: xr_ai_runtime.Topic[xr_ai_interaction.ParticipantJoined] | None = None, participant_left_topic: xr_ai_runtime.Topic[xr_ai_interaction.ParticipantLeft] | None = None, interrupted_topic: xr_ai_runtime.Topic[xr_ai_interaction.Interrupted] | None = None, initialize_participant: collections.abc.Callable[[str], collections.abc.Awaitable[None]] | None = None, cleanup_participant: collections.abc.Callable[[str], collections.abc.Awaitable[None]] | None = None, set_status: collections.abc.Callable[[Literal['processing', 'idle'], str], collections.abc.Awaitable[None]] | None = None)
 
    Route a turn, check admission before speech, and retain explicit focus.
 
@@ -405,12 +405,6 @@ Package Contents
        whether called directly or published. An interrupted initialization runs again on the next turn.
    :param cleanup_participant: Optional idempotent application cleanup after destination work is drained.
        Used also for initialized participants who never selected a route; failed cleanup can be retried.
-   :param turn_scope: Optional factory for an asynchronous context manager around each owned turn,
-       including direct and runtime calls. Entered after admission and before initialization and
-       routing; exited after the destination and failure handling finish, including cancellation.
-       Use it to reserve shared resources or preempt background work. Entry failures use the normal
-       turn failure output. It does not cover downstream audio playback and must not suppress
-       exceptions or reenter router operations.
    :param set_status: Optional asynchronous callback receiving ``processing`` or ``idle``, then the participant ID,
        around each runtime turn. Its failures are logged and do not fail the turn.
        All callbacks run on the delivery event loop and must not reenter this router's operations.

@@ -500,12 +500,7 @@ questions belong in separate routed destinations.</p>
     <span class="n">runtime</span><span class="o">=</span><span class="n">runtime</span><span class="p">,</span>
     <span class="n">output_topic</span><span class="o">=</span><span class="n">VOICE_OUTPUT_TOPIC</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="n">front_end</span> <span class="o">=</span> <span class="n">AgentRouter</span><span class="p">(</span>
-    <span class="p">{</span><span class="s2">"conversation"</span><span class="p">:</span> <span class="n">conversation</span><span class="p">},</span>
-    <span class="n">decisions</span><span class="p">,</span>
-    <span class="n">output</span><span class="o">=</span><span class="n">publish_router_control</span><span class="p">,</span>
-    <span class="n">turn_scope</span><span class="o">=</span><span class="k">lambda</span> <span class="n">_turn</span><span class="p">:</span> <span class="n">context</span><span class="o">.</span><span class="n">foreground</span><span class="p">(),</span>
-<span class="p">)</span>
+<span class="n">front_end</span> <span class="o">=</span> <span class="n">AgentRouter</span><span class="p">({</span><span class="s2">"conversation"</span><span class="p">:</span> <span class="n">conversation</span><span class="p">},</span> <span class="n">decisions</span><span class="p">,</span> <span class="n">output</span><span class="o">=</span><span class="n">publish_router_control</span><span class="p">)</span>
 
 
 <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">participant_left</span><span class="p">(</span><span class="n">participant_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
@@ -610,44 +605,9 @@ plus the entries sent in one compaction request. It must be at least half
 the largest section budget plus 256 bytes. A larger backlog is compacted
 oldest first in several requests.</p></li>
 <li><p>The newest dialogue exchange always stays verbatim. Compaction runs in the
-background without awaiting its result in the answer path. Concurrent
-inference can still compete for shared GPU resources.</p></li>
+background and never delays an answer.</p></li>
 <li><p>A summary topic is not compacted: each update replaces its state.</p></li>
 </ul>
-<p>To give live queries priority, pass <code class="docutils literal notranslate"><span class="pre">turn_scope=lambda</span> <span class="pre">_turn:</span> <span class="pre">context.foreground()</span></code>
-to <code class="docutils literal notranslate"><span class="pre">AgentRouter</span></code>, as in the composition above. Before routing starts, this scope
-cancels and drains ordinary compaction requests owned by the manager. It normally
-pauses compaction through the destination response, across all participants and
-incremental sources sharing that manager. Uncommitted entries remain intact;
-preempted requests normally retry after the last overlapping scope exits.
-Direct callers can use <code class="docutils literal notranslate"><span class="pre">async</span> <span class="pre">with</span> <span class="pre">context.foreground()</span></code> around their routing
-and inference instead.</p>
-<p>To prevent indefinite deferral by live queries, the manager tracks each pending
-batch’s age, including time waiting before its first request and across retries.
-After 30 seconds, the oldest eligible batch can be promoted to run alongside
-live inference. A timer wakes pending work even if a foreground scope stays open.
-Only one batch is promoted at a time. After it finishes, fails, or is cancelled,
-another promotion waits at least 30 seconds. This prevents an overdue backlog
-from draining at foreground priority; waiting batches retain their age, and a
-follow-on batch starts at normal priority.</p>
-<p>Promotion protects one existing byte-bounded batch, including at most one
-summary-shortening request needed to commit it. Live queries continue without
-waiting for the promoted batch, but shared GPU contention can increase their
-latency. The 30-second threshold is eligibility for promotion, not a completion
-deadline or a maximum wait for every batch: older batches and the interval
-between promotions can delay it further. Request duration remains subject to
-the model service’s limits. A failing or stalled model cannot be guaranteed to
-make progress. The manager logs promotions with the job name and pending age.</p>
-<p>Participant removal and shutdown still cancel and drain promoted work, and do
-not commit stale results. Prompt budgets still omit the oldest uncompacted
-entries with a warning while retaining them for later compaction. These budgets
-do not bound stored history: incoming work that outpaces compaction, or model
-failures, can still grow memory usage.</p>
-<p>This policy does not coordinate separate workers or unrelated model clients.
-It starts at an admitted query, not microphone activity, and ends when the
-routed answer finishes, not when downstream audio playback drains. Request
-cancellation depends on the serving backend; client cleanup does not guarantee
-that an already executing GPU kernel has stopped.</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Situation</p></th>
