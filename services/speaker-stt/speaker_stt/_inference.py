@@ -20,6 +20,7 @@ from xr_ai_voicegate._speaker import _SpeakerConfig
 from ._selection import _Selection
 
 _FINAL_PADDING_SECONDS = 0.32
+_EOU_TOKEN = "<EOU>"
 
 
 if TYPE_CHECKING:
@@ -58,11 +59,108 @@ class _CompletedStream:
     text: str
 
 
+def _vocabulary(model) -> list[str]:
+    tokenizer = model.tokenizer
+    return tokenizer.ids_to_tokens(list(range(tokenizer.vocab_size)))
+
+
+def _continuations(vocabulary: list[str]) -> frozenset[int]:
+    """Tokens that extend or punctuate a word and so cannot begin an utterance."""
+    return frozenset(
+        token
+        for token, piece in enumerate(vocabulary)
+        if not piece.startswith("▁") or not any(char.isalnum() for char in piece)
+    )
+
+
+def _require_label_loop(model, purpose: str) -> None:
+    from nemo.collections.asr.parts.submodules.rnnt_greedy_decoding import GreedyBatchedRNNTInfer
+
+    decoder = model.decoding.decoding
+    if not isinstance(decoder, GreedyBatchedRNNTInfer) or not decoder.loop_labels:
+        raise ValueError(f"{purpose} requires greedy_batch label-loop decoding")
+
+
+class _EndOfUtterance:
+    """Turn-end predictor that streams the same audio as the speaker ASR."""
+
+    def __init__(self, name: str, device, hop_samples: int) -> None:
+        from nemo.collections.asr.models import ASRModel
+
+        self.model = ASRModel.from_pretrained(name).eval().to(device)
+        _require_label_loop(self.model, "end-of-utterance detection")
+        self.model.encoder.set_default_att_context_size([70, 1])
+        streaming = self.model.encoder.streaming_cfg
+        if round(streaming.valid_out_len * self.model.encoder.subsampling_factor * 160) != hop_samples:
+            raise ValueError("the end-of-utterance model must stream at the speaker ASR hop")
+        cache_size = streaming.pre_encode_cache_size
+        if isinstance(cache_size, (tuple, list)):
+            cache_size = cache_size[-1]
+        self.cache_samples = round(cache_size * 160)
+        vocabulary = _vocabulary(self.model)
+        if _EOU_TOKEN not in vocabulary:
+            raise ValueError(f"end-of-utterance model has no {_EOU_TOKEN} token")
+        self.token = vocabulary.index(_EOU_TOKEN)
+
+
+class _EndOfUtteranceStream:
+    def __init__(self, head: _EndOfUtterance, hop_samples: int) -> None:
+        from nemo.collections.asr.parts.utils.streaming_utils import CacheAwareStreamingAudioBuffer
+
+        self.head = head
+        self.hop_samples = hop_samples
+        self.buffer = CacheAwareStreamingAudioBuffer(model=head.model, online_normalization=False)
+        self._reset()
+
+    def _reset(self) -> None:
+        self.cache = self.head.model.encoder.get_initial_cache_state(batch_size=1)
+        self.previous_hypotheses = None
+        self.audio = np.zeros(self.head.cache_samples, dtype=np.float32)
+        self.fresh = True
+
+    def _step(self, hop: np.ndarray, device) -> bool:
+        """Decode one hop; True when the model predicts the end of an utterance."""
+        from nemo.collections.asr.parts.utils.rnnt_utils import Hypothesis
+
+        self.fresh = False
+        self.audio = np.concatenate((self.audio, hop))[-(self.head.cache_samples + self.hop_samples) :]
+        features, lengths = self.buffer.preprocess_audio(self.audio, device=device)
+        features = features[:, :, : int(lengths[0])]
+        model = self.head.model
+        (_, _, channel, time, length, hypotheses) = model.conformer_stream_step(
+            processed_signal=features,
+            processed_signal_length=lengths,
+            cache_last_channel=self.cache[0],
+            cache_last_time=self.cache[1],
+            cache_last_channel_len=self.cache[2],
+            keep_all_outputs=False,
+            previous_hypotheses=self.previous_hypotheses,
+            previous_pred_out=None,
+            drop_extra_pre_encoded=model.encoder.streaming_cfg.drop_extra_pre_encoded,
+            return_transcription=True,
+        )
+        self.cache = (channel, time, length)
+        hypothesis = hypotheses[0]
+        if self.head.token in hypothesis.y_sequence.tolist():
+            # The reference voice agent restarts this model after each turn end.
+            self._reset()
+            return True
+        self.previous_hypotheses = [
+            Hypothesis(
+                score=0.0,
+                y_sequence=[],
+                dec_state=hypothesis.dec_state,
+                last_token=hypothesis.last_token,
+                biasing_cfg=hypothesis.biasing_cfg,
+            )
+        ]
+        return False
+
+
 class _Models:
     def __init__(self, cfg: dict) -> None:
         import torch
         from nemo.collections.asr.models import ASRModel, SortformerEncLabelModel
-        from nemo.collections.asr.parts.submodules.rnnt_greedy_decoding import GreedyBatchedRNNTInfer
         from nemo.collections.asr.parts.utils.multispk_transcribe_utils import (
             configure_diar_streaming,
             validate_feature_frame_strides,
@@ -76,9 +174,8 @@ class _Models:
         self.asr = ASRModel.from_pretrained(cfg["asr_model"]).eval().to(self.device)
         if not hasattr(self.asr, "set_speaker_targets"):
             raise ValueError("ASR model must support speaker conditioning")
-        decoder = self.asr.decoding.decoding
-        if not isinstance(decoder, GreedyBatchedRNNTInfer) or not decoder.loop_labels:
-            raise ValueError("speaker ASR requires greedy_batch label-loop decoding")
+        _require_label_loop(self.asr, "speaker ASR")
+        self.continuation = _continuations(_vocabulary(self.asr))
         self.diar = SortformerEncLabelModel.from_pretrained(cfg["diar_model"]).eval().to(self.device)
         self.asr.encoder.set_default_att_context_size([70, 1])
         self.cfg = OmegaConf.create(
@@ -121,6 +218,8 @@ class _Models:
         # Bounded terminal quiet for this model's subword completion; it is
         # evaluated on a snapshot and never advances accepted capture time.
         self.final_padding_hops = ceil(_FINAL_PADDING_SECONDS * 16000 / self.hop_samples)
+        eou_model = cfg.get("eou_model")
+        self.eou = _EndOfUtterance(eou_model, self.device, self.hop_samples) if eou_model else None
         self._warmup()
 
     def _warmup(self) -> None:
@@ -177,6 +276,7 @@ class _Session:
         self._truncated_episodes: dict[int, float] = {}
         self._diagnostic_streams: dict[int, _DecodedStream] = {}
         self._diagnostic_active: dict[int, str] = {}
+        self._eou = _EndOfUtteranceStream(models.eou, models.hop_samples) if models.eou is not None else None
         self._reset_asr()
 
     def _new_asr(self) -> _AsrState:
@@ -339,6 +439,10 @@ class _Session:
 
     def _decode(self, predictions, selected, drop, stream, finished) -> str:
         stream.tokens.extend(stream.emitted)
+        # A previous utterance's late word tail or punctuation can be decoded
+        # in the lead-in; it cannot begin this one.
+        while stream.tokens and stream.tokens[0] in self.models.continuation:
+            stream.tokens.pop(0)
         if finished:
             # Virtual terminal silence must not advance the live audio timeline
             # or its encoder cache; later real audio reconciles emitted tokens.
@@ -492,6 +596,10 @@ class _Session:
                         self._diagnostic_streams.pop(speaker, None)
                         logger.exception("optional speaker continuation failed speaker={}", speaker)
                 if self.selection.owner is None:
+                    # Turn-end prediction serves only an enrolled owner and
+                    # restarts with the next enrollment.
+                    if self._eou is not None and not self._eou.fresh:
+                        self._eou._reset()
                     candidate_events = self._candidate_step(
                         preds, drop, active, chunk_pts,
                     )
@@ -519,15 +627,13 @@ class _Session:
                 events.extend(edges)
                 if started or self._asr is None:
                     self._reset_asr()
+                if self._eou is not None and self._eou._step(frame[-self.models.hop_samples :], self.models.device):
+                    self.selection._end_of_utterance(started)
                 owner_before = self.selection.owner
                 completed = []
                 if selected is not None:
                     self.selection.text = self._decode(
-                        preds,
-                        selected,
-                        drop,
-                        self._asr,
-                        self.selection._finished and self.selection.silence >= self.selection.cfg.silence_duration,
+                        preds, selected, drop, self._asr, self.selection._ended_in_quiet,
                     )
                     text = self.selection.text
                     if self.selection.owner is not None and text and text != self.last_partial:
