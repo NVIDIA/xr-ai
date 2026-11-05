@@ -55,7 +55,7 @@ async def compile_alert(
             ChatMessage(role="user", content="\n\n".join(sections)),
         ),
         # Without reasoning, the model often answers "unclear" for a plain request once history is present.
-        # A small budget keeps the delay to about a second for the reply and anything waiting on the alert lock.
+        # Bound reasoning separately from the total output while the alert lock is held.
         enable_thinking=True,
         thinking_budget=_THINKING_BUDGET,
         max_tokens=_MAX_TOKENS,
