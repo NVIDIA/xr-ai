@@ -19,6 +19,7 @@ class _Selection:
         self.silence = 0.0
         self.pts_us = 0
         self.text = ""
+        self.turn_end = False
         self._controls = _ControlMatcher(cfg)
         self._enrollment_controls: dict[int, _ControlMatcher] = {}
         self._wake_pattern = build_magic_pattern(cfg.magic_phrases)
@@ -111,7 +112,15 @@ class _Selection:
         self.duration += seconds
         speaking = self.candidate in active
         self.silence = 0.0 if speaking else self.silence + seconds
+        if speaking:
+            # Speech after a predicted turn end continues the utterance.
+            self.turn_end = False
         return self.candidate, events, started
+
+    def _end_of_utterance(self, started: bool) -> None:
+        """Accept a predicted turn end for the utterance already in progress."""
+        if self.candidate is not None and not started:
+            self.turn_end = True
 
     def _finish(self, text: str, *, allow_control: bool = True) -> list[dict]:
         events = []
@@ -143,9 +152,18 @@ class _Selection:
         self.candidate = None
         self.duration = self.silence = 0.0
         self.text = ""
+        self.turn_end = False
+
+    @property
+    def _ended_in_quiet(self) -> bool:
+        # A predicted turn end needs the owner quiet now; the silence interval
+        # remains the fallback when no prediction arrives.
+        return self.candidate is not None and (
+            (self.turn_end and self.silence > 0) or self.silence >= self.cfg.silence_duration
+        )
 
     @property
     def _finished(self) -> bool:
-        return self.candidate is not None and (
-            self.silence >= self.cfg.silence_duration or self.duration >= self.cfg.max_utterance_s
+        return self._ended_in_quiet or (
+            self.candidate is not None and self.duration >= self.cfg.max_utterance_s
         )

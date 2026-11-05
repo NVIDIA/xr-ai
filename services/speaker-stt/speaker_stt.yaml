@@ -6,6 +6,10 @@ host: 127.0.0.1
 port: 8102
 asr_model: nvidia/multitalker-parakeet-streaming-0.6b-v1
 diar_model: nvidia/Nemotron-3-Diarization
+# Predicts an enrolled speaker's turn end from the same audio stream, so a
+# finished utterance does not wait for the silence interval. Omit to rely on
+# the silence interval alone.
+eou_model: nvidia/parakeet_realtime_eou_120m-v1
 device: cuda
 precision: bf16
 # Hardware profiles or CUDA_VISIBLE_DEVICES own GPU placement.
