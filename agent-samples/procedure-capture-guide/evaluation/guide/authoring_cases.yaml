@@ -21,6 +21,7 @@
     - "Extracts seating dividers and clipping the nameplate as distinct required actions, rather than one step per caption."
     - "Holding and alignment observations remain progress evidence, not independent required procedural steps."
     - "Divider instruction and verification retain all three, seated in the slots, and tall ends toward the handle."
+    - "Cosmos is asked to describe count, seating, and tab direction; evidence.condition asks CLEF to establish all required facts, with no visual regex or observation agent."
     - "Nameplate instruction and verification require attachment to the front rail, not presence or holding nearby."
     - "Evidence notes connect the chronological source IDs to action, object, target, constraints, and incomplete versus completed states."
     - "Preserves both actions and their counts if grouping repeated observations; does not infer hidden fit or a required motion history."
@@ -43,7 +44,7 @@
     - "Handle trigger question includes clipping/attachment, front, and notch facing up."
     - "Does not turn camera adjustment into a step or copy the example workpiece task."
     - "Records stale-caption conflict and unavailable-image review gap with actual source IDs."
-    - "Clearly instructed observable assembly results retain normal live ready gates, not disabled gates solely for missing source images."
+    - "Clearly instructed observable assembly results retain descriptive visual questions and explicit CLEF conditions, not disabled gates solely for missing source images."
     - "Recorded replay distinguishes text/state audit from unavailable image tests; no invented visual pass results."
 
 - id: prerequisite_count
@@ -106,7 +107,7 @@
     - "Retains dial ordering and spring-tab contact requirements without pretending final view proves them."
     - "Flags sequence verification, continuous contact, and ambiguous duration as blockers."
     - "Does not invent sequence_view or choose duration_s 15 from the range."
-    - "Unsupported checks use never-matching evidence and no direct completion commit."
+    - "Unsupported visual checks retain an explicit condition and no completion commit; they do not use a visual regex."
     - "Guide validates structurally but remains draft, with blockers in review notes."
 
 - id: replay_incomplete_demonstration

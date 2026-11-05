@@ -4,7 +4,7 @@
 """Share recognition expectations between this sample's visual and guide evaluators.
 
 Expected answers come from the case manifest, not model responses. Recognition
-ignores whitespace layout; production evidence gates still score the raw answer.
+ignores whitespace layout; CLEF independently judges the original description against the guide condition.
 """
 
 import re

@@ -1,0 +1,28 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Skipping heating must still verify immersion and start the full steeping timer.
+# Unit tests advance the clock to cover its expiry; this live scenario checks
+# model interpretation, visual confirmation, and timer entry without shortening it.
+guide_path: ../../guide.yaml
+fail_fast: true
+scenes_file: ../fixtures/image_scenes.yaml
+visual_cases_file: ../fixtures/visual_expectations.yaml
+actions:
+  - {action: image, scene: chamomile}
+  - {action: say, text: Start guide, expect: Show the tea packet, tools: [workflow__restart]}
+  - {action: wait_speech, expect: The packet identifies chamomile}
+  - {action: image, scene: current65}
+  - {action: say, text: Next, expect: Heat fresh water, tools: [workflow__advance], arguments: [{skip: false}]}
+  - {action: observe, case: current65}
+  - {action: image, scene: dry_bag}
+  - {action: say, text: Skip this step, expect: 'Temperature verification skipped.*Carefully put the chamomile', tools: [workflow__advance], arguments: [{skip: true}]}
+  - {action: observe, case: dry_bag}
+  # A foreground camera lookup is allowed; the required outcome is blocked advancement.
+  - {action: say, text: Next, expect: not complete}
+  - {action: image, scene: immersed}
+  - {action: wait_speech, expect: The tea bag is visibly in the water}
+  - {action: say, text: Next, expect: five-minute steeping timer is now running, tools: [workflow__advance], arguments: [{skip: false}]}
+  - {action: say, text: 'How much time remains?', tools: [clock__timer], arguments: [{}]}
+  - {action: say, text: Next, expect: not complete, tools: [workflow__advance], arguments: [{skip: false}]}
+  - {action: say, text: Stop guide, expect: Guide stopped, tools: [workflow__reset]}

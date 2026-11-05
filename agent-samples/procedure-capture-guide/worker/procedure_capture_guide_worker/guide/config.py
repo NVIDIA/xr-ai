@@ -3,8 +3,8 @@
 
 """Load guide selection and verification settings for guided procedures.
 
-Read the visual verification timeout from guide-agent-config.yaml and accept
-the guide path resolved by the launcher. Shared voice, frame,
+Read verification timeouts and the guide-run trace directory from
+guide-agent-config.yaml, and accept the guide path resolved by the launcher. Shared voice, frame,
 and model settings remain in the worker's config.py.
 """
 
@@ -18,6 +18,8 @@ import yaml
 class GuideConfig:
     guide_path: Path
     vision_timeout_s: float = 15.0
+    decision_timeout_s: float = 15.0
+    traces_dir: Path | None = None
 
 
 def load_guide_config(path: Path, *, guide_path: str | None) -> GuideConfig:
@@ -27,4 +29,13 @@ def load_guide_config(path: Path, *, guide_path: str | None) -> GuideConfig:
     timeout = float(data.get("vision_timeout_s", 15.0))
     if not 0 < timeout < float("inf"):
         raise ValueError("vision_timeout_s must be finite and positive")
-    return GuideConfig(Path(guide_path), timeout)
+    if isinstance(data.get("decision_timeout_s"), bool):
+        raise ValueError("decision_timeout_s must be finite and positive")
+    decision_timeout = float(data.get("decision_timeout_s", 15.0))
+    if not 0 < decision_timeout < float("inf"):
+        raise ValueError("decision_timeout_s must be finite and positive")
+    trace_path = data.get("traces_dir", "../artifacts/guide-runs")
+    if trace_path is not None and (not isinstance(trace_path, str) or not trace_path.strip()):
+        raise ValueError("traces_dir must be a path or null")
+    traces_dir = (path.parent / trace_path).resolve() if trace_path is not None else None
+    return GuideConfig(Path(guide_path), timeout, decision_timeout, traces_dir)

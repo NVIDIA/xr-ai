@@ -16,7 +16,7 @@ actions:
   - {action: say, text: 'What is my status?', expect: 'Read the tea packet\. Complete', tools: [workflow__status]}
   - {action: image, scene: current100}
   - {action: say, text: Next, expect: Heat fresh water, tools: [workflow__advance], arguments: [{skip: false}]}
-  - {action: wait_speech, expect: The displayed current water temperature is at the brewing target}
+  - {action: wait_speech, expect: The display shows the brewing target temperature}
   - {action: image, scene: immersed}
   - {action: say, text: Next, expect: Carefully put the chamomile, tools: [workflow__advance], arguments: [{skip: false}]}
   - {action: wait_speech, expect: The tea bag is visibly in the water}

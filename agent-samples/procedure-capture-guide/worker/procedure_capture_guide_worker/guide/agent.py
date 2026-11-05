@@ -18,7 +18,7 @@ from pathlib import Path
 import nemo_relay
 from loguru import logger
 from xr_ai_interaction import Interrupted, ParticipantJoined, ParticipantLeft, ResponseOutputs, UserQuery
-from xr_ai_models import ChatMessage, ChatResponse, LLMService, ToolDef
+from xr_ai_models import ChatMessage, ChatResponse, DecisionService, LLMService, ToolDef
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeClosedError, RuntimeContext, subscribe
 from xr_ai_tools import ToolSet
 from xr_ai_tools.current_frame import CurrentFrameTool
@@ -26,9 +26,10 @@ from xr_ai_tools.tool_calling import run_tool_loop
 from xr_ai_tools.vision import ImageQueryTool
 from xr_ai_voice import VOICE_OUTPUT_TOPIC
 
+from .controls import classify_control
 from .events import INTERRUPTED_TOPIC, PARTICIPANT_JOINED_TOPIC, PARTICIPANT_LEFT_TOPIC, USER_QUERY_TOPIC
 from .guides import SelectedGuide
-from .guiding import _cancel, _discard, _Guide
+from .guiding import _cancel, _discard, _Guide, _ProgressChanged
 
 _MAX_TOOL_ROUNDS = 3
 _FOREGROUND_MODEL_OPTIONS = {"max_tokens": 1536, "enable_thinking": True, "thinking_budget": 1024}
@@ -51,20 +52,27 @@ class GuideAgent(Agent):
         *,
         guide: SelectedGuide,
         llm: LLMService,
+        decisions: DecisionService,
         current_frame: CurrentFrameTool,
         image_query: ImageQueryTool,
         vision_timeout_s: float,
+        decision_timeout_s: float = 15.0,
+        measurement_query: ImageQueryTool | None = None,
+        traces_dir: Path | None = None,
     ) -> None:
         super().__init__()
         self._llm = llm
+        self._decisions = decisions
+        self._decision_timeout_s = decision_timeout_s
         self._controls: dict[str, asyncio.Lock] = {}
         self._runtime: AgentRuntime | None = None
         self._connected: set[str] = set()
         self._turns: dict[str, asyncio.Task[None]] = {}
         self._stopping = False
         self._backend = _Guide(
-            guide=guide, current_frame=current_frame, image_query=image_query,
+            guide=guide, decisions=decisions, current_frame=current_frame, image_query=image_query,
             vision_timeout_s=vision_timeout_s, run_model=self._tool_loop,
+            decision_timeout_s=decision_timeout_s, measurement_query=measurement_query, traces_dir=traces_dir,
             announce=self._announce, invalidate=self._withdraw,
             connected=lambda pid: pid in self._connected,
         )
@@ -195,10 +203,44 @@ class GuideAgent(Agent):
         if guidance is None:
             return ""
         system = f"{_FOREGROUND_PROMPT}\n\n{guidance.instructions}"
-        user = json.dumps({"request": text, **guidance.context}, ensure_ascii=False)
         try:
-            result = await self._tool_loop(system, user, guidance.tools, foreground=True)
-            return await guidance.finish(result)
+            trace_run_id = self._backend.record_event(participant_id, "user_request", text=text)
+            binding, decision = await classify_control(
+                self._decisions, text, guidance.context, timeout_s=self._decision_timeout_s,
+            )
+            self._backend.record_event(participant_id, "control_decision", run_id=trace_run_id, text=text, **decision)
+            if binding is not None:
+                name, arguments = binding
+                tool = guidance.tools.get(name)
+                if tool is None:
+                    result = "That control is unavailable in the current guide state."
+                else:
+                    response = await tool.execute(tool.request_model.model_validate(arguments))
+                    result = response.message
+                self._backend.record_event(participant_id, "user_control_result", run_id=trace_run_id, text=text,
+                                           tool=name, arguments=arguments, response=result, **decision)
+                result = await guidance.finish(result, refresh=False)
+            else:
+                for attempt in range(2):
+                    read_only = ToolSet({name: tool for name, tool in guidance.tools.items()
+                                         if name == "workflow__status" or not name.startswith("workflow__")})
+                    user = json.dumps({"request": text, **guidance.context,
+                                       "control_interpretation": decision}, ensure_ascii=False)
+                    result = await self._tool_loop(system, user, read_only, foreground=True)
+                    try:
+                        result = await guidance.finish(result, refresh=attempt == 0)
+                        break
+                    except _ProgressChanged:
+                        fresh = await self._backend.guidance(participant_id)
+                        if fresh is None:
+                            return ""
+                        if fresh.execution != guidance.execution:
+                            result = await guidance.finish("", refresh=False)
+                            break
+                        guidance = fresh
+                        system = f"{_FOREGROUND_PROMPT}\n\n{guidance.instructions}"
+            self._backend.record_event(participant_id, "answer_prepared", run_id=trace_run_id, text=result)
+            return result
         except asyncio.CancelledError:
             await guidance.cancel()
             raise

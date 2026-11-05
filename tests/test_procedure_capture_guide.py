@@ -162,10 +162,10 @@ def test_documented_model_deployment_matches_worker(gpu_profile, monkeypatch):
     config = load_config(_SAMPLE / "yaml/worker.yaml")
     models = load_models_config(config.models_config)
     services = {process.name: process for process in launched}
-    assert tuple(services) == ("stt", "tts", "omni", "vlm")
-    assert set(models.entries) == {"stt", "tts", "llm", "vlm"}
+    assert tuple(services) == ("stt", "tts", "omni", "vlm", "clef")
+    assert set(models.entries) == {"stt", "tts", "llm", "vlm", "decision"}
     for name, model in models.entries.items():
-        service = services["omni" if name == "llm" else name]
+        service = services[{"llm": "omni", "decision": "clef"}.get(name, name)]
         assert urlsplit(model.endpoint.base_url).port == service.port
         assert service.launch_mode == "persist"
     assert services["omni"].command == "nemotron_omni_llm_server"
