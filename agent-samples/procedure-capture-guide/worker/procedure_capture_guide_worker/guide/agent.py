@@ -29,7 +29,7 @@ from xr_ai_voice import VOICE_OUTPUT_TOPIC
 from .controls import classify_control
 from .events import INTERRUPTED_TOPIC, PARTICIPANT_JOINED_TOPIC, PARTICIPANT_LEFT_TOPIC, USER_QUERY_TOPIC
 from .guides import SelectedGuide
-from .guiding import _cancel, _discard, _Guide
+from .guiding import _cancel, _discard, _Guide, _ProgressChanged
 
 _MAX_TOOL_ROUNDS = 3
 _FOREGROUND_MODEL_OPTIONS = {"max_tokens": 1536, "enable_thinking": True, "thinking_budget": 1024}
@@ -219,13 +219,26 @@ class GuideAgent(Agent):
                     result = response.message
                 self._backend.record_event(participant_id, "user_control_result", run_id=trace_run_id, text=text,
                                            tool=name, arguments=arguments, response=result, **decision)
+                result = await guidance.finish(result, refresh=False)
             else:
-                read_only = ToolSet({name: tool for name, tool in guidance.tools.items()
-                                     if name == "workflow__status" or not name.startswith("workflow__")})
-                user = json.dumps({"request": text, **guidance.context,
-                                   "control_interpretation": decision}, ensure_ascii=False)
-                result = await self._tool_loop(system, user, read_only, foreground=True)
-            result = await guidance.finish(result)
+                for attempt in range(2):
+                    read_only = ToolSet({name: tool for name, tool in guidance.tools.items()
+                                         if name == "workflow__status" or not name.startswith("workflow__")})
+                    user = json.dumps({"request": text, **guidance.context,
+                                       "control_interpretation": decision}, ensure_ascii=False)
+                    result = await self._tool_loop(system, user, read_only, foreground=True)
+                    try:
+                        result = await guidance.finish(result, refresh=attempt == 0)
+                        break
+                    except _ProgressChanged:
+                        fresh = await self._backend.guidance(participant_id)
+                        if fresh is None:
+                            return ""
+                        if fresh.execution != guidance.execution:
+                            result = await guidance.finish("", refresh=False)
+                            break
+                        guidance = fresh
+                        system = f"{_FOREGROUND_PROMPT}\n\n{guidance.instructions}"
             self._backend.record_event(participant_id, "answer_prepared", run_id=trace_run_id, text=result)
             return result
         except asyncio.CancelledError:
