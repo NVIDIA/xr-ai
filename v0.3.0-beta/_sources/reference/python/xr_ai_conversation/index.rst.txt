@@ -185,9 +185,10 @@ Package Contents
    incremental topic and the dialogue keep recent entries verbatim and fold
    older ones into a rolling summary written by ``llm``.
 
-   Every method runs on the event loop and none yields between reading and
-   writing a participant's context, so a participant's context is never
-   observed half-updated. Compaction runs as a background task per section.
+   Participant context updates run atomically on the delivery event loop.
+   Compaction runs as a background task per section; :meth:`foreground`
+   normally preempts its model requests while live work uses the same resources.
+   Aged batches get occasional progress alongside live work.
 
    The owner creates the manager, registers ``subscriber()`` with the runtime
    that delivers context updates, calls ``clear()`` when a participant leaves,
@@ -206,6 +207,30 @@ Package Contents
 
    All budgets must be positive. Topic lists contain non-empty names; names
    must be unique within and across both lists.
+
+
+   .. py:method:: foreground() -> collections.abc.AsyncIterator[None]
+      :async:
+
+
+      Give live work priority over this manager's background inference.
+
+      Entry cancels and drains ordinary compaction requests across all
+      participants and context sources. Uncommitted inputs remain stored;
+      requests normally retry after the last overlapping scope exits.
+
+      After 30 seconds pending, the oldest eligible batch may run alongside
+      live work, including its optional summary-shortening request. Only one
+      batch is promoted at a time, with 30 seconds between its completion and
+      the next promotion. Foreground callers do not wait for promoted work,
+      but can experience inference contention. Clear and close still cancel it.
+
+      This controls requests owned by this manager, not other processes or
+      unrelated model clients. Cancellation support depends on the model
+      service: entry waits for ordinary client request cleanup before yielding.
+
+      :raises RuntimeError: If the manager is closing.
+
 
 
    .. py:method:: subscriber() -> xr_ai_runtime.Agent

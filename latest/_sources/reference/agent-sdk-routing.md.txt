@@ -191,9 +191,17 @@ new join reopens admission after cleanup, first retrying a departure whose
 cleanup failed. A runtime query refused because its participant left or the
 router is stopping is logged and dropped. `set_status` reports `processing` and
 `idle` around each runtime turn; its failures are logged and never fail the turn.
-Interruption retains
-completed history and focus. Await `router.stop()` before runtime shutdown and
-resource closure. Successful stop permits a fresh later lifecycle.
+
+The optional `turn_scope` is entered after admission and before initialization
+and routing, for both direct and runtime turns. It remains active through
+destination execution and failure handling. Scope creation or entry failures
+use the normal turn failure output; runtime turns also return to `idle`.
+A turn refused before scope entry does not acquire it. Application scopes must
+not suppress exceptions or reenter router operations.
+
+Interruption retains completed history and focus. Await `router.stop()` before
+runtime shutdown and resource closure. Successful stop permits a fresh later
+lifecycle.
 
 Runtime turns use the same failure rule as `handle()`: a turn that fails before
 its destination calls `started()` gets one brief failure message through the

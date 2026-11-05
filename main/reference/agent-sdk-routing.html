@@ -642,10 +642,16 @@ Leave closes admission before cleanup; late queries cannot recreate state, and a
 new join reopens admission after cleanup, first retrying a departure whose
 cleanup failed. A runtime query refused because its participant left or the
 router is stopping is logged and dropped. <code class="docutils literal notranslate"><span class="pre">set_status</span></code> reports <code class="docutils literal notranslate"><span class="pre">processing</span></code> and
-<code class="docutils literal notranslate"><span class="pre">idle</span></code> around each runtime turn; its failures are logged and never fail the turn.
-Interruption retains
-completed history and focus. Await <code class="docutils literal notranslate"><span class="pre">router.stop()</span></code> before runtime shutdown and
-resource closure. Successful stop permits a fresh later lifecycle.</p>
+<code class="docutils literal notranslate"><span class="pre">idle</span></code> around each runtime turn; its failures are logged and never fail the turn.</p>
+<p>The optional <code class="docutils literal notranslate"><span class="pre">turn_scope</span></code> is entered after admission and before initialization
+and routing, for both direct and runtime turns. It remains active through
+destination execution and failure handling. Scope creation or entry failures
+use the normal turn failure output; runtime turns also return to <code class="docutils literal notranslate"><span class="pre">idle</span></code>.
+A turn refused before scope entry does not acquire it. Application scopes must
+not suppress exceptions or reenter router operations.</p>
+<p>Interruption retains completed history and focus. Await <code class="docutils literal notranslate"><span class="pre">router.stop()</span></code> before
+runtime shutdown and resource closure. Successful stop permits a fresh later
+lifecycle.</p>
 <p>Runtime turns use the same failure rule as <code class="docutils literal notranslate"><span class="pre">handle()</span></code>: a turn that fails before
 its destination calls <code class="docutils literal notranslate"><span class="pre">started()</span></code> gets one brief failure message through the
 router’s output, unless that output itself failed. After <code class="docutils literal notranslate"><span class="pre">started()</span></code>, the

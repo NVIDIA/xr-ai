@@ -644,9 +644,10 @@ adds the size limit and the output format, so a prompt does not state them.</p>
 their own byte budget. A summary topic keeps only its latest state; an
 incremental topic and the dialogue keep recent entries verbatim and fold
 older ones into a rolling summary written by <code class="docutils literal notranslate"><span class="pre">llm</span></code>.</p>
-<p>Every method runs on the event loop and none yields between reading and
-writing a participant’s context, so a participant’s context is never
-observed half-updated. Compaction runs as a background task per section.</p>
+<p>Participant context updates run atomically on the delivery event loop.
+Compaction runs as a background task per section; <a class="reference internal" href="#xr_ai_conversation.ContextManager.foreground" title="xr_ai_conversation.ContextManager.foreground"><code class="xref py py-meth docutils literal notranslate"><span class="pre">foreground()</span></code></a>
+normally preempts its model requests while live work uses the same resources.
+Aged batches get occasional progress alongside live work.</p>
 <p>The owner creates the manager, registers <code class="docutils literal notranslate"><span class="pre">subscriber()</span></code> with the runtime
 that delivers context updates, calls <code class="docutils literal notranslate"><span class="pre">clear()</span></code> when a participant leaves,
 and calls <code class="docutils literal notranslate"><span class="pre">close()</span></code> at shutdown. Agents that share a manager use its
@@ -668,6 +669,28 @@ compaction request; at least half the largest section budget plus 256 bytes.</p>
 </dl>
 <p>All budgets must be positive. Topic lists contain non-empty names; names
 must be unique within and across both lists.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="xr_ai_conversation.ContextManager.foreground">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">foreground</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">collections.abc.AsyncIterator</span><span class="p"><span class="pre">[</span></span><span class="pre">None</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#xr_ai_conversation.ContextManager.foreground" title="Link to this definition">#</a></dt>
+<dd><p>Give live work priority over this manager’s background inference.</p>
+<p>Entry cancels and drains ordinary compaction requests across all
+participants and context sources. Uncommitted inputs remain stored;
+requests normally retry after the last overlapping scope exits.</p>
+<p>After 30 seconds pending, the oldest eligible batch may run alongside
+live work, including its optional summary-shortening request. Only one
+batch is promoted at a time, with 30 seconds between its completion and
+the next promotion. Foreground callers do not wait for promoted work,
+but can experience inference contention. Clear and close still cancel it.</p>
+<p>This controls requests owned by this manager, not other processes or
+unrelated model clients. Cancellation support depends on the model
+service: entry waits for ordinary client request cleanup before yielding.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>RuntimeError</strong> – If the manager is closing.</p>
+</dd>
+</dl>
+</dd></dl>
+
 <dl class="py method">
 <dt class="sig sig-object py" id="xr_ai_conversation.ContextManager.subscriber">
 <span class="sig-name descname"><span class="pre">subscriber</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../xr_ai_runtime/index.html#xr_ai_runtime.Agent" title="xr_ai_runtime.Agent"><span class="pre">xr_ai_runtime.Agent</span></a></span></span><a class="headerlink" href="#xr_ai_conversation.ContextManager.subscriber" title="Link to this definition">#</a></dt>
@@ -830,6 +853,7 @@ Configure at least one topic before calling this method.</p>
 </ul>
 </li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_conversation.ContextManager"><code class="docutils literal notranslate"><span class="pre">ContextManager</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_conversation.ContextManager.foreground"><code class="docutils literal notranslate"><span class="pre">foreground()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_conversation.ContextManager.subscriber"><code class="docutils literal notranslate"><span class="pre">subscriber()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_conversation.ContextManager.update"><code class="docutils literal notranslate"><span class="pre">update()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_conversation.ContextManager.reconcile_history"><code class="docutils literal notranslate"><span class="pre">reconcile_history()</span></code></a></li>
