@@ -1155,6 +1155,30 @@ async def test_acknowledgment_client_builds_nonreasoning_bounded_payload() -> No
     }
 
 
+def test_short_request_roles_preserve_unrelated_options_and_the_original_profile() -> None:
+    models = load_models_config(_SAMPLE_DIR / "yaml" / "models.json")
+    original = models.llm("llm")
+    extras = {**original.default_extras, "chat_template_kwargs": {
+        **original.default_extras["chat_template_kwargs"], "thinking_budget": 2048, "keep_detail": "unchanged",
+    }}
+    customized = replace(original, adapter=replace(original.adapter, default_extras=extras))
+    models = replace(models, entries={**models.entries, "llm": customized})
+
+    compiler = app._alert_compile_models(models).llm("alert_compile_llm")
+    acknowledgment = app._acknowledgment_models(models).llm("acknowledgment_llm")
+
+    for role in (compiler, acknowledgment):
+        assert role.default_extras == {"temperature": 0.25, "chat_template_kwargs": {"keep_detail": "unchanged"}}
+        assert role.endpoint == original.endpoint
+    assert compiler.adapter.thinking == original.adapter.thinking
+    assert acknowledgment.adapter.thinking.default is False
+    assert customized.default_extras == extras
+    assert extras["max_tokens"] == 4608
+    assert extras["chat_template_kwargs"] == {
+        "reasoning_budget": 4096, "thinking_budget": 2048, "keep_detail": "unchanged",
+    }
+
+
 def test_config_without_a_file_uses_packaged_defaults(tmp_path) -> None:
     prompt = (_WORKER_DIR / "conversation_example_worker" / "prompts" / "system.txt").read_text()
 

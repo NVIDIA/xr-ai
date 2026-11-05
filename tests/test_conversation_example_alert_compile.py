@@ -77,6 +77,8 @@ async def test_the_model_sees_the_request_recent_exchanges_and_saved_context():
         assert label in messages[0].content
         assert label in user
     assert "saved notes" in messages[0].content
+    assert "supply identifying details that the current request depends on" in messages[0].content
+    assert "The current request determines what to watch for" in messages[0].content
 
 
 @pytest.mark.asyncio
@@ -96,6 +98,7 @@ async def test_sections_without_content_are_left_out():
     [
         ("Alert me when you see a kettle.", (AgentExchange("What color is the mat?", "Green."),), ""),
         ("Alert me about the shape in my notes.", (), "Watch for a purple hexagon."),
+        ("Alert me when the kettle is on the hob.", (), "The kettle is the blue one on the left."),
         ("Alert me when that thing happens.", (), ""),
     ],
 )
