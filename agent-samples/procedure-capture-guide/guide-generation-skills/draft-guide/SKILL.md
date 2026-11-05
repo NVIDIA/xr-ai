@@ -110,8 +110,8 @@ requirement, not an unknown one merely because its saved image is unavailable.
 For each normal visual check, put every required object, count, attachment,
 target, and direction in the actual question (1–500 characters); the tool does
 not receive the voice prompt. Held nearby is not attached. Request exactly
-`ready`, `not ready`, or `unclear`; only `^ready$` after two consecutive matches
-commits. Prefer direct `evidence.commit`; uncertainty and failure never complete.
+`ready`, `not ready`, or `unclear`; only `(?i)^ready$` (models may capitalize)
+after two consecutive matches commits. Prefer direct `evidence.commit`; uncertainty and failure never complete.
 
 ## Write, validate, and review
 
