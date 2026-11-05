@@ -73,7 +73,7 @@ def _ensure_reasoning_parser(model_cache: Path, url: str) -> Path:
     path = model_cache / _PARSER_FILENAME
     if not path.exists():
         logger.info("Downloading {}…", _PARSER_FILENAME)
-        with urllib.request.urlopen(url) as resp:
+        with urllib.request.urlopen(url, timeout=30) as resp:
             path.write_bytes(resp.read())
     return path
 
