@@ -773,6 +773,7 @@ def test_dropped_audio_splits_a_stop_phrase_without_releasing(_streaming_models,
 
     models, activity, _calls, _masks, _allocations, text = _streaming_models
     cfg = _SpeakerConfig(silence_duration=0.16)
+    prefix, suffix = cfg.stop_phrase.rsplit(" ", 1)
     session = _Session(models, cfg, audio_origin_us=1_000_000)
     session.selection.owner = 7
 
@@ -781,18 +782,18 @@ def test_dropped_audio_splits_a_stop_phrase_without_releasing(_streaming_models,
         text[0] = transcript
         return session._feed(bytes(5120))
 
-    feed([7], "hey agent")
-    assert feed([], "hey agent")[-1]["kind"] == "control_pending"
+    feed([7], prefix)
+    assert feed([], prefix)[-1]["kind"] == "control_pending"
     if skip:
         assert session._skip(16000) == []
-    feed([7], "let's stop talking")
-    events = feed([], "let's stop talking")
+    feed([7], suffix)
+    events = feed([], suffix)
     if not skip:
         assert events[-1] == {"kind": "released"} and session.selection.owner is None
         return
     assert session.selection.owner == 7
     # The held fragment is discarded; the timeline includes the dropped second.
-    assert events[-1]["kind"] == "transcript" and events[-1]["text"] == "let's stop talking"
+    assert events[-1]["kind"] == "transcript" and events[-1]["text"] == suffix
     assert events[-1]["pts_us"] == 1_000_000 + 2 * 160_000 + 1_000_000
 
 
@@ -818,19 +819,21 @@ def test_dropped_audio_splits_a_start_phrase_without_enrolling(_streaming_models
     from speaker_stt._inference import _Session
 
     models, activity, _calls, _masks, _allocations, text = _streaming_models
-    session = _Session(models, _SpeakerConfig(silence_duration=0.16), audio_origin_us=0)
+    cfg = _SpeakerConfig(silence_duration=0.16)
+    prefix, suffix = cfg.start_phrase.rsplit(" ", 1)
+    session = _Session(models, cfg, audio_origin_us=0)
 
     def feed(speakers, transcript):
         activity[:] = speakers
         text[0] = transcript
         return session._feed(bytes(5120))
 
-    feed([7], "hey agent")
-    feed([], "hey agent")
+    feed([7], prefix)
+    feed([], prefix)
     if skip:
         assert session._skip(16000) == []
-    feed([7], "let's start talking")
-    events = feed([], "let's start talking")
+    feed([7], suffix)
+    events = feed([], suffix)
     assert (session.selection.owner is None) == skip
     assert ({"kind": "enrolled"} in events) != skip
 

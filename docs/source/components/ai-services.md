@@ -242,10 +242,11 @@ candidate cannot enroll from the tail of the same continuing speech episode;
 that speaker must end its episode before making another attempt.
 
 The private protocol makes that ownership explicit: the opening JSON message
-supplies `audio_origin_us` once, and subsequent binary WebSocket messages
-supply only PCM bytes. Each connection owns one session, and the caller waits
-for the event response before sending the next audio message. Audio must be
-serialized in capture order. The service neither reorders audio nor guesses
+supplies `audio_origin_us` once. Later WebSocket messages carry binary PCM
+or a JSON skip control for audio dropped under overload. Each connection owns
+one session, and the caller waits for the event response before sending the
+next message. Audio must be serialized in capture order. The service neither
+reorders audio nor guesses
 whether samples are missing from wall-clock arrival times.
 Binary messages retain the existing limit of one second of audio (16,000
 complete signed 16-bit samples, or 32,000 bytes). Invalid message types, JSON,
@@ -261,10 +262,14 @@ temporary wake permissions do not span the gap. An endpoint without this
 message rejects it as a protocol error, and the client then resets enrollment
 as it does for any service failure.
 
-The private identity is protocol 5, adding the explicit diagnostics setting to
-protocol 4's interaction policy. Worker and speaker service must be restarted
-together after updating: earlier endpoints fail admission rather than silently
-selecting batch STT or accepting incompatible interaction settings.
+The private identity remains protocol 5, which added the explicit diagnostics
+setting to protocol 4's interaction policy. Earlier protocol numbers fail
+admission rather than silently selecting batch STT or accepting incompatible
+interaction settings. A protocol-5 service without skip support passes
+admission but rejects its first skip, triggering the existing enrollment reset.
+Skip support does not change the protocol number because that failure path
+preserves the previous overload behavior. Restart worker and service after
+updating to enable enrollment-preserving overload recovery on both sides.
 
 Configure model IDs, device, precision, host, port and session capacity
 in `services/speaker-stt/speaker_stt.yaml`. The default HTTP base URL is

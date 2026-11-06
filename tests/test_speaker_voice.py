@@ -659,9 +659,11 @@ async def test_audio_coalescing_retains_next_frame_in_order_and_in_backlog():
 
 
 @pytest.mark.asyncio
-async def test_overload_frame_limit_includes_frame_retained_for_next_batch():
+@pytest.mark.parametrize("skip_fails", [False, True])
+async def test_overload_frame_limit_includes_frame_retained_for_next_batch(monkeypatch, skip_fails):
     processor = _SpeakerSttProcessor(cfg=_SpeakerConfig())
     received, permits = asyncio.Queue(), asyncio.Queue()
+    stopped = asyncio.Event()
 
     async def feed(pid, audio, pts_us):
         await received.put(audio)
@@ -671,10 +673,16 @@ async def test_overload_frame_limit_includes_frame_retained_for_next_batch():
     async def skip(pid, samples):
         await received.put(("skip", samples))
         await permits.get()
-        return []
+        if skip_fails:
+            raise RuntimeError("speaker audio frames must be binary PCM")
+        return [{"kind": "speech_stop"}]
+
+    def pushed(frame, *_args):
+        if isinstance(frame, UserStoppedSpeakingFrame):
+            stopped.set()
 
     processor._client = SimpleNamespace(_feed=feed, _skip=skip, _forget=AsyncMock(), _close=AsyncMock())
-    processor.push_frame = AsyncMock()
+    processor.push_frame = AsyncMock(side_effect=pushed)
 
     async def submit(size):
         frame = InputAudioRawFrame(audio=bytes(size), sample_rate=16000, num_channels=1)
@@ -684,7 +692,9 @@ async def test_overload_frame_limit_includes_frame_retained_for_next_batch():
     try:
         await processor.process_frame(ParticipantJoinedFrame("wearer"), FrameDirection.DOWNSTREAM)
         processor._enrolled.add("wearer")
+        processor._utterances.add("wearer")
         await submit(320)
+        worker = processor._tasks["wearer"]
         await asyncio.wait_for(received.get(), 1)
         await submit(320)
         await submit(5120)
@@ -710,6 +720,37 @@ async def test_overload_frame_limit_includes_frame_retained_for_next_batch():
         assert await asyncio.wait_for(received.get(), 1) == ("skip", 200)
         assert processor._queued_frames["wearer"] == 0 and processor._queued_bytes["wearer"] == 0
         processor._client._forget.assert_not_awaited()
+        permits.put_nowait(None)
+        await asyncio.wait_for(stopped.wait(), 1)
+        assert "wearer" not in processor._utterances
+        if skip_fails:
+            await asyncio.wait_for(worker, 1)
+            resets = [c.args[0] for c in processor.push_frame.call_args_list
+                      if isinstance(c.args[0], _SpeakerEnrollmentFrame)]
+            assert [(frame.participant_id, frame.state) for frame in resets] == [("wearer", "reset")]
+            assert "wearer" not in processor._enrolled
+            assert "wearer" not in processor._tasks and "wearer" not in processor._queues
+            processor._client._forget.assert_awaited_once_with("wearer")
+            # Advance only this processor's existing retry clock; do not wait
+            # in real time or change the event loop's monotonic clock.
+            import time
+
+            deadline = processor._retry_after["wearer"]
+            now = deadline - 1
+            monkeypatch.setattr("xr_ai_voice._processors.speaker_stt.time", SimpleNamespace(
+                monotonic=lambda: now, time_ns=time.time_ns,
+            ))
+            await submit(320)
+            assert "wearer" not in processor._tasks and received.empty()
+            now = deadline
+            await submit(320)
+            assert await asyncio.wait_for(received.get(), 1) == bytes(320)
+            assert processor._tasks["wearer"] is not worker
+        else:
+            assert "wearer" in processor._enrolled
+            assert not [c for c in processor.push_frame.call_args_list
+                        if isinstance(c.args[0], _SpeakerEnrollmentFrame)]
+            processor._client._forget.assert_not_awaited()
     finally:
         await processor.cleanup()
 
