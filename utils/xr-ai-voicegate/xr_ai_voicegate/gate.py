@@ -244,7 +244,7 @@ class VoiceGate:
         stop_candidate = stripped if (matched_magic and stripped) else text
 
         # 1. STOP — takes priority when enabled. Matched on both the raw transcript
-        #    ("stop") AND on the magic-phrase-stripped tail ("hey agent,
+        #    ("stop") AND on the magic-phrase-stripped tail ("hey assistant,
         #    stop") so the fast path triggers either way.
         if self._matches_stop(stop_candidate):
             logger.info(

@@ -38,7 +38,7 @@ files before starting the sample:
 | `worker/conversation_example_worker/prompts/` | Separate conversation, current-view, alert, and note-taking instructions |
 
 For example, change `followup_grace_s` in `yaml/voice_gate.yaml` to control how
-long a second utterance can omit “Hey Agent”:
+long a second utterance can omit “Hey Assistant”:
 
 ```yaml
 followup_grace_s: 10.0
@@ -85,8 +85,8 @@ Open the authenticated web-client URL printed by DeviceIOHub and select
 **Connect**. Choose **Live video** or **On-demand images** under **Camera Mode**,
 then select **Start Microphone** and grant camera and microphone access when
 prompted. After the agent reports ready, say
-“Hey agent, let's start talking,” then speak questions without a wake phrase.
-Say “Hey agent, let's stop talking” to close the conversation. Typed questions
+“Start talking to me,” then speak questions without a wake phrase.
+Say “Stop talking to me” to close the conversation. Typed questions
 remain available without opening a voice conversation. With `--session-recording`, each connection is recorded under
 `~/.local/share/xr-ai/captures/conversation-example/` and finalized when the
 participant disconnects or the stack stops. The normal command writes no
