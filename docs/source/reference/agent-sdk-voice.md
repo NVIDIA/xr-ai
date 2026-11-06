@@ -260,7 +260,9 @@ next utterance within `phrase_window_s` decides what the withheld words were:
 - Otherwise the withheld words were speech. In an active conversation they lead
   that utterance's transcript, which is handled as if spoken unsplit: the agent
   query keeps every word, and with `require_wake_phrase` the wake rule applies
-  to the joined text.
+  to the joined text. With a custom wake-prefixed control, withheld words that
+  form only a wake phrase can open the bare-wake follow-up window. They are not
+  released again as query text when wake phrases are required.
 
 A global STOP (`stop`, `stop talking`) is never withheld, although it begins the
 default stop phrase: it interrupts at once. Its valid control prefix remains

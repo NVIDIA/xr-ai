@@ -139,6 +139,76 @@ def test_partial_start_control_is_not_a_turn_and_unique_full_start_owns(tmp_path
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("use_speaker", [False, True])
+@pytest.mark.parametrize("complete_control", [False, True])
+async def test_custom_wake_prefixed_controls_keep_split_wake_behavior(tmp_path, use_speaker, complete_control):
+    path = tmp_path / "voice_gate.yaml"
+    path.write_text(yaml.safe_dump({
+        "mode": "hybrid", "magic_phrases": ["hey agent"], "listening_chime": False,
+        "speaker": {"enabled": use_speaker},
+        "conversation": {"start_phrase": "Hey agent, let's start talking",
+                         "stop_phrase": "Hey agent, let's stop talking", "require_wake_phrase": True},
+    }))
+    cfg = load_voice_gate_config(path)
+    gate = VoiceGateProcessor(cfg=cfg, tts=SimpleNamespace())
+    gate.push_frame = AsyncMock()
+    selection = _Selection(cfg._speaker) if use_speaker else None
+    audio = _SpeakerSttProcessor(cfg=cfg._speaker) if use_speaker else None
+    if audio:
+        async def forward(frame, *_args):
+            await gate.process_frame(frame, FrameDirection.DOWNSTREAM)
+        audio.push_frame = forward
+    now = 0
+
+    async def speak(text):
+        nonlocal now
+        now += 100_000
+        if audio:
+            if selection.owner is None:
+                events = selection._enroll_completed([(7, text, now, False)], completed_at_us=now + 10_000)
+            else:
+                selection._activity({7}, 0.1, now)
+                events = selection._finish(text)
+            for event in events:
+                await audio._event("a", event)
+        else:
+            frame = TranscriptionFrame(text=text, user_id="a", timestamp="now")
+            frame.transport_source, frame.pts = "a", now * 1000
+            await gate.process_frame(frame, FrameDirection.DOWNSTREAM)
+
+    def queries():
+        return [c.args[0].text for c in gate.push_frame.call_args_list if isinstance(c.args[0], GatedQueryFrame)]
+
+    try:
+        await speak("Hey")
+        await speak("agent")
+        assert not queries() and "a" not in gate._conversation_active
+        if complete_control:
+            await speak("let's start talking")
+            assert "a" in gate._conversation_active and not queries()
+            if selection:
+                assert selection.owner == 7
+            # The same bare wake inside the open conversation grants one turn;
+            # its withheld words must not be released again as query text.
+            await speak("Hey")
+            await speak("agent")
+        await speak("what is the temperature?")
+        assert queries() == ["what is the temperature?"]
+        assert ("a" in gate._conversation_active) is complete_control
+        if complete_control:
+            await speak("Hey")
+            await speak("agent")
+            await speak("let's stop talking")
+            assert "a" not in gate._conversation_active
+            assert not selection or selection.owner is None
+            assert queries() == ["what is the temperature?"]
+    finally:
+        await gate.cleanup()
+        if audio:
+            await audio.cleanup()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("use_speaker", [False, True])
 @pytest.mark.parametrize("mode", ["always_on", "wake_only", "conversation", "hybrid"])
 @pytest.mark.parametrize("stop_enabled", [False, True])
 async def test_actual_gate_and_selection_sequences_match_modes(tmp_path, use_speaker, mode, stop_enabled):

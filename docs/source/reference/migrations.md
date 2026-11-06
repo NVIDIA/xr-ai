@@ -310,6 +310,11 @@ conversations, or `always_on` for ungated dispatch. `wake_only` and `hybrid`
 require non-empty `magic_phrases`. Set `conversation.require_wake_phrase: true`
 to require wake phrases during an active conversation.
 
+The sample wake phrases change from `agent` and `hey agent` to `assistant` and
+`hey assistant`. Retained private YAML keeps its configured `magic_phrases`
+and conversation controls; these values are not rewritten automatically.
+Update private configuration explicitly to adopt the new phrases.
+
 In conversation mode, only accepted final transcripts during an active
 conversation reach `VOICE_TRANSCRIPT_TOPIC`; hybrid mode also delivers accepted
 closed-state one-off questions. Applications needing ungated final transcripts

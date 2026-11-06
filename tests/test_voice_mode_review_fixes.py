@@ -126,8 +126,8 @@ async def test_intervening_control_consumes_permission_but_not_fragment_matcher(
     await say("" if middle == "unrecognized" else middle, 1)
     await say("ambient speech", 2)
     assert not [c for c in gate.push_frame.call_args_list if isinstance(c.args[0], GatedQueryFrame)]
-    # A genuinely new bare wake grants its own permission and can also join
-    # a start control; consuming query permission must not erase fragments.
+    # A new start control still joins across fragments after the earlier
+    # bare-wake query permission was consumed.
     await say("start talking", 3)
     await say("to me", 4)
     assert "a" in gate._conversation_active
