@@ -1,0 +1,52 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Original eight held-out wordings; expectations now match two SOP-facing agents.
+- name: fresh-passive-possibility
+  setup_requests:
+  - Start tea making.
+  query: Would it be possible for this walkthrough to begin again?
+  expected_destination: conversation
+  expected_control: null
+- name: fresh-addressed-restart
+  setup_requests:
+  - Start tea making.
+  query: Would you start the walkthrough over now?
+  expected_destination: workflow
+  expected_control: restart
+- name: fresh-reported-skip
+  setup_requests:
+  - Start tea making.
+  query: A coworker recommended we skip this instruction.
+  expected_destination: conversation
+  expected_control: null
+- name: fresh-quoted-exit
+  setup_requests:
+  - Start tea making.
+  query: '"Exit the guide" is a command someone might use.'
+  expected_destination: conversation
+  expected_control: null
+- name: fresh-background-owner
+  setup_requests:
+  - Start tea making.
+  query: Please stop the visual diary and keep tea guidance running.
+  expected_destination: conversation
+  expected_control: null
+- name: fresh-advice-not-command
+  setup_requests:
+  - Start tea making.
+  query: Would starting over be better?
+  expected_destination: conversation
+  expected_control: null
+- name: fresh-known-temperature
+  setup_requests:
+  - Start tea making.
+  query: I need to know the water target, rather than inspect the display.
+  expected_destination: conversation
+  expected_control: null
+- name: fresh-current-position
+  setup_requests:
+  - Start tea making.
+  query: Leave my progress as it is and explain our position in the procedure.
+  expected_destination: conversation
+  expected_control: null

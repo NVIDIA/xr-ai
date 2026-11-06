@@ -182,6 +182,13 @@ An answer request has three messages:
    and the current time last.
 3. The current request.
 
+Uncompacted exchanges are delimited as historical dialogue: assistant text is
+what was said then, not a fresh measurement. Summary-topic states have separate
+current-source snapshot boundaries. Exchange completion, snapshot publication
+and current-request time labels include seconds, so same-minute changes remain
+distinguishable. Missing exchange/publication timestamps are labeled unknown;
+the original user and assistant text is retained within existing bounds.
+
 Each section compacts on its own schedule, so a summary can cover a time span
 that overlaps an uncompacted entry from another section, for example a
 dialogue summary covering 14:13 to 14:43 and a topic update published at

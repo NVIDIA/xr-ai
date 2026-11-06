@@ -16,3 +16,6 @@ omni:
 embedding:
   cuda_visible_devices: '0'
   gpu_memory_utilization: 0.08
+
+# Clef is required for bounded text judgments; Omni retains all visual work.
+clef: {}
