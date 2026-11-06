@@ -1,17 +1,16 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-mode: conversation
+mode: hybrid
 magic_phrases:
-  - agent
-  - hey agent
+  - assistant
 listening_chime: true
 followup_grace_s: 5.0
 
 # Start once, then speak naturally until the full stop phrase.
 conversation:
-  start_phrase: "Hey agent, let's start talking"
-  stop_phrase: "Hey agent, let's stop talking"
+  start_phrase: "Start talking to me"
+  stop_phrase: "Stop talking to me"
   require_wake_phrase: false  # true keeps magic_phrases and followup_grace_s
   phrase_window_s: 6.0
 

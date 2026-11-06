@@ -321,7 +321,7 @@ _SAMPLES = {
     "procedure-capture-guide": ("stt", "tts", "omni", "vlm"),
     "simple-vlm-example": ("speaker-stt", "tts", "vlm"),
     "lab-instrument-monitoring": ("speaker-stt", "tts", "omni", "vlm"),
-    "tea-making-sample": ("speaker-stt", "tts", "omni", "embedding"),
+    "tea-making-sample": ("speaker-stt", "tts", "omni", "clef", "embedding"),
     "xr-render-demo": ("speaker-stt", "tts", "omni", "vlm"),
 }
 

@@ -74,8 +74,37 @@ async def test_recorded_exchange_renders_for_its_participant_only():
 
     store.record_exchange("alice", "Remember copper.", "Copper noted.", timestamp_us=_NOON_US, exchange_id=None)
 
-    assert "User: Remember copper.\nAssistant: “Copper noted.”" in _rendered(store, "alice")
+    assert "User: Remember copper.\nAssistant said then: “Copper noted.”" in _rendered(store, "alice")
     assert store.blocks("bob") == ()
+
+
+@pytest.mark.asyncio
+async def test_mutable_snapshot_is_distinct_from_verbatim_same_minute_historical_dialogue():
+    store = _store()
+    user_text = 'My cup says "tea".\nHow long do I have?'
+    assistant_text = "You have 355 seconds remaining."
+    store.record_exchange(
+        "alice", user_text, assistant_text, timestamp_us=_NOON_US + 11_000_000, exchange_id=object()
+    )
+    await store.update(
+        "alice", "status", _note('remaining_seconds=346; sampled_at=12:00:20 UTC'),
+        mode="summary", timestamp_us=_NOON_US + 20_000_000,
+    )
+    rendered = _rendered(store)
+    assert user_text in rendered and assistant_text in rendered
+    assert rendered.index("HISTORICAL DIALOGUE") < rendered.index(assistant_text)
+    assert rendered.index("CURRENT SOURCE SNAPSHOT") < rendered.index("remaining_seconds=346")
+    assert "12:00:11 UTC" in rendered and "12:00:20 UTC" in rendered
+
+    await store.update(
+        "alice", "status", _note('remaining_seconds=332; sampled_at=12:00:33 UTC'),
+        mode="summary", timestamp_us=_NOON_US + 33_000_000,
+    )
+    rendered = _rendered(store)
+    assert user_text in rendered and assistant_text in rendered
+    assert "remaining_seconds=332" in rendered and "remaining_seconds=346" not in rendered
+    assert rendered.count(assistant_text) == 1
+    await store.close()
 
 
 @pytest.mark.asyncio
@@ -281,7 +310,7 @@ async def test_oversized_summary_state_is_clipped_within_its_budget(caplog):
     (block,) = store.blocks("alice")
     assert len(block.text.encode()) <= 300
     assert "start" in block.text
-    assert block.text.endswith("end")
+    assert block.text.endswith("end\nEND CURRENT SOURCE SNAPSHOT")
     assert "clipping oversized context state" in caplog.text
 
 

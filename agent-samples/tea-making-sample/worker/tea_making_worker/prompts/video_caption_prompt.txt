@@ -1,3 +1,0 @@
-Describe visible people, objects, actions, readable text, and notable scene
-conditions. Report only visible facts, do not infer, keep wording stable across
-similar frames, and omit uncertain attributes.

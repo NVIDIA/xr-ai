@@ -16,7 +16,7 @@ def profile_config(basename: str, profile: str) -> Path:
         # Batch STT remains an explicit alternative, not a default sample service.
         return _ROOT / "services/stt-server/stt_server.yaml"
     sample = "tea-making-sample" if basename == "embedding_server" else "lab-instrument-monitoring"
-    services = ("speaker-stt", "tts", "omni", "embedding") if sample == "tea-making-sample" else (
+    services = ("speaker-stt", "tts", "omni", "clef", "embedding") if sample == "tea-making-sample" else (
         "speaker-stt", "tts", "omni", "vlm",
     )
     base = _ROOT / "agent-samples" / sample / "model-servers"

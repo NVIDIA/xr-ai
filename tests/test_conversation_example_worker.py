@@ -883,7 +883,7 @@ async def test_text_and_visual_destinations_share_router_history_and_output_sour
     prompt = "\n".join(str(message.content) for message in llm.requests[1][0])
     assert "What is the capital of Portugal?" in prompt
     assert "What color is the sign?" in prompt
-    assert "Assistant: “a blue square”" in prompt
+    assert "Assistant said then: “a blue square”" in prompt
     assert frames.requests[0].participant_id == "alice"
     assert "What color is the sign?" in vision.requests[0].query
     assert [source for source, _text in output] == ["conversation", "observation", "observation", "conversation"]

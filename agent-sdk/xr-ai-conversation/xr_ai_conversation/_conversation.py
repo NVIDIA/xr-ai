@@ -26,7 +26,7 @@ from xr_ai_routing import (
 )
 from xr_ai_runtime import AgentRuntime, RuntimeClosedError, Topic
 
-from ._context import _format_minute
+from ._context import _format_timestamp
 from ._manager import ContextBlock, ContextManager
 
 _DEFAULT_SYSTEM_PROMPT = (Path(__file__).parent / "prompts" / "core.txt").read_text(encoding="utf-8").strip()
@@ -250,7 +250,7 @@ def _messages(
             "first, then newer entries in time order. A summary covers a span of time, so when facts conflict, "
             "compare the times stated.",
             *(block.text for block in blocks),
-            f"Current time: around {_format_minute(time.time_ns() // 1_000)}.",
+            f"Current time: around {_format_timestamp(time.time_ns() // 1_000)}.",
         )
     )
     return (

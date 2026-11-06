@@ -1,0 +1,25 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+- name: explicit-start
+  query: Please start tea making now.
+  expected_destination: workflow
+  expected_control: start
+- name: explicit-stop
+  setup_requests:
+  - Start tea making.
+  query: Stop tea making now.
+  expected_destination: workflow
+  expected_control: stop
+- name: explicit-skip
+  setup_requests:
+  - Start tea making.
+  query: Skip this step.
+  expected_destination: workflow
+  expected_control: skip
+- name: explicit-reset
+  setup_requests:
+  - Start tea making.
+  query: Reset tea making.
+  expected_destination: workflow
+  expected_control: reset

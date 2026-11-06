@@ -10,8 +10,8 @@ import asyncio
 from collections.abc import Sequence
 from pathlib import Path
 
-from .app import run_app
-from .config import load_config
+from .application.application_config import load_config
+from .application.tea_application import run_app
 
 
 def run(argv: Sequence[str] | None = None) -> None:
