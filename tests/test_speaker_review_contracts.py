@@ -131,7 +131,7 @@ async def test_wire_payload_matches_independent_protocol5_service_schema(monkeyp
         assert set(opening["config"]) == accepted
         assert opening["config"]["diagnostics"] is diagnostics
         assert opening["audio_origin_us"] == 100
-        await socket.send(json.dumps({"service": "xr-ai-speaker-stt", "protocol": 6}))
+        await socket.send(json.dumps({"service": "xr-ai-speaker-stt", "protocol": 5}))
         await socket.recv()
         await socket.send(json.dumps({"events": []}))
     async with serve(handler, "127.0.0.1", 0) as server:
@@ -149,14 +149,14 @@ async def test_http_and_websocket_ignore_ambient_proxy_and_normalize_origin(monk
         writer.close()
     async def health(reader, writer):
         await reader.readuntil(b"\r\n\r\n")
-        body = b'{"service":"xr-ai-speaker-stt","protocol":6}'
+        body = b'{"service":"xr-ai-speaker-stt","protocol":5}'
         writer.write(b"HTTP/1.1 200 OK\r\nContent-Length: " + str(len(body)).encode()
                      + b"\r\nConnection: close\r\n\r\n" + body)
         await writer.drain()
         writer.close()
     async def handler(socket):
         await socket.recv()
-        await socket.send(json.dumps({"service": "xr-ai-speaker-stt", "protocol": 6}))
+        await socket.send(json.dumps({"service": "xr-ai-speaker-stt", "protocol": 5}))
     proxy_server = await asyncio.start_server(proxy, "127.0.0.1", 0)
     health_server = await asyncio.start_server(health, "127.0.0.1", 0)
     async with proxy_server, health_server, serve(handler, "127.0.0.1", 0) as ws:

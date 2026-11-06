@@ -28,7 +28,7 @@ from xr_ai_logging import setup_logging
 from xr_ai_voicegate._speaker import _SpeakerConfig
 
 _SERVICE = "xr-ai-speaker-stt"
-_PROTOCOL = 6
+_PROTOCOL = 5
 _DEFAULT_HOST = "127.0.0.1"
 _DEFAULT_PORT = 8102
 _STREAM_PATH = "/v1/audio/transcriptions/stream"

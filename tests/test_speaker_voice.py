@@ -241,7 +241,7 @@ async def test_cancelled_request_closes_connection_and_releases_session(cancel_o
             if cancel_op == "open":
                 allocated.set()
                 await release_reply.wait()
-            await socket.send(json.dumps({"service": "xr-ai-speaker-stt", "protocol": 6}))
+            await socket.send(json.dumps({"service": "xr-ai-speaker-stt", "protocol": 5}))
             await socket.recv()
             if cancel_op == "audio":
                 allocated.set()
@@ -460,7 +460,7 @@ async def test_stream_isolates_participants_and_reconnects_with_new_origin():
         opening = json.loads(await socket.recv())
         assert socket.request.path == "/v1/audio/transcriptions/stream"
         sessions[socket] = opening["audio_origin_us"]
-        await socket.send(json.dumps({"service": "xr-ai-speaker-stt", "protocol": 6}))
+        await socket.send(json.dumps({"service": "xr-ai-speaker-stt", "protocol": 5}))
         count, samples = 0, 0
         try:
             async for audio in socket:
@@ -493,6 +493,30 @@ async def test_stream_isolates_participants_and_reconnects_with_new_origin():
             while sessions:
                 await asyncio.wait_for(closed.get(), timeout=1)
         assert not client._sessions
+
+
+@pytest.mark.asyncio
+async def test_skip_to_an_endpoint_without_it_fails_like_any_service_error():
+    async def handler(socket):
+        await socket.recv()
+        await socket.send(json.dumps({"service": "xr-ai-speaker-stt", "protocol": 5}))
+        async for message in socket:
+            if isinstance(message, str):
+                # An earlier service rejects every text frame after opening.
+                await socket.send(json.dumps({"error": "speaker audio frames must be binary PCM"}))
+                await socket.close(code=1008)
+                return
+            await socket.send(json.dumps({"events": []}))
+
+    async with serve(handler, "127.0.0.1", 0) as server:
+        port = server.sockets[0].getsockname()[1]
+        client = _SpeakerClient(_SpeakerConfig(base_url=f"http://127.0.0.1:{port}", timeout_s=1))
+        try:
+            assert await client._feed("wearer", bytes(640), 1) == []
+            with pytest.raises(RuntimeError, match="binary PCM"):
+                await client._skip("wearer", 1600)
+        finally:
+            await client._close()
 
 
 @pytest.mark.asyncio
@@ -1238,7 +1262,7 @@ async def test_pipeline_silence_reaches_speaker_stream_without_mutating_shared_c
     async def handler(socket):
         opening = json.loads(await socket.recv())
         openings.append(opening["config"]["silence_duration"])
-        await socket.send(json.dumps({"service": "xr-ai-speaker-stt", "protocol": 6}))
+        await socket.send(json.dumps({"service": "xr-ai-speaker-stt", "protocol": 5}))
         async for _audio in socket:
             await socket.send(json.dumps({"events": []}))
 

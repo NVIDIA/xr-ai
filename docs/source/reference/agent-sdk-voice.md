@@ -305,10 +305,10 @@ independently. `auto` may select batch STT at startup if the speaker endpoint is
 absent; protocol mismatch is an error, not a fallback. Required speaker ASR never
 silently switches to batch after reset.
 
-The speaker service and client use protocol **6** for diagnostics configuration,
-explicit attributed one-turn authorization, and reporting audio dropped under
-overload. Update/restart both together; earlier peers are rejected rather than
-silently changing transcript display or authorization.
+The speaker service and client use protocol **5** for diagnostics configuration
+and explicit attributed one-turn authorization. Update/restart both together;
+earlier peers are rejected rather than silently changing transcript display or
+authorization.
 
 ## Voice gating and early probes
 
