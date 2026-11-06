@@ -14,7 +14,7 @@ from loguru import logger
 from xr_ai_models import ChatMessage, LLMService
 from xr_ai_routing import AgentExchange
 
-_THINKING_BUDGET = 256
+_THINKING_BUDGET = 1024
 _MAX_TOKENS = _THINKING_BUDGET + 256
 _COMPILE = (Path(__file__).parent / "prompts" / "alert_compile.txt").read_text(encoding="utf-8").strip()
 

@@ -1,0 +1,59 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Replay query/history/context through the production compile_alert function
+# with the sample's alert_compile_llm role. These are semantic evaluation cases,
+# not guarantees from the CPU tests or the routing-only decision evaluator.
+# Review the actual condition against expected_condition; status=ready alone
+# is insufficient. Repeat live trials and record latency and token usage.
+
+- name: absent_subject_can_define_future_watch
+  query: "Notify me when a delivery cart is visible."
+  history:
+    - user: "Describe the corridor."
+      assistant: "The corridor is empty, with two closed doors."
+  expected_status: ready
+  expected_condition: "A delivery cart is visible; its absence in the earlier view is irrelevant."
+
+- name: current_request_over_previous_alert_and_refusal
+  query: "Alert me when you see an umbrella."
+  history:
+    - user: "What is on the table?"
+      assistant: "There are two notebooks and a cup on the table."
+    - user: "Alert me when I open an umbrella."
+      assistant: "I couldn't tell what to watch for. Please say what should trigger the alert."
+  expected_status: ready
+  expected_condition: "An umbrella is visible, regardless of whether it is open, closed, held, or moving."
+
+- name: no_camera_frame_needed_for_compilation
+  query: "Notify me when a bicycle is visible."
+  history:
+    - user: "What do you see?"
+      assistant: "I cannot access a camera in this chat."
+  expected_status: ready
+  expected_condition: "A bicycle is visible; no image or camera access is required to define the trigger."
+
+- name: history_resolves_required_reference
+  query: "Alert me when that item is visible."
+  history:
+    - user: "The item I want to watch for is an orange backpack."
+      assistant: "Noted."
+  expected_status: ready
+  expected_condition: "An orange backpack is visible."
+
+- name: notes_resolve_required_reference
+  query: "Alert me when the object in my notes is visible."
+  context: "The object to watch for is a striped suitcase."
+  expected_status: ready
+  expected_condition: "A striped suitcase is visible."
+
+- name: unresolved_trigger_still_needs_clarification
+  query: "Alert me when that happens."
+  history:
+    - user: "Describe the corridor."
+      assistant: "The corridor is empty, with two closed doors."
+  expected_status: unclear
+
+- name: nonvisual_trigger_still_needs_clarification
+  query: "Alert me when I feel anxious."
+  expected_status: unclear

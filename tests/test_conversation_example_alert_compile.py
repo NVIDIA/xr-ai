@@ -11,6 +11,7 @@ from pathlib import Path
 
 import httpx
 import pytest
+import yaml
 from xr_ai_models import Capabilities, ChatResponse, load_models_config, make_llm
 from xr_ai_routing import AgentExchange
 
@@ -21,6 +22,9 @@ from conversation_example_worker._alert_compile import CompiledAlert, compile_al
 from conversation_example_worker.app import _alert_compile_models  # noqa: E402
 
 _READY = {"status": "ready", "condition": " the lamp is blue ", "relevance": " the lamp "}
+_EVAL_CASES = yaml.safe_load(
+    (_ROOT / "agent-samples/conversation-example/eval/alert-compile-cases.yaml").read_text(encoding="utf-8")
+)
 
 
 class _LLM:
@@ -43,7 +47,7 @@ async def test_a_ready_answer_becomes_a_trimmed_watch(wrap):
     llm = _LLM(wrap(json.dumps(_READY)))
 
     assert await compile_alert(llm, "Alert me about the lamp.") == CompiledAlert("the lamp is blue", "the lamp")
-    assert llm.options == [{"enable_thinking": True, "thinking_budget": 256, "max_tokens": 512}]
+    assert llm.options == [{"enable_thinking": True, "thinking_budget": 1024, "max_tokens": 1280}]
 
 
 @pytest.mark.asyncio
@@ -90,6 +94,26 @@ async def test_sections_without_content_are_left_out():
     user = llm.requests[0][-1].content
     assert "Alert me about the lamp." in user
     assert "Recent exchanges" not in user and "Saved context" not in user
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("case", _EVAL_CASES, ids=lambda case: case["name"])
+async def test_future_watch_eval_inputs_reach_the_compiler(case):
+    """Exercise live-eval request assembly without claiming model correctness."""
+    llm = _LLM('{"status":"unclear"}')
+    history = tuple(AgentExchange(item["user"], item["assistant"]) for item in case.get("history", []))
+
+    await compile_alert(llm, case["query"], history=history, context=case.get("context", ""))
+
+    system, user = llm.requests[0]
+    assert user.content.split("\n\n", 1)[0] == f"Alert request:\n{case['query']}"
+    for exchange in history:
+        assert f"User: {exchange.user}\nAssistant: {exchange.assistant}" in user.content
+    if case.get("context"):
+        assert f"Saved context:\n{case['context']}" in user.content
+    assert "Define a trigger for future camera frames" in system.content
+    assert "prior alert requests and prior assistant refusals do not replace it" in system.content
+    assert "not because it is absent now" in system.content
 
 
 @pytest.mark.asyncio
@@ -142,8 +166,8 @@ async def test_sample_compiler_limits_reach_the_serialized_request(monkeypatch):
             await llm.close()
 
     (payload,) = payloads
-    assert payload["max_tokens"] == 512
-    assert payload["thinking_token_budget"] == 256
+    assert payload["max_tokens"] == 1280
+    assert payload["thinking_token_budget"] == 1024
     assert payload["chat_template_kwargs"] == {"enable_thinking": True}
     assert payload["temperature"] == 0.25
     assert original.default_extras == {

@@ -78,6 +78,12 @@ about. The spoken confirmation states the compiled condition. When no specific
 visible condition can be resolved, the agent says so, starts nothing, and leaves
 any running alert in place.
 
+Alert compilation has its own generation limits: up to 1,024 reasoning tokens
+within a 1,280-token total output limit. Its instructions define a trigger for
+future frames; an object need not be visible in an earlier scene description to
+request a watch for it. These limits do not change ordinary conversation or
+visual-question generation settings.
+
 Each job then checks frames in a paced loop. A cheap Clef image call screens every
 frame for whether the relevance subject may be visible, and a frame it rejects
 costs nothing more. Only a screened frame runs the two condition checks in
@@ -255,6 +261,13 @@ uv --config-file uv.toml run --project agent-samples/conversation-example/worker
 choice. Answer quality, alert compilation, and the alert frame checks are not
 scored: alert compilation returns a fixed watch, and alert jobs never receive a
 frame.
+
+`agent-samples/conversation-example/eval/alert-compile-cases.yaml` contains
+separate manual replay cases for the production alert compiler, including absent
+subjects, prior alert refusals, and references to history or notes. Evaluate the
+returned condition against each case's semantic expectation, rather than treating
+every `ready` response as correct. The CPU tests check request assembly and wire
+limits; they do not measure model accuracy.
 
 Router uncertainty still probes the highest-probability currently eligible
 destination through its normal admission step. It produces router clarification
