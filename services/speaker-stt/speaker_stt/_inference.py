@@ -160,12 +160,16 @@ class _Session:
             diar_pred_out_stream=torch.zeros((1, 0, 8), device=models.device),
         )
         self.buffer = CacheAwareStreamingAudioBuffer(model=models.asr, online_normalization=False)
-        self.pending = np.zeros(models.cache_samples, dtype=np.float32)
-        self.step = 0
         self.audio_origin_us = audio_origin_us
+        self._audio_samples = 0
+        self._reset_segment()
+
+    def _reset_segment(self) -> None:
+        """Start fresh decoding without replacing the diarizer's identity cache."""
+        self.pending = np.zeros(self.models.cache_samples, dtype=np.float32)
         self.last_partial = ""
         self._speaker_states: dict[int, _AsrState] = {}
-        self._history = deque(maxlen=models.history_hops)
+        self._history = deque(maxlen=self.models.history_hops)
         self._frame = None
         self._unavailable: set[int] = set()
         self._candidate_streams: dict[int, _DecodedStream] = {}
@@ -409,23 +413,14 @@ class _Session:
         No utterance or control phrase may span the gap: the owner's partial
         utterance ends like an empty one, and unenrolled candidates restart.
         """
-        self.audio_origin_us += round(samples * 1_000_000 / 16000)
-        self._diagnostic_streams.clear()
-        # Words decoded before the gap cannot lead into speech after it, either
-        # from a live decoder or by replaying history into a new speaker's.
-        for state in self._speaker_states.values():
-            state.recent.clear()
-        self._history.clear()
-        if self.selection.owner is None:
-            self._candidate_streams.clear()
-            self.selection._enrollment_controls.clear()
-            self.selection._wake_until.clear()
-            return []
-        if self.selection.candidate is None:
-            self.selection._controls._reset()
-            return []
-        events = self.selection._finish("")
-        self._reset_asr()
+        # The pending buffer starts with reused acoustic context. Only its
+        # unprocessed suffix is additional capture time discarded at this gap.
+        self._audio_samples += samples + len(self.pending) - self.models.cache_samples
+        events = self.selection._finish("") if self.selection.candidate is not None else []
+        owner = self.selection.owner
+        self.selection = _Selection(self.selection.cfg)
+        self.selection.owner = owner
+        self._reset_segment()
         return events
 
     def _feed(self, audio: bytes) -> list[dict]:
@@ -466,7 +461,7 @@ class _Session:
                 recent = preds[:, -self.models.asr.encoder.streaming_cfg.valid_out_len :]
                 active_mask = recent.amax(dim=1)[0] >= self.selection.cfg.activity_threshold
                 active = set(active_mask.nonzero().flatten().tolist())
-                chunk_pts = self.audio_origin_us + round(self.step * self.models.hop_samples * 1_000_000 / 16000)
+                chunk_pts = self.audio_origin_us + round(self._audio_samples * 1_000_000 / 16000)
                 self._frame = frame
                 encoded_features = self.adapter.forward_pre_encoded(features, lengths, drop)
                 needed = active if self.selection.owner is None or self.selection.cfg.diagnostics else set()
@@ -514,7 +509,7 @@ class _Session:
                         ]
                         events.extend(self._diagnostic_events(active, completed, None, chunk_pts))
                     self._history.append((*encoded_features, preds.detach().clone(), drop))
-                    self.step += 1
+                    self._audio_samples += self.models.hop_samples
                     continue
                 selected, edges, started = self.selection._activity(
                     active,
@@ -565,5 +560,5 @@ class _Session:
                     self._diagnostic_streams.clear()
                     self._speaker_states = {owner_before: self._speaker_states[owner_before]}
                 self._history.append((*encoded_features, preds.detach().clone(), drop))
-                self.step += 1
+                self._audio_samples += self.models.hop_samples
         return events

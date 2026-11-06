@@ -255,9 +255,11 @@ an unrelated audio-duration limit.
 
 A JSON text message `{"skip_samples": N}` reports N samples the client dropped
 under overload: the session keeps its enrolled speaker, advances its timeline
-past the gap, and ends any utterance or partial control phrase that would span
-it. An endpoint without this message rejects it as a protocol error, and the
-client then resets enrollment as it does for any service failure.
+past the gap, and starts a fresh ASR segment. Buffered pre-gap audio is discarded
+and included in the timeline advance; decoder state, partial controls and
+temporary wake permissions do not span the gap. An endpoint without this
+message rejects it as a protocol error, and the client then resets enrollment
+as it does for any service failure.
 
 The private identity is protocol 5, adding the explicit diagnostics setting to
 protocol 4's interaction policy. Worker and speaker service must be restarted

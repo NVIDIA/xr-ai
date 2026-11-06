@@ -870,3 +870,91 @@ def test_words_before_dropped_audio_do_not_lead_into_the_next_utterance(_streami
         events.extend(session._feed(bytes(5120)))
     kind = "one_shot" if owner is None else "transcript"
     assert [e["text"] for e in events if e["kind"] == kind] == ["what time"]
+
+
+@pytest.mark.parametrize("cache_samples", [0, 320])
+@pytest.mark.parametrize("residual", [0, 1280])
+def test_gap_discards_partial_hop_and_context_but_keeps_capture_time(
+    _streaming_models, monkeypatch, cache_samples, residual,
+):
+    import numpy as np
+    from speaker_stt._inference import _Session
+
+    models, activity, calls, _masks, _allocations, text = _streaming_models
+    models.cache_samples = cache_samples
+    session = _Session(models, _SpeakerConfig(), audio_origin_us=123)
+    session.selection.owner = 3
+    diarizer = session.adapter.instance_manager.diar_states
+    frames = []
+    preprocess = session.buffer.preprocess_audio
+
+    def capture(frame, **kwargs):
+        frames.append(frame.copy())
+        return preprocess(frame, **kwargs)
+
+    monkeypatch.setattr(session.buffer, "preprocess_audio", capture)
+    session._feed(np.full(models.hop_samples + residual, 1000, dtype="<i2").tobytes())
+    session._skip(16000)
+    # Repeated gaps with a one-sample residual exercise exact sample accounting
+    # without counting reused context or accumulating rounded microseconds.
+    for _ in range(3):
+        session._feed(bytes(2))
+        session._skip(1)
+    count = len(calls)
+    activity[:] = [3]
+    text[0] = "fresh query"
+    events = session._feed(np.full(models.hop_samples, 2000, dtype="<i2").tobytes())
+    assert events[0] == {"kind": "speech_start"}
+    assert session.selection.owner == 3
+    assert session.adapter.instance_manager.diar_states is diarizer
+    assert session.selection.pts_us == 123 + round((models.hop_samples + residual + 16000 + 6) * 1e6 / 16000)
+    assert len(frames) == 2
+    np.testing.assert_array_equal(frames[-1][:cache_samples], np.zeros(cache_samples))
+    np.testing.assert_array_equal(frames[-1][cache_samples:], np.full(models.hop_samples, 2000 / 32768))
+    assert calls[count]["previous_hypotheses"] is None
+    assert not calls[count]["cache_last_channel"].any()
+
+
+@pytest.mark.parametrize("owner", [None, 3])
+@pytest.mark.parametrize("skip", [False, True])
+def test_gap_restarts_native_decoder_instead_of_reconciling_old_padding(
+    _streaming_models, monkeypatch, owner, skip,
+):
+    import torch
+    from nemo.collections.asr.parts.utils.rnnt_utils import Hypothesis
+    from speaker_stt._inference import _Session
+
+    models, activity, _calls, _masks, _allocations, _text = _streaming_models
+    after_gap = False
+    next_calls = []
+
+    def decode(**kwargs):
+        previous = kwargs["previous_hypotheses"]
+        step = previous[0].dec_state + 1 if previous else 1
+        if after_gap:
+            next_calls.append(previous)
+            value = " beta gamma" if activity and not kwargs["keep_all_outputs"] else ""
+        else:
+            value = "alpha" if step == 1 else " beta" if step == 3 else ""
+        hyp = Hypothesis(y_sequence=torch.tensor([ord(c) for c in value]), dec_state=step)
+        return None, [hyp], *models.asr.encoder.get_initial_cache_state(batch_size=1), [hyp]
+
+    monkeypatch.setattr(models.asr, "conformer_stream_step", decode)
+    session = _Session(models, _SpeakerConfig(mode="always_on", silence_duration=0.16), audio_origin_us=0)
+    session.selection.owner = owner
+    activity[:] = [3]
+    session._feed(bytes(5120))
+    activity[:] = []
+    session._feed(bytes(5120))
+    assert session._speaker_states[3].pending == [ord(c) for c in " beta"]
+    if skip:
+        session._skip(16000)
+    after_gap = True
+    activity[:] = [3]
+    events = session._feed(bytes(5120))
+    activity[:] = []
+    events += session._feed(bytes(5120))
+    kind = "one_shot" if owner is None else "transcript"
+    assert [e["text"] for e in events if e["kind"] == kind] == ["beta gamma" if skip else "gamma"]
+    assert (next_calls[0] is None) == skip
+    assert session.selection.owner == owner

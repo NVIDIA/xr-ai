@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 import yaml
-from pipecat.frames.frames import InputAudioRawFrame, TranscriptionFrame, UserStartedSpeakingFrame
+from pipecat.frames.frames import InputAudioRawFrame, TranscriptionFrame, UninterruptibleFrame, UserStartedSpeakingFrame
 from pipecat.processors.frame_processor import FrameDirection
 from speaker_stt._selection import _Selection
 from xr_ai_voice._frames import (
@@ -133,6 +133,58 @@ async def test_intervening_control_consumes_permission_but_not_fragment_matcher(
     assert "a" in gate._conversation_active
     await processor.cleanup()
     await gate.cleanup()
+
+
+@pytest.mark.asyncio
+async def test_overload_gap_consumes_wake_permission_without_releasing_enrollment(tmp_path):
+    cfg = load(tmp_path, {"mode": "conversation", "magic_phrases": ["hey agent"],
+                          "conversation": {"require_wake_phrase": True}, "speaker": {"enabled": True}})
+    gate = VoiceGateProcessor(cfg=cfg, tts=SimpleNamespace())
+    gate._use_speaker_asr = True
+    gate.push_frame, gate._emit_chime = AsyncMock(), AsyncMock()
+    processor = _SpeakerSttProcessor(cfg=cfg._speaker)
+    entered, release, skipped, gap_forwarded = (asyncio.Event() for _ in range(4))
+
+    async def forward(frame, direction=D):
+        await gate.process_frame(frame, direction)
+        if isinstance(frame, _UnrecognizedSpeechFrame):
+            assert isinstance(frame, UninterruptibleFrame)
+            gap_forwarded.set()
+
+    async def feed(*_args):
+        entered.set()
+        await release.wait()
+        return []
+
+    async def skip(*_args):
+        skipped.set()
+        return []
+
+    processor.push_frame = forward
+    processor._client = SimpleNamespace(_feed=feed, _skip=skip, _forget=AsyncMock(), _close=AsyncMock())
+    try:
+        await processor.process_frame(ParticipantJoinedFrame("a"), D)
+        await processor._event("a", {"kind": "enrolled"})
+        await processor._event("a", {"kind": "control_pending", "text": "hey agent", "pts_us": 0})
+        assert "a" in gate._gate._followup_until
+        await processor.process_frame(audio(), D)
+        await asyncio.wait_for(entered.wait(), 1)
+        for _ in range(3):
+            await processor.process_frame(audio(size=32000), D)
+        release.set()
+        await asyncio.wait_for(skipped.wait(), 1)
+        await asyncio.wait_for(gap_forwarded.wait(), 1)
+        assert "a" in processor._enrolled and "a" in gate._conversation_active
+        assert "a" not in gate._gate._followup_until
+        await processor._event("a", {"kind": "transcript", "text": "ambient speech", "pts_us": 1})
+        assert not [c for c in gate.push_frame.call_args_list if isinstance(c.args[0], GatedQueryFrame)]
+        await processor._event("a", {"kind": "transcript", "text": "hey agent fresh query", "pts_us": 2})
+        queries = [c.args[0] for c in gate.push_frame.call_args_list if isinstance(c.args[0], GatedQueryFrame)]
+        assert [query.text for query in queries] == ["fresh query"]
+        processor._client._forget.assert_not_awaited()
+    finally:
+        await processor.cleanup()
+        await gate.cleanup()
 
 
 @pytest.mark.asyncio

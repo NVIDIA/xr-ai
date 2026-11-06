@@ -29,6 +29,7 @@ from .._frames import (
     _SpeakerEnrollmentFrame,
     _SpeakerTranscriptionFrame,
     _SpeakerTurnFrame,
+    _UnrecognizedSpeechFrame,
 )
 from .._speaker_client import _SpeakerClient
 
@@ -172,6 +173,11 @@ class _SpeakerSttProcessor(FrameProcessor):
                 if audio is None:
                     # Skip markers carry dropped bytes, not a timestamp.
                     events = await self._client._skip(pid, value // 2)
+                    if self._closed or pid not in self._participants or self._tasks.get(pid) is not task:
+                        return
+                    # The skipped utterance cannot grant a later query wake
+                    # permission; this does not revoke speaker enrollment.
+                    await self.push_frame(_UnrecognizedSpeechFrame(participant_id=pid))
                 else:
                     parts = [audio]
                     size = len(audio)
