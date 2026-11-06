@@ -29,6 +29,7 @@ from .._frames import (
     _SpeakerEnrollmentFrame,
     _SpeakerTranscriptionFrame,
     _SpeakerTurnFrame,
+    _UnrecognizedSpeechFrame,
 )
 from .._speaker_client import _SpeakerClient
 
@@ -122,19 +123,21 @@ class _SpeakerSttProcessor(FrameProcessor):
             pts_us = frame.pts // 1_000 if frame.pts is not None else time.time_ns() // 1_000
             queue = self._queues.get(pid)
             if queue is None:
-                queue = asyncio.Queue(maxsize=_MAX_QUEUED_FRAMES)
+                # Room for the backlog plus at most one merged skip marker.
+                queue = asyncio.Queue(maxsize=_MAX_QUEUED_FRAMES + 1)
                 self._queues[pid] = queue
                 self._queued_bytes[pid] = 0
                 self._queued_frames[pid] = 0
                 self._tasks[pid] = asyncio.create_task(self._run(pid, queue), name=f"speaker-stt-{pid}")
-            # Bound both frame count and duration. Replaying delayed control
-            # phrases after overload could enroll or release the wrong session.
+            # Bound both frame count and duration. Delayed control phrases must
+            # not be replayed after overload, so the backlog is dropped and the
+            # service told how much audio is missing; enrollment survives.
             if (
                 self._queued_frames[pid] >= _MAX_QUEUED_FRAMES
                 or self._queued_bytes[pid] + len(frame.audio) > 64000
             ):
-                logger.warning("speaker ASR overloaded; enrollment reset pid={!r}", pid)
-                await self._replace_worker(pid, retry=True)
+                logger.warning("speaker ASR overloaded; dropping queued audio pid={!r}", pid)
+                self._drop_backlog(pid, queue, len(frame.audio))
                 return
             self._queued_bytes[pid] += len(frame.audio)
             self._queued_frames[pid] += 1
@@ -142,30 +145,56 @@ class _SpeakerSttProcessor(FrameProcessor):
             return
         await self.push_frame(frame, direction)
 
+    def _drop_backlog(self, pid: str, queue: asyncio.Queue, skipped: int) -> None:
+        """Replace queued audio with one marker for the dropped byte count."""
+        while True:
+            try:
+                audio, value = queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+            if audio is None:
+                skipped += value
+            else:
+                skipped += len(audio)
+                self._queued_bytes[pid] -= len(audio)
+                self._queued_frames[pid] -= 1
+        queue.put_nowait((None, skipped))
+
     async def _run(self, pid: str, queue: asyncio.Queue) -> None:
         task = asyncio.current_task()
         # A retained frame stays in backlog counts and is discarded with its
-        # owning queue when this worker is cancelled.
+        # owning queue when this worker is cancelled. It predates any backlog
+        # dropped behind it, so it is still sent before the skip marker.
         pending = None
         try:
             while True:
-                audio, pts_us = pending if pending is not None else await queue.get()
+                audio, value = pending if pending is not None else await queue.get()
                 pending = None
-                parts = [audio]
-                size = len(audio)
-                while size < _COALESCED_AUDIO_BYTES:
-                    try:
-                        next_audio, next_pts = queue.get_nowait()
-                    except asyncio.QueueEmpty:
-                        break
-                    if size + len(next_audio) > _COALESCED_AUDIO_BYTES:
-                        pending = (next_audio, next_pts)
-                        break
-                    parts.append(next_audio)
-                    size += len(next_audio)
-                self._queued_bytes[pid] -= size
-                self._queued_frames[pid] -= len(parts)
-                for event in await self._client._feed(pid, b"".join(parts), pts_us):
+                if audio is None:
+                    # Skip markers carry dropped bytes, not a timestamp.
+                    events = await self._client._skip(pid, value // 2)
+                    if self._closed or pid not in self._participants or self._tasks.get(pid) is not task:
+                        return
+                    # The skipped utterance cannot grant a later query wake
+                    # permission; this does not revoke speaker enrollment.
+                    await self.push_frame(_UnrecognizedSpeechFrame(participant_id=pid))
+                else:
+                    parts = [audio]
+                    size = len(audio)
+                    while size < _COALESCED_AUDIO_BYTES:
+                        try:
+                            item = queue.get_nowait()
+                        except asyncio.QueueEmpty:
+                            break
+                        if item[0] is None or size + len(item[0]) > _COALESCED_AUDIO_BYTES:
+                            pending = item
+                            break
+                        parts.append(item[0])
+                        size += len(item[0])
+                    self._queued_bytes[pid] -= size
+                    self._queued_frames[pid] -= len(parts)
+                    events = await self._client._feed(pid, b"".join(parts), value)
+                for event in events:
                     if self._closed or pid not in self._participants or self._tasks.get(pid) is not task:
                         return
                     await self._event(pid, event)
@@ -197,7 +226,7 @@ class _SpeakerSttProcessor(FrameProcessor):
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
 
-    async def _replace_worker(self, pid: str, *, reset: bool = True, retry: bool = False) -> bool:
+    async def _replace_worker(self, pid: str, *, reset: bool = True) -> bool:
         """Revoke the old worker before draining; readmit only its current join."""
         lifecycle = self._lifecycles.get(pid)
         self._participants.discard(pid)
@@ -208,7 +237,7 @@ class _SpeakerSttProcessor(FrameProcessor):
         if self._closed or lifecycle is None or self._lifecycles.get(pid) is not lifecycle:
             return False
         if reset:
-            await self._reset(pid, retry=retry)
+            await self._reset(pid, retry=False)
         if self._closed or self._lifecycles.get(pid) is not lifecycle:
             return False
         self._participants.add(pid)
