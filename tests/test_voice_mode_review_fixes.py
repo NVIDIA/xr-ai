@@ -34,7 +34,7 @@ def load(tmp_path, raw):
 
 
 def hybrid(tmp_path):
-    return load(tmp_path, {"mode": "hybrid", "magic_phrases": ["hey agent"],
+    return load(tmp_path, {"mode": "hybrid", "magic_phrases": ["hey assistant"],
                            "speaker": {"enabled": True}, "listening_chime": True})
 
 
@@ -54,7 +54,7 @@ def audio(track="first", size=320):
 @pytest.mark.parametrize("key,value", [("start_phrase", "computer begin"), ("stop_phrase", "computer end"),
                                       ("require_wake_phrase", True), ("phrase_window_s", 9)])
 def test_explicit_mode_rejects_misplaced_controls_instead_of_replacing(tmp_path, mode, key, value):
-    raw = {"mode": mode, "magic_phrases": ["hey agent"], "speaker": {"enabled": True, key: value}}
+    raw = {"mode": mode, "magic_phrases": ["hey assistant"], "speaker": {"enabled": True, key: value}}
     with pytest.raises(ValueError, match="move conversation controls from speaker to conversation"):
         load(tmp_path, raw)
 
@@ -80,7 +80,7 @@ async def test_custom_controls_preserved_in_supported_location_and_wire(tmp_path
     await client._close()
 
 
-@pytest.mark.parametrize("raw,mode", [({}, "always_on"), ({"magic_phrases": ["hey agent"]}, "wake_only"),
+@pytest.mark.parametrize("raw,mode", [({}, "always_on"), ({"magic_phrases": ["hey assistant"]}, "wake_only"),
                                      ({"conversation": {}}, "conversation")])
 def test_mode_less_shapes_assert_effective_mode(tmp_path, raw, mode):
     assert load(tmp_path, raw)._mode == mode
@@ -89,14 +89,14 @@ def test_mode_less_shapes_assert_effective_mode(tmp_path, raw, mode):
 
 def test_mode_is_part_of_semantic_equality_and_direct_phrase_inference(tmp_path):
     assert VoiceGateConfig()._mode == "always_on"
-    assert VoiceGateConfig(magic_phrases=("hey agent",))._mode == "wake_only"
-    assert load(tmp_path, {"mode": "hybrid", "magic_phrases": ["hey agent"]}) != load(
-        tmp_path, {"mode": "conversation", "magic_phrases": ["hey agent"]})
+    assert VoiceGateConfig(magic_phrases=("hey assistant",))._mode == "wake_only"
+    assert load(tmp_path, {"mode": "hybrid", "magic_phrases": ["hey assistant"]}) != load(
+        tmp_path, {"mode": "conversation", "magic_phrases": ["hey assistant"]})
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("speaker", [False, True])
-@pytest.mark.parametrize("middle", ["hey agent let's", "Hey agent, let's stop talking", "unrecognized"])
+@pytest.mark.parametrize("middle", ["start talking", "stop talking to me", "unrecognized"])
 async def test_intervening_control_consumes_permission_but_not_fragment_matcher(tmp_path, speaker, middle):
     cfg = hybrid(tmp_path)
     gate = VoiceGateProcessor(cfg=cfg, tts=SimpleNamespace())
@@ -122,14 +122,14 @@ async def test_intervening_control_consumes_permission_but_not_fragment_matcher(
                 await gate.process_frame(speech(text), D)
             else:
                 await gate.process_frame(_UnrecognizedSpeechFrame(participant_id="a"), D)
-    await say("hey agent", 0)
+    await say("hey assistant", 0)
     await say("" if middle == "unrecognized" else middle, 1)
     await say("ambient speech", 2)
     assert not [c for c in gate.push_frame.call_args_list if isinstance(c.args[0], GatedQueryFrame)]
-    # A genuinely new bare wake grants its own permission and can also join
-    # a start control; consuming query permission must not erase fragments.
-    await say("hey agent", 3)
-    await say("let's start talking", 4)
+    # A new start control still joins across fragments after the earlier
+    # bare-wake query permission was consumed.
+    await say("start talking", 3)
+    await say("to me", 4)
     assert "a" in gate._conversation_active
     await processor.cleanup()
     await gate.cleanup()
@@ -139,7 +139,7 @@ async def test_intervening_control_consumes_permission_but_not_fragment_matcher(
 @pytest.mark.parametrize("partials", [False, True])
 @pytest.mark.parametrize("chime", [False, True])
 async def test_batch_hybrid_acknowledges_complete_turn_once(tmp_path, partials, chime):
-    cfg = load(tmp_path, {"mode": "hybrid", "magic_phrases": ["hey agent"], "listening_chime": chime})
+    cfg = load(tmp_path, {"mode": "hybrid", "magic_phrases": ["hey assistant"], "listening_chime": chime})
     gate = VoiceGateProcessor(cfg=cfg, tts=SimpleNamespace())
     gate.push_frame = AsyncMock()
     # Exercise the real acknowledgement guard and configured gate, not a mock
@@ -147,9 +147,9 @@ async def test_batch_hybrid_acknowledges_complete_turn_once(tmp_path, partials, 
     gate._gate._chime_wav = b"synthetic audio"
     gate.play_wav = AsyncMock()
     if partials:
-        await gate.handle_partial_transcript("a", "hey agent describe")
-        await gate.handle_partial_transcript("a", "hey agent describe this")
-    await gate.process_frame(speech("hey agent describe this"), D)
+        await gate.handle_partial_transcript("a", "hey assistant describe")
+        await gate.handle_partial_transcript("a", "hey assistant describe this")
+    await gate.process_frame(speech("hey assistant describe this"), D)
     assert gate.play_wav.await_count == int(chime)
     assert len([c for c in gate.push_frame.call_args_list if isinstance(c.args[0], GatedQueryFrame)]) == 1
     await gate.cleanup()

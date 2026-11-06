@@ -84,6 +84,7 @@ class VoiceGateProcessor(FrameProcessor):
         """
         super().__init__()
         self._conversation_cfg = cfg._conversation
+        self._stop_commands_enabled = cfg.stop_commands_enabled
         self._mode = cfg._mode
         self._wake_phrase = max(cfg.magic_phrases, key=len, default="")
         self._conversation_active: set[str] = set()
@@ -289,7 +290,9 @@ class VoiceGateProcessor(FrameProcessor):
             elif active:
                 await self._dispatch_conversation_transcript(pid, frame.text, frame._released)
             return
-        matcher = self._controls.setdefault(pid, _ControlMatcher(cfg))
+        matcher = self._controls.setdefault(
+            pid, _ControlMatcher(cfg, stop_commands_enabled=self._stop_commands_enabled),
+        )
         at_s = self._feeding_pts_us / 1_000_000 if self._feeding_pts_us is not None else time.monotonic()
         action = matcher._feed(frame.text, key=pid, at_s=at_s)
         if action in {"start", "stop"}:

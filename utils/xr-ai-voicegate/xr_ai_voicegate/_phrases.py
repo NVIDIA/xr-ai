@@ -46,8 +46,8 @@ def build_magic_pattern(phrases: Sequence[str]) -> re.Pattern | None:
     Longest-first ordering picks the most specific match when one phrase
     is a prefix of another (e.g. "agent" vs "agent buddy"). Inside each
     phrase, the literal space between words is treated as "whitespace OR
-    punctuation" so STT transcripts like "Hey, agent." still match the
-    configured "hey agent". A phrase may begin the transcript or follow
+    punctuation" so STT transcripts like "Hey, assistant." still match the
+    configured "hey assistant". A phrase may begin the transcript or follow
     sentence-final punctuation separated by whitespace or a closing delimiter;
     commas and other mid-sentence punctuation do not open the gate. Returns
     ``None`` when ``phrases`` is empty so the gate degrades to always-on.

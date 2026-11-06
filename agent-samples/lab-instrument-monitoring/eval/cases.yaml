@@ -62,7 +62,7 @@
   expected_tool: lab_instruments__read
 
 - name: read-instrument-voice
-  query: Hey agent, read this instrument.
+  query: Hey assistant, read this instrument.
   expected_tool: lab_instruments__read
 
 - name: read-meter
