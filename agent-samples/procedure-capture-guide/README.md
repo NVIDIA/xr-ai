@@ -67,9 +67,17 @@ Open the authenticated web-client URL printed by the hub and connect. Enable
 the microphone and use live video or on-demand image capture. Say **start
 capture**, narrate the demonstration, then say **stop capture**. Repeat
 these commands to record another task without reconnecting. The worker announces
-"Capture started." and "Capture stopped.", and stays silent during narration
-and finalization. On connection, the worker explains these commands once.
+"Capture started." and "Capture stopped." During narration it may issue
+capture-quality warnings; finalization remains silent. On connection, the worker
+explains these commands once.
 Other speech while idle does not trigger a reply.
+
+During capture, the web client and worker monitor connection health, incoming
+video rate/resolution, and on-demand image failures. Sustained degradation causes
+a short spoken warning without stopping recording. Set `quality.enabled: false`
+in `yaml/capture-agent-config.yaml` to disable this. The packet's `quality.jsonl`
+contains diagnostic events. See the [quality-feedback reference](https://nvidia.github.io/xr-ai/latest/reference/procedure-capture-guide.html#capture-quality-feedback)
+for thresholds, on-demand behavior, and local connection-loss audio.
 
 Recorded procedures are saved under
 `artifacts/sessions/<session-id>/` (frames, captions,

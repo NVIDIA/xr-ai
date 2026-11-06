@@ -27,6 +27,8 @@ import {
   LiveKitConfig,
 } from '/StreamKit/index.js';
 
+import { CaptureQualityClient, prepareCaptureOutageAudio } from './CaptureQuality.js';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Pure helpers
 // ─────────────────────────────────────────────────────────────────────────────
@@ -443,19 +445,31 @@ export async function connect(model, {
     tokenURL: model.token.trim()  ? null : resolvedTokenURL(model),
   });
 
+  model.captureQuality?.close();
+  model.captureOutageAudio?.close();
+  const outageAudio = prepareCaptureOutageAudio(showError);
   let newSession;
   try {
     newSession = await StreamSession.create(BackendConfiguration.liveKit(lkConfig));
   } catch (err) {
     showError(err instanceof StreamError ? err.message : String(err));
     model.connectionState = ConnectionState.DISCONNECTED;
+    outageAudio.close();
     render();
     return;
   }
 
+  const captureQuality = new CaptureQualityClient({
+    send: (data, options) => newSession.send(data, options),
+    read: () => ({ ...model, cameraTrackId: newSession.cameraTrack?.id ?? '' }),
+    warn: () => { void outageAudio.play(); },
+  });
+  model.captureQuality = captureQuality;
+  model.captureOutageAudio = outageAudio;
   newSession.onConnectionStateChanged = (state) => {
     const wasCameraActive = model.isCameraActive;
     model.connectionState = state;
+    captureQuality.connection(state);
     if (state === ConnectionState.CONNECTED) {
       // Enumerate cameras on connect so the selector is populated before the
       // user starts the camera for the first time.
@@ -483,6 +497,7 @@ export async function connect(model, {
 
   newSession.onNetworkMetrics = (metrics) => {
     model.networkMetrics = metrics;
+    captureQuality.network(metrics);
     renderNetworkMetrics(model);
   };
 
@@ -534,6 +549,7 @@ export async function connect(model, {
     : null;
 
   newSession.onDataReceived = (topic, data) => {
+    if (captureQuality.control(topic, data)) return;
     // Let the caller intercept topics first (returns true to suppress list append).
     if (onDataReceived?.(topic, data)) return;
 
@@ -567,6 +583,8 @@ export async function connect(model, {
     await newSession.connect(sessionConfig);
   } catch (err) {
     showError(err instanceof StreamError ? err.message : String(err));
+    captureQuality.close();
+    outageAudio.close();
     await newSession.disconnect().catch(() => {});
     model.session         = null;
     model.connectionState = ConnectionState.DISCONNECTED;
@@ -676,6 +694,8 @@ async function captureCameraTrack(track, signal, { settleExposure = false } = {}
 
 /** @param {object} model @param {() => void} render */
 export async function disconnect(model, render) {
+  model.captureQuality?.close();
+  model.captureOutageAudio?.close();
   await model.session?.disconnect();
   model.captureSequence += 1;
   if (model.capturedImageURL) URL.revokeObjectURL(model.capturedImageURL);
@@ -749,6 +769,7 @@ export async function startCamera(model, { render, showError, enumerateCameras: 
       return;
     }
     model.isCameraActive = true;
+    void model.captureQuality?.report();
   } catch (err) {
     showError(err instanceof StreamError ? err.message : String(err));
     fallBackToCameraOff(model);
@@ -764,6 +785,7 @@ export async function stopCamera(model, render, showError) {
     showError(err instanceof StreamError ? err.message : String(err));
   }
   model.isCameraActive = false;
+  void model.captureQuality?.report();
   render();
 }
 
@@ -777,6 +799,7 @@ export async function stopCamera(model, render, showError) {
 export async function setCameraMode(model, mode, { render, startCamera, stopCamera }) {
   if (!CAMERA_MODES.has(mode)) return;
   model.cameraMode = mode;
+  void model.captureQuality?.report();
   saveCameraMode(mode);
   if (model.session) {
     model.session.onImageCaptureRequested = mode === 'on-demand'
