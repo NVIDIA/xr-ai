@@ -156,9 +156,9 @@ async def test_batch_hybrid_acknowledges_complete_turn_once(tmp_path, partials, 
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("replacement", ["rejoin", "track", "overload"])
+@pytest.mark.parametrize("replacement", ["rejoin", "track"])
 @pytest.mark.parametrize("late", ["one_shot", "enrolled", "transcript", "error"])
-async def test_replacement_revokes_old_response_before_drain_and_resets(tmp_path, monkeypatch, replacement, late):
+async def test_replacement_revokes_old_response_before_drain_and_resets(tmp_path, replacement, late):
     cfg = hybrid(tmp_path)
     processor = _SpeakerSttProcessor(cfg=cfg._speaker)
     entered, cancelled, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
@@ -191,9 +191,6 @@ async def test_replacement_revokes_old_response_before_drain_and_resets(tmp_path
     await processor.process_frame(audio(), D)
     await entered.wait()
     old = processor._tasks["a"]
-    if replacement == "overload":
-        await processor.process_frame(audio(size=32000), D)
-        await processor.process_frame(audio(size=32000), D)
     trigger = ParticipantJoinedFrame("a") if replacement == "rejoin" else audio(
         "second" if replacement == "track" else "first",
     )
@@ -208,14 +205,6 @@ async def test_replacement_revokes_old_response_before_drain_and_resets(tmp_path
     assert not [f for f in frames if isinstance(f, _SpeakerEnrollmentFrame) and f.state == "enrolled"]
     assert not [f for f in frames if getattr(f, "text", None) == "stale"]
     assert len([f for f in frames if isinstance(f, _SpeakerEnrollmentFrame) and f.state == "reset"]) == 1
-    if replacement == "overload":
-        import time
-        # Advance this module's clock to its existing retry deadline, not a
-        # new delay or policy. Other event-loop clocks remain untouched.
-        deadline = processor._retry_after["a"]
-        monkeypatch.setattr("xr_ai_voice._processors.speaker_stt.time", SimpleNamespace(
-            monotonic=lambda: deadline, time_ns=time.time_ns,
-        ))
     if replacement != "track":
         await processor.process_frame(audio(), D)
     await asyncio.wait_for(fresh_received.wait(), 2)

@@ -28,7 +28,7 @@ from xr_ai_logging import setup_logging
 from xr_ai_voicegate._speaker import _SpeakerConfig
 
 _SERVICE = "xr-ai-speaker-stt"
-_PROTOCOL = 5
+_PROTOCOL = 6
 _DEFAULT_HOST = "127.0.0.1"
 _DEFAULT_PORT = 8102
 _STREAM_PATH = "/v1/audio/transcriptions/stream"
@@ -213,6 +213,19 @@ class _Server:
             raise
         return events
 
+    def _skip(self, session_id: str, body: object) -> list[dict]:
+        session = self.sessions.get(session_id)
+        if session is None:
+            raise _ProtocolError("unknown speaker session; open a new stream")
+        samples = body.get("skip_samples") if isinstance(body, dict) else None
+        if not isinstance(samples, int) or isinstance(samples, bool) or samples <= 0:
+            raise _ProtocolError("skip_samples must be a positive sample count")
+        try:
+            return session._skip(samples)
+        except Exception:
+            self.sessions.pop(session_id, None)
+            raise
+
     def _close(self, session_id: str) -> None:
         self.sessions.pop(session_id, None)
 
@@ -281,10 +294,16 @@ def _build_app(server: _Server, cfg: dict, ready_file: Path | None = None):
                 if message["type"] == "websocket.disconnect":
                     break
                 audio = message.get("bytes")
-                if audio is None:
-                    raise _ProtocolError("speaker audio frames must be binary PCM")
+                if audio is not None:
+                    call = (server._audio, session_id, audio)
+                else:
+                    # A text frame reports audio the client dropped under load.
+                    try:
+                        call = (server._skip, session_id, json.loads(message.get("text") or ""))
+                    except json.JSONDecodeError as exc:
+                        raise _ProtocolError("speaker frames must be binary PCM or a JSON skip") from exc
                 async with inference_lock:
-                    work = asyncio.create_task(asyncio.to_thread(server._audio, session_id, audio))
+                    work = asyncio.create_task(asyncio.to_thread(*call))
                     events = await _await_without_abandoning(work)
                 await websocket.send_json({"events": events})
         except WebSocketDisconnect:

@@ -241,7 +241,7 @@ async def test_cancelled_request_closes_connection_and_releases_session(cancel_o
             if cancel_op == "open":
                 allocated.set()
                 await release_reply.wait()
-            await socket.send(json.dumps({"service": "xr-ai-speaker-stt", "protocol": 5}))
+            await socket.send(json.dumps({"service": "xr-ai-speaker-stt", "protocol": 6}))
             await socket.recv()
             if cancel_op == "audio":
                 allocated.set()
@@ -405,7 +405,7 @@ async def test_model_failure_revokes_enrollment_without_batch_stt_fallback():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("shutdown", ["cancel", "cleanup"])
-async def test_slow_inference_does_not_block_other_participants_and_overload_drops_audio(shutdown):
+async def test_slow_inference_does_not_block_other_participants_and_overload_keeps_enrollment(shutdown):
     processor = _SpeakerSttProcessor(cfg=_SpeakerConfig())
     slow = asyncio.Event()
     other = asyncio.Event()
@@ -419,9 +419,9 @@ async def test_slow_inference_does_not_block_other_participants_and_overload_dro
 
     processor._client = SimpleNamespace(_feed=AsyncMock(side_effect=feed), _forget=AsyncMock(), _close=AsyncMock())
     processor.push_frame = AsyncMock()
-    processor._enrolled.add("slow")
     for pid in ("slow", "other"):
         await processor.process_frame(ParticipantJoinedFrame(pid), FrameDirection.DOWNSTREAM)
+    processor._enrolled.add("slow")
     def audio(pid):
         frame = InputAudioRawFrame(audio=bytes(32000), sample_rate=16000, num_channels=1)
         frame.transport_source = pid
@@ -432,12 +432,13 @@ async def test_slow_inference_does_not_block_other_participants_and_overload_dro
     await asyncio.wait_for(other.wait(), timeout=1)
     for _ in range(3):
         await processor.process_frame(audio("slow"), FrameDirection.DOWNSTREAM)
-    assert "slow" not in processor._enrolled
-    assert "slow" not in processor._queues
-    assert "slow" not in processor._tasks
-    resets = [c.args[0] for c in processor.push_frame.call_args_list if isinstance(c.args[0], _SpeakerEnrollmentFrame)]
-    assert any(f.participant_id == "slow" and f.state == "reset" for f in resets)
-    # A reply from a cancelled request cannot restore enrollment.
+    # The third second overflows: the backlog becomes one skip marker for all
+    # three seconds, and the stalled session keeps its enrollment.
+    assert "slow" in processor._enrolled and "slow" in processor._tasks
+    assert processor._queues["slow"].get_nowait() == (None, 96000)
+    assert processor._queued_bytes["slow"] == 0 and processor._queued_frames["slow"] == 0
+    assert not [c for c in processor.push_frame.call_args_list
+                if isinstance(c.args[0], _SpeakerEnrollmentFrame) and c.args[0].participant_id == "slow"]
     assert processor._client._feed.await_count == 2
     if shutdown == "cancel":
         await processor.process_frame(CancelFrame(), FrameDirection.DOWNSTREAM)
@@ -459,7 +460,7 @@ async def test_stream_isolates_participants_and_reconnects_with_new_origin():
         opening = json.loads(await socket.recv())
         assert socket.request.path == "/v1/audio/transcriptions/stream"
         sessions[socket] = opening["audio_origin_us"]
-        await socket.send(json.dumps({"service": "xr-ai-speaker-stt", "protocol": 5}))
+        await socket.send(json.dumps({"service": "xr-ai-speaker-stt", "protocol": 6}))
         count, samples = 0, 0
         try:
             async for audio in socket:
@@ -513,6 +514,10 @@ async def test_voice_client_uses_actual_service_health_and_stream_contract():
             self.samples += len(audio) // 2
             return [{"kind": "transcript", "text": str(self.samples), "pts_us": pts_us}]
 
+        def _skip(self, samples):
+            self.samples += samples
+            return [{"kind": "speech_stop"}]
+
     models = SimpleNamespace(_session=lambda cfg, *, audio_origin_us: Session(audio_origin_us))
     service = Server(models)
     cfg = {"host": "127.0.0.1", "port": 8102, "asr_model": "asr", "diar_model": "diar"}
@@ -529,7 +534,11 @@ async def test_voice_client_uses_actual_service_health_and_stream_contract():
         assert await client._available()
         assert (await client._feed("wearer", bytes(640), 1_000_000))[0]["pts_us"] == 1_000_000
         assert (await client._feed("wearer", bytes(640), 1_020_000))[0]["pts_us"] == 1_020_000
+        # Dropped audio keeps the session and advances its media clock.
+        assert await client._skip("wearer", 1600) == [{"kind": "speech_stop"}]
+        assert (await client._feed("wearer", bytes(640), 1_140_000))[0]["pts_us"] == 1_140_000
         assert len(service.sessions) == 1
+        assert await client._skip("absent", 1600) == []
         await client._forget("wearer")
         await asyncio.wait_for(closed.get(), timeout=1)
         assert not service.sessions
@@ -635,7 +644,12 @@ async def test_overload_frame_limit_includes_frame_retained_for_next_batch():
         await permits.get()
         return []
 
-    processor._client = SimpleNamespace(_feed=feed, _forget=AsyncMock(), _close=AsyncMock())
+    async def skip(pid, samples):
+        await received.put(("skip", samples))
+        await permits.get()
+        return []
+
+    processor._client = SimpleNamespace(_feed=feed, _skip=skip, _forget=AsyncMock(), _close=AsyncMock())
     processor.push_frame = AsyncMock()
 
     async def submit(size):
@@ -660,15 +674,24 @@ async def test_overload_frame_limit_includes_frame_retained_for_next_batch():
         assert processor._queued_bytes["wearer"] == 5518
         assert "wearer" in processor._enrolled
         await submit(2)
-        assert "wearer" not in processor._enrolled
-        assert "wearer" not in processor._tasks
-        assert "wearer" not in processor._queued_frames
+        # The retained frame predates the dropped backlog and is still sent
+        # first; the service then learns that 200 samples are missing.
+        assert "wearer" in processor._enrolled
+        assert processor._queues["wearer"].qsize() == 1
+        assert processor._queued_frames["wearer"] == 1
+        assert processor._queued_bytes["wearer"] == 5120
+        permits.put_nowait(None)
+        assert await asyncio.wait_for(received.get(), 1) == bytes(5120)
+        permits.put_nowait(None)
+        assert await asyncio.wait_for(received.get(), 1) == ("skip", 200)
+        assert processor._queued_frames["wearer"] == 0 and processor._queued_bytes["wearer"] == 0
+        processor._client._forget.assert_not_awaited()
     finally:
         await processor.cleanup()
 
 
 @pytest.mark.asyncio
-async def test_web_audio_queue_allows_two_seconds_before_reset():
+async def test_web_audio_queue_allows_two_seconds_before_dropping_it():
     processor = _SpeakerSttProcessor(cfg=_SpeakerConfig())
     started = asyncio.Event()
     async def feed(*_args):
@@ -690,8 +713,12 @@ async def test_web_audio_queue_allows_two_seconds_before_reset():
         assert processor._queued_bytes["web-client"] == 64000
         assert "web-client" in processor._enrolled
         await processor.process_frame(audio(), FrameDirection.DOWNSTREAM)
-        assert "web-client" not in processor._enrolled
-        assert "web-client" not in processor._tasks
+        assert "web-client" in processor._enrolled and "web-client" in processor._tasks
+        assert processor._queues["web-client"].get_nowait() == (None, 64320)
+        assert processor._queued_bytes["web-client"] == 0
+        # Later audio queues behind the marker under the same two-second bound.
+        await processor.process_frame(audio(), FrameDirection.DOWNSTREAM)
+        assert processor._queued_frames["web-client"] == 1
     finally:
         await processor.cleanup()
 
@@ -1211,7 +1238,7 @@ async def test_pipeline_silence_reaches_speaker_stream_without_mutating_shared_c
     async def handler(socket):
         opening = json.loads(await socket.recv())
         openings.append(opening["config"]["silence_duration"])
-        await socket.send(json.dumps({"service": "xr-ai-speaker-stt", "protocol": 5}))
+        await socket.send(json.dumps({"service": "xr-ai-speaker-stt", "protocol": 6}))
         async for _audio in socket:
             await socket.send(json.dumps({"events": []}))
 

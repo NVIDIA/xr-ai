@@ -253,10 +253,14 @@ or incomplete PCM samples are protocol errors. The server's standard transport
 message-size and heartbeat defaults are retained; JSON controls do not inherit
 an unrelated audio-duration limit.
 
-The private identity is protocol 5, adding the explicit diagnostics setting to
-protocol 4's interaction policy. Worker and speaker service must be restarted
-together after updating: earlier endpoints fail admission rather than silently
-selecting batch STT or accepting incompatible interaction settings.
+The private identity is protocol 6. A JSON text message `{"skip_samples": N}`
+reports N samples the client dropped under overload: the session keeps its
+enrolled speaker, advances its timeline past the gap, and ends any utterance or
+partial control phrase that would span it. Protocol 5 added the explicit
+diagnostics setting to protocol 4's interaction policy. Worker and speaker
+service must be restarted together after updating: earlier endpoints fail
+admission rather than silently selecting batch STT or accepting incompatible
+interaction settings.
 
 Configure model IDs, device, precision, host, port and session capacity
 in `services/speaker-stt/speaker_stt.yaml`. The default HTTP base URL is

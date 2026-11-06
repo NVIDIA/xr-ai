@@ -765,3 +765,108 @@ def test_released_speaker_does_not_carry_its_last_word_into_reenrollment(_stream
         activity[:] = speakers
         events.extend(session._feed(bytes(5120)))
     assert [e["kind"] for e in events if e["kind"] in {"released", "enrolled"}] == ["released", "enrolled"]
+
+
+@pytest.mark.parametrize("skip", [False, True])
+def test_dropped_audio_splits_a_stop_phrase_without_releasing(_streaming_models, skip):
+    from speaker_stt._inference import _Session
+
+    models, activity, _calls, _masks, _allocations, text = _streaming_models
+    cfg = _SpeakerConfig(silence_duration=0.16)
+    session = _Session(models, cfg, audio_origin_us=1_000_000)
+    session.selection.owner = 7
+
+    def feed(speakers, transcript):
+        activity[:] = speakers
+        text[0] = transcript
+        return session._feed(bytes(5120))
+
+    feed([7], "hey agent")
+    assert feed([], "hey agent")[-1]["kind"] == "control_pending"
+    if skip:
+        assert session._skip(16000) == []
+    feed([7], "let's stop talking")
+    events = feed([], "let's stop talking")
+    if not skip:
+        assert events[-1] == {"kind": "released"} and session.selection.owner is None
+        return
+    assert session.selection.owner == 7
+    # The held fragment is discarded; the timeline includes the dropped second.
+    assert events[-1]["kind"] == "transcript" and events[-1]["text"] == "let's stop talking"
+    assert events[-1]["pts_us"] == 1_000_000 + 2 * 160_000 + 1_000_000
+
+
+def test_dropped_audio_ends_the_owner_utterance_in_progress(_streaming_models):
+    from speaker_stt._inference import _Session
+
+    models, activity, _calls, _masks, _allocations, text = _streaming_models
+    session = _Session(models, _SpeakerConfig(silence_duration=0.32), audio_origin_us=0)
+    session.selection.owner = 7
+    activity[:] = [7]
+    text[0] = "what is"
+    assert session._feed(bytes(5120))[0] == {"kind": "speech_start"}
+    assert session._skip(1600) == [{"kind": "speech_stop"}]
+    assert session.selection.candidate is None and session.selection.owner == 7
+    text[0] = "the time"
+    events = session._feed(bytes(5120))
+    assert events[0] == {"kind": "speech_start"}
+    assert all("what" not in event.get("text", "") for event in events)
+
+
+@pytest.mark.parametrize("skip", [False, True])
+def test_dropped_audio_splits_a_start_phrase_without_enrolling(_streaming_models, skip):
+    from speaker_stt._inference import _Session
+
+    models, activity, _calls, _masks, _allocations, text = _streaming_models
+    session = _Session(models, _SpeakerConfig(silence_duration=0.16), audio_origin_us=0)
+
+    def feed(speakers, transcript):
+        activity[:] = speakers
+        text[0] = transcript
+        return session._feed(bytes(5120))
+
+    feed([7], "hey agent")
+    feed([], "hey agent")
+    if skip:
+        assert session._skip(16000) == []
+    feed([7], "let's start talking")
+    events = feed([], "let's start talking")
+    assert (session.selection.owner is None) == skip
+    assert ({"kind": "enrolled"} in events) != skip
+
+
+@pytest.mark.parametrize("owner", [None, 3])
+def test_words_before_dropped_audio_do_not_lead_into_the_next_utterance(_streaming_models, monkeypatch, owner):
+    import torch
+    from nemo.collections.asr.parts.utils.rnnt_utils import Hypothesis
+    from speaker_stt._inference import _Session
+
+    models, activity, _calls, _masks, _allocations, _text = _streaming_models
+    # Words belong to the audio of each hop, so a decoder warmed from history
+    # replays them too. "earlier" is heard just before the gap.
+    words = {2: "earlier", 3: "what", 4: " time"}
+    hop = [0]
+
+    def decode(**kwargs):
+        index = int(kwargs["processed_signal"][0, 0, 0])
+        value = "" if kwargs["keep_all_outputs"] else words.get(index, "")
+        hyp = Hypothesis(y_sequence=torch.tensor([ord(c) for c in value]), dec_state=index)
+        return None, [hyp], *models.asr.encoder.get_initial_cache_state(batch_size=1), [hyp]
+
+    session = _Session(models, _SpeakerConfig(mode="always_on", silence_duration=0.32), audio_origin_us=0)
+    monkeypatch.setattr(models.asr, "conformer_stream_step", decode)
+    monkeypatch.setattr(
+        session.adapter, "forward_pre_encoded",
+        lambda *_args: (torch.full((1, 2, 128), float(hop[0])), torch.tensor([2])),
+    )
+    session.selection.owner = owner
+    events = []
+    for speakers in ([], [], "skip", [3], [3], [], []):
+        if speakers == "skip":
+            events.extend(session._skip(16000))
+            continue
+        hop[0] += 1
+        activity[:] = speakers
+        events.extend(session._feed(bytes(5120)))
+    kind = "one_shot" if owner is None else "transcript"
+    assert [e["text"] for e in events if e["kind"] == kind] == ["what time"]

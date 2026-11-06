@@ -15,7 +15,7 @@ from websockets.asyncio.client import ClientConnection, connect
 
 
 def _check_identity(status: dict[str, Any]) -> None:
-    if status.get("service") != "xr-ai-speaker-stt" or status.get("protocol") != 5:
+    if status.get("service") != "xr-ai-speaker-stt" or status.get("protocol") != 6:
         raise RuntimeError("speaker endpoint belongs to an incompatible service")
 
 
@@ -63,6 +63,13 @@ class _SpeakerStream:
         assert self._socket is not None
         async with asyncio.timeout(self._timeout_s):
             await self._socket.send(audio)
+            return (await self._response())["events"]
+
+    async def _skip(self, samples: int) -> list[dict[str, Any]]:
+        """Tell the service that ``samples`` of audio were dropped here."""
+        assert self._socket is not None
+        async with asyncio.timeout(self._timeout_s):
+            await self._socket.send(json.dumps({"skip_samples": samples}))
             return (await self._response())["events"]
 
     async def _close(self) -> None:

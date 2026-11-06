@@ -403,6 +403,31 @@ class _Session:
             )
         return events
 
+    def _skip(self, samples: int) -> list[dict]:
+        """Account for audio the client dropped while keeping enrollment.
+
+        No utterance or control phrase may span the gap: the owner's partial
+        utterance ends like an empty one, and unenrolled candidates restart.
+        """
+        self.audio_origin_us += round(samples * 1_000_000 / 16000)
+        self._diagnostic_streams.clear()
+        # Words decoded before the gap cannot lead into speech after it, either
+        # from a live decoder or by replaying history into a new speaker's.
+        for state in self._speaker_states.values():
+            state.recent.clear()
+        self._history.clear()
+        if self.selection.owner is None:
+            self._candidate_streams.clear()
+            self.selection._enrollment_controls.clear()
+            self.selection._wake_until.clear()
+            return []
+        if self.selection.candidate is None:
+            self.selection._controls._reset()
+            return []
+        events = self.selection._finish("")
+        self._reset_asr()
+        return events
+
     def _feed(self, audio: bytes) -> list[dict]:
         import torch
 
