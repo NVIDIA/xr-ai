@@ -22,7 +22,7 @@ import {
 } from 'livekit-client';
 
 import { ConnectionState } from '../../ConnectionState.js';
-import { NetworkMetrics, NetworkQuality } from '../../NetworkMetrics.js';
+import { NetworkMetrics, NetworkQuality, cameraNetworkMetrics } from '../../NetworkMetrics.js';
 import { StreamError } from '../../StreamError.js';
 import { MicrophoneMode } from '../../Config/AudioConfig.js';
 import { CameraEncodingConfig } from '../../Config/CameraConfig.js';
@@ -727,6 +727,12 @@ export class LiveKitBackend {
         ? [result.value]
         : []);
 
+      const camera = this.#videoTrack;
+      const cameraReports = camera?.getRTCStatsReport
+        ? await Promise.allSettled([camera.getRTCStatsReport()]) : [];
+      const cameraReport = cameraReports[0]?.status === 'fulfilled' ? cameraReports[0].value : null;
+      const video = camera === this.#videoTrack && camera
+        ? cameraNetworkMetrics(cameraReport, camera.sid) : null;
       let roundTripTimeMs = null;
       let receiveJitterMs = null;
       const stats = reports.flatMap(report => [...report.values()]);
@@ -757,6 +763,7 @@ export class LiveKitBackend {
         quality: mapQuality(room.localParticipant.connectionQuality),
         roundTripTimeMs,
         receiveJitterMs,
+        video,
       }));
     } finally {
       this.#networkMetricsPollActive = false;
