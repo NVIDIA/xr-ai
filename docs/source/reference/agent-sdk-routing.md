@@ -100,6 +100,80 @@ whether it can accept the specific turn. Destinations decline or clarify before
 answer work begins. A clarification returned after answer work starts is an
 error.
 
+## Participant-scoped destination instances
+
+A destination object in the mapping is shared across participants, as before.
+Use `ParticipantAgentFactory` when each participant needs a dedicated agent
+instance with its own workflow state:
+
+```python
+from xr_ai_routing import AgentRouter, ParticipantAgentFactory
+
+async def create_workflow(participant_id):
+    # Models, runtime, and frame source are borrowed application resources.
+    return WorkflowAgent(participant_id, models=models, runtime=runtime)
+
+async def close_workflow(agent):
+    # Stop and drain this instance's independent background work.
+    await agent.close()
+
+router = AgentRouter(
+    {
+        "conversation": conversation,
+        "workflow": ParticipantAgentFactory(create_workflow, close_workflow),
+    },
+    decision_service,
+    output=publish_router_control,
+)
+```
+
+Created instances implement the same `RoutableAgent` protocol as shared agents.
+Every factory is initialized before the first route selection, including routes
+that the participant never selects, because eligibility is supplied by each
+instance's synchronous `routing_aid()`. Runtime join events also initialize
+instances. Repeated joins reuse the initialized instances; a successful departure
+followed by an explicit runtime join creates new instances, even for the same
+participant ID. There is no reconnect grace period. A direct router without
+runtime lifecycle admission permits a fresh later turn after successful cleanup.
+
+`create` must return a fully initialized, dedicated instance. It owns partial
+allocations until it returns, so it must clean them if initialization raises or
+is cancelled. The router records returned instances before checking cancellation;
+a factory that returns late after cancellation cannot leak its instance into a
+later participant lifetime. A partial batch is closed before another batch can
+be created. Returning a shared or already-owned instance is an error; the router
+does not close an object belonging to another owner. Registering the same factory
+descriptor under multiple route names is also an error; route aliases are not
+introduced by this API.
+
+`close` is the sole departure disposer for factory-created instances; their
+optional `participant_left()` hook is not additionally called. It must be
+idempotent and retryable, and success must mean the instance's independent work
+has drained. Ordinary routed turn interruption and focus release retain the
+instance; they do not stop its independent workflow. Shared destinations keep
+the existing `participant_left()`/`release()` behavior.
+
+On departure or shutdown, the router first drains in-flight routed turns and
+initialization, then closes every owned instance in reverse creation order.
+It attempts independent closes even if one fails and retains failed instances
+for explicit cleanup retry. A disposer propagating `CancelledError` is reported
+as an incomplete-close failure (with the cancellation as its cause), so it cannot
+abandon cleanup of other instances or participants. Successful closes are not repeated. A scoped close
+failure blocks rejoin and defers the application's `cleanup_participant` hook:
+that hook may release images, context, or other resources that live workflow work
+still uses. After all scoped closes succeed, application cleanup runs. Failed
+application cleanup remains owned even if no scoped instances remain and is
+retried before a new factory batch is allocated. Routers with only shared
+destinations retain their existing cleanup-error behavior.
+
+Shared model clients and room resources remain application-owned. Closing one
+participant must not close clients borrowed by other participants. `stop()`
+closes initialized and partially initialized instances, including those created
+by joins without queries; it does not create instances for an empty room. The
+application still awaits router shutdown before closing shared resources or its
+runtime. Standard async context-manager factories are not accepted as a separate
+contract: a one-shot context-manager exit cannot reliably retry failed cleanup.
+
 ## Response progress and routing context
 
 The router calls `answer(turn, started=...)`. Destinations await `started()`
