@@ -173,7 +173,7 @@ def test_web_event_config_defaults_and_validation(
     )
 
     custom_gate = tmp_path / "custom-voice.yaml"
-    custom_gate.write_text("mode: hybrid\nmagic_phrases: [hey agent]\n", encoding="utf-8")
+    custom_gate.write_text("mode: hybrid\nmagic_phrases: [hey assistant]\n", encoding="utf-8")
     custom_source = tmp_path / "custom-worker.yaml"
     custom_source.write_text(
         (_SAMPLE / "yaml/tea_making_worker.yaml")

@@ -32,7 +32,7 @@ from xr_ai_voicegate import load_voice_gate_config
 def _config(tmp_path, mode, *, speaker=True, stop_enabled=True):
     path = tmp_path / "voice_gate.yaml"
     path.write_text(yaml.safe_dump({
-        "mode": mode, "magic_phrases": ["hey agent"], "listening_chime": False,
+        "mode": mode, "magic_phrases": ["hey assistant"], "listening_chime": False,
         "speaker": {"enabled": speaker, "backend": "required"}, "stop_commands_enabled": stop_enabled,
     }))
     return load_voice_gate_config(path)
@@ -67,7 +67,7 @@ def test_attributed_turn_never_enrolls_bystander_or_question_speaker(tmp_path, m
     selection = _Selection(_config(tmp_path, mode)._speaker)
     events = selection._enroll_completed([
         (1, "unrelated background conversation", 0, False),
-        (7, "hey agent describe the room", 100, False),
+        (7, "hey assistant describe the room", 100, False),
     ], completed_at_us=1000)
     assert events == [{"kind": "one_shot", "text": "describe the room", "pts_us": 100,
                        "speaker_id": 7, "fresh_match": True}]
@@ -79,7 +79,7 @@ def test_attributed_turn_never_enrolls_bystander_or_question_speaker(tmp_path, m
 def test_same_boundary_one_turn_ambiguity_never_chooses_a_label(tmp_path, order):
     selection = _Selection(_config(tmp_path, "hybrid")._speaker)
     assert selection._enroll_completed([
-        (speaker, "hey agent describe this", 0, False) for speaker in order
+        (speaker, "hey assistant describe this", 0, False) for speaker in order
     ], completed_at_us=100) == []
     assert selection.owner is None
     assert selection._enroll_completed([
@@ -90,14 +90,15 @@ def test_same_boundary_one_turn_ambiguity_never_chooses_a_label(tmp_path, order)
 
 def test_same_speaker_followup_uses_onset_not_completion_and_is_consumed(tmp_path):
     selection = _Selection(_config(tmp_path, "hybrid")._speaker)
-    assert selection._enroll_completed([(7, "hey agent", 0, False)], completed_at_us=1000)[0]["kind"] == "wake_ready"
+    events = selection._enroll_completed([(7, "hey assistant", 0, False)], completed_at_us=1000)
+    assert events[0]["kind"] == "wake_ready"
     assert selection._enroll_completed([(1, "bystander query", 2000, False)], completed_at_us=3000) == []
     # Existing five-second grace: question starts inside, finishes after it.
     events = selection._enroll_completed([(7, "the question", 4_000_000, False)], completed_at_us=9_000_000)
     assert events[0]["text"] == "the question" and events[0]["fresh_match"] is False
     assert selection.owner is None
     assert selection._enroll_completed([(7, "second query", 10_000_000, False)], completed_at_us=11_000_000) == []
-    selection._enroll_completed([(7, "hey agent", 12_000_000, False)], completed_at_us=13_000_000)
+    selection._enroll_completed([(7, "hey assistant", 12_000_000, False)], completed_at_us=13_000_000)
     assert selection._enroll_completed([(7, "expired", 19_000_000, False)], completed_at_us=20_000_000) == []
 
 
@@ -106,7 +107,7 @@ def test_followup_disabled_or_at_expiry_never_authorizes(tmp_path, grace, onset)
     from dataclasses import replace
 
     selection = _Selection(replace(_config(tmp_path, "hybrid")._speaker, followup_grace_s=grace))
-    selection._enroll_completed([(7, "hey agent", 0, False)], completed_at_us=1000)
+    selection._enroll_completed([(7, "hey assistant", 0, False)], completed_at_us=1000)
     assert selection._enroll_completed([(7, "not addressed", onset, False)], completed_at_us=onset + 100) == []
 
 
@@ -127,13 +128,83 @@ async def test_complete_speaker_turn_acknowledges_wake_once(tmp_path, mode):
 
 def test_partial_start_control_is_not_a_turn_and_unique_full_start_owns(tmp_path):
     selection = _Selection(_config(tmp_path, "hybrid")._speaker)
-    assert selection._enroll_completed([(7, "hey agent let's", 0, False)], completed_at_us=100) == []
+    assert selection._enroll_completed([(7, "start", 0, False)], completed_at_us=100) == []
     assert selection.owner is None
     events = selection._enroll_completed([
-        (1, "hey agent a different question", 1000, False),
-        (7, "start talking", 1000, False),
+        (1, "hey assistant a different question", 1000, False),
+        (7, "talking to me", 1000, False),
     ], completed_at_us=2000)
     assert events == [{"kind": "enrolled"}] and selection.owner == 7
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("use_speaker", [False, True])
+@pytest.mark.parametrize("complete_control", [False, True])
+async def test_custom_wake_prefixed_controls_keep_split_wake_behavior(tmp_path, use_speaker, complete_control):
+    path = tmp_path / "voice_gate.yaml"
+    path.write_text(yaml.safe_dump({
+        "mode": "hybrid", "magic_phrases": ["hey agent"], "listening_chime": False,
+        "speaker": {"enabled": use_speaker},
+        "conversation": {"start_phrase": "Hey agent, let's start talking",
+                         "stop_phrase": "Hey agent, let's stop talking", "require_wake_phrase": True},
+    }))
+    cfg = load_voice_gate_config(path)
+    gate = VoiceGateProcessor(cfg=cfg, tts=SimpleNamespace())
+    gate.push_frame = AsyncMock()
+    selection = _Selection(cfg._speaker) if use_speaker else None
+    audio = _SpeakerSttProcessor(cfg=cfg._speaker) if use_speaker else None
+    if audio:
+        async def forward(frame, *_args):
+            await gate.process_frame(frame, FrameDirection.DOWNSTREAM)
+        audio.push_frame = forward
+    now = 0
+
+    async def speak(text):
+        nonlocal now
+        now += 100_000
+        if audio:
+            if selection.owner is None:
+                events = selection._enroll_completed([(7, text, now, False)], completed_at_us=now + 10_000)
+            else:
+                selection._activity({7}, 0.1, now)
+                events = selection._finish(text)
+            for event in events:
+                await audio._event("a", event)
+        else:
+            frame = TranscriptionFrame(text=text, user_id="a", timestamp="now")
+            frame.transport_source, frame.pts = "a", now * 1000
+            await gate.process_frame(frame, FrameDirection.DOWNSTREAM)
+
+    def queries():
+        return [c.args[0].text for c in gate.push_frame.call_args_list if isinstance(c.args[0], GatedQueryFrame)]
+
+    try:
+        await speak("Hey")
+        await speak("agent")
+        assert not queries() and "a" not in gate._conversation_active
+        if complete_control:
+            await speak("let's start talking")
+            assert "a" in gate._conversation_active and not queries()
+            if selection:
+                assert selection.owner == 7
+            # The same bare wake inside the open conversation grants one turn;
+            # its withheld words must not be released again as query text.
+            await speak("Hey")
+            await speak("agent")
+        await speak("what is the temperature?")
+        assert queries() == ["what is the temperature?"]
+        assert ("a" in gate._conversation_active) is complete_control
+        if complete_control:
+            await speak("Hey")
+            await speak("agent")
+            await speak("let's stop talking")
+            assert "a" not in gate._conversation_active
+            assert not selection or selection.owner is None
+            assert queries() == ["what is the temperature?"]
+    finally:
+        await gate.cleanup()
+        if audio:
+            await audio.cleanup()
 
 
 @pytest.mark.asyncio
@@ -178,7 +249,7 @@ async def test_actual_gate_and_selection_sequences_match_modes(tmp_path, use_spe
         return [call.args[0] for call in gate.push_frame.call_args_list if isinstance(call.args[0], GatedQueryFrame)]
 
     try:
-        query = await speak("hey agent xyz")
+        query = await speak("hey assistant xyz")
         assert bool(query) is (mode != "conversation")
         assert "a" not in gate._conversation_active
         assert not selection or selection.owner is None
@@ -191,28 +262,22 @@ async def test_actual_gate_and_selection_sequences_match_modes(tmp_path, use_spe
         interruptions = [call for call in gate.push_frame.call_args_list if isinstance(call.args[0], InterruptionFrame)]
         assert bool(interruptions) is (stop_enabled and mode in {"always_on", "wake_only"})
         if mode in {"wake_only", "hybrid"}:
-            assert not await speak("hey agent")
+            assert not await speak("hey assistant")
             assert (await speak("one next utterance"))[0].text == "one next utterance"
             assert not await speak("another utterance")
-        if mode == "hybrid":
-            # Withheld control fragments are judged together, so a split wake
-            # phrase still grants the next utterance.
-            assert not await speak("hey")
-            assert not await speak("agent")
-            assert (await speak("one next utterance"))[0].text == "one next utterance"
         if mode in {"conversation", "hybrid"}:
-            assert not await speak("hey agent let's")
             assert not await speak("start talking")
+            assert not await speak("to me")
             assert "a" in gate._conversation_active
             if selection:
                 assert selection.owner == 7
-                assert not await speak("hey agent bystander question", speaker=1)
+                assert not await speak("hey assistant bystander question", speaker=1)
             assert (await speak("natural speech"))[0].text == "natural speech"
             assert not await speak(cfg._conversation.stop_phrase)
             assert "a" not in gate._conversation_active
             if selection:
                 assert selection.owner is None
-            assert bool(await speak("hey agent after release")) is (mode == "hybrid")
+            assert bool(await speak("hey assistant after release")) is (mode == "hybrid")
         await gate.process_frame(ParticipantLeftFrame("a"), FrameDirection.DOWNSTREAM)
         assert "a" not in gate._conversation_active
     finally:
@@ -246,7 +311,7 @@ async def test_protocol3_peer_is_rejected_without_audio_or_reuse():
         stream = _SpeakerStream(f"http://127.0.0.1:{port}", 1)
         try:
             with pytest.raises(RuntimeError, match="incompatible service"):
-                await stream._open({"mode": "hybrid", "magic_phrases": ["hey agent"]}, 100)
+                await stream._open({"mode": "hybrid", "magic_phrases": ["hey assistant"]}, 100)
         finally:
             await stream._close()
     assert len(observed) == 1 and observed[0]["audio_origin_us"] == 100
@@ -276,7 +341,7 @@ async def test_old_service_health_is_not_absence_or_silent_batch_fallback(tmp_pa
 @pytest.mark.parametrize("grace", [float("nan"), float("inf"), -1, True])
 def test_effective_grace_policy_rejected_before_backend_allocation(tmp_path, grace):
     path = tmp_path / "voice.yaml"
-    path.write_text(yaml.safe_dump({"mode": "hybrid", "magic_phrases": ["hey agent"],
+    path.write_text(yaml.safe_dump({"mode": "hybrid", "magic_phrases": ["hey assistant"],
                                     "followup_grace_s": grace, "speaker": {"enabled": True}}))
     with pytest.raises(ValueError, match="finite and non-negative"):
         load_voice_gate_config(path)
@@ -331,7 +396,7 @@ async def test_real_speaker_producer_websocket_hybrid_to_runtime_without_enrollm
 
     cfg = _config(tmp_path, "hybrid")
     models, activity, _calls, _masks, _allocations, text = _streaming_models
-    recognized = {1: "unrelated continuous background speech", 7: "hey agent describe this"}
+    recognized = {1: "unrelated continuous background speech", 7: "hey assistant describe this"}
     original_step = _Session._step_native
 
     def step(self, *args):

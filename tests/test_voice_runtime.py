@@ -445,7 +445,7 @@ async def test_transcript_subscriber_failure_does_not_block_accepted_query() -> 
     runtime.register("voice", voice)
 
     async with _running_voice(runtime, voice, session):
-        await session.run_options["on_transcript"]("alice", "hey agent listen", 7)
+        await session.run_options["on_transcript"]("alice", "hey assistant listen", 7)
         assert session.handler is not None
         await session.handler(
             VoiceQuery(
@@ -463,11 +463,11 @@ async def test_transcript_subscriber_failure_does_not_block_accepted_query() -> 
 
     assert [query.text for _pid, _source, query in queries.messages] == ["listen"]
     assert [message.text for _pid, _source, message in transcripts.messages] == [
-        "hey agent listen",
+        "hey assistant listen",
         "second utterance",
     ]
     assert session.endpoint.return_data == [
-        DataMessage("alice", CAPTURE_STT_TOPIC, 7, b"hey agent listen"),
+        DataMessage("alice", CAPTURE_STT_TOPIC, 7, b"hey assistant listen"),
         DataMessage("alice", CAPTURE_STT_TOPIC, 8, b"second utterance"),
     ]
 
@@ -484,12 +484,12 @@ async def test_blocked_transcript_subscriber_does_not_block_accepted_query() -> 
 
     async with _running_voice(runtime, voice, session):
         await asyncio.wait_for(
-            session.run_options["on_transcript"]("alice", "hey agent listen", 7),
+            session.run_options["on_transcript"]("alice", "hey assistant listen", 7),
             0.1,
         )
         await asyncio.wait_for(blocker.started.wait(), 1.0)
         assert session.endpoint.return_data == [
-            DataMessage("alice", CAPTURE_STT_TOPIC, 7, b"hey agent listen")
+            DataMessage("alice", CAPTURE_STT_TOPIC, 7, b"hey assistant listen")
         ]
         assert session.handler is not None
         await asyncio.wait_for(
@@ -824,8 +824,8 @@ async def test_untopiced_hub_data_bypasses_speech_gate_as_typed_queries(
 
         typed_queries = (
             (2, b"describe the room"),
-            (3, b"hey agent describe the room"),
-            (4, b"hey agent let's start talking"),
+            (3, b"hey assistant describe the room"),
+            (4, b"start talking to me"),
         )
         for pts_us, data in typed_queries:
             await connector.push_data(DataMessage("alice", "", pts_us, data))
@@ -840,8 +840,8 @@ async def test_untopiced_hub_data_bypasses_speech_gate_as_typed_queries(
 
     assert session.queries == [
         ("alice", "describe the room", 2),
-        ("alice", "hey agent describe the room", 3),
-        ("alice", "hey agent let's start talking", 4),
+        ("alice", "hey assistant describe the room", 3),
+        ("alice", "start talking to me", 4),
     ]
 
 

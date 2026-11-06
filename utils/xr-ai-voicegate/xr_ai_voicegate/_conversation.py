@@ -9,6 +9,8 @@ import math
 import re
 from dataclasses import dataclass, fields
 
+from ._phrases import STOP_RE
+
 
 def _normalize(text: str) -> str:
     words = re.findall(r"\w+", text.casefold().replace("'", "").replace("’", ""))
@@ -21,8 +23,8 @@ def _letters(text: str) -> str:
 
 @dataclass(frozen=True)
 class _ConversationConfig:
-    start_phrase: str = "Hey agent, let's start talking"
-    stop_phrase: str = "Hey agent, let's stop talking"
+    start_phrase: str = "Start talking to me"
+    stop_phrase: str = "Stop talking to me"
     require_wake_phrase: bool = False
     phrase_window_s: float = 6.0
 
@@ -62,6 +64,10 @@ class _ConversationConfig:
         return _normalize(text) == _normalize(self.stop_phrase)
 
     def _could_be_control(self, text: str) -> bool:
+        # A global STOP such as "stop" or "stop talking" also opens the stop phrase. It interrupts at once; only
+        # the complete stop phrase closes the conversation.
+        if STOP_RE.match(text):
+            return False
         words = _normalize(text)
         return any(_normalize(p).startswith(words) for p in (self.start_phrase, self.stop_phrase))
 
@@ -69,8 +75,9 @@ class _ConversationConfig:
 class _ControlMatcher:
     """Join only exact control-phrase prefixes from one source in a bounded window."""
 
-    def __init__(self, cfg: _ConversationConfig) -> None:
+    def __init__(self, cfg: _ConversationConfig, *, stop_commands_enabled: bool = True) -> None:
         self.cfg = cfg
+        self._stop_commands_enabled = stop_commands_enabled
         self._key: object = None
         self._started_s = 0.0
         self._words = ""
@@ -89,7 +96,7 @@ class _ControlMatcher:
     def _feed(self, text: str, *, key: object, at_s: float) -> str | None:
         self._released = ""
         # Fragments join on letters, not words: an utterance boundary can fall
-        # inside a word ("hey ag" + "ent, let's start talking").
+        # inside a word ("start tal" + "king to me").
         words = _letters(text)
         if not words:
             self._reset()
@@ -105,21 +112,24 @@ class _ControlMatcher:
             if words == phrase or combined == phrase:
                 self._reset()
                 return action
+        # STOP acts immediately but may still complete a configured control.
+        # Keep recognition state, not withheld or replayable query text.
+        stop = self._stop_commands_enabled and STOP_RE.match(text) is not None
         if any(phrase.startswith(combined) for phrase in controls.values()):
             if not self._words:
                 self._started_s = at_s
             self._words = combined
-            self._held = f"{self._held} {text.strip()}".strip()
+            self._held = "" if stop else f"{self._held} {text.strip()}".strip()
             self._key = key
-            return "pending"
+            return None if stop else "pending"
         held = self._held
         self._reset()
         if any(phrase.startswith(words) for phrase in controls.values()):
             self._words = words
             # The earlier fragments are speech too; they lead this one.
-            self._held = f"{held} {text.strip()}".strip()
+            self._held = "" if stop else f"{held} {text.strip()}".strip()
             self._key = key
             self._started_s = at_s
-            return "pending"
-        self._released = held
+            return None if stop else "pending"
+        self._released = "" if stop else held
         return None

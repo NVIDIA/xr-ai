@@ -748,7 +748,7 @@ def test_released_speaker_does_not_carry_its_last_word_into_reenrollment(_stream
 
     models, activity, _calls, _masks, _allocations, _text = _streaming_models
     # The stop phrase's last word is decoded in the quiet step that ends it.
-    words = {1: "hey agent, let's stop", 2: " talking", 3: "hey agent, let's start talking"}
+    words = {1: "stop talking", 2: " to me", 3: "start talking to me"}
 
     def decode(**kwargs):
         previous = kwargs["previous_hypotheses"]
