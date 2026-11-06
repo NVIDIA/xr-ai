@@ -75,8 +75,9 @@ class _ConversationConfig:
 class _ControlMatcher:
     """Join only exact control-phrase prefixes from one source in a bounded window."""
 
-    def __init__(self, cfg: _ConversationConfig) -> None:
+    def __init__(self, cfg: _ConversationConfig, *, stop_commands_enabled: bool = True) -> None:
         self.cfg = cfg
+        self._stop_commands_enabled = stop_commands_enabled
         self._key: object = None
         self._started_s = 0.0
         self._words = ""
@@ -100,12 +101,6 @@ class _ControlMatcher:
         if not words:
             self._reset()
             return None
-        if STOP_RE.match(text):
-            # A global STOP is never part of a control; fragments held before it are released unchanged.
-            held = self._held
-            self._reset()
-            self._released = held
-            return None
         controls = {
             "start": _letters(self.cfg.start_phrase),
             "stop": _letters(self.cfg.stop_phrase),
@@ -117,21 +112,24 @@ class _ControlMatcher:
             if words == phrase or combined == phrase:
                 self._reset()
                 return action
+        # STOP acts immediately but may still complete a configured control.
+        # Keep recognition state, not withheld or replayable query text.
+        stop = self._stop_commands_enabled and STOP_RE.match(text) is not None
         if any(phrase.startswith(combined) for phrase in controls.values()):
             if not self._words:
                 self._started_s = at_s
             self._words = combined
-            self._held = f"{self._held} {text.strip()}".strip()
+            self._held = "" if stop else f"{self._held} {text.strip()}".strip()
             self._key = key
-            return "pending"
+            return None if stop else "pending"
         held = self._held
         self._reset()
         if any(phrase.startswith(words) for phrase in controls.values()):
             self._words = words
             # The earlier fragments are speech too; they lead this one.
-            self._held = f"{held} {text.strip()}".strip()
+            self._held = "" if stop else f"{held} {text.strip()}".strip()
             self._key = key
             self._started_s = at_s
-            return "pending"
-        self._released = held
+            return None if stop else "pending"
+        self._released = "" if stop else held
         return None

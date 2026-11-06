@@ -22,12 +22,15 @@ from xr_ai_voicegate import load_voice_gate_config
 from xr_ai_voicegate._conversation import _ControlMatcher, _ConversationConfig
 
 
-def _config(tmp_path, *, require_wake=False, enabled=True):
+def _config(tmp_path, *, require_wake=False, enabled=True, stop_phrase="Stop talking to me",
+            stop_commands_enabled=True):
     path = tmp_path / "voice.yaml"
     path.write_text(yaml.safe_dump({
         "magic_phrases": ["hey assistant"], "listening_chime": False,
+        "stop_commands_enabled": stop_commands_enabled,
         "conversation": {"enabled": enabled, "require_wake_phrase": require_wake,
-                         "start_phrase": "Start talking to me", "phrase_window_s": 6},
+                         "start_phrase": "Start talking to me", "stop_phrase": stop_phrase,
+                         "phrase_window_s": 6},
     }))
     return load_voice_gate_config(path)
 
@@ -57,13 +60,32 @@ def test_global_stop_words_are_not_control_prefixes(text, could_be):
     assert _ConversationConfig()._could_be_control(text) is could_be
 
 
-def test_global_stop_is_never_withheld_and_releases_held_fragments():
+def test_global_stop_is_not_withheld_or_replayed_as_query_text():
     matcher = _ControlMatcher(_ConversationConfig())
     assert matcher._feed("stop", key="a", at_s=0) is None and matcher._released == ""
     assert matcher._feed("Star.", key="a", at_s=1) == "pending"
     assert matcher._feed("stop talking", key="a", at_s=2) is None
-    assert matcher._released == "Star."
+    assert matcher._released == matcher._held == ""
+    assert matcher._words == "stoptalking"
+    assert matcher._feed("what time is it", key="a", at_s=3) is None
+    assert matcher._released == ""
     assert matcher._feed("stop talking to me", key="a", at_s=3) == "stop"
+
+
+@pytest.mark.parametrize("key,seconds", [("b", 1), ("a", 6.1), ("a", -1)])
+def test_immediate_stop_does_not_join_controls_across_source_or_window(key, seconds):
+    matcher = _ControlMatcher(_ConversationConfig())
+    assert matcher._feed("Stop talking", key="a", at_s=0) is None
+    assert matcher._feed("to me", key=key, at_s=seconds) is None
+    assert matcher._released == ""
+
+
+def test_disabled_stop_keeps_prefix_as_withheld_control():
+    matcher = _ControlMatcher(_ConversationConfig(), stop_commands_enabled=False)
+    assert matcher._feed("Stop talking", key="a", at_s=0) == "pending"
+    assert matcher._held == "Stop talking"
+    assert matcher._feed("about tea", key="a", at_s=1) is None
+    assert matcher._released == "Stop talking"
 
 
 @pytest.mark.parametrize("key,seconds", [("b", 1), ("a", 6.1), ("a", -1)])
@@ -106,7 +128,8 @@ def test_unrelated_and_empty_transcripts_clear_fragments():
 
 @pytest.fixture
 async def harness(tmp_path, monkeypatch, request):
-    cfg = _config(tmp_path, require_wake=getattr(request, "param", False))
+    param = getattr(request, "param", False)
+    cfg = _config(tmp_path, **({"require_wake": param} if isinstance(param, bool) else param))
     stt, captions, accepted = SimpleNamespace(transcribe=AsyncMock()), AsyncMock(), []
 
     class Detector:
@@ -156,6 +179,51 @@ async def harness(tmp_path, monkeypatch, request):
     await gate.cleanup()
     await output.cleanup()
     transport.shutdown()
+
+
+@pytest.mark.parametrize("harness,parts", [
+    ({}, ["Stop talking", "to me"]),
+    ({}, ["Stop talking.", "To me."]),
+    ({}, ["Stop", "talking to me"]),
+    ({}, ["Stop", "talking", "to", "me"]),
+    ({"stop_phrase": "Stop speaking to me"}, ["Stop speaking", "to me"]),
+    ({"stop_phrase": "Stop it"}, ["Stop it"]),
+    ({"stop_phrase": "Stop talking"}, ["Stop talking"]),
+], indirect=["harness"])
+async def test_stop_interrupts_immediately_and_completes_configured_control(harness, parts):
+    h = harness
+    await h.speak("Start talking to me")
+    h.emitted.clear()
+    await h.speak(parts[0])
+    assert any(isinstance(frame, InterruptionFrame) for frame in h.emitted)
+    for part in parts[1:]:
+        assert "a" in h.gate._conversation_active
+        await h.speak(part)
+    assert "a" not in h.gate._conversation_active
+    assert not h.accepted
+
+
+async def test_interrupted_prefix_is_not_replayed_before_next_query(harness):
+    h = harness
+    await h.speak("Start talking to me")
+    await h.speak("Stop talking")
+    await h.speak("What time is it?")
+    assert [query.text for query in h.accepted] == ["What time is it?"]
+    assert "a" in h.gate._conversation_active
+
+
+@pytest.mark.parametrize("harness", [{"stop_commands_enabled": False}], indirect=True)
+async def test_disabled_stop_does_not_discard_ordinary_prefix(harness):
+    h = harness
+    await h.speak("Start talking to me")
+    h.emitted.clear()
+    await h.speak("Stop talking")
+    assert not any(isinstance(frame, InterruptionFrame) for frame in h.emitted)
+    await h.speak("about tea")
+    assert [query.text for query in h.accepted] == ["Stop talking about tea"]
+    await h.speak("Stop talking")
+    await h.speak("to me")
+    assert "a" not in h.gate._conversation_active
 
 
 @pytest.mark.parametrize("harness", [False, True], indirect=True)

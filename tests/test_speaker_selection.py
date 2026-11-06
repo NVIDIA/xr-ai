@@ -128,6 +128,38 @@ def test_start_and_stop_controls_can_span_utterances():
     assert selection._finish("me")[-1] == {"kind": "released"}
 
 
+@pytest.mark.parametrize("parts,phrase", [
+    (["Stop talking", "to me"], "Stop talking to me"),
+    (["Stop", "talking", "to", "me"], "Stop talking to me"),
+    (["Stop speaking", "to me"], "Stop speaking to me"),
+    (["Stop it"], "Stop it"),
+])
+def test_immediate_stop_can_complete_the_owner_release(parts, phrase):
+    selection = _Selection(_SpeakerConfig(stop_phrase=phrase))
+    _enroll(selection, 7)
+    for index, text in enumerate(parts):
+        selection._activity({7}, 0.3, index * 1_000_000)
+        event = selection._finish(text)[-1]
+        if index == len(parts) - 1:
+            assert event == {"kind": "released"}
+            assert selection.owner is None
+        else:
+            assert selection.owner == 7
+            if index == 0:
+                assert event["kind"] == "transcript" and event["text"] == text
+                assert event["released"] == ""
+
+
+def test_disabled_stop_preserves_speaker_control_prefix_as_ordinary_speech():
+    selection = _Selection(_SpeakerConfig(stop_commands_enabled=False))
+    _enroll(selection, 7)
+    selection._activity({7}, 0.3, 0)
+    assert selection._finish("Stop talking")[-1]["kind"] == "control_pending"
+    selection._activity({7}, 0.3, 1_000_000)
+    event = selection._finish("about tea")[-1]
+    assert event["text"] == "about tea" and event["released"] == "Stop talking"
+
+
 def test_withheld_fragment_is_released_with_the_next_transcript():
     selection = _Selection(_SpeakerConfig())
     selection.owner = 7

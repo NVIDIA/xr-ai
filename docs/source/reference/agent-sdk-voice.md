@@ -263,9 +263,14 @@ next utterance within `phrase_window_s` decides what the withheld words were:
   to the joined text.
 
 A global STOP (`stop`, `stop talking`) is never withheld, although it begins the
-default stop phrase: it interrupts at once, and only the complete stop phrase
-closes the conversation. Wake phrases are not control prefixes, so a wake phrase
-split across final results is not joined.
+default stop phrase: it interrupts at once. Its valid control prefix remains
+recognizable in the same source and time window, so `Stop talking` followed by
+`to me` still closes the conversation. The interrupted words are never replayed
+as query text. An exact configured control takes precedence over global STOP;
+with `stop_commands_enabled: false`, prefixes use normal control withholding.
+With the default control phrases, wake phrases are not control prefixes, so a
+wake phrase split across final results is not joined. Custom wake-prefixed
+controls retain prefix joining and the bare-wake follow-up behavior above.
 
 In every other case the withheld words are discarded: a control or STOP ran,
 no conversation is active, the next utterance comes from another speaker, is

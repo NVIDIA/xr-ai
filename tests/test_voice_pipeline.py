@@ -765,14 +765,19 @@ async def test_stop_policy_with_probes_and_final_transcripts(
         stt.texts = [final_text]
         await _StagedVad.instances[-1].trigger_utterance()
         final_stop = active and stop_enabled and text == "stop"
+        # With STOP disabled, "stop" is an ordinary prefix of the configured
+        # close control, withheld until the next transcript resolves it.
+        control_pending = conversation == "open" and not stop_enabled and text == "stop"
         assert any(isinstance(f, InterruptionFrame) for f in emitted) == final_stop
         assert [f.text for f in emitted if isinstance(f, TextFrame)] == (
             ["Okay, I will stop."] if final_stop else []
         )
         assert [f.text for f in emitted if isinstance(f, GatedQueryFrame)] == (
-            [text] if active and not final_stop else []
+            [text] if active and not final_stop and not control_pending else []
         )
-        assert [call.args[1] for call in transcripts.await_args_list] == ([final_text] if active else [])
+        assert [call.args[1] for call in transcripts.await_args_list] == (
+            [final_text] if active and not control_pending else []
+        )
     finally:
         await proc.cleanup()
         await gate.cleanup()
