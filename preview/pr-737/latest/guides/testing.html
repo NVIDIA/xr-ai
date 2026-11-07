@@ -536,6 +536,12 @@ indicator; those checks require a physical device and a running server.</p>
 </section>
 <section id="coverage-boundaries">
 <h2>Coverage boundaries<a class="headerlink" href="#coverage-boundaries" title="Link to this heading">#</a></h2>
+<p>For manual voice checks with the shipped conversation-mode sample YAML, say
+<code class="docutils literal notranslate"><span class="pre">Start</span> <span class="pre">talking</span> <span class="pre">to</span> <span class="pre">me</span></code>, ask a question, then say <code class="docutils literal notranslate"><span class="pre">Stop</span> <span class="pre">talking</span> <span class="pre">to</span> <span class="pre">me</span></code> to close
+the conversation. A short <code class="docutils literal notranslate"><span class="pre">stop</span></code> interrupts without closing it. When checking
+wake-required or hybrid behavior, use <code class="docutils literal notranslate"><span class="pre">assistant</span></code> or <code class="docutils literal notranslate"><span class="pre">hey</span> <span class="pre">assistant</span></code>. For
+retained private YAML, use its configured phrases instead; adopting new sample
+defaults does not rewrite that configuration.</p>
 <p>The suite includes:</p>
 <ul class="simple">
 <li><p>package API and model-profile behavior;</p></li>

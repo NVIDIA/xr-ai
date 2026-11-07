@@ -733,12 +733,16 @@ the package’s batch-STT defaults.</p>
 <p id="voice-sample-conversation-defaults">Simple VLM, Conversation, lab monitoring, tea making, and XR render select
 <code class="docutils literal notranslate"><span class="pre">conversation</span></code>. Procedure capture and guidance uses <code class="docutils literal notranslate"><span class="pre">always_on</span></code> for commands
 and narration. For a conversation-mode sample, say
-<code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">start</span> <span class="pre">talking</span></code> after connecting and
-<code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">stop</span> <span class="pre">talking</span></code> to close the conversation.
+<code class="docutils literal notranslate"><span class="pre">Start</span> <span class="pre">talking</span> <span class="pre">to</span> <span class="pre">me</span></code> after connecting and
+<code class="docutils literal notranslate"><span class="pre">Stop</span> <span class="pre">talking</span> <span class="pre">to</span> <span class="pre">me</span></code> to close the conversation.
 Select <code class="docutils literal notranslate"><span class="pre">wake_only</span></code> for addressed turns, <code class="docutils literal notranslate"><span class="pre">hybrid</span></code> for addressed turns alongside
 conversations, or <code class="docutils literal notranslate"><span class="pre">always_on</span></code> for ungated dispatch. <code class="docutils literal notranslate"><span class="pre">wake_only</span></code> and <code class="docutils literal notranslate"><span class="pre">hybrid</span></code>
 require non-empty <code class="docutils literal notranslate"><span class="pre">magic_phrases</span></code>. Set <code class="docutils literal notranslate"><span class="pre">conversation.require_wake_phrase:</span> <span class="pre">true</span></code>
 to require wake phrases during an active conversation.</p>
+<p>The sample wake phrases change from <code class="docutils literal notranslate"><span class="pre">agent</span></code> and <code class="docutils literal notranslate"><span class="pre">hey</span> <span class="pre">agent</span></code> to <code class="docutils literal notranslate"><span class="pre">assistant</span></code> and
+<code class="docutils literal notranslate"><span class="pre">hey</span> <span class="pre">assistant</span></code>. Retained private YAML keeps its configured <code class="docutils literal notranslate"><span class="pre">magic_phrases</span></code>
+and conversation controls; these values are not rewritten automatically.
+Update private configuration explicitly to adopt the new phrases.</p>
 <p>In conversation mode, only accepted final transcripts during an active
 conversation reach <code class="docutils literal notranslate"><span class="pre">VOICE_TRANSCRIPT_TOPIC</span></code>; hybrid mode also delivers accepted
 closed-state one-off questions. Applications needing ungated final transcripts

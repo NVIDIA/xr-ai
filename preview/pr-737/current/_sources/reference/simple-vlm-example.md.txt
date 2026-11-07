@@ -129,8 +129,8 @@ persistent stack, and start it again before restarting this sample.
 Refer to the generated {doc}`configuration <configuration>` reference for exact
 fields, checked-in values, and adjacent YAML comments.
 
-After connecting, say `Hey agent, let's start talking`, then ask questions
-without a wake phrase. Say `Hey agent, let's stop talking` to finish. These
+After connecting, say `Start talking to me`, then ask questions
+without a wake phrase. Say `Stop talking to me` to finish. These
 controls work with the sample's existing STT endpoint, including NIM. Refer to
 {ref}`voice-conversation-controls` for paused phrases and the legacy wake mode.
 

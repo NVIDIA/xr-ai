@@ -196,8 +196,8 @@ once against the packaged baseline.
 The `simple-vlm-example`, `conversation-example`, `tea-making-sample`,
 `lab-instrument-monitoring`, and `xr-render-demo` samples start with microphone
 conversation closed.
-After connecting, say `Hey agent, let's start talking`, then speak naturally
-without a wake phrase. Say `Hey agent, let's stop talking` to close the
+After connecting, say `Start talking to me`, then speak naturally
+without a wake phrase. Say `Stop talking to me` to close the
 conversation and interrupt the current response. A short `stop` interrupts the
 response while keeping the conversation open.
 
@@ -218,16 +218,16 @@ choose another interaction policy without maintaining a separate preset copy.
 
 ```yaml
 mode: hybrid
-magic_phrases: ["hey agent"]
+magic_phrases: ["assistant", "hey assistant"]
 ```
 
-While closed, `Hey agent, what is this?` answers one question without opening
+While closed, `Hey assistant, what is this?` answers one question without opening
 the conversation or registering a persistent speaker. The next unaddressed
-utterance is ignored. `Hey agent` alone permits one next utterance in the
+utterance is ignored. `Hey assistant` alone permits one next utterance in the
 existing `followup_grace_s` window; its onset must be in the window, but it may
 finish later. Speaker ASR binds that permission to the same recognized speaker.
 This temporary permission is not speaker registration or an idle conversation
-timeout. A control prefix such as `Hey agent, let's` is withheld, never sent
+timeout. A control prefix such as `Start talking` is withheld, never sent
 as a question, and consumes an earlier bare-wake permission; it does not preserve
 that permission for a third utterance. The complete start phrase opens the conversation.
 
@@ -238,16 +238,16 @@ misplaced controls are rejected instead of silently replaced by defaults.
 
 ```yaml
 conversation:
-  start_phrase: "Hey agent, let's start talking"
-  stop_phrase: "Hey agent, let's stop talking"
+  start_phrase: "Start talking to me"
+  stop_phrase: "Stop talking to me"
   require_wake_phrase: false
   phrase_window_s: 6.0
 ```
 
 Matching ignores case, punctuation, apostrophes, and spacing; `let us` also
 matches `let's`. Exact control prefixes can span final STT results, and a
-boundary may fall inside a word: `Hey agent` (or `Hey ag`), followed by
-`let's start talking` (or `ent, let's start talking`), starts the conversation
+boundary may fall inside a word: `Start talking` (or `Start tal`), followed by
+`to me` (or `king to me`), starts the conversation
 if their speech onsets fall within `phrase_window_s`.
 
 An utterance that could begin a control phrase is withheld. The same speaker's
@@ -260,10 +260,19 @@ next utterance within `phrase_window_s` decides what the withheld words were:
 - Otherwise the withheld words were speech. In an active conversation they lead
   that utterance's transcript, which is handled as if spoken unsplit: the agent
   query keeps every word, and with `require_wake_phrase` the wake rule applies
-  to the joined text. The exception is withheld words that together form only
-  a wake phrase under `require_wake_phrase`: they already opened its follow-up
-  window when withheld, so they are not released again. A wake phrase split
-  across final results (`Hey` | `agent`) counts as one.
+  to the joined text. With a custom wake-prefixed control, withheld words that
+  form only a wake phrase can open the bare-wake follow-up window. They are not
+  released again as query text when wake phrases are required.
+
+A global STOP (`stop`, `stop talking`) is never withheld, although it begins the
+default stop phrase: it interrupts at once. Its valid control prefix remains
+recognizable in the same source and time window, so `Stop talking` followed by
+`to me` still closes the conversation. The interrupted words are never replayed
+as query text. An exact configured control takes precedence over global STOP;
+with `stop_commands_enabled: false`, prefixes use normal control withholding.
+With the default control phrases, wake phrases are not control prefixes, so a
+wake phrase split across final results is not joined. Custom wake-prefixed
+controls retain prefix joining and the bare-wake follow-up behavior above.
 
 In every other case the withheld words are discarded: a control or STOP ran,
 no conversation is active, the next utterance comes from another speaker, is
@@ -328,9 +337,9 @@ whitespace or a closing quote. Text before the boundary and the phrase are
 removed. A phrase after a comma, semicolon, or inside ordinary prose does not
 activate the gate. In that mode, partial STOP classification checks both raw
 text and the tail after a configured wake phrase, so `stop` and
-`hey agent stop` interrupt equally early. With natural speech enabled by
+`hey assistant stop` interrupt equally early. With natural speech enabled by
 `conversation.require_wake_phrase: false`, final transcripts remain intact and
-only a standalone short stop uses the global-stop path; `hey agent stop`
+only a standalone short stop uses the global-stop path; `hey assistant stop`
 remains a query.
 
 When enabled, global STOP uses a closed imperative grammar for direct requests
@@ -347,7 +356,7 @@ A partial STOP match emits only an interruption, not a chime or stop
 acknowledgement. Wake recognition may independently emit the optional chime,
 but chime configuration, initialization, or playback does not control probing.
 If the final transcript remains a global stop, normal stop handling emits the
-acknowledgement. If STT revises partial `hey agent stop` to final `hey agent stop
+acknowledgement. If STT revises partial `hey assistant stop` to final `hey assistant stop
 monitoring xyz`, the final transcript instead dispatches `stop monitoring xyz`
 to the agent; the latency-saving interruption is not undone.
 
