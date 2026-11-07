@@ -142,6 +142,14 @@ class ToolDef:
         }
 
 
+ToolChoice = str
+"""``"auto"``, ``"required"``, ``"none"``, or the name of one supplied tool.
+
+``"required"`` forces some tool call and a name forces that tool. Forcing
+needs :attr:`Capabilities.tool_choice`; ``"auto"`` and ``"none"`` do not.
+"""
+
+
 @dataclass(frozen=True)
 class ChatMessage:
     """One input turn in an LLM or VLM conversation."""
@@ -223,6 +231,20 @@ class Capabilities:
 
     reasoning: bool = False
     """Whether the endpoint can return model reasoning."""
+
+    json_schema: bool = False
+    """Whether the endpoint constrains responses to a JSON Schema.
+
+    Declare it only after the structured-output eval passes for the model;
+    requests with ``response_schema`` are rejected otherwise.
+    """
+
+    tool_choice: bool = False
+    """Whether the endpoint can force a tool call with ``tool_choice``.
+
+    Declare it only after the structured-output eval passes for the model;
+    requests that force a call are rejected otherwise.
+    """
 
 
 @dataclass(frozen=True)
@@ -325,6 +347,18 @@ class LLMService(Protocol):
     ``None`` uses the endpoint's configured default.  The endpoint renders it
     in the model's own dialect, and models without a switch ignore it.
     ``thinking_budget`` caps reasoning tokens on servers that enforce it.
+
+    ``response_schema`` constrains the response text to one JSON value
+    matching that JSON Schema; when reasoning may precede the answer, the
+    service also states the schema in the prompt. ``tool_choice`` selects whether and which tool must be called
+    (see :data:`ToolChoice`). Either constraint raises :class:`ValueError` when
+    the endpoint does not declare support, when reasoning is on without a
+    ``thinking_budget``, or when ``max_tokens`` leaves no room after that
+    budget: a model that reasons until the token limit returns no answer.
+    ``response_schema`` cannot be combined with tools. A forced call is
+    always made, but servers may not enforce every rule of its argument
+    schema. Callers still validate the result: a response truncated at
+    ``max_tokens`` is not a complete value.
     """
 
     capabilities: Capabilities
@@ -335,6 +369,8 @@ class LLMService(Protocol):
         messages: Sequence[ChatMessage],
         *,
         tools: Sequence[ToolDef] | None = None,
+        tool_choice: ToolChoice | None = None,
+        response_schema: Mapping[str, Any] | None = None,
         max_tokens: int | None = None,
         temperature: float | None = None,
         enable_thinking: bool | None = None,
@@ -351,6 +387,8 @@ class LLMService(Protocol):
         messages: Sequence[ChatMessage],
         *,
         tools: Sequence[ToolDef] | None = None,
+        tool_choice: ToolChoice | None = None,
+        response_schema: Mapping[str, Any] | None = None,
         max_tokens: int | None = None,
         temperature: float | None = None,
         enable_thinking: bool | None = None,
@@ -367,6 +405,8 @@ class LLMService(Protocol):
         messages: Sequence[ChatMessage],
         *,
         tools: Sequence[ToolDef] | None = None,
+        tool_choice: ToolChoice | None = None,
+        response_schema: Mapping[str, Any] | None = None,
         max_tokens: int | None = None,
         temperature: float | None = None,
         enable_thinking: bool | None = None,

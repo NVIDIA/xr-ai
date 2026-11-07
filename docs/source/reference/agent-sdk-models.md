@@ -135,7 +135,7 @@ refer to {ref}`consumer-model-readiness`.
 | `cosmos3_nano_reasoner` | Cosmos3 Nano VLM | Image; video requires `max_videos_per_prompt >= 1`; no reasoning switch |
 | `cosmos_vlm` | Cosmos-Reason1 compatibility | Image; video requires `max_videos_per_prompt >= 1`; thinking disabled by default |
 | `nemotron3_nano` | Nemotron 3 Nano LLM | Normalizes the `reasoning` field; thinking disabled unless requested |
-| `nemotron_omni` | Nemotron Omni | Tool calls, image and video, `reasoning_content` normalization; thinking disabled unless requested |
+| `nemotron_omni` | Nemotron Omni | Tool calls, forced tool calls and JSON Schema output, image and video, `reasoning_content` normalization; thinking disabled unless requested |
 | `nemotron_embedding` | Embedding server | OpenAI-compatible dense vectors |
 | `nemotron_ocr` | Hugging Face OCR server or OCR NIM 2.0 | Multilingual text, confidence, normalized polygons; `/v1/ocr` |
 | `parakeet_stt` | STT server | OpenAI-compatible transcription |
@@ -195,6 +195,69 @@ boolean is still accepted: with `control: chat_template` or unset it becomes
 `thinking.default`, overriding the preset's, and a call can override it. With
 another control it is sent unchanged. A profile that sets both keys to
 different values is rejected.
+
+(agent-sdk-models-structured-output)=
+## Structured output and forced tool calls
+
+`LLMService.chat`, `stream` and `stream_events` accept two constraints:
+
+- `response_schema`, a JSON Schema mapping (for example a Pydantic model's
+  `model_json_schema()`), limits the response text to one JSON value matching
+  it. It is sent as the OpenAI-compatible `response_format` of type
+  `json_schema`. It cannot be combined with tools.
+- `tool_choice` is `"auto"`, `"none"`, `"required"` (some tool must be called)
+  or the name of one supplied tool (that tool must be called).
+
+Both are applied while the model generates, but they promise different things.
+A supported endpoint returns `response_schema` answers that match the schema.
+A forced tool call is always made, but servers may constrain only the call and
+not every rule of its argument schema: on Nemotron Omni with vLLM's
+`qwen3_coder` tool parser, about 1 in 200 forced calls exceeded a `maxLength` or
+omitted a required field. Native tools validate their arguments and return the
+error to the model, so a tool loop recovers; for one value that must match a
+schema, prefer `response_schema`. Callers still validate every result: a
+response cut off at `max_tokens` is not a complete value.
+
+Support depends on the model and its server, so an adapter declares it in
+`capabilities.json_schema` and `capabilities.tool_choice`. A request using an
+undeclared constraint raises `ValueError` before anything is sent, instead of
+being silently ignored. `"auto"` and `"none"` need no declaration.
+
+Two rules apply to every model:
+
+- When reasoning may precede the answer, the client also states the schema in
+  the system message. Without it, Nemotron Omni with reasoning on sometimes
+  filled the constrained answer with whitespace until the token limit. Without
+  reasoning the client leaves the prompt alone: there the constraint alone kept
+  every answer valid, and stating the schema biased an enum answer toward its
+  first value. Tools already carry their schema, so forced tool calls add
+  nothing.
+- With reasoning on, a constrained request requires `thinking_budget`, and
+  `max_tokens` must exceed it. Reasoning comes before the constrained answer
+  and can otherwise use every token, leaving no answer. An endpoint whose
+  reasoning switch cannot carry a budget (`system_prompt`, or `none` on a model
+  that declares `capabilities.reasoning`) rejects constrained requests that may
+  reason.
+
+### Qualify a model
+
+Before declaring either capability for a new model or server, run the live eval
+in [`agent-sdk/xr-ai-models/eval`](https://github.com/NVIDIA/xr-ai/tree/main/agent-sdk/xr-ai-models/eval)
+against it. It passes only when, with reasoning off and on and through both
+`chat` and `stream_events`, every `response_schema` answer matches its schema
+and every forced tool call is made. Then set the
+capabilities in the preset, or in a deployment profile:
+
+```yaml
+adapter:
+  preset: nemotron3_nano
+  capabilities:
+    json_schema: true
+    tool_choice: true
+```
+
+`nemotron_omni` declares both. The other presets declare neither until they
+have been evaluated.
 
 <a id="protocols"></a>
 (agent-sdk-models-protocols)=
