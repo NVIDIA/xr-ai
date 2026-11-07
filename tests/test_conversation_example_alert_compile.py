@@ -97,23 +97,27 @@ async def test_sections_without_content_are_left_out():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("case", _EVAL_CASES, ids=lambda case: case["name"])
-async def test_future_watch_eval_inputs_reach_the_compiler(case):
-    """Exercise live-eval request assembly without claiming model correctness."""
+async def test_prompt_defines_future_conditions_without_requiring_current_evidence():
     llm = _LLM('{"status":"unclear"}')
-    history = tuple(AgentExchange(item["user"], item["assistant"]) for item in case.get("history", []))
 
-    await compile_alert(llm, case["query"], history=history, context=case.get("context", ""))
+    await compile_alert(llm, "Alert me when a delivery cart is visible.")
 
-    system, user = llm.requests[0]
-    assert user.content.split("\n\n", 1)[0] == f"Alert request:\n{case['query']}"
-    for exchange in history:
-        assert f"User: {exchange.user}\nAssistant: {exchange.assistant}" in user.content
-    if case.get("context"):
-        assert f"Saved context:\n{case['context']}" in user.content
-    assert "Define a trigger for future camera frames" in system.content
-    assert "prior alert requests and prior assistant refusals do not replace it" in system.content
-    assert "not because it is absent now" in system.content
+    system = llm.requests[0][0].content
+    assert "Define a trigger for future camera frames" in system
+    assert "No image is supplied to this compilation step, and none is required" in system
+    assert "A subject missing from a previous scene description is not a reason to reject a future watch" in system
+    assert "prior alert requests and prior assistant refusals do not replace it" in system
+    assert "resolve references or supply identifying details that the current request depends on" in system
+
+
+def test_alert_eval_cases_have_explicit_semantic_expectations():
+    assert len({case["name"] for case in _EVAL_CASES}) == len(_EVAL_CASES)
+    for case in _EVAL_CASES:
+        assert case["query"].strip()
+        assert case["expected_status"] in {"ready", "unclear"}
+        assert ("expected_condition" in case) == (case["expected_status"] == "ready")
+        if case["expected_status"] == "ready":
+            assert case["expected_condition"].strip()
 
 
 @pytest.mark.asyncio

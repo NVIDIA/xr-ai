@@ -1,8 +1,8 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Replay query/history/context through the production compile_alert function
-# with the sample's alert_compile_llm role. These are semantic evaluation cases,
+# run_alert_compile_eval.py replays these inputs through compile_alert with
+# the sample's alert_compile_llm role. These are semantic evaluation cases,
 # not guarantees from the CPU tests or the routing-only decision evaluator.
 # Review the actual condition against expected_condition; status=ready alone
 # is insufficient. Repeat live trials and record latency and token usage.
@@ -13,7 +13,8 @@
     - user: "Describe the corridor."
       assistant: "The corridor is empty, with two closed doors."
   expected_status: ready
-  expected_condition: "A delivery cart is visible; its absence in the earlier view is irrelevant."
+  expected_condition: "A delivery cart is visible."
+  notes: "Its absence in the earlier view must not prevent compilation."
 
 - name: current_request_over_previous_alert_and_refusal
   query: "Alert me when you see an umbrella."
@@ -23,7 +24,8 @@
     - user: "Alert me when I open an umbrella."
       assistant: "I couldn't tell what to watch for. Please say what should trigger the alert."
   expected_status: ready
-  expected_condition: "An umbrella is visible, regardless of whether it is open, closed, held, or moving."
+  expected_condition: "An umbrella is visible."
+  notes: "Opening, holding, or moving the umbrella must not become an additional condition."
 
 - name: no_camera_frame_needed_for_compilation
   query: "Notify me when a bicycle is visible."
@@ -31,7 +33,8 @@
     - user: "What do you see?"
       assistant: "I cannot access a camera in this chat."
   expected_status: ready
-  expected_condition: "A bicycle is visible; no image or camera access is required to define the trigger."
+  expected_condition: "A bicycle is visible."
+  notes: "No image or camera access is required to define the trigger."
 
 - name: history_resolves_required_reference
   query: "Alert me when that item is visible."
@@ -57,3 +60,20 @@
 - name: nonvisual_trigger_still_needs_clarification
   query: "Alert me when I feel anxious."
   expected_status: unclear
+
+- name: identifying_details_from_saved_context
+  query: "Alert me when the kettle is on the hob."
+  context: "The kettle to watch is the blue one on the left."
+  expected_status: ready
+  expected_condition: "The blue kettle on the left is on the hob."
+
+- name: banana_presence_after_raise_refusal
+  query: "Alert me when you see a banana"
+  history:
+    - user: "Describe the desk."
+      assistant: "There is a keyboard, a monitor, and a notebook."
+    - user: "Alert me when I raise a banana"
+      assistant: "I couldn't tell what to watch for. Please say what should trigger the alert."
+  expected_status: ready
+  expected_condition: "A banana is visible."
+  notes: "Synthetic reproduction of the measured failure pattern, not the original recorded session. Raising or holding up the banana is not required."

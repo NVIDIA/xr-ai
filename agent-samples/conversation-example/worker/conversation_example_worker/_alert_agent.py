@@ -50,6 +50,8 @@ _DESCRIPTION = (_PROMPTS / "alert_description.txt").read_text(encoding="utf-8").
 _ALERT = "Alert"
 _CANCELLED = "The visual alert is cancelled."
 _UNCLEAR = "I couldn't tell what to watch for. Please say what should trigger the alert."
+_COMPILE_TIMEOUT_SECS = 30.0
+_COMPILE_TIMED_OUT = "I couldn't set up the new alert in time. Please try again."
 _STOPPED = "I couldn't check the visual alert. It has stopped."
 _NO_ANSWER = DestinationResult("answer", "")
 
@@ -144,7 +146,14 @@ class VisualAlertAgent(RoutableAgent):
                 await self._retire(participant_id)
                 return await self._reply(turn, started, _CANCELLED)
             # Compile under the lock so a departure or shutdown waits for it and then cancels the new job.
-            alert = await self._compile(turn)
+            try:
+                async with asyncio.timeout(_COMPILE_TIMEOUT_SECS):
+                    alert = await self._compile(turn)
+            except TimeoutError:
+                if self._closing:
+                    return _NO_ANSWER
+                logger.warning("alert compilation timed out participant={!r}", participant_id)
+                return await self._reply(turn, started, _COMPILE_TIMED_OUT)
             if self._closing:
                 return _NO_ANSWER
             if alert is None:
