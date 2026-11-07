@@ -11,6 +11,7 @@ from pathlib import Path
 
 import httpx
 import pytest
+import yaml
 from xr_ai_models import Capabilities, ChatResponse, load_models_config, make_llm
 from xr_ai_routing import AgentExchange
 
@@ -21,6 +22,9 @@ from conversation_example_worker._alert_compile import CompiledAlert, compile_al
 from conversation_example_worker.app import _alert_compile_models  # noqa: E402
 
 _READY = {"status": "ready", "condition": " the lamp is blue ", "relevance": " the lamp "}
+_EVAL_CASES = yaml.safe_load(
+    (_ROOT / "agent-samples/conversation-example/eval/alert-compile-cases.yaml").read_text(encoding="utf-8")
+)
 
 
 class _LLM:
@@ -43,7 +47,7 @@ async def test_a_ready_answer_becomes_a_trimmed_watch(wrap):
     llm = _LLM(wrap(json.dumps(_READY)))
 
     assert await compile_alert(llm, "Alert me about the lamp.") == CompiledAlert("the lamp is blue", "the lamp")
-    assert llm.options == [{"enable_thinking": True, "thinking_budget": 256, "max_tokens": 512}]
+    assert llm.options == [{"enable_thinking": True, "thinking_budget": 1024, "max_tokens": 1280}]
 
 
 @pytest.mark.asyncio
@@ -90,6 +94,30 @@ async def test_sections_without_content_are_left_out():
     user = llm.requests[0][-1].content
     assert "Alert me about the lamp." in user
     assert "Recent exchanges" not in user and "Saved context" not in user
+
+
+@pytest.mark.asyncio
+async def test_prompt_defines_future_conditions_without_requiring_current_evidence():
+    llm = _LLM('{"status":"unclear"}')
+
+    await compile_alert(llm, "Alert me when a delivery cart is visible.")
+
+    system = llm.requests[0][0].content
+    assert "Define a trigger for future camera frames" in system
+    assert "No image is supplied to this compilation step, and none is required" in system
+    assert "A subject missing from a previous scene description is not a reason to reject a future watch" in system
+    assert "prior alert requests and prior assistant refusals do not replace it" in system
+    assert "resolve references or supply identifying details that the current request depends on" in system
+
+
+def test_alert_eval_cases_have_explicit_semantic_expectations():
+    assert len({case["name"] for case in _EVAL_CASES}) == len(_EVAL_CASES)
+    for case in _EVAL_CASES:
+        assert case["query"].strip()
+        assert case["expected_status"] in {"ready", "unclear"}
+        assert ("expected_condition" in case) == (case["expected_status"] == "ready")
+        if case["expected_status"] == "ready":
+            assert case["expected_condition"].strip()
 
 
 @pytest.mark.asyncio
@@ -142,8 +170,8 @@ async def test_sample_compiler_limits_reach_the_serialized_request(monkeypatch):
             await llm.close()
 
     (payload,) = payloads
-    assert payload["max_tokens"] == 512
-    assert payload["thinking_token_budget"] == 256
+    assert payload["max_tokens"] == 1280
+    assert payload["thinking_token_budget"] == 1024
     assert payload["chat_template_kwargs"] == {"enable_thinking": True}
     assert payload["temperature"] == 0.25
     assert original.default_extras == {
