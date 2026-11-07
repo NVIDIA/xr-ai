@@ -1,0 +1,156 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Structured-output cases. Each schema is plain JSON Schema, as Pydantic's
+# model_json_schema() emits it. Checks grade the answer, not only its shape:
+#   equals: [accepted values]        contains: [substrings, case-insensitive]
+#   range: [min, max]                min_items: n
+# Paths are JSON Pointers into the answer. Every check must pass on each
+# accept example; at least one must fail on each reject example. The repository
+# tests use them to check the graders offline.
+
+cases:
+  - name: change-important
+    # The tea sample's ChangeDecision model.
+    system: >-
+      You watch a camera for a change the user asked about. Decide whether the
+      new caption shows that change. Summarize it only when it is important.
+    user: >-
+      Watch for: tell me when the kettle boils.
+      Previous caption: A kettle sits on a lit stove; no steam is visible.
+      Current caption: Thick steam pours from the kettle spout and the kettle is whistling.
+    schema:
+      title: ChangeDecision
+      type: object
+      additionalProperties: false
+      properties:
+        important: {title: Important, type: boolean}
+        summary: {title: Summary, type: string, default: "", maxLength: 300}
+      required: [important]
+    checks:
+      - {path: /important, equals: [true]}
+      - {path: /summary, contains: [boil, steam, whistl]}
+    accept: ['{"important": true, "summary": "The kettle is boiling and whistling."}']
+    reject: ['{"important": false, "summary": ""}', '{"important": true, "summary": "Lighting changed."}']
+
+  - name: change-unimportant
+    system: >-
+      You watch a camera for a change the user asked about. Decide whether the
+      new caption shows that change. Summarize it only when it is important.
+    user: >-
+      Watch for: tell me when the kettle boils.
+      Previous caption: A kettle sits on a lit stove; no steam is visible.
+      Current caption: The same kettle on the lit stove, slightly brighter lighting; no steam.
+    schema:
+      title: ChangeDecision
+      type: object
+      additionalProperties: false
+      properties:
+        important: {title: Important, type: boolean}
+        summary: {title: Summary, type: string, default: "", maxLength: 300}
+      required: [important]
+    checks:
+      - {path: /important, equals: [false]}
+    accept: ['{"important": false, "summary": ""}']
+    reject: ['{"important": true, "summary": "Brighter lighting."}', '{"important": 0}']
+
+  - name: transcript-summary
+    # The tea sample's TranscriptSummary model.
+    system: Summarize the supplied utterances in one or two sentences.
+    user: >-
+      {"utterances": ["I'm going to use the green tea today", "the water is at
+      eighty degrees", "I'll steep it for two minutes", "okay pouring now"]}
+    schema:
+      title: TranscriptSummary
+      type: object
+      additionalProperties: false
+      properties:
+        summary: {title: Summary, type: string, minLength: 1, maxLength: 500}
+      required: [summary]
+    checks:
+      - {path: /summary, contains: [green tea]}
+    accept: ['{"summary": "Brewing green tea at 80 degrees for two minutes."}']
+    reject: ['{"summary": "The user made black tea."}']
+
+  - name: session-state
+    # Nested objects, an enum and bounded integers.
+    system: You track a tea-making session. Report the current state.
+    user: >-
+      Observations: the kettle clicked off 40 s ago; the user poured water into
+      a cup holding 2 tea bags; a 3-minute timer was started; 1 spoon is on the
+      counter. What changed, what state are we in, and what items are visible?
+    schema:
+      title: SessionState
+      type: object
+      additionalProperties: false
+      $defs:
+        Item:
+          title: Item
+          type: object
+          additionalProperties: false
+          properties:
+            name: {title: Name, type: string, minLength: 1, maxLength: 40}
+            count: {title: Count, type: integer, minimum: 0, maximum: 20}
+          required: [name, count]
+      properties:
+        changed: {title: Changed, type: boolean}
+        state: {title: State, type: string, enum: [idle, heating, pouring, steeping, done]}
+        items: {title: Items, type: array, items: {$ref: "#/$defs/Item"}, maxItems: 6}
+        reason: {title: Reason, type: string, maxLength: 200}
+      required: [changed, state, items, reason]
+    checks:
+      - {path: /state, equals: [steeping]}
+      - {path: /items, min_items: 2}
+    accept: ['{"changed": true, "state": "steeping", "items": [{"name": "cup", "count": 1}, {"name": "tea bag", "count": 2}], "reason": "Timer running."}']
+    reject: ['{"changed": true, "state": "pouring", "items": [{"name": "cup", "count": 1}, {"name": "tea bag", "count": 2}], "reason": "x"}', '{"changed": true, "state": "steeping", "items": [], "reason": "x"}']
+
+  - name: instrument-reading
+    # Numbers, a nullable field (anyOf with null) and a unit enum.
+    system: Extract the instrument reading the operator reports.
+    user: >-
+      The incubator thermometer reads 37.4 degrees Celsius. The acceptable range
+      for this step is 36.5 to 37.5. No other notes.
+    schema:
+      title: InstrumentReading
+      type: object
+      additionalProperties: false
+      properties:
+        instrument: {title: Instrument, type: string, minLength: 1}
+        value: {title: Value, type: number}
+        unit: {title: Unit, type: string, enum: ["°C", "°F", "mL", "g", "pH"]}
+        within_range: {title: Within Range, type: boolean}
+        note: {title: Note, anyOf: [{type: string, maxLength: 120}, {type: "null"}], default: null}
+      required: [instrument, value, unit, within_range, note]
+    checks:
+      - {path: /value, range: [37.39, 37.41]}
+      - {path: /unit, equals: ["°C"]}
+      - {path: /within_range, equals: [true]}
+    accept: ['{"instrument": "incubator thermometer", "value": 37.4, "unit": "°C", "within_range": true, "note": null}']
+    reject: ['{"instrument": "thermometer", "value": 37, "unit": "°C", "within_range": true, "note": null}', '{"instrument": "thermometer", "value": 37.4, "unit": "°C", "within_range": "yes", "note": null}']
+
+  - name: step-plan
+    # A bounded array of objects with integer bounds.
+    system: Plan the steps the user asked for. Keep each instruction short.
+    user: Plan how to brew one cup of green tea with loose leaves.
+    schema:
+      title: StepPlan
+      type: object
+      additionalProperties: false
+      properties:
+        steps:
+          title: Steps
+          type: array
+          minItems: 3
+          maxItems: 8
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              instruction: {type: string, minLength: 1, maxLength: 120}
+              seconds: {type: integer, minimum: 0, maximum: 900}
+            required: [instruction, seconds]
+      required: [steps]
+    checks:
+      - {path: /steps, min_items: 3}
+    accept: ['{"steps": [{"instruction": "Heat water to 80 °C", "seconds": 180}, {"instruction": "Add leaves", "seconds": 10}, {"instruction": "Steep", "seconds": 120}]}']
+    reject: ['{"steps": [{"instruction": "Make tea", "seconds": 300}]}']
