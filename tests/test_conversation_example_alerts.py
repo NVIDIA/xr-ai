@@ -705,3 +705,64 @@ async def test_cancelling_or_replacing_an_alert_withdraws_its_unspoken_updates(r
     assert after_description.index(("withdraw", "")) < after_description.index(("reply", reply))
     await agent.stop()
 
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("existing_alert", [False, True])
+async def test_compilation_deadline_reports_timeout_and_preserves_existing_alert(monkeypatch, existing_alert):
+    from conversation_example_worker import _alert_agent
+
+    entered, cancelled = asyncio.Event(), asyncio.Event()
+
+    class SlowReplacement(_LLM):
+        async def chat(self, messages, **kwargs):
+            if existing_alert and not self.requests:
+                return await super().chat(messages, **kwargs)
+            entered.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cancelled.set()
+
+    monkeypatch.setattr(_alert_agent, "_COMPILE_TIMEOUT_SECS", 0.02)
+    agent, output = _agent(_Decisions("start", "start"), _Frames(), llm=SlowReplacement())
+    if existing_alert:
+        await _start(agent, turn_id="first")
+    running = agent._jobs.get("alice")
+    answering = asyncio.create_task(_start(agent, turn_id="new"))
+    await entered.wait()
+    announcement = asyncio.create_task(agent._announce("alice", running, "Alert")) if running else None
+    await asyncio.wait_for(answering, 1)
+
+    assert cancelled.is_set()
+    assert "I couldn't set up the new alert in time. Please try again." in _spoken(output)
+    assert not any("couldn't tell what to watch for" in text for text in _spoken(output))
+    assert agent._jobs.get("alice") is running
+    if announcement:
+        assert await asyncio.wait_for(announcement, 1)
+        assert not running.task.done()
+    await agent.stop()
+
+
+@pytest.mark.asyncio
+async def test_cancelled_compilation_propagates_without_timeout_reply():
+    entered, cancelled = asyncio.Event(), asyncio.Event()
+
+    class WaitingLLM(_LLM):
+        async def chat(self, messages, **kwargs):
+            entered.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cancelled.set()
+
+    agent, output = _agent(_Decisions("start"), _Frames(), llm=WaitingLLM())
+    answering = asyncio.create_task(_start(agent))
+    await entered.wait()
+    answering.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await answering
+    assert cancelled.is_set()
+    assert _spoken(output) == []
+    assert not agent._jobs
+    await asyncio.wait_for(agent.participant_left("alice"), 1)
+    await agent.stop()
