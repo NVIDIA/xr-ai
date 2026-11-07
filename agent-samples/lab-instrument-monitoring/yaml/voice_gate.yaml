@@ -5,15 +5,15 @@
 # optional wake gate. Only accepted turns reach the foreground agent.
 mode: conversation
 magic_phrases:
-  - agent
-  - hey agent
+  - assistant
+  - hey assistant
 listening_chime: true
 followup_grace_s: 5.0
 
 # Start once, then speak naturally until the full stop phrase.
 conversation:
-  start_phrase: "Hey agent, let's start talking"
-  stop_phrase: "Hey agent, let's stop talking"
+  start_phrase: "Start talking to me"
+  stop_phrase: "Stop talking to me"
   require_wake_phrase: false  # true keeps magic_phrases and followup_grace_s
   phrase_window_s: 6.0
 

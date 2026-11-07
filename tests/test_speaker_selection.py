@@ -18,7 +18,7 @@ def _enroll(selection, speaker=5):
 def test_enrollment_needs_one_attributed_exact_phrase():
     cfg = _SpeakerConfig()
     selection = _Selection(cfg)
-    assert selection._enroll_completed([(2, "someone said hey agent let's start talking", 10, False)]) == []
+    assert selection._enroll_completed([(2, "someone said start talking to me", 10, False)]) == []
     assert selection.owner is None
     assert selection._activity({2, 4}, 0.2, 20) == (None, [], False)
     assert selection.owner is None
@@ -71,10 +71,10 @@ def test_only_owner_reaches_asr_and_release_requires_owner():
 
 def test_control_phrase_matching_normalizes_case_punctuation_and_apostrophes():
     cfg = _SpeakerConfig()
-    assert cfg._matches_start("HEY AGENT! Lets start talking.")
-    assert cfg._matches_stop("Hey agent, let’s stop talking!")
-    assert not cfg._matches_stop("Hey agent, let's stop talking about this")
-    assert cfg._could_be_control("Hey agent let's stop")
+    assert cfg._matches_start("start talking to me.")
+    assert cfg._matches_stop("stop talking to me!")
+    assert not cfg._matches_stop("stop talking to me about this")
+    assert cfg._could_be_control("Stop talking to")
 
 
 @pytest.mark.parametrize(
@@ -102,9 +102,9 @@ def test_invalid_speaker_settings_fail_early(settings):
 @pytest.mark.parametrize("interference", ["other-speaker", "unrelated", "timeout", "truncated"])
 def test_enrollment_fragments_remain_attributed_and_bounded(interference):
     selection = _Selection(_SpeakerConfig())
-    assert selection._enroll_completed([(7, "hey agent", 0, False)]) == []
+    assert selection._enroll_completed([(7, "start talking", 0, False)]) == []
     if interference == "other-speaker":
-        assert selection._enroll_completed([(1, "let's start talking", 1_000_000, False)]) == []
+        assert selection._enroll_completed([(1, "to me", 1_000_000, False)]) == []
         return
     elif interference == "unrelated":
         selection._enroll_completed([(7, "what time is it", 1_000_000, False)])
@@ -114,26 +114,58 @@ def test_enrollment_fragments_remain_attributed_and_bounded(interference):
         at_us = 2_000_000
     else:
         at_us = 6_100_000
-    assert selection._enroll_completed([(7, "let's start talking", at_us, False)]) == []
+    assert selection._enroll_completed([(7, "to me", at_us, False)]) == []
     assert selection.owner is None
 
 
 def test_start_and_stop_controls_can_span_utterances():
     selection = _Selection(_SpeakerConfig())
-    assert selection._enroll_completed([(7, "hey agent", 0, False)]) == []
-    assert selection._enroll_completed([(7, "let us start talking", 1_000_000, False)]) == [{"kind": "enrolled"}]
+    assert selection._enroll_completed([(7, "start talking", 0, False)]) == []
+    assert selection._enroll_completed([(7, "to me", 1_000_000, False)]) == [{"kind": "enrolled"}]
     selection._activity({7}, 0.3, 2_000_000)
-    assert selection._finish("hey agent")[-1]["kind"] == "control_pending"
+    assert selection._finish("stop talking to")[-1]["kind"] == "control_pending"
     selection._activity({7}, 0.3, 3_000_000)
-    assert selection._finish("let's stop talking")[-1] == {"kind": "released"}
+    assert selection._finish("me")[-1] == {"kind": "released"}
+
+
+@pytest.mark.parametrize("parts,phrase", [
+    (["Stop talking", "to me"], "Stop talking to me"),
+    (["Stop", "talking", "to", "me"], "Stop talking to me"),
+    (["Stop speaking", "to me"], "Stop speaking to me"),
+    (["Stop it"], "Stop it"),
+])
+def test_immediate_stop_can_complete_the_owner_release(parts, phrase):
+    selection = _Selection(_SpeakerConfig(stop_phrase=phrase))
+    _enroll(selection, 7)
+    for index, text in enumerate(parts):
+        selection._activity({7}, 0.3, index * 1_000_000)
+        event = selection._finish(text)[-1]
+        if index == len(parts) - 1:
+            assert event == {"kind": "released"}
+            assert selection.owner is None
+        else:
+            assert selection.owner == 7
+            if index == 0:
+                assert event["kind"] == "transcript" and event["text"] == text
+                assert event["released"] == ""
+
+
+def test_disabled_stop_preserves_speaker_control_prefix_as_ordinary_speech():
+    selection = _Selection(_SpeakerConfig(stop_commands_enabled=False))
+    _enroll(selection, 7)
+    selection._activity({7}, 0.3, 0)
+    assert selection._finish("Stop talking")[-1]["kind"] == "control_pending"
+    selection._activity({7}, 0.3, 1_000_000)
+    event = selection._finish("about tea")[-1]
+    assert event["text"] == "about tea" and event["released"] == "Stop talking"
 
 
 def test_withheld_fragment_is_released_with_the_next_transcript():
     selection = _Selection(_SpeakerConfig())
     selection.owner = 7
     selection._activity({7}, 0.3, 1_000_000)
-    assert selection._finish("Hey.")[-1]["kind"] == "control_pending"
+    assert selection._finish("Star.")[-1]["kind"] == "control_pending"
     selection._activity({7}, 0.3, 2_000_000)
     assert selection._finish("How are you?")[-1] == {
-        "kind": "transcript", "text": "How are you?", "released": "Hey.", "pts_us": 2_000_000, "speaker_id": 7,
+        "kind": "transcript", "text": "How are you?", "released": "Star.", "pts_us": 2_000_000, "speaker_id": 7,
     }

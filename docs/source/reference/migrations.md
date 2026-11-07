@@ -303,12 +303,17 @@ the package's batch-STT defaults.
 Simple VLM, Conversation, lab monitoring, tea making, and XR render select
 `conversation`. Procedure capture and guidance uses `always_on` for commands
 and narration. For a conversation-mode sample, say
-`Hey agent, let's start talking` after connecting and
-`Hey agent, let's stop talking` to close the conversation.
+`Start talking to me` after connecting and
+`Stop talking to me` to close the conversation.
 Select `wake_only` for addressed turns, `hybrid` for addressed turns alongside
 conversations, or `always_on` for ungated dispatch. `wake_only` and `hybrid`
 require non-empty `magic_phrases`. Set `conversation.require_wake_phrase: true`
 to require wake phrases during an active conversation.
+
+The sample wake phrases change from `agent` and `hey agent` to `assistant` and
+`hey assistant`. Retained private YAML keeps its configured `magic_phrases`
+and conversation controls; these values are not rewritten automatically.
+Update private configuration explicitly to adopt the new phrases.
 
 In conversation mode, only accepted final transcripts during an active
 conversation reach `VOICE_TRANSCRIPT_TOPIC`; hybrid mode also delivers accepted

@@ -86,9 +86,8 @@ uv run tea_making_sample --expose-web-events
 
 Open the authenticated web-client URL printed by DeviceIOHub, accept the
 development certificate on first use, allow microphone and camera access, and
-connect. Say “Hey agent, let's start
-talking,” then speak commands without a wake phrase. Say “Hey agent, let's stop
-talking” to close the conversation. The optional event viewer is available at
+connect. Say “Start talking to me,” then speak commands without a wake phrase.
+Say “Stop talking to me” to close the conversation. The optional event viewer is available at
 `http://127.0.0.1:8092` by default, and durable output is written below
 `artifacts/`.
 

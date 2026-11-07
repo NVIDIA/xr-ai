@@ -99,7 +99,7 @@ async def test_every_transcript_reaches_the_supervisor_loop(monkeypatch) -> None
     monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
 
     transcripts = (
-        "Hey Agent, what am I looking at?",
+        "Hey Assistant, what am I looking at?",
         "Assistant, tell me what object I'm looking at.",
         "Put the sphere on the",
         "Move the cube to",
