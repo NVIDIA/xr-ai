@@ -83,7 +83,8 @@ temperature 0.6 and a 512-token thinking budget:
 | `json_schema_flipped` | on | - | 84/96 | 83/96 | 2.53 |
 
 That run failed the gate once: one streamed `json_schema` answer filled its
-remaining tokens with whitespace. Across three full runs, 1 of 1,152
+remaining tokens with whitespace. Across three full runs (the first made before
+the schema-in-prompt rule was limited to reasoning), 1 of 1,152
 `response_schema` answers failed that way and 6 of 1,728 forced calls had
 arguments outside their schema. The flipped ablation supports the client's
 rule both ways: stating the schema without reasoning cut correct answers
