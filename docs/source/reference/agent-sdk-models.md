@@ -209,14 +209,19 @@ different values is rejected.
   or the name of one supplied tool (that tool must be called).
 
 Both are applied while the model generates, but they promise different things.
-A supported endpoint returns `response_schema` answers that match the schema.
-A forced tool call is always made, but servers may constrain only the call and
-not every rule of its argument schema: on Nemotron Omni with vLLM's
-`qwen3_coder` tool parser, about 1 in 200 forced calls exceeded a `maxLength` or
-omitted a required field. Native tools validate their arguments and return the
-error to the model, so a tool loop recovers; for one value that must match a
-schema, prefer `response_schema`. Callers still validate every result: a
-response cut off at `max_tokens` is not a complete value.
+A `response_schema` answer is limited to the schema. A forced tool call is
+always made, but servers may constrain only the call and not every rule of its
+argument schema: on Nemotron Omni with vLLM's `qwen3_coder` tool parser, 6 of
+1,728 forced calls exceeded a `maxLength` or omitted a required field. Native
+tools validate their arguments and return the error to the model, so a tool loop
+recovers; for one value that must match a schema, prefer `response_schema`.
+
+Callers still validate every result. A response cut off at `max_tokens` is not a
+complete value, and a constrained answer can be cut off: vLLM's xgrammar JSON
+grammar allows any amount of whitespace, and 1 of 1,152 Nemotron Omni answers
+filled the rest of its tokens with it (`finish_reason` `length`). vLLM's server
+option `--structured-outputs-config '{"disable_any_whitespace": true}'` removes
+that freedom; the repository's model servers do not set it yet.
 
 Support depends on the model and its server, so an adapter declares it in
 `capabilities.json_schema` and `capabilities.tool_choice`. A request using an
