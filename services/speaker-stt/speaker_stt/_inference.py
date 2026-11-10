@@ -69,7 +69,9 @@ def _continuations(vocabulary: list[str]) -> frozenset[int]:
     return frozenset(
         token
         for token, piece in enumerate(vocabulary)
-        if not piece.startswith("▁") or not any(char.isalnum() for char in piece)
+        # SentencePiece can emit the word boundary separately, especially
+        # before numbers and currency. It starts a word just as "▁word" does.
+        if not piece.startswith("▁") or (piece != "▁" and not any(char.isalnum() for char in piece))
     )
 
 
@@ -276,7 +278,9 @@ class _Session:
         self._truncated_episodes: dict[int, float] = {}
         self._diagnostic_streams: dict[int, _DecodedStream] = {}
         self._diagnostic_active: dict[int, str] = {}
-        self._eou = _EndOfUtteranceStream(models.eou, models.hop_samples) if models.eou is not None else None
+        self._eou = (
+            _EndOfUtteranceStream(self.models.eou, self.models.hop_samples) if self.models.eou is not None else None
+        )
         self._reset_asr()
 
     def _new_asr(self) -> _AsrState:

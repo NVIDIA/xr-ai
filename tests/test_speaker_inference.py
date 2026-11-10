@@ -962,6 +962,7 @@ def test_gap_restarts_native_decoder_instead_of_reconciling_old_padding(
     assert (next_calls[0] is None) == skip
     assert session.selection.owner == owner
 
+
 def _scripted_decoder(models, words):
     import torch
     from nemo.collections.asr.parts.utils.rnnt_utils import Hypothesis
@@ -1086,3 +1087,88 @@ def test_turn_end_model_restarts_after_each_prediction_and_without_an_owner(_str
     activity[:] = []
     session._feed(bytes(5120))
     assert session._eou.fresh and len(steps) == 3
+
+
+@pytest.mark.parametrize(
+    "piece,continuation",
+    [("▁", False), ("▁what", False), ("▁café", False), ("s", True), ("?", True), ("▁!", True)],
+)
+def test_continuations_respect_sentencepiece_word_boundaries(piece, continuation):
+    from speaker_stt._inference import _continuations
+
+    assert (0 in _continuations([piece])) == continuation
+
+
+@pytest.mark.parametrize("owner", [None, 3])
+@pytest.mark.parametrize("predicted_end", [False, True])
+@pytest.mark.parametrize(
+    "pieces,expected",
+    [
+        (["▁", "2", "0", "▁min", "ut", "es"], "20 minutes"),
+        (["▁", "2", "0", "2", "6", "▁was", "▁a", "▁go", "od", "▁y", "ear"], "2026 was a good year"),
+        (["▁", "$", "5"], "$5"),
+        (["▁", "4", "2"], "42"),
+        (["▁", "£", "2", "0"], "£20"),
+        (["▁", "€", "5"], "€5"),
+        (["?", "s", "▁he", "ll", "o"], "hello"),
+    ],
+)
+def test_realistic_tokens_preserve_new_words_through_transcript(
+    _streaming_models, _eou_head, monkeypatch, owner, predicted_end, pieces, expected,
+):
+    import torch
+    from nemo.collections.asr.parts.utils.rnnt_utils import Hypothesis
+    from speaker_stt._inference import _continuations, _Session
+
+    models, activity, _calls, _masks, _allocations, _text = _streaming_models
+    # Numeric/currency sequences match the configured multitalker Parakeet
+    # tokenizer, revision 8749fc71fd6e2d88ef230159bbf2aea69b524ee1.
+    vocabulary = list(dict.fromkeys(pieces))
+    tokens = [vocabulary.index(piece) for piece in pieces]
+    models.continuation = _continuations(vocabulary)
+    models.asr.tokenizer.ids_to_text = lambda ids: "".join(vocabulary[i] for i in ids).replace("▁", " ").strip()
+
+    def decode(**kwargs):
+        previous = kwargs["previous_hypotheses"]
+        step = previous[0].dec_state + 1 if previous else 1
+        # Emit the word boundary separately from its number on later hops.
+        emitted = tokens[:1] if step == 1 else tokens[1:] if step == 2 else []
+        hyp = Hypothesis(y_sequence=torch.tensor(emitted, dtype=torch.long), dec_state=step)
+        return None, [hyp], *models.asr.encoder.get_initial_cache_state(batch_size=1), [hyp]
+
+    monkeypatch.setattr(models.asr, "conformer_stream_step", decode)
+    ends, _steps = _eou_head
+    if predicted_end:
+        ends.add(3)
+    session = _Session(models, _SpeakerConfig(mode="always_on", silence_duration=0.32), audio_origin_us=0)
+    session.selection.owner = owner
+    events = []
+    for speakers in ([3], [3], [], []):
+        activity[:] = speakers
+        events.extend(session._feed(bytes(5120)))
+    kind = "one_shot" if owner is None else "transcript"
+    assert [e["text"] for e in events if e["kind"] == kind] == [expected]
+
+
+def test_audio_gap_resets_turn_end_prediction_with_the_asr_segment(_streaming_models, _eou_head):
+    models, activity, _calls, _masks, _allocations, text = _streaming_models
+    ends, steps = _eou_head
+    ends.add(2)
+    text[0] = "before gap"
+    session, transcripts = _owner_transcripts(models, activity, [[3], [3]])
+    assert transcripts == [] and session.selection.turn_end
+    diarizer_state = session.adapter.instance_manager.diar_states.streaming_state
+    previous_eou = session._eou
+    assert [e["kind"] for e in session._skip(16000)] == ["speech_stop"]
+    assert session.selection.owner == 3
+    assert session.adapter.instance_manager.diar_states.streaming_state is diarizer_state
+    assert session._eou is not previous_eou and session._eou.fresh
+    assert not session.selection.turn_end
+    text[0] = "after gap"
+    events = []
+    for speakers in ([3], []):
+        activity[:] = speakers
+        events.extend(session._feed(bytes(5120)))
+    assert steps[2] is None
+    assert not any(e["kind"] == "transcript" for e in events)
+    assert session.selection.text == "after gap"
