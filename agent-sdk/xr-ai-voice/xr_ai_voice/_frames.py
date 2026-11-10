@@ -68,8 +68,8 @@ class _SpeakerDiagnosticFrame(DataFrame):
 
 
 @dataclass
-class _UnrecognizedSpeechFrame(DataFrame):
-    """A final utterance produced no transcript; discard pending controls."""
+class _UnrecognizedSpeechFrame(DataFrame, UninterruptibleFrame):
+    """An empty or interrupted utterance discards temporary speech permission."""
 
     participant_id: str
 
