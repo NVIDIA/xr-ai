@@ -2327,6 +2327,10 @@ async def test_streaming_tts_preserves_sentence_and_response_boundary_order():
 
 @pytest.mark.asyncio
 async def test_streaming_tts_interrupt_closes_only_target_stream():
+    await _assert_streaming_tts_interrupt_closes_only_target_stream()
+
+
+async def _assert_streaming_tts_interrupt_closes_only_target_stream():
     tts = _FakeStreamingTts()
     tts.configure(
         "Alice speaking.",
@@ -2381,7 +2385,7 @@ async def test_streaming_tts_interrupt_closes_only_target_stream():
 
 
 @pytest.mark.asyncio
-async def test_streaming_tts_interrupt_with_an_inherited_relay_scope_stack():
+async def test_streaming_tts_interrupt_with_an_inherited_relay_scope_stack(monkeypatch):
     """Each participant's sender runs on its own Relay scope stack.
 
     Child tasks share their creator's stack. When the caller already has one,
@@ -2400,13 +2404,13 @@ async def test_streaming_tts_interrupt_with_an_inherited_relay_scope_stack():
         async def record_stack(_queue) -> None:
             sender_stacks.append(nemo_relay.get_scope_stack())
 
-        probe._sender_loop = record_stack  # noqa: SLF001
+        monkeypatch.setattr(probe, "_sender_loop", record_stack)
         probe._ensure_sender("alice")  # noqa: SLF001
-        await probe._state("alice").sender_task  # noqa: SLF001
+        await asyncio.wait_for(probe._state("alice").sender_task, timeout=2)  # noqa: SLF001
         assert sender_stacks and sender_stacks[0] is not caller_stack
 
         await asyncio.wait_for(
-            test_streaming_tts_interrupt_closes_only_target_stream(), timeout=2,
+            _assert_streaming_tts_interrupt_closes_only_target_stream(), timeout=2,
         )
 
 
