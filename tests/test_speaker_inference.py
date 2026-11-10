@@ -765,3 +765,199 @@ def test_released_speaker_does_not_carry_its_last_word_into_reenrollment(_stream
         activity[:] = speakers
         events.extend(session._feed(bytes(5120)))
     assert [e["kind"] for e in events if e["kind"] in {"released", "enrolled"}] == ["released", "enrolled"]
+
+
+@pytest.mark.parametrize("skip", [False, True])
+def test_dropped_audio_splits_a_stop_phrase_without_releasing(_streaming_models, skip):
+    from speaker_stt._inference import _Session
+
+    models, activity, _calls, _masks, _allocations, text = _streaming_models
+    cfg = _SpeakerConfig(silence_duration=0.16)
+    prefix, suffix = cfg.stop_phrase.rsplit(" ", 1)
+    session = _Session(models, cfg, audio_origin_us=1_000_000)
+    session.selection.owner = 7
+
+    def feed(speakers, transcript):
+        activity[:] = speakers
+        text[0] = transcript
+        return session._feed(bytes(5120))
+
+    feed([7], prefix)
+    assert feed([], prefix)[-1]["kind"] == "control_pending"
+    if skip:
+        assert session._skip(16000) == []
+    feed([7], suffix)
+    events = feed([], suffix)
+    if not skip:
+        assert events[-1] == {"kind": "released"} and session.selection.owner is None
+        return
+    assert session.selection.owner == 7
+    # The held fragment is discarded; the timeline includes the dropped second.
+    assert events[-1]["kind"] == "transcript" and events[-1]["text"] == suffix
+    assert events[-1]["pts_us"] == 1_000_000 + 2 * 160_000 + 1_000_000
+
+
+def test_dropped_audio_ends_the_owner_utterance_in_progress(_streaming_models):
+    from speaker_stt._inference import _Session
+
+    models, activity, _calls, _masks, _allocations, text = _streaming_models
+    session = _Session(models, _SpeakerConfig(silence_duration=0.32), audio_origin_us=0)
+    session.selection.owner = 7
+    activity[:] = [7]
+    text[0] = "what is"
+    assert session._feed(bytes(5120))[0] == {"kind": "speech_start"}
+    assert session._skip(1600) == [{"kind": "speech_stop"}]
+    assert session.selection.candidate is None and session.selection.owner == 7
+    text[0] = "the time"
+    events = session._feed(bytes(5120))
+    assert events[0] == {"kind": "speech_start"}
+    assert all("what" not in event.get("text", "") for event in events)
+
+
+@pytest.mark.parametrize("skip", [False, True])
+def test_dropped_audio_splits_a_start_phrase_without_enrolling(_streaming_models, skip):
+    from speaker_stt._inference import _Session
+
+    models, activity, _calls, _masks, _allocations, text = _streaming_models
+    cfg = _SpeakerConfig(silence_duration=0.16)
+    prefix, suffix = cfg.start_phrase.rsplit(" ", 1)
+    session = _Session(models, cfg, audio_origin_us=0)
+
+    def feed(speakers, transcript):
+        activity[:] = speakers
+        text[0] = transcript
+        return session._feed(bytes(5120))
+
+    feed([7], prefix)
+    feed([], prefix)
+    if skip:
+        assert session._skip(16000) == []
+    feed([7], suffix)
+    events = feed([], suffix)
+    assert (session.selection.owner is None) == skip
+    assert ({"kind": "enrolled"} in events) != skip
+
+
+@pytest.mark.parametrize("owner", [None, 3])
+def test_words_before_dropped_audio_do_not_lead_into_the_next_utterance(_streaming_models, monkeypatch, owner):
+    import torch
+    from nemo.collections.asr.parts.utils.rnnt_utils import Hypothesis
+    from speaker_stt._inference import _Session
+
+    models, activity, _calls, _masks, _allocations, _text = _streaming_models
+    # Words belong to the audio of each hop, so a decoder warmed from history
+    # replays them too. "earlier" is heard just before the gap.
+    words = {2: "earlier", 3: "what", 4: " time"}
+    hop = [0]
+
+    def decode(**kwargs):
+        index = int(kwargs["processed_signal"][0, 0, 0])
+        value = "" if kwargs["keep_all_outputs"] else words.get(index, "")
+        hyp = Hypothesis(y_sequence=torch.tensor([ord(c) for c in value]), dec_state=index)
+        return None, [hyp], *models.asr.encoder.get_initial_cache_state(batch_size=1), [hyp]
+
+    session = _Session(models, _SpeakerConfig(mode="always_on", silence_duration=0.32), audio_origin_us=0)
+    monkeypatch.setattr(models.asr, "conformer_stream_step", decode)
+    monkeypatch.setattr(
+        session.adapter, "forward_pre_encoded",
+        lambda *_args: (torch.full((1, 2, 128), float(hop[0])), torch.tensor([2])),
+    )
+    session.selection.owner = owner
+    events = []
+    for speakers in ([], [], "skip", [3], [3], [], []):
+        if speakers == "skip":
+            events.extend(session._skip(16000))
+            continue
+        hop[0] += 1
+        activity[:] = speakers
+        events.extend(session._feed(bytes(5120)))
+    kind = "one_shot" if owner is None else "transcript"
+    assert [e["text"] for e in events if e["kind"] == kind] == ["what time"]
+
+
+@pytest.mark.parametrize("cache_samples", [0, 320])
+@pytest.mark.parametrize("residual", [0, 1280])
+def test_gap_discards_partial_hop_and_context_but_keeps_capture_time(
+    _streaming_models, monkeypatch, cache_samples, residual,
+):
+    import numpy as np
+    from speaker_stt._inference import _Session
+
+    models, activity, calls, _masks, _allocations, text = _streaming_models
+    models.cache_samples = cache_samples
+    session = _Session(models, _SpeakerConfig(), audio_origin_us=123)
+    session.selection.owner = 3
+    diarizer = session.adapter.instance_manager.diar_states
+    frames = []
+    preprocess = session.buffer.preprocess_audio
+
+    def capture(frame, **kwargs):
+        frames.append(frame.copy())
+        return preprocess(frame, **kwargs)
+
+    monkeypatch.setattr(session.buffer, "preprocess_audio", capture)
+    session._feed(np.full(models.hop_samples + residual, 1000, dtype="<i2").tobytes())
+    session._skip(16000)
+    # Repeated gaps with a one-sample residual exercise exact sample accounting
+    # without counting reused context or accumulating rounded microseconds.
+    for _ in range(3):
+        session._feed(bytes(2))
+        session._skip(1)
+    count = len(calls)
+    activity[:] = [3]
+    text[0] = "fresh query"
+    events = session._feed(np.full(models.hop_samples, 2000, dtype="<i2").tobytes())
+    assert events[0] == {"kind": "speech_start"}
+    assert session.selection.owner == 3
+    assert session.adapter.instance_manager.diar_states is diarizer
+    assert session.selection.pts_us == 123 + round((models.hop_samples + residual + 16000 + 6) * 1e6 / 16000)
+    assert len(frames) == 2
+    np.testing.assert_array_equal(frames[-1][:cache_samples], np.zeros(cache_samples))
+    np.testing.assert_array_equal(frames[-1][cache_samples:], np.full(models.hop_samples, 2000 / 32768))
+    assert calls[count]["previous_hypotheses"] is None
+    assert not calls[count]["cache_last_channel"].any()
+
+
+@pytest.mark.parametrize("owner", [None, 3])
+@pytest.mark.parametrize("skip", [False, True])
+def test_gap_restarts_native_decoder_instead_of_reconciling_old_padding(
+    _streaming_models, monkeypatch, owner, skip,
+):
+    import torch
+    from nemo.collections.asr.parts.utils.rnnt_utils import Hypothesis
+    from speaker_stt._inference import _Session
+
+    models, activity, _calls, _masks, _allocations, _text = _streaming_models
+    after_gap = False
+    next_calls = []
+
+    def decode(**kwargs):
+        previous = kwargs["previous_hypotheses"]
+        step = previous[0].dec_state + 1 if previous else 1
+        if after_gap:
+            next_calls.append(previous)
+            value = " beta gamma" if activity and not kwargs["keep_all_outputs"] else ""
+        else:
+            value = "alpha" if step == 1 else " beta" if step == 3 else ""
+        hyp = Hypothesis(y_sequence=torch.tensor([ord(c) for c in value]), dec_state=step)
+        return None, [hyp], *models.asr.encoder.get_initial_cache_state(batch_size=1), [hyp]
+
+    monkeypatch.setattr(models.asr, "conformer_stream_step", decode)
+    session = _Session(models, _SpeakerConfig(mode="always_on", silence_duration=0.16), audio_origin_us=0)
+    session.selection.owner = owner
+    activity[:] = [3]
+    session._feed(bytes(5120))
+    activity[:] = []
+    session._feed(bytes(5120))
+    assert session._speaker_states[3].pending == [ord(c) for c in " beta"]
+    if skip:
+        session._skip(16000)
+    after_gap = True
+    activity[:] = [3]
+    events = session._feed(bytes(5120))
+    activity[:] = []
+    events += session._feed(bytes(5120))
+    kind = "one_shot" if owner is None else "transcript"
+    assert [e["text"] for e in events if e["kind"] == kind] == ["beta gamma" if skip else "gamma"]
+    assert (next_calls[0] is None) == skip
+    assert session.selection.owner == owner

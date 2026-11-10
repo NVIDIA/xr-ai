@@ -65,6 +65,13 @@ class _SpeakerStream:
             await self._socket.send(audio)
             return (await self._response())["events"]
 
+    async def _skip(self, samples: int) -> list[dict[str, Any]]:
+        """Tell the service that ``samples`` of audio were dropped here."""
+        assert self._socket is not None
+        async with asyncio.timeout(self._timeout_s):
+            await self._socket.send(json.dumps({"skip_samples": samples}))
+            return (await self._response())["events"]
+
     async def _close(self) -> None:
         socket, self._socket = self._socket, None
         if socket is not None:
