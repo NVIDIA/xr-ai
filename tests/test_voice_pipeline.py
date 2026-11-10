@@ -2395,14 +2395,15 @@ async def test_streaming_tts_interrupt_with_an_inherited_relay_scope_stack():
         tts  = _FakeStreamingTts()
         gate = VoiceGate(VoiceGateConfig(), audio_sink=_NullSink(), tts=tts)
         probe = StreamingTtsProcessor(tts=tts, voice_gate=gate)
-        sender = probe._state("alice")  # noqa: SLF001
+        sender_stacks = []
+
+        async def record_stack(_queue) -> None:
+            sender_stacks.append(nemo_relay.get_scope_stack())
+
+        probe._sender_loop = record_stack  # noqa: SLF001
         probe._ensure_sender("alice")  # noqa: SLF001
-        try:
-            sender_stack = sender.sender_task.get_context().run(nemo_relay.get_scope_stack)
-            assert sender_stack is not caller_stack
-        finally:
-            sender.sender_task.cancel()
-            await asyncio.gather(sender.sender_task, return_exceptions=True)
+        await probe._state("alice").sender_task  # noqa: SLF001
+        assert sender_stacks and sender_stacks[0] is not caller_stack
 
         await asyncio.wait_for(
             test_streaming_tts_interrupt_closes_only_target_stream(), timeout=2,
