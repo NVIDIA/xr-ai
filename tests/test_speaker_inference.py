@@ -961,3 +961,214 @@ def test_gap_restarts_native_decoder_instead_of_reconciling_old_padding(
     assert [e["text"] for e in events if e["kind"] == kind] == ["beta gamma" if skip else "gamma"]
     assert (next_calls[0] is None) == skip
     assert session.selection.owner == owner
+
+
+def _scripted_decoder(models, words):
+    import torch
+    from nemo.collections.asr.parts.utils.rnnt_utils import Hypothesis
+
+    def decode(**kwargs):
+        previous = kwargs["previous_hypotheses"]
+        step = previous[0].dec_state + 1 if previous else 1
+        value = "" if kwargs["keep_all_outputs"] else words.get(step, "")
+        hyp = Hypothesis(y_sequence=torch.tensor([ord(c) for c in value]), dec_state=step)
+        return None, [hyp], *models.asr.encoder.get_initial_cache_state(batch_size=1), [hyp]
+
+    return decode
+
+
+@pytest.mark.parametrize("owner", [None, 3])
+def test_late_punctuation_does_not_start_the_next_utterance(_streaming_models, monkeypatch, owner):
+    from speaker_stt._inference import _Session
+
+    models, activity, _calls, _masks, _allocations, _text = _streaming_models
+    # The first question mark is decoded after its utterance has ended, just
+    # before the next one starts, so it falls in that utterance's lead-in.
+    words = {1: "what's going on", 4: "?", 5: "capital"}
+    monkeypatch.setattr(models.asr, "conformer_stream_step", _scripted_decoder(models, words))
+    session = _Session(models, _SpeakerConfig(mode="always_on", silence_duration=0.32), audio_origin_us=0)
+    session.selection.owner = owner
+    events = []
+    for speakers in ([3], [], [], [], [3], [], []):
+        activity[:] = speakers
+        events.extend(session._feed(bytes(5120)))
+    kind = "one_shot" if owner is None else "transcript"
+    assert [e["text"] for e in events if e["kind"] == kind] == ["what's going on", "capital"]
+
+
+@pytest.fixture
+def _eou_head(_streaming_models):
+    """A turn-end model that predicts the end of an utterance at scripted hops."""
+    from types import SimpleNamespace
+
+    import torch
+    from nemo.collections.asr.parts.utils.rnnt_utils import Hypothesis
+
+    models = _streaming_models[0]
+    ends: set[int] = set()
+    steps = []
+
+    def decode(**kwargs):
+        steps.append(kwargs["previous_hypotheses"])
+        tokens = [7] if len(steps) in ends else []
+        hyp = Hypothesis(y_sequence=torch.tensor(tokens, dtype=torch.long))
+        return None, None, *models.asr.encoder.get_initial_cache_state(batch_size=1), [hyp]
+
+    model = SimpleNamespace(
+        encoder=SimpleNamespace(
+            get_initial_cache_state=models.asr.encoder.get_initial_cache_state,
+            streaming_cfg=SimpleNamespace(drop_extra_pre_encoded=2),
+        ),
+        conformer_stream_step=decode,
+    )
+    models.eou = SimpleNamespace(model=model, token=7, cache_samples=0)
+    return ends, steps
+
+
+def _owner_transcripts(models, activity, steps, *, silence_duration=1.6):
+    from speaker_stt._inference import _Session
+
+    session = _Session(models, _SpeakerConfig(silence_duration=silence_duration), audio_origin_us=0)
+    session.selection.owner = 3
+    transcripts = []
+    for index, speakers in enumerate(steps, start=1):
+        activity[:] = speakers
+        transcripts.extend((index, e["text"]) for e in session._feed(bytes(5120)) if e["kind"] == "transcript")
+    return session, transcripts
+
+
+# The prediction can arrive while diarization still marks the owner active;
+# the utterance then ends at the first quiet step after it.
+@pytest.mark.parametrize("speech,predicted_at,finished_at", [([[3], []], 2, 2), ([[3], [3], []], 2, 3)])
+def test_predicted_turn_end_finishes_a_quiet_owner_before_the_silence_interval(
+    _streaming_models, _eou_head, speech, predicted_at, finished_at,
+):
+    models, activity, calls, _masks, _allocations, text = _streaming_models
+    ends, _steps = _eou_head
+    ends.add(predicted_at)
+    text[0] = "what time is it"
+    _session, transcripts = _owner_transcripts(models, activity, speech)
+    assert transcripts == [(finished_at, "what time is it")]
+    # A predicted end still flushes the decoder's last subwords.
+    assert any(call["keep_all_outputs"] for call in calls)
+
+
+@pytest.mark.parametrize(
+    "speech,predicted_at",
+    [
+        # Speech after the prediction continues the utterance.
+        ([[3], [3], [3], [], []], 2),
+        # Nothing is in progress to end; the next utterance waits for quiet.
+        ([[], [3], []], 1),
+        # A prediction on the step an utterance starts belongs to earlier audio.
+        ([[3], []], 1),
+    ],
+)
+def test_turn_end_prediction_cannot_end_speech_it_does_not_follow(
+    _streaming_models, _eou_head, speech, predicted_at,
+):
+    models, activity, _calls, _masks, _allocations, text = _streaming_models
+    ends, _steps = _eou_head
+    ends.add(predicted_at)
+    text[0] = "what time is it"
+    session, transcripts = _owner_transcripts(models, activity, speech)
+    assert transcripts == []
+    assert session.selection.candidate == 3
+
+
+def test_turn_end_model_restarts_after_each_prediction_and_without_an_owner(_streaming_models, _eou_head):
+    models, activity, _calls, _masks, _allocations, _text = _streaming_models
+    ends, steps = _eou_head
+    ends.add(2)
+    session, _transcripts = _owner_transcripts(models, activity, [[3], [], []])
+    # The step after a prediction starts without decoder history.
+    assert steps[1] is not None and steps[2] is None
+    session.selection.owner = None
+    activity[:] = []
+    session._feed(bytes(5120))
+    assert session._eou.fresh and len(steps) == 3
+
+
+@pytest.mark.parametrize(
+    "piece,continuation",
+    [("▁", False), ("▁what", False), ("▁café", False), ("s", True), ("?", True), ("▁!", True)],
+)
+def test_continuations_respect_sentencepiece_word_boundaries(piece, continuation):
+    from speaker_stt._inference import _continuations
+
+    assert (0 in _continuations([piece])) == continuation
+
+
+@pytest.mark.parametrize("owner", [None, 3])
+@pytest.mark.parametrize("predicted_end", [False, True])
+@pytest.mark.parametrize(
+    "pieces,expected",
+    [
+        (["▁", "2", "0", "▁min", "ut", "es"], "20 minutes"),
+        (["▁", "2", "0", "2", "6", "▁was", "▁a", "▁go", "od", "▁y", "ear"], "2026 was a good year"),
+        (["▁", "$", "5"], "$5"),
+        (["▁", "4", "2"], "42"),
+        (["▁", "£", "2", "0"], "£20"),
+        (["▁", "€", "5"], "€5"),
+        (["?", "s", "▁he", "ll", "o"], "hello"),
+    ],
+)
+def test_realistic_tokens_preserve_new_words_through_transcript(
+    _streaming_models, _eou_head, monkeypatch, owner, predicted_end, pieces, expected,
+):
+    import torch
+    from nemo.collections.asr.parts.utils.rnnt_utils import Hypothesis
+    from speaker_stt._inference import _continuations, _Session
+
+    models, activity, _calls, _masks, _allocations, _text = _streaming_models
+    # Numeric/currency sequences match the configured multitalker Parakeet
+    # tokenizer, revision 8749fc71fd6e2d88ef230159bbf2aea69b524ee1.
+    vocabulary = list(dict.fromkeys(pieces))
+    tokens = [vocabulary.index(piece) for piece in pieces]
+    models.continuation = _continuations(vocabulary)
+    models.asr.tokenizer.ids_to_text = lambda ids: "".join(vocabulary[i] for i in ids).replace("▁", " ").strip()
+
+    def decode(**kwargs):
+        previous = kwargs["previous_hypotheses"]
+        step = previous[0].dec_state + 1 if previous else 1
+        # Emit the word boundary separately from its number on later hops.
+        emitted = tokens[:1] if step == 1 else tokens[1:] if step == 2 else []
+        hyp = Hypothesis(y_sequence=torch.tensor(emitted, dtype=torch.long), dec_state=step)
+        return None, [hyp], *models.asr.encoder.get_initial_cache_state(batch_size=1), [hyp]
+
+    monkeypatch.setattr(models.asr, "conformer_stream_step", decode)
+    ends, _steps = _eou_head
+    if predicted_end:
+        ends.add(3)
+    session = _Session(models, _SpeakerConfig(mode="always_on", silence_duration=0.32), audio_origin_us=0)
+    session.selection.owner = owner
+    events = []
+    for speakers in ([3], [3], [], []):
+        activity[:] = speakers
+        events.extend(session._feed(bytes(5120)))
+    kind = "one_shot" if owner is None else "transcript"
+    assert [e["text"] for e in events if e["kind"] == kind] == [expected]
+
+
+def test_audio_gap_resets_turn_end_prediction_with_the_asr_segment(_streaming_models, _eou_head):
+    models, activity, _calls, _masks, _allocations, text = _streaming_models
+    ends, steps = _eou_head
+    ends.add(2)
+    text[0] = "before gap"
+    session, transcripts = _owner_transcripts(models, activity, [[3], [3]])
+    assert transcripts == [] and session.selection.turn_end
+    diarizer_state = session.adapter.instance_manager.diar_states.streaming_state
+    previous_eou = session._eou
+    assert [e["kind"] for e in session._skip(16000)] == ["speech_stop"]
+    assert session.selection.owner == 3
+    assert session.adapter.instance_manager.diar_states.streaming_state is diarizer_state
+    assert session._eou is not previous_eou and session._eou.fresh
+    assert not session.selection.turn_end
+    text[0] = "after gap"
+    events = []
+    for speakers in ([3], []):
+        activity[:] = speakers
+        events.extend(session._feed(bytes(5120)))
+    assert steps[2] is None
+    assert not any(e["kind"] == "transcript" for e in events)
+    assert session.selection.text == "after gap"
