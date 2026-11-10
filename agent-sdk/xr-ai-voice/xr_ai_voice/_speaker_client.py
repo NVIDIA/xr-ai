@@ -54,6 +54,13 @@ class _SpeakerClient:
             await stream._open({name: getattr(self._cfg, name) for name in names}, pts_us)
         return await stream._feed(audio)
 
+    async def _skip(self, pid: str, samples: int) -> list[dict]:
+        stream = self._sessions.get(pid)
+        # Without an open stream the next frame opens one at its own timestamp.
+        if stream is None or stream._socket is None:
+            return []
+        return await stream._skip(samples)
+
     async def _forget(self, pid: str) -> None:
         stream = self._sessions.pop(pid, None)
         if stream is not None:

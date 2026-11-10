@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 import yaml
-from pipecat.frames.frames import InputAudioRawFrame, TranscriptionFrame, UserStartedSpeakingFrame
+from pipecat.frames.frames import InputAudioRawFrame, TranscriptionFrame, UninterruptibleFrame, UserStartedSpeakingFrame
 from pipecat.processors.frame_processor import FrameDirection
 from speaker_stt._selection import _Selection
 from xr_ai_voice._frames import (
@@ -136,6 +136,58 @@ async def test_intervening_control_consumes_permission_but_not_fragment_matcher(
 
 
 @pytest.mark.asyncio
+async def test_overload_gap_consumes_wake_permission_without_releasing_enrollment(tmp_path):
+    cfg = load(tmp_path, {"mode": "conversation", "magic_phrases": ["hey agent"],
+                          "conversation": {"require_wake_phrase": True}, "speaker": {"enabled": True}})
+    gate = VoiceGateProcessor(cfg=cfg, tts=SimpleNamespace())
+    gate._use_speaker_asr = True
+    gate.push_frame, gate._emit_chime = AsyncMock(), AsyncMock()
+    processor = _SpeakerSttProcessor(cfg=cfg._speaker)
+    entered, release, skipped, gap_forwarded = (asyncio.Event() for _ in range(4))
+
+    async def forward(frame, direction=D):
+        await gate.process_frame(frame, direction)
+        if isinstance(frame, _UnrecognizedSpeechFrame):
+            assert isinstance(frame, UninterruptibleFrame)
+            gap_forwarded.set()
+
+    async def feed(*_args):
+        entered.set()
+        await release.wait()
+        return []
+
+    async def skip(*_args):
+        skipped.set()
+        return []
+
+    processor.push_frame = forward
+    processor._client = SimpleNamespace(_feed=feed, _skip=skip, _forget=AsyncMock(), _close=AsyncMock())
+    try:
+        await processor.process_frame(ParticipantJoinedFrame("a"), D)
+        await processor._event("a", {"kind": "enrolled"})
+        await processor._event("a", {"kind": "control_pending", "text": "hey agent", "pts_us": 0})
+        assert "a" in gate._gate._followup_until
+        await processor.process_frame(audio(), D)
+        await asyncio.wait_for(entered.wait(), 1)
+        for _ in range(3):
+            await processor.process_frame(audio(size=32000), D)
+        release.set()
+        await asyncio.wait_for(skipped.wait(), 1)
+        await asyncio.wait_for(gap_forwarded.wait(), 1)
+        assert "a" in processor._enrolled and "a" in gate._conversation_active
+        assert "a" not in gate._gate._followup_until
+        await processor._event("a", {"kind": "transcript", "text": "ambient speech", "pts_us": 1})
+        assert not [c for c in gate.push_frame.call_args_list if isinstance(c.args[0], GatedQueryFrame)]
+        await processor._event("a", {"kind": "transcript", "text": "hey agent fresh query", "pts_us": 2})
+        queries = [c.args[0] for c in gate.push_frame.call_args_list if isinstance(c.args[0], GatedQueryFrame)]
+        assert [query.text for query in queries] == ["fresh query"]
+        processor._client._forget.assert_not_awaited()
+    finally:
+        await processor.cleanup()
+        await gate.cleanup()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("partials", [False, True])
 @pytest.mark.parametrize("chime", [False, True])
 async def test_batch_hybrid_acknowledges_complete_turn_once(tmp_path, partials, chime):
@@ -156,9 +208,9 @@ async def test_batch_hybrid_acknowledges_complete_turn_once(tmp_path, partials, 
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("replacement", ["rejoin", "track", "overload"])
+@pytest.mark.parametrize("replacement", ["rejoin", "track"])
 @pytest.mark.parametrize("late", ["one_shot", "enrolled", "transcript", "error"])
-async def test_replacement_revokes_old_response_before_drain_and_resets(tmp_path, monkeypatch, replacement, late):
+async def test_replacement_revokes_old_response_before_drain_and_resets(tmp_path, replacement, late):
     cfg = hybrid(tmp_path)
     processor = _SpeakerSttProcessor(cfg=cfg._speaker)
     entered, cancelled, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
@@ -191,9 +243,6 @@ async def test_replacement_revokes_old_response_before_drain_and_resets(tmp_path
     await processor.process_frame(audio(), D)
     await entered.wait()
     old = processor._tasks["a"]
-    if replacement == "overload":
-        await processor.process_frame(audio(size=32000), D)
-        await processor.process_frame(audio(size=32000), D)
     trigger = ParticipantJoinedFrame("a") if replacement == "rejoin" else audio(
         "second" if replacement == "track" else "first",
     )
@@ -208,14 +257,6 @@ async def test_replacement_revokes_old_response_before_drain_and_resets(tmp_path
     assert not [f for f in frames if isinstance(f, _SpeakerEnrollmentFrame) and f.state == "enrolled"]
     assert not [f for f in frames if getattr(f, "text", None) == "stale"]
     assert len([f for f in frames if isinstance(f, _SpeakerEnrollmentFrame) and f.state == "reset"]) == 1
-    if replacement == "overload":
-        import time
-        # Advance this module's clock to its existing retry deadline, not a
-        # new delay or policy. Other event-loop clocks remain untouched.
-        deadline = processor._retry_after["a"]
-        monkeypatch.setattr("xr_ai_voice._processors.speaker_stt.time", SimpleNamespace(
-            monotonic=lambda: deadline, time_ns=time.time_ns,
-        ))
     if replacement != "track":
         await processor.process_frame(audio(), D)
     await asyncio.wait_for(fresh_received.wait(), 2)
