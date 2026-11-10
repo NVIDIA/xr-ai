@@ -296,7 +296,5 @@ def _streaming_models(monkeypatch):
         ),
         diar=SimpleNamespace(sortformer_modules=SimpleNamespace(init_streaming_state=lambda **kwargs: object())),
         encodes=encodes,
-        # Character tokens: spaces and punctuation cannot begin a word.
-        continuation=frozenset(ord(char) for char in " ?.,!'"),
     )
     return models, activity, asr_calls, masks, cache_allocations, text

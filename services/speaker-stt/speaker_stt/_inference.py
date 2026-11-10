@@ -58,34 +58,11 @@ class _CompletedStream:
     text: str
 
 
-def _vocabulary(model) -> list[str]:
-    tokenizer = model.tokenizer
-    return tokenizer.ids_to_tokens(list(range(tokenizer.vocab_size)))
-
-
-def _continuations(vocabulary: list[str]) -> frozenset[int]:
-    """Tokens that extend or punctuate a word and so cannot begin an utterance."""
-    return frozenset(
-        token
-        for token, piece in enumerate(vocabulary)
-        # SentencePiece can emit the word boundary separately, especially
-        # before numbers and currency. It starts a word just as "▁word" does.
-        if not piece.startswith("▁") or (piece != "▁" and not any(char.isalnum() for char in piece))
-    )
-
-
-def _require_label_loop(model, purpose: str) -> None:
-    from nemo.collections.asr.parts.submodules.rnnt_greedy_decoding import GreedyBatchedRNNTInfer
-
-    decoder = model.decoding.decoding
-    if not isinstance(decoder, GreedyBatchedRNNTInfer) or not decoder.loop_labels:
-        raise ValueError(f"{purpose} requires greedy_batch label-loop decoding")
-
-
 class _Models:
     def __init__(self, cfg: dict) -> None:
         import torch
         from nemo.collections.asr.models import ASRModel, SortformerEncLabelModel
+        from nemo.collections.asr.parts.submodules.rnnt_greedy_decoding import GreedyBatchedRNNTInfer
         from nemo.collections.asr.parts.utils.multispk_transcribe_utils import (
             configure_diar_streaming,
             validate_feature_frame_strides,
@@ -99,8 +76,9 @@ class _Models:
         self.asr = ASRModel.from_pretrained(cfg["asr_model"]).eval().to(self.device)
         if not hasattr(self.asr, "set_speaker_targets"):
             raise ValueError("ASR model must support speaker conditioning")
-        _require_label_loop(self.asr, "speaker ASR")
-        self.continuation = _continuations(_vocabulary(self.asr))
+        decoder = self.asr.decoding.decoding
+        if not isinstance(decoder, GreedyBatchedRNNTInfer) or not decoder.loop_labels:
+            raise ValueError("speaker ASR requires greedy_batch label-loop decoding")
         self.diar = SortformerEncLabelModel.from_pretrained(cfg["diar_model"]).eval().to(self.device)
         self.asr.encoder.set_default_att_context_size([70, 1])
         self.cfg = OmegaConf.create(
@@ -361,10 +339,6 @@ class _Session:
 
     def _decode(self, predictions, selected, drop, stream, finished) -> str:
         stream.tokens.extend(stream.emitted)
-        # A previous utterance's late word tail or punctuation can be decoded
-        # in the lead-in; it cannot begin this one.
-        while stream.tokens and stream.tokens[0] in self.models.continuation:
-            stream.tokens.pop(0)
         if finished:
             # Virtual terminal silence must not advance the live audio timeline
             # or its encoder cache; later real audio reconciles emitted tokens.
@@ -549,7 +523,10 @@ class _Session:
                 completed = []
                 if selected is not None:
                     self.selection.text = self._decode(
-                        preds, selected, drop, self._asr,
+                        preds,
+                        selected,
+                        drop,
+                        self._asr,
                         self.selection._finished and self.selection.silence >= self.selection.cfg.silence_duration,
                     )
                     text = self.selection.text

@@ -208,18 +208,6 @@ their own utterance completes. Non-speech background noise does not impose a
 silence gate. Each speaker's existing inactivity interval ends their utterance;
 there is no requirement that every speaker become quiet together.
 
-An enrolled speaker's utterance ends after their configured `silence_duration`,
-followed by the existing decoder flush. An independent turn-end prediction does
-not prove that the conditioned ASR has decoded its final word, so it does not
-shorten that interval. Remove `eou_model` from private speaker-STT YAML retained
-from an earlier checkout; the service no longer loads that model. Stop the
-persistent speaker-STT process before launching the updated configuration.
-
-Before the final decoder flush, the service suppresses leading subword tails and
-punctuation decoded late from the previous utterance, stopping at a word
-boundary, including a standalone boundary before numbers or currency. This is
-a heuristic, not a guarantee that every late token is removed.
-
 All complete start phrases finalized in one accepted audio step are considered
 before ownership changes. One match enrolls its speaker; multiple matches in
 that step enroll nobody and require a fresh attempt. A phrase finalized later
