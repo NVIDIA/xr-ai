@@ -208,15 +208,14 @@ their own utterance completes. Non-speech background noise does not impose a
 silence gate. Each speaker's existing inactivity interval ends their utterance;
 there is no requirement that every speaker become quiet together.
 
-After enrollment, the process also streams the session audio through a
-Parakeet realtime end-of-utterance model. When it predicts a turn end and
-diarization reports the owner quiet, the owner's utterance ends without waiting
-for the full silence interval; speech after the prediction continues the
-utterance, and the silence interval remains the fallback. The prediction hears
-the mixed audio, so a nearby speaker finishing a sentence during the owner's
-pause can end the owner's utterance early. Omit `eou_model` from
-`services/speaker-stt/speaker_stt.yaml` to use the silence interval alone. Before
-the final decoder flush, the service suppresses leading subword tails and
+An enrolled speaker's utterance ends after their configured `silence_duration`,
+followed by the existing decoder flush. An independent turn-end prediction does
+not prove that the conditioned ASR has decoded its final word, so it does not
+shorten that interval. Remove `eou_model` from private speaker-STT YAML retained
+from an earlier checkout; the service no longer loads that model. Stop the
+persistent speaker-STT process before launching the updated configuration.
+
+Before the final decoder flush, the service suppresses leading subword tails and
 punctuation decoded late from the previous utterance, stopping at a word
 boundary, including a standalone boundary before numbers or currency. This is
 a heuristic, not a guarantee that every late token is removed.

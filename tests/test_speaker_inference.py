@@ -996,99 +996,6 @@ def test_late_punctuation_does_not_start_the_next_utterance(_streaming_models, m
     assert [e["text"] for e in events if e["kind"] == kind] == ["what's going on", "capital"]
 
 
-@pytest.fixture
-def _eou_head(_streaming_models):
-    """A turn-end model that predicts the end of an utterance at scripted hops."""
-    from types import SimpleNamespace
-
-    import torch
-    from nemo.collections.asr.parts.utils.rnnt_utils import Hypothesis
-
-    models = _streaming_models[0]
-    ends: set[int] = set()
-    steps = []
-
-    def decode(**kwargs):
-        steps.append(kwargs["previous_hypotheses"])
-        tokens = [7] if len(steps) in ends else []
-        hyp = Hypothesis(y_sequence=torch.tensor(tokens, dtype=torch.long))
-        return None, None, *models.asr.encoder.get_initial_cache_state(batch_size=1), [hyp]
-
-    model = SimpleNamespace(
-        encoder=SimpleNamespace(
-            get_initial_cache_state=models.asr.encoder.get_initial_cache_state,
-            streaming_cfg=SimpleNamespace(drop_extra_pre_encoded=2),
-        ),
-        conformer_stream_step=decode,
-    )
-    models.eou = SimpleNamespace(model=model, token=7, cache_samples=0)
-    return ends, steps
-
-
-def _owner_transcripts(models, activity, steps, *, silence_duration=1.6):
-    from speaker_stt._inference import _Session
-
-    session = _Session(models, _SpeakerConfig(silence_duration=silence_duration), audio_origin_us=0)
-    session.selection.owner = 3
-    transcripts = []
-    for index, speakers in enumerate(steps, start=1):
-        activity[:] = speakers
-        transcripts.extend((index, e["text"]) for e in session._feed(bytes(5120)) if e["kind"] == "transcript")
-    return session, transcripts
-
-
-# The prediction can arrive while diarization still marks the owner active;
-# the utterance then ends at the first quiet step after it.
-@pytest.mark.parametrize("speech,predicted_at,finished_at", [([[3], []], 2, 2), ([[3], [3], []], 2, 3)])
-def test_predicted_turn_end_finishes_a_quiet_owner_before_the_silence_interval(
-    _streaming_models, _eou_head, speech, predicted_at, finished_at,
-):
-    models, activity, calls, _masks, _allocations, text = _streaming_models
-    ends, _steps = _eou_head
-    ends.add(predicted_at)
-    text[0] = "what time is it"
-    _session, transcripts = _owner_transcripts(models, activity, speech)
-    assert transcripts == [(finished_at, "what time is it")]
-    # A predicted end still flushes the decoder's last subwords.
-    assert any(call["keep_all_outputs"] for call in calls)
-
-
-@pytest.mark.parametrize(
-    "speech,predicted_at",
-    [
-        # Speech after the prediction continues the utterance.
-        ([[3], [3], [3], [], []], 2),
-        # Nothing is in progress to end; the next utterance waits for quiet.
-        ([[], [3], []], 1),
-        # A prediction on the step an utterance starts belongs to earlier audio.
-        ([[3], []], 1),
-    ],
-)
-def test_turn_end_prediction_cannot_end_speech_it_does_not_follow(
-    _streaming_models, _eou_head, speech, predicted_at,
-):
-    models, activity, _calls, _masks, _allocations, text = _streaming_models
-    ends, _steps = _eou_head
-    ends.add(predicted_at)
-    text[0] = "what time is it"
-    session, transcripts = _owner_transcripts(models, activity, speech)
-    assert transcripts == []
-    assert session.selection.candidate == 3
-
-
-def test_turn_end_model_restarts_after_each_prediction_and_without_an_owner(_streaming_models, _eou_head):
-    models, activity, _calls, _masks, _allocations, _text = _streaming_models
-    ends, steps = _eou_head
-    ends.add(2)
-    session, _transcripts = _owner_transcripts(models, activity, [[3], [], []])
-    # The step after a prediction starts without decoder history.
-    assert steps[1] is not None and steps[2] is None
-    session.selection.owner = None
-    activity[:] = []
-    session._feed(bytes(5120))
-    assert session._eou.fresh and len(steps) == 3
-
-
 @pytest.mark.parametrize(
     "piece,continuation",
     [("▁", False), ("▁what", False), ("▁café", False), ("s", True), ("?", True), ("▁!", True)],
@@ -1100,7 +1007,6 @@ def test_continuations_respect_sentencepiece_word_boundaries(piece, continuation
 
 
 @pytest.mark.parametrize("owner", [None, 3])
-@pytest.mark.parametrize("predicted_end", [False, True])
 @pytest.mark.parametrize(
     "pieces,expected",
     [
@@ -1114,7 +1020,7 @@ def test_continuations_respect_sentencepiece_word_boundaries(piece, continuation
     ],
 )
 def test_realistic_tokens_preserve_new_words_through_transcript(
-    _streaming_models, _eou_head, monkeypatch, owner, predicted_end, pieces, expected,
+    _streaming_models, monkeypatch, owner, pieces, expected,
 ):
     import torch
     from nemo.collections.asr.parts.utils.rnnt_utils import Hypothesis
@@ -1137,9 +1043,6 @@ def test_realistic_tokens_preserve_new_words_through_transcript(
         return None, [hyp], *models.asr.encoder.get_initial_cache_state(batch_size=1), [hyp]
 
     monkeypatch.setattr(models.asr, "conformer_stream_step", decode)
-    ends, _steps = _eou_head
-    if predicted_end:
-        ends.add(3)
     session = _Session(models, _SpeakerConfig(mode="always_on", silence_duration=0.32), audio_origin_us=0)
     session.selection.owner = owner
     events = []
@@ -1150,25 +1053,44 @@ def test_realistic_tokens_preserve_new_words_through_transcript(
     assert [e["text"] for e in events if e["kind"] == kind] == [expected]
 
 
-def test_audio_gap_resets_turn_end_prediction_with_the_asr_segment(_streaming_models, _eou_head):
-    models, activity, _calls, _masks, _allocations, text = _streaming_models
-    ends, steps = _eou_head
-    ends.add(2)
-    text[0] = "before gap"
-    session, transcripts = _owner_transcripts(models, activity, [[3], [3]])
-    assert transcripts == [] and session.selection.turn_end
-    diarizer_state = session.adapter.instance_manager.diar_states.streaming_state
-    previous_eou = session._eou
-    assert [e["kind"] for e in session._skip(16000)] == ["speech_stop"]
-    assert session.selection.owner == 3
-    assert session.adapter.instance_manager.diar_states.streaming_state is diarizer_state
-    assert session._eou is not previous_eou and session._eou.fresh
-    assert not session.selection.turn_end
-    text[0] = "after gap"
-    events = []
-    for speakers in ([3], []):
+@pytest.mark.parametrize(
+    "prefix,suffix,expected",
+    [
+        (["▁wh", "at", "'", "s", "▁cap", "ital", "▁of", "▁Ch", "in"], ["a"], "what's capital of China"),
+        (["▁how", "▁to", "▁m", "ake", "▁a", "▁p", "iz"], ["z", "a"], "how to make a pizza"),
+    ],
+)
+def test_owner_waits_for_silence_then_flushes_delayed_final_subwords(
+    _streaming_models, monkeypatch, prefix, suffix, expected,
+):
+    import torch
+    from nemo.collections.asr.parts.utils.rnnt_utils import Hypothesis
+    from speaker_stt._inference import _continuations, _Session
+
+    models, activity, _calls, _masks, _allocations, _text = _streaming_models
+    vocabulary = list(dict.fromkeys(prefix + suffix))
+    prefix_tokens = [vocabulary.index(piece) for piece in prefix]
+    suffix_tokens = [vocabulary.index(piece) for piece in suffix]
+    models.continuation = _continuations(vocabulary)
+    models.asr.tokenizer.ids_to_text = lambda ids: "".join(vocabulary[i] for i in ids).replace("▁", " ").strip()
+
+    def decode(**kwargs):
+        previous = kwargs["previous_hypotheses"]
+        step = previous[0].dec_state + 1 if previous else 1
+        emitted = prefix_tokens if step == 1 else suffix_tokens if step == 6 else []
+        hyp = Hypothesis(y_sequence=torch.tensor(emitted, dtype=torch.long), dec_state=step)
+        return None, [hyp], *models.asr.encoder.get_initial_cache_state(batch_size=1), [hyp]
+
+    monkeypatch.setattr(models.asr, "conformer_stream_step", decode)
+    session = _Session(models, _SpeakerConfig(silence_duration=0.4), audio_origin_us=0)
+    session.selection.owner = 3
+    completed = []
+    for hop, speakers in enumerate(([3], [3], [], [], []), start=1):
         activity[:] = speakers
-        events.extend(session._feed(bytes(5120)))
-    assert steps[2] is None
-    assert not any(e["kind"] == "transcript" for e in events)
-    assert session.selection.text == "after gap"
+        events = session._feed(bytes(5120))
+        if hop < 5:
+            assert not any(e["kind"] in {"speech_stop", "transcript"} for e in events)
+        completed.extend(e["text"] for e in events if e["kind"] == "transcript")
+    assert completed == [expected]
+    assert session.selection.owner == 3
+    assert session._asr.pending == suffix_tokens

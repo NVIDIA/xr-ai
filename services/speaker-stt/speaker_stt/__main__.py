@@ -252,7 +252,7 @@ def _build_app(server: _Server, cfg: dict, ready_file: Path | None = None):
 
     @app.get("/v1/models")
     async def models() -> dict:
-        names = [cfg["asr_model"], cfg["diar_model"], *([cfg["eou_model"]] if cfg.get("eou_model") else [])]
+        names = [cfg["asr_model"], cfg["diar_model"]]
         return {
             "object": "list",
             "data": [{"id": name, "object": "model", "owned_by": "local"} for name in names],

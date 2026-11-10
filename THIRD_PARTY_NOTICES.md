@@ -151,8 +151,6 @@ The inference process downloads
 [`nvidia/Nemotron-3-Diarization`](https://huggingface.co/nvidia/Nemotron-3-Diarization)
 under OpenMDW-1.1 and
 [`nvidia/multitalker-parakeet-streaming-0.6b-v1`](https://huggingface.co/nvidia/multitalker-parakeet-streaming-0.6b-v1)
-and
-[`nvidia/parakeet_realtime_eou_120m-v1`](https://huggingface.co/nvidia/parakeet_realtime_eou_120m-v1)
 under the NVIDIA Open Model License. Refer to the corresponding model
 repositories for their license texts and download terms.
 

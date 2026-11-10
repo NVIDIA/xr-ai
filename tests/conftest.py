@@ -298,6 +298,5 @@ def _streaming_models(monkeypatch):
         encodes=encodes,
         # Character tokens: spaces and punctuation cannot begin a word.
         continuation=frozenset(ord(char) for char in " ?.,!'"),
-        eou=None,
     )
     return models, activity, asr_calls, masks, cache_allocations, text
