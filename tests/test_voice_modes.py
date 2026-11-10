@@ -194,6 +194,12 @@ async def test_actual_gate_and_selection_sequences_match_modes(tmp_path, use_spe
             assert not await speak("hey agent")
             assert (await speak("one next utterance"))[0].text == "one next utterance"
             assert not await speak("another utterance")
+        if mode == "hybrid":
+            # Withheld control fragments are judged together, so a split wake
+            # phrase still grants the next utterance.
+            assert not await speak("hey")
+            assert not await speak("agent")
+            assert (await speak("one next utterance"))[0].text == "one next utterance"
         if mode in {"conversation", "hybrid"}:
             assert not await speak("hey agent let's")
             assert not await speak("start talking")

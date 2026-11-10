@@ -39,7 +39,7 @@ from xr_ai_voice._pipeline import _build_voice_pipeline
 from xr_ai_voice._processors.io import _VoiceIOProcessor
 from xr_ai_voice._processors.speaker_stt import _SpeakerSttProcessor
 from xr_ai_voice._processors.vad_stt import VadConfig, VadSttProcessor
-from xr_ai_voice._processors.voice_gate import VoiceGateProcessor
+from xr_ai_voice._processors.voice_gate import _STOP_ACK_TEXT, VoiceGateProcessor
 from xr_ai_voice._speaker_client import _select_speaker_asr, _SpeakerClient
 from xr_ai_voice._transport import HubVoiceTransport
 from xr_ai_voicegate import load_voice_gate_config
@@ -542,6 +542,132 @@ async def test_voice_client_uses_actual_service_health_and_stream_contract():
 
 
 @pytest.mark.asyncio
+async def test_queued_audio_coalesces_after_slow_inference_without_resetting_enrollment():
+    processor = _SpeakerSttProcessor(cfg=_SpeakerConfig())
+    received = asyncio.Queue()
+    release = asyncio.Event()
+
+    async def feed(pid, audio, pts_us):
+        await received.put((audio, pts_us))
+        await release.wait()
+        return []
+
+    processor._client = SimpleNamespace(_feed=feed, _forget=AsyncMock(), _close=AsyncMock())
+    processor.push_frame = AsyncMock()
+
+    async def submit(data, pts_us):
+        frame = InputAudioRawFrame(audio=data, sample_rate=16000, num_channels=1)
+        frame.transport_source, frame.pts = "wearer", pts_us * 1000
+        await processor.process_frame(frame, FrameDirection.DOWNSTREAM)
+
+    try:
+        await processor.process_frame(ParticipantJoinedFrame("wearer"), FrameDirection.DOWNSTREAM)
+        processor._enrolled.add("wearer")
+        await submit(bytes(320), 1_000_000)
+        # A lone frame is sent without waiting to fill a batch.
+        assert await asyncio.wait_for(received.get(), 1) == (bytes(320), 1_000_000)
+        packets = [bytes([i]) * 320 for i in range(1, 13)]
+        for i, packet in enumerate(packets):
+            await submit(packet, 1_010_000 + i * 10_000)
+        release.set()
+        assert await asyncio.wait_for(received.get(), 1) == (b"".join(packets), 1_010_000)
+        assert processor._queued_bytes["wearer"] == 0
+        assert processor._queued_frames["wearer"] == 0
+        assert "wearer" in processor._enrolled
+        processor._client._forget.assert_not_awaited()
+        assert not [c for c in processor.push_frame.await_args_list
+                    if isinstance(c.args[0], _SpeakerEnrollmentFrame)]
+    finally:
+        await processor.cleanup()
+
+
+@pytest.mark.asyncio
+async def test_audio_coalescing_retains_next_frame_in_order_and_in_backlog():
+    processor = _SpeakerSttProcessor(cfg=_SpeakerConfig())
+    received, permits = asyncio.Queue(), asyncio.Queue()
+
+    async def feed(pid, audio, pts_us):
+        await received.put((audio, pts_us))
+        await permits.get()
+        return []
+
+    processor._client = SimpleNamespace(_feed=feed, _forget=AsyncMock(), _close=AsyncMock())
+    processor.push_frame = AsyncMock()
+
+    async def submit(data, pts_us):
+        frame = InputAudioRawFrame(audio=data, sample_rate=16000, num_channels=1)
+        frame.transport_source, frame.pts = "wearer", pts_us * 1000
+        await processor.process_frame(frame, FrameDirection.DOWNSTREAM)
+
+    packets = [(b"a" * 320, 1_010_000), (b"b" * 32000, 1_020_000),
+               (b"c" * 320, 2_020_000), (b"d" * 4800, 2_030_000),
+               (b"e" * 640, 2_180_000), (b"f" * 4800, 2_200_000),
+               (b"g" * 320, 2_350_000)]
+    expected = [(packets[0], 42880, 6), (packets[1], 10880, 5),
+                ((packets[2][0] + packets[3][0], 2_020_000), 5760, 3),
+                (packets[4], 5120, 2),
+                ((packets[5][0] + packets[6][0], 2_200_000), 0, 0)]
+    try:
+        await processor.process_frame(ParticipantJoinedFrame("wearer"), FrameDirection.DOWNSTREAM)
+        processor._enrolled.add("wearer")
+        await submit(bytes(320), 1_000_000)
+        await asyncio.wait_for(received.get(), 1)
+        for packet, pts_us in packets:
+            await submit(packet, pts_us)
+        for request, queued_bytes, queued_frames in expected:
+            permits.put_nowait(None)
+            assert await asyncio.wait_for(received.get(), 1) == request
+            assert processor._queued_bytes["wearer"] == queued_bytes
+            assert processor._queued_frames["wearer"] == queued_frames
+        assert "wearer" in processor._enrolled
+        processor._client._forget.assert_not_awaited()
+    finally:
+        await processor.cleanup()
+
+
+@pytest.mark.asyncio
+async def test_overload_frame_limit_includes_frame_retained_for_next_batch():
+    processor = _SpeakerSttProcessor(cfg=_SpeakerConfig())
+    received, permits = asyncio.Queue(), asyncio.Queue()
+
+    async def feed(pid, audio, pts_us):
+        await received.put(audio)
+        await permits.get()
+        return []
+
+    processor._client = SimpleNamespace(_feed=feed, _forget=AsyncMock(), _close=AsyncMock())
+    processor.push_frame = AsyncMock()
+
+    async def submit(size):
+        frame = InputAudioRawFrame(audio=bytes(size), sample_rate=16000, num_channels=1)
+        frame.transport_source = "wearer"
+        await processor.process_frame(frame, FrameDirection.DOWNSTREAM)
+
+    try:
+        await processor.process_frame(ParticipantJoinedFrame("wearer"), FrameDirection.DOWNSTREAM)
+        processor._enrolled.add("wearer")
+        await submit(320)
+        await asyncio.wait_for(received.get(), 1)
+        await submit(320)
+        await submit(5120)
+        permits.put_nowait(None)
+        assert await asyncio.wait_for(received.get(), 1) == bytes(320)
+        # The next 160 ms frame was removed from the queue, but is still pending.
+        for _ in range(199):
+            await submit(2)
+        assert processor._queues["wearer"].qsize() == 199
+        assert processor._queued_frames["wearer"] == 200
+        assert processor._queued_bytes["wearer"] == 5518
+        assert "wearer" in processor._enrolled
+        await submit(2)
+        assert "wearer" not in processor._enrolled
+        assert "wearer" not in processor._tasks
+        assert "wearer" not in processor._queued_frames
+    finally:
+        await processor.cleanup()
+
+
+@pytest.mark.asyncio
 async def test_web_audio_queue_allows_two_seconds_before_reset():
     processor = _SpeakerSttProcessor(cfg=_SpeakerConfig())
     started = asyncio.Event()
@@ -854,17 +980,37 @@ async def test_same_conversation_workflow_through_both_asr_paths(tmp_path, monke
 
         await speak("what is that")
         assert len(accepted) == (0 if require_wake else 1)
-        # A wake phrase split from an ordinary command retains its follow-up window.
+        # A wake phrase split from an ordinary command leads the next transcript,
+        # as if spoken unsplit. When wake phrases are required, it opens only its
+        # follow-up window instead.
+        query = "describe this" if require_wake else "hey agent describe this"
         await speak("hey agent")
         await speak("describe this")
-        assert accepted[-1].text == "describe this"
+        assert accepted[-1].text == query
         count = len(accepted)
+        if require_wake:
+            await speak("hey agent")
+            gate.gate.forget("a")  # Its follow-up window elapses.
+            await speak("describe this")
+            assert len(accepted) == count
+        # A wake phrase split across fragments is still one wake phrase.
+        for part in ("hey", "agent", "describe this"):
+            await speak(part)
+        assert len(accepted) == count + 1 and accepted[-1].text == query
+        count += 1
+        # Released words lead a query, but a STOP is judged on its own utterance.
+        responses = []
+        gate._emit_text_response = AsyncMock(side_effect=lambda pid, text: responses.append(text))
+        await speak("Hey.")
+        await speak("stop")
+        assert responses == [_STOP_ACK_TEXT] and len(accepted) == count
         await speak("hey agent")
         await speak("let's stop talking")
         assert "a" not in gate._conversation_active and len(accepted) == count
         await speak("do not send this")
         assert len(accepted) == count
-        assert [call.args[1] for call in captions.await_args_list] == ["what is that", "describe this"]
+        captioned = [call.args[1] for call in captions.await_args_list]
+        assert captioned == ["what is that", query, *(["describe this"] if require_wake else []), query, "stop"]
         messages = [call.args[0] for call in display.await_args_list]
         assert len(messages) == len(accepted)
         label = "Speaker 7" if use_speaker else "User"

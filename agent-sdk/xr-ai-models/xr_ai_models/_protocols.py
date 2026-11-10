@@ -298,6 +298,10 @@ class DecisionService(Protocol):
         positive and finite; the SystemOne adapter caps it at the configured
         endpoint timeout. Transport failures and invalid or incomplete answers
         raise exceptions without returning partial decisions.
+
+        Raises:
+            DecisionInputTooLargeError: The service rejected the request as more
+                input than its model accepts; a smaller request may succeed.
         """
 
         pass
@@ -566,6 +570,14 @@ class _StreamingTTSService(TTSService, Protocol):
 
 class ModelServiceError(RuntimeError):
     """Base for model-service failures, including embedding identity and OCR errors."""
+
+
+class DecisionInputTooLargeError(ModelServiceError):
+    """The decision service rejected a request as more input than its model accepts.
+
+    The service owns that limit, and the caller cannot know it in advance. The same
+    request will not succeed; a caller can retry with less input.
+    """
 
 
 @runtime_checkable

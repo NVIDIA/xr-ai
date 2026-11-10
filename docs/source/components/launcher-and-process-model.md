@@ -5,6 +5,15 @@
 
 # Launcher and process model
 
+## Overview
+
+An XR AI application runs a hub, agent workers, and any additional services it
+needs. The launcher starts those processes in dependency order, waits for
+readiness, and stops the application stack if a monitored process exits. Use
+it to make your application repeatable to launch and operate.
+
+## Declare the application stack
+
 Application samples own their DeviceIOHub and worker processes. Model services may
 instead be declared with `launch_mode="reuse"` and started separately through the
 sample's separate `model-servers/` convenience launcher.
@@ -151,7 +160,9 @@ the launcher:
    torn down together rather than leaving orphans.
 3. Waits for the process to create *<f>* (the ready file), recording a DEBUG
    progress line every five seconds. It is visible with `XR_AI_VERBOSE` and in
-   the per-run log.
+   the per-run log. Every launched child remains supervised during startup;
+   only a ready `persist` process under `exit_after_ready=True` may exit with
+   status 0. All other exits abort startup.
 4. Once all processes are ready, monitors them: any exit triggers a graceful
    shutdown of the rest (SIGTERM, escalating to SIGKILL after a timeout).
 
@@ -227,18 +238,17 @@ processes. Refer to `run_stack` for the API contract.
   kill it on shutdown.
 
 On a clean ready-exit, `persist` and `reuse` processes are left running. On an
-abort during startup (SIGINT, SIGTERM, a process exiting before it signals ready,
-or an unexpected exit while other members of its parallel group start), the launcher
-stops `own` processes and `persist` wrappers that have not signaled readiness.
-Persistent services that had signaled readiness when cleanup began stay running,
-including ready members of a parallel group whose other members failed. For
-model-server stacks, use the sample's model command with `--stop` to clear
-retained models. Externally
-started `reuse` services remain untouched. Signal handling stays active through
-cleanup; repeated SIGINT or SIGTERM does not interrupt cleanup or force early
-SIGKILL. A wrapper that ignores SIGTERM can take the full 20-second shutdown
-timeout plus up to 5 seconds waiting after SIGKILL. SIGKILL and launcher crashes
-cannot run this cleanup.
+abort during startup (SIGINT, SIGTERM, or an unexpected exit by any launched
+process), the launcher stops `own` processes and `persist` wrappers that have
+not signaled readiness. Persistent services that had signaled readiness when
+cleanup began stay running, including ready members of a parallel group whose
+other members failed. For model-server stacks, use the sample's model command
+with `--stop` to clear retained models. Externally started `reuse` services
+remain untouched. Signal handling stays active through cleanup; repeated SIGINT
+or SIGTERM does not interrupt cleanup or force early SIGKILL. A wrapper that
+ignores SIGTERM can take the full 20-second shutdown timeout plus up to 5
+seconds waiting after SIGKILL. SIGKILL and launcher crashes cannot run this
+cleanup.
 
 ## Process failures
 
@@ -252,18 +262,17 @@ a terminated child's failure, the launcher waits up to one second for its
 pending terminal output to be forwarded. A descendant that keeps an output
 pipe open cannot hold up this wait indefinitely.
 
-An unexpected monitored exit is a stack failure even when the child exits
-with code 0; the launcher returns 1 in that case. Other child exit codes are
+An unexpected monitored exit is a stack failure even when the child exits with
+code 0; the launcher returns 1 in that case. Other child exit codes are
 preserved, and signal termination maps to `128 + signal number`. Startup
 cancellation returns `128 + signal number` (130 for SIGINT, 143 for SIGTERM);
 cancellation after readiness follows normal shutdown. Summary errors do not
-replace the original failure. Members of a
-parallel startup group remain monitored until the entire group is ready. An
-unexpected exit during that wait triggers startup cleanup even if the exiting
-process had already signaled ready. Other persistent services that had signaled
-readiness when cleanup began stay running. With `exit_after_ready=True`, a
-`persist` wrapper may exit successfully after signaling ready while its service
-keeps running.
+replace the original failure. Every launched process remains monitored until the
+entire stack is ready. An unexpected exit during startup triggers startup
+cleanup even if the exiting process had already signaled ready. Other persistent
+services that had signaled readiness when cleanup began stay running. With
+`exit_after_ready=True`, a `persist` wrapper may exit successfully after
+signaling ready while its service keeps running.
 
 ## Adding a new managed process
 

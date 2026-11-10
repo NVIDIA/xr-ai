@@ -415,7 +415,9 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
   - `urllib3>=2.8.0`
   - `pyjwt>=2.15.1`
   - `transformers>=5.17.0`
-  - `vllm>=0.30.0`
+  - `vllm==0.31.0`
+  - `protobuf>=7.36.2; platform_machine != 's390x'`
+  - `protobuf==7.36.1; platform_machine == 's390x'`
   - `mcp>=2.2.0`
   - `pillow>=13.0.0`
   - `pyyaml>=6.0`
@@ -433,16 +435,15 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
-  - `hydra-core>=1.3.7`
-  - `fsspec>=2026.6.0`
+  - `hydra-core>=1.3.8,<1.4`
+  - `fsspec>=2026.7.0`
   - `multidict>=6.9.1`
   - `werkzeug>=3.1.9`
-  - `pytorch-lightning>=2.6.6`
-  - `nv-one-logger-pytorch-lightning-integration==2.3.1` (source: `https://github.com/yanziz-nvidia/nv-one-logger, rev=665328ee4697b1c488ef58d4597dfad34d33f759`)
+  - `pytorch-lightning>=2.6.6,<2.7`
   - `urllib3>=2.8.0`
   - `transformers>=5.17.0`
-  - `nemo_toolkit[tts]>=2.5` (source: `https://github.com/yanziz-nvidia/Speech/archive/f047d87f41761e55bf2baf61967cbc687eeb1754.tar.gz`)
-  - `lightning>=2.6.6` (source: `https://github.com/Lightning-AI/pytorch-lightning, rev=771017e4f39b314b49abd4a1d65905c74268d248`)
+  - `nemo-toolkit[tts]>=3.1,<3.2` (source: `https://github.com/NVIDIA-NeMo/Speech/archive/dec3f0d39d869193c00b49a198fe13613be914dc.tar.gz`)
+  - `lightning>=2.6.6,<2.7` (source: `https://github.com/Lightning-AI/pytorch-lightning, rev=771017e4f39b314b49abd4a1d65905c74268d248`)
   - `soundfile>=0.12`
   - `numpy>=1.24`
   - `fastapi>=0.111`
@@ -465,7 +466,9 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
   - `urllib3>=2.8.0`
   - `pyjwt>=2.15.1`
   - `transformers>=5.17.0`
-  - `vllm>=0.30.0`
+  - `vllm==0.31.0`
+  - `protobuf>=7.36.2; platform_machine != 's390x'`
+  - `protobuf==7.36.1; platform_machine == 's390x'`
   - `mcp>=2.2.0`
   - `pillow>=13.0.0`
   - `pyyaml>=6.0`
@@ -487,7 +490,9 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
   - `urllib3>=2.8.0`
   - `pyjwt>=2.15.1`
   - `transformers>=5.17.0`
-  - `vllm>=0.30.0`
+  - `vllm==0.31.0`
+  - `protobuf>=7.36.2; platform_machine != 's390x'`
+  - `protobuf==7.36.1; platform_machine == 's390x'`
   - `mcp>=2.2.0`
   - `pillow>=13.0.0`
   - `pyyaml>=6.0`
@@ -555,12 +560,11 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
-  - `hydra-core>=1.3.7`
-  - `fsspec>=2026.6.0`
+  - `hydra-core>=1.3.8,<1.4`
+  - `fsspec>=2026.7.0`
   - `multidict>=6.9.1`
   - `werkzeug>=3.1.9`
-  - `pytorch-lightning>=2.6.6`
-  - `nv-one-logger-pytorch-lightning-integration==2.3.1` (source: `https://github.com/yanziz-nvidia/nv-one-logger, rev=665328ee4697b1c488ef58d4597dfad34d33f759`)
+  - `pytorch-lightning>=2.6.6,<2.7`
   - `fastapi>=0.115.0`
   - `uvicorn[standard]>=0.34.0`
   - `anyio>=4.8.0`
@@ -569,8 +573,8 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
   - `xr-ai-voicegate` → [`xr-ai-voicegate`](utils/xr-ai-voicegate/) (local, editable)
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
   - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
-  - `nemo-toolkit[asr]` (source: `https://github.com/yanziz-nvidia/Speech/archive/d7939d46c647d64db180e9f291e058855cd75d3a.tar.gz`)
-  - `lightning>=2.6.6` (source: `https://github.com/Lightning-AI/pytorch-lightning, rev=771017e4f39b314b49abd4a1d65905c74268d248`)
+  - `nemo-toolkit[asr]>=3.1,<3.2` (source: `https://github.com/NVIDIA-NeMo/Speech/archive/dec3f0d39d869193c00b49a198fe13613be914dc.tar.gz`)
+  - `lightning>=2.6.6,<2.7` (source: `https://github.com/Lightning-AI/pytorch-lightning, rev=771017e4f39b314b49abd4a1d65905c74268d248`)
   - `lhotse==2.0.0a6` (source: `https://files.pythonhosted.org/packages/18/ae/8ba7ee0b1db7fadf8de8f58121723a6b1ae3d88bdb0a1ffeee165b62d4ba/lhotse-2.0.0a6-py3-none-any.whl`)
 - Optional dependency groups: none
 - Commands:
@@ -582,16 +586,15 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
-  - `hydra-core>=1.3.7`
-  - `fsspec>=2026.6.0`
+  - `hydra-core>=1.3.8,<1.4`
+  - `fsspec>=2026.7.0`
   - `multidict>=6.9.1`
   - `werkzeug>=3.1.9`
-  - `pytorch-lightning>=2.6.6`
-  - `nv-one-logger-pytorch-lightning-integration==2.3.1` (source: `https://github.com/yanziz-nvidia/nv-one-logger, rev=665328ee4697b1c488ef58d4597dfad34d33f759`)
+  - `pytorch-lightning>=2.6.6,<2.7`
   - `urllib3>=2.8.0`
   - `transformers>=5.17.0`
-  - `nemo_toolkit[asr]>=2.5` (source: `https://github.com/yanziz-nvidia/Speech/archive/f047d87f41761e55bf2baf61967cbc687eeb1754.tar.gz`)
-  - `lightning>=2.6.6` (source: `https://github.com/Lightning-AI/pytorch-lightning, rev=771017e4f39b314b49abd4a1d65905c74268d248`)
+  - `nemo-toolkit[asr]>=3.1,<3.2` (source: `https://github.com/NVIDIA-NeMo/Speech/archive/dec3f0d39d869193c00b49a198fe13613be914dc.tar.gz`)
+  - `lightning>=2.6.6,<2.7` (source: `https://github.com/Lightning-AI/pytorch-lightning, rev=771017e4f39b314b49abd4a1d65905c74268d248`)
   - `fastapi>=0.111`
   - `uvicorn[standard]>=0.29`
   - `python-multipart>=0.0.9`
@@ -629,7 +632,9 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
   - `urllib3>=2.8.0`
   - `pyjwt>=2.15.1`
   - `transformers>=5.17.0`
-  - `vllm>=0.30.0`
+  - `vllm==0.31.0`
+  - `protobuf>=7.36.2; platform_machine != 's390x'`
+  - `protobuf==7.36.1; platform_machine == 's390x'`
   - `mcp>=2.2.0`
   - `pillow>=13.0.0`
   - `pyyaml>=6.0`
@@ -642,6 +647,52 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
   - `vlm_server` → `vlm_server.__main__:run`
 
 ### Agent samples
+
+#### `conversation-example` — [`agent-samples/conversation-example/`](agent-samples/conversation-example/)
+
+- Python: `>=3.11,<3.15`
+- Build dependencies:
+  - `hatchling`
+- Runtime dependencies:
+  - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
+  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
+- Optional dependency groups: none
+- Commands:
+  - `conversation_example` → `main:run`
+
+#### `conversation-example-model-servers` — [`agent-samples/conversation-example/model-servers/`](agent-samples/conversation-example/model-servers/)
+
+- Python: `>=3.11,<3.15`
+- Build dependencies:
+  - `hatchling`
+- Runtime dependencies:
+  - `xr-ai-model-server-stack` → [`xr-ai-model-server-stack`](utils/xr-ai-model-server-stack/) (local, editable)
+- Optional dependency groups: none
+- Commands:
+  - `conversation_example_model_servers` → `main:run`
+
+#### `conversation-example-worker` — [`agent-samples/conversation-example/worker/`](agent-samples/conversation-example/worker/)
+
+- Python: `>=3.11,<3.15`
+- Build dependencies:
+  - `hatchling`
+- Runtime dependencies:
+  - `nemo-relay>=0.10.0,<0.11`
+  - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
+  - `xr-ai-conversation` → [`xr-ai-conversation`](agent-sdk/xr-ai-conversation/) (local, editable)
+  - `xr-ai-routing[runtime]` → [`xr-ai-routing`](agent-sdk/xr-ai-routing/) (local, editable)
+  - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
+  - `xr-ai-interaction` → [`xr-ai-interaction`](agent-sdk/xr-ai-interaction/) (local, editable)
+  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
+  - `xr-ai-models[riva]` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
+  - `xr-ai-tools[frames,vision]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
+  - `xr-ai-voice` → [`xr-ai-voice`](agent-sdk/xr-ai-voice/) (local, editable)
+  - `xr-ai-voicegate` → [`xr-ai-voicegate`](utils/xr-ai-voicegate/) (local, editable)
+  - `loguru>=0.7`
+  - `pyyaml>=6.0`
+- Optional dependency groups: none
+- Commands:
+  - `conversation_example_worker` → `conversation_example_worker.__main__:run`
 
 #### `lab-instrument-monitoring` — [`agent-samples/lab-instrument-monitoring/`](agent-samples/lab-instrument-monitoring/)
 
@@ -919,8 +970,8 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Runtime dependencies:
   - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
   - `xr-ai-interaction` → [`xr-ai-interaction`](agent-sdk/xr-ai-interaction/) (local, editable)
-  - `xr-ai-routing` → [`xr-ai-routing`](agent-sdk/xr-ai-routing/) (local, editable)
   - `xr-ai-conversation` → [`xr-ai-conversation`](agent-sdk/xr-ai-conversation/) (local, editable)
+  - `xr-ai-routing` → [`xr-ai-routing`](agent-sdk/xr-ai-routing/) (local, editable)
   - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
   - `xr-ai-models[riva]` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
   - `xr-ai-tools[frames,image-editing,marker-tracking,services,vision]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
@@ -960,6 +1011,9 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Runtime dependencies: none
 - Optional dependency groups:
   - `repository`:
+    - `conversation-example` → [`conversation-example`](agent-samples/conversation-example/) (local, editable)
+    - `conversation-example-model-servers` → [`conversation-example-model-servers`](agent-samples/conversation-example/model-servers/) (local, editable)
+    - `conversation-example-worker` → [`conversation-example-worker`](agent-samples/conversation-example/worker/) (local, editable)
     - `lab-instrument-monitoring` → [`lab-instrument-monitoring`](agent-samples/lab-instrument-monitoring/) (local, editable)
     - `lab-instrument-monitoring-model-servers` → [`lab-instrument-monitoring-model-servers`](agent-samples/lab-instrument-monitoring/model-servers/) (local, editable)
     - `lab-instrument-monitoring-worker` → [`lab-instrument-monitoring-worker`](agent-samples/lab-instrument-monitoring/worker/) (local, editable)
@@ -1087,8 +1141,6 @@ Keep non-obvious fan-out in the same change:
   from `xr-ai-vllm` internals.
 - `agent-sdk/xr-ai-hub/` depends only on `pyzmq` and `msgpack`; it has no
   server-side packages.
-- `agent-sdk/xr-ai-interaction/` depends only on `pydantic`, so routing,
-  conversation, and non-voice front ends share its messages without voice media.
 - `agent-sdk/xr-ai-models/` depends only on `xr-ai-logging`, `httpx`, and
   `pyyaml`. In-tree backends use typed OpenAI-compatible HTTP rather than vendor
   SDKs, with one scoped exception: the optional `riva` extra adds

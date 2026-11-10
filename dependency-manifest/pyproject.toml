@@ -16,6 +16,9 @@ dependencies = []
 
 [project.optional-dependencies]
 repository = [
+    "conversation-example",
+    "conversation-example-model-servers",
+    "conversation-example-worker",
     "lab-instrument-monitoring",
     "lab-instrument-monitoring-model-servers",
     "lab-instrument-monitoring-worker",
@@ -70,9 +73,11 @@ vllm = [
 [tool.uv]
 package = false
 conflicts = [[{ extra = "repository" }, { extra = "vllm" }]]
-override-dependencies = ['hydra-core==1.3.7', 'lightning==2.6.6']
 
 [tool.uv.sources]
+"conversation-example"                    = { path = "../agent-samples/conversation-example", editable = true }
+"conversation-example-model-servers"      = { path = "../agent-samples/conversation-example/model-servers", editable = true }
+"conversation-example-worker"             = { path = "../agent-samples/conversation-example/worker", editable = true }
 "lab-instrument-monitoring"               = { path = "../agent-samples/lab-instrument-monitoring", editable = true }
 "lab-instrument-monitoring-model-servers" = { path = "../agent-samples/lab-instrument-monitoring/model-servers", editable = true }
 "lab-instrument-monitoring-worker"        = { path = "../agent-samples/lab-instrument-monitoring/worker", editable = true }
@@ -120,4 +125,3 @@ override-dependencies = ['hydra-core==1.3.7', 'lightning==2.6.6']
 "xr-ai-vad"                               = { path = "../utils/xr-ai-vad", editable = true }
 "xr-ai-vllm"                              = { path = "../utils/xr-ai-vllm", editable = true }
 "xr-ai-voicegate"                         = { path = "../utils/xr-ai-voicegate", editable = true }
-"lightning" = { "git" = "https://github.com/Lightning-AI/pytorch-lightning", "rev" = "771017e4f39b314b49abd4a1d65905c74268d248" }

@@ -5,14 +5,18 @@
 
 # xr-ai-voice
 
-`xr-ai-voice` owns the voice-facing boundary for an XR agent. Pipecat implements
-the private media pipeline; applications use typed runtime events and model
-service protocols. Refer to {doc}`python/index` for exact constructors, fields,
-and defaults.
+## Overview
+
+`VoiceAgent` connects speech input and spoken responses to your application
+agents. It handles voice gating, interruptions, and session cleanup, letting
+several agents share a voice interface while handling their own tasks.
 
 <a id="usage"></a>
 (agent-sdk-voice-usage)=
 ## Voice agent
+
+Pipecat implements the private media pipeline. Refer to {doc}`python/index`
+for exact constructors, fields, and defaults.
 
 Applications construct speech from their loaded model profile and voice-gate
 configuration, then register one `VoiceAgent` with their runtime:
@@ -44,14 +48,18 @@ async with runtime:
     await voice.run(runtime)
 ```
 
-`VoiceAgent` owns application readiness, hub transport, VAD and STT, voice gating,
-typed text ingress, TTS, signals, pipeline cancellation, and cleanup. Its media
-session remains private. Applications that need a shared public
-`HubVoiceTransport` construct and inject one explicitly.
+`VoiceAgent` marks its worker ready after its configured dependency checks pass
+and the voice transport starts; DeviceIOHub owns aggregated client readiness.
+`VoiceAgent` also owns hub transport, VAD and STT, voice gating, typed text
+ingress, TTS, signals, pipeline cancellation, and cleanup. Its media session
+remains private. Applications that need a shared public `HubVoiceTransport`
+construct and inject one explicitly.
 
 Set utterance-ending silence once through `VadConfig.silence_duration` passed
 to `VoiceAgent`. It controls the active backend: Silero VAD for batch STT, or
-per-speaker inactivity for speaker ASR. This value takes precedence over the
+per-speaker inactivity for speaker ASR. For speaker ASR, words decoded within
+the same interval before a speaker becomes active also open their utterance,
+since the decoder can lead diarization. This value takes precedence over the
 voice-gate YAML's `speaker.silence_duration`; direct speaker sessions retain
 their own configuration. Other `VadConfig` fields apply only to batch STT.
 Speaker ASR checks inactivity at model-chunk boundaries, so the threshold is
@@ -185,8 +193,9 @@ once against the packaged baseline.
 (voice-conversation-controls)=
 ## Conversation controls
 
-The Simple VLM, Tea making, lab monitoring and XR render samples start with
-their microphone conversation closed.
+The `simple-vlm-example`, `conversation-example`, `tea-making-sample`,
+`lab-instrument-monitoring`, and `xr-render-demo` samples start with microphone
+conversation closed.
 After connecting, say `Hey agent, let's start talking`, then speak naturally
 without a wake phrase. Say `Hey agent, let's stop talking` to close the
 conversation and interrupt the current response. A short `stop` interrupts the
@@ -202,7 +211,7 @@ Choose a mode in each sample's voice-gate YAML:
 | `always_on` | All recognized speech | No persistent conversation | No persistent owner |
 
 `wake_only` and `hybrid` require non-empty `magic_phrases`. The packaged default
-is `always_on`, preserving the existing ungated fallback; the four conversation
+is `always_on`, preserving the existing ungated fallback; the conversation
 samples explicitly select `conversation`. Procedure capture instead uses
 ungated narration with STOP disabled. Change the sample's `mode` field to
 choose another interaction policy without maintaining a separate preset copy.
@@ -235,15 +244,34 @@ conversation:
   phrase_window_s: 6.0
 ```
 
-Matching ignores case, punctuation, and apostrophes; `let us` also matches
-`let's`. Exact control prefixes can span final STT results: `Hey agent`, followed
-by `let's start talking`, starts the conversation if their speech onsets fall
-within `phrase_window_s`. An unrelated or unrecognized utterance, an expired
-window, or a disconnect discards pending fragments. Quoting the phrase inside a
-longer utterance does not activate it. In conversation and hybrid modes, control
-phrases never become agent queries or transcript-topic events. In wake-only and
-always-on modes, their words are ordinary text subject to that mode's admission
-policy, not session controls.
+Matching ignores case, punctuation, apostrophes, and spacing; `let us` also
+matches `let's`. Exact control prefixes can span final STT results, and a
+boundary may fall inside a word: `Hey agent` (or `Hey ag`), followed by
+`let's start talking` (or `ent, let's start talking`), starts the conversation
+if their speech onsets fall within `phrase_window_s`.
+
+An utterance that could begin a control phrase is withheld. The same speaker's
+next utterance within `phrase_window_s` decides what the withheld words were:
+
+- If it completes a control phrase, alone or joined, the control runs.
+- If the joined words could still begin one, they stay withheld. If only the
+  new utterance could, it begins a new window with the earlier words ahead of it.
+- If it is a STOP on its own, the STOP runs.
+- Otherwise the withheld words were speech. In an active conversation they lead
+  that utterance's transcript, which is handled as if spoken unsplit: the agent
+  query keeps every word, and with `require_wake_phrase` the wake rule applies
+  to the joined text. The exception is withheld words that together form only
+  a wake phrase under `require_wake_phrase`: they already opened its follow-up
+  window when withheld, so they are not released again. A wake phrase split
+  across final results (`Hey` | `agent`) counts as one.
+
+In every other case the withheld words are discarded: a control or STOP ran,
+no conversation is active, the next utterance comes from another speaker, is
+empty or failed, or does not start within the window, or the participant
+disconnects. Quoting the phrase inside a longer utterance does not activate it.
+In conversation and hybrid modes, control phrases never become agent queries or
+transcript-topic events. In wake-only and always-on modes, their words are
+ordinary text subject to that mode's admission policy, not session controls.
 
 These controls work with the sample's existing batch STT service, including NIM,
 or with speaker ASR. Batch STT controls are participant-scoped and cannot identify
@@ -328,7 +356,8 @@ to the agent; the latency-saving interruption is not undone.
 ## Speaker filtering and backend selection
 
 The same conversation controls work with ordinary STT and speaker filtering.
-Shipped samples select required speaker ASR alongside `conversation`:
+The conversation samples select required speaker ASR alongside
+`conversation`:
 
 ```yaml
 speaker:
@@ -367,7 +396,10 @@ opens one WebSocket at `/v1/audio/transcriptions/stream` per participant. The
 connection owns that participant's enrollment and closes when the participant
 leaves or its audio worker resets. After one configuration and audio-origin
 message, the worker sends ordered 16 kHz mono signed-16 PCM frames and waits for
-each event response before sending the next frame. The service derives timestamps
+each event response before sending the next request. When the worker falls behind,
+it combines already queued short frames into batches of at most 160 ms without
+waiting for more audio. A frame that would exceed the batch limit starts the next
+request; larger valid input frames pass through unchanged. The service derives timestamps
 from accepted sample counts; reconnecting starts a fresh timeline and clears
 temporary turn permissions and any enrollment. Conversation mode requires
 enrollment again. Other voices contribute to
@@ -392,7 +424,7 @@ candidate transcripts before
 enrollment and additionally transcribes non-owner voices after enrollment. It
 returns activity and ignored text on `voice.speaker-diagnostic` through the
 existing participant-routed data channel. These messages cannot invoke or
-interrupt an agent or change enrollment. See
+interrupt an agent or change enrollment. Refer to
 {doc}`../components/ai-services` for decoder ownership and diagnostic resource cost. The
 simple VLM sample enables diagnostics for live inspection. They have no effect
 when ordinary STT is selected.
@@ -422,19 +454,23 @@ uv --config-file uv.toml run --project services/speaker-stt \
   python -m speaker_stt --config services/speaker-stt/speaker_stt.yaml
 ```
 
-Alternatively, each sample-local model stack starts speaker ASR. Stop a
-standalone instance before switching to the stack's hardware configuration;
-their configuration fingerprints can differ. From the repository root:
+Each conversation sample's local model stack starts speaker ASR. The
+`procedure-capture-guide` model stack uses batch STT instead. Stop a standalone
+speaker ASR instance before switching to a conversation sample stack's
+hardware configuration; their configuration fingerprints can differ.
+From the repository root:
 
 ```bash
-uv --config-file uv.toml run --project agent-samples/simple-vlm-example/model-servers \
-  simple_vlm_example_model_servers
+uv --config-file uv.toml run --project agent-samples/conversation-example/model-servers \
+  conversation_example_model_servers
 ```
 
-It composes the `services/speaker-stt/speaker_stt.yaml`
-defaults with that sample's `model-servers/yaml/<gpu-profile>.yaml` placement
+The conversation-example launcher composes the
+`services/speaker-stt/speaker_stt.yaml` defaults with that sample's
+`model-servers/yaml/<gpu-profile>.yaml` placement
 and capacity overrides, waits for decoder warmup, and reuses matching warm
-instances. The sample's model command with `--stop` includes the speaker service. Stop the stack
+instances. The sample's model command with `--stop` includes the speaker
+service. Stop the stack
 before changing its speaker-service YAML. Native NIM deployment configures the
 worker's ordinary speech adapters for independently deployed Riva endpoints;
 disable `speaker.enabled` when choosing that speech path. Refer to

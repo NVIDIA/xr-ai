@@ -5,6 +5,15 @@
 
 # Customizing model servers
 
+## Overview
+
+Change a sample's model selection, GPU placement, or inference endpoints to
+suit your application and hardware. Keep the model-server settings and worker
+profile aligned, and stop the relevant services before applying deployment
+changes.
+
+## Existing services
+
 Each agent sample has a `model-servers/` convenience launcher that brings up
 only its required local inference servers. It waits for readiness and returns;
 the servers remain running while you start, stop, or develop the agent sample.
@@ -12,16 +21,15 @@ These launchers are editable development presets. Applications can also use
 compatible services launched individually or independently operated endpoints.
 Refer to {doc}`deploying-with-nim` for external NIM endpoints.
 
-## Existing services
-
 Inspect the selected services' configured ports before invoking a model
 launcher. Server identities are shared across samples, but reuse checks differ:
 
 - **vLLM Docker:** reuse requires the expected container name and a matching
   launch-configuration fingerprint. On the selected ports, startup can evict
   other xr-ai containers and listeners, or recreate a changed container.
-- **Pocket TTS:** reuses a listener whose `/health` endpoint is healthy,
-  without checking ownership or a launch-configuration fingerprint.
+- **Pocket TTS:** reuses a listener whose `/health` endpoint returns HTTP 200
+  and identifies Pocket TTS, without checking ownership or a
+  launch-configuration fingerprint.
 - **Speaker ASR:** requires an owned listener and matching service fingerprint.
   An unmanaged listener or configuration mismatch stops startup; it does not
   evict or recreate the existing service.
@@ -33,21 +41,23 @@ unchanged or obtain permission from their operator to replace them.
 
 | Sample | Servers |
 |---|---|
-| Simple VLM | speaker ASR, Pocket TTS, Cosmos VLM |
+| Conversation example | Speaker ASR, Pocket TTS, Nemotron Omni, Cosmos VLM, Clef router |
+| Simple VLM (legacy) | speaker ASR, Pocket TTS, Cosmos VLM |
 | Lab instrument monitoring | Speaker ASR, TTS, Nemotron Omni, Cosmos VLM |
 | Tea making | Speaker ASR, TTS, Nemotron Omni, Nemotron embedding |
 | XR render demo | Speaker ASR, TTS, Nemotron Omni, Cosmos VLM |
 | Procedure capture and guide | Batch STT, Pocket TTS, Nemotron Omni, Cosmos VLM |
 
-Tea making uses Omni for both language and vision. Its RAG service needs
+The conversation example uses Omni for language and Clef for turn routing.
+Tea making uses Omni for both language and vision; its RAG service needs
 embeddings. XR rendering uses one Omni server for its LLM roles and does not
 need embeddings. Hubs, workers, RAG, scene, and rendering processes remain in
 the agent launcher; the model launcher brings up inference servers only.
 
-The Simple VLM, lab monitoring, tea making, and XR render workers require
-speaker ASR on port 8102. They do not contain a batch-STT model role or
-automatically fall back to the batch server on 8103. Procedure capture and guide
-uses batch STT on port 8103 with speaker selection disabled.
+The conversation example, Simple VLM, lab monitoring, tea making, and XR render
+workers require speaker ASR on port 8102. They do not contain a batch-STT model
+role or automatically fall back to the batch server on 8103. Procedure capture
+and guide uses batch STT on port 8103 with speaker selection disabled.
 For explicit batch speech, replace `speaker-stt` with `stt` in the sample's
 launcher service list and every selected hardware YAML, add the existing
 batch adapter under `models.stt` in the worker profile, and disable
@@ -57,7 +67,10 @@ retain both servers and a real batch client. Refer to
 
 ## Start, develop, and stop
 
-Run these commands from `agent-samples/simple-vlm-example/`:
+The following commands use deprecated Simple VLM as a legacy worked example.
+For new voice-and-vision applications, start with
+{doc}`/reference/conversation-example`. Run the example commands from
+`agent-samples/simple-vlm-example/`:
 
 ```bash
 uv run --project model-servers simple_vlm_example_model_servers

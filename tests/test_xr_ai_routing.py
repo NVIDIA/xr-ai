@@ -15,7 +15,7 @@ import xr_ai_routing._router as router_module
 from _routing_test_output import destination_output as _destination_output
 from _routing_test_output import emit_control as _emit_control
 from _routing_test_output import route as _route
-from xr_ai_models import ChatResponse, DecisionAnswer, DecisionResponse
+from xr_ai_models import ChatResponse, DecisionAnswer, DecisionInputTooLargeError, DecisionResponse
 from xr_ai_routing import (
     Admission,
     AgentExchange,
@@ -487,7 +487,7 @@ async def test_declined_route_reroutes_once_and_preamble_precedes_attributed_res
     assert result.disposition == "answer"
     assert output == [("xr", "I will add it."), ("xr", "Added.")]
     assert len(decisions.calls) == 2
-    assert "tea" not in decisions.calls[-1][0]["destinations"]
+    assert "tea" not in decisions.calls[-1][1]["destination"].criteria
 
 
 @pytest.mark.asyncio
@@ -816,9 +816,13 @@ async def test_route_scope_records_choice_probabilities_and_eligible_candidates(
                 "selected_destination_probability": 0.27,
                 "selection_reason": "highest_scored_eligible_after_clarify",
                 "eligible_destinations": ["conversation", "observation"],
+                "history_exchanges_sent": 0,
             },
         )
     ]
+    # Destinations reach the decision model once, as choices, not again in the state.
+    assert "destinations" not in decisions.calls[0][0]
+    assert "Questions about the current camera view" in decisions.calls[0][1]["destination"].criteria["observation"]
 
 
 @pytest.mark.asyncio
@@ -965,9 +969,9 @@ async def test_route_prompt_exposes_unavailable_destination_eligibility():
 
     assert result == DestinationResult("clarify", "Which part would you like help with?")
     assert output == [("conversation", "Which part would you like help with?")]
-    routed_destinations = decisions.calls[0][0]["destinations"]
-    assert next(item for item in routed_destinations if item["name"] == "xr")["eligibility"] == "unavailable"
-    assert next(item for item in routed_destinations if item["name"] == "xr")["eligible"] is False
+    xr_choice = decisions.calls[0][1]["destination"].criteria["xr"]
+    assert "eligibility=unavailable" in xr_choice
+    assert "eligible=False" in xr_choice
     assert xr.calls == []
     assert conversation.calls == []
 
@@ -1018,14 +1022,16 @@ async def test_exhausted_declines_answer_once_with_default_and_shared_history():
     assert output == [("conversation", "I can still help.")]
     assert [call[0] for call in specialist.calls] == ["admit"]
     assert [call[0] for call in visual.calls] == ["admit"]
-    assert [item["name"] for item in decisions.calls[0][0]["destinations"]] == [
+    assert list(decisions.calls[0][1]["destination"].criteria) == [
         "conversation",
         "specialist",
         "visual",
+        "clarify",
     ]
-    assert [item["name"] for item in decisions.calls[1][0]["destinations"]] == [
+    assert list(decisions.calls[1][1]["destination"].criteria) == [
         "conversation",
         "visual",
+        "clarify",
     ]
     assert default.calls == [("answer", "Continue that.")]
     assert default.answer_turns[0].history == history
@@ -1129,8 +1135,8 @@ async def test_domain_specific_visual_question_routes_by_declared_scope():
 
     result, _output = await _run(front_end, query="What is written on this exhibit label?")
 
-    declared = {item["name"]: item["description"] for item in decisions.calls[0][0]["destinations"]}
-    assert declared["museum_guide"] == "Visual questions about museum exhibits and artwork"
+    museum_choice = decisions.calls[0][1]["destination"].criteria["museum_guide"]
+    assert "description='Visual questions about museum exhibits and artwork'" in museum_choice
     assert museum.calls == [
         ("admit", "What is written on this exhibit label?", False),
         ("answer", "What is written on this exhibit label?"),
@@ -1995,3 +2001,76 @@ async def test_cancelled_answer_after_focused_decline_keeps_owner_and_drains_wor
         assert notes.calls[-2:] == [("admit", "Another note", True), ("answer", "Another note")]
     finally:
         await router.stop()
+
+
+class _SizeLimitedDecisions(_Decisions):
+    """Reject routing requests carrying more than ``max_history`` exchanges, as a model input limit would."""
+
+    def __init__(self, *choices, max_history: int) -> None:
+        super().__init__(*choices)
+        self.max_history = max_history
+        self.sent_history = []
+
+    async def decide(self, state, questions, *, timeout=None):
+        history = state["completed_history"]
+        self.sent_history.append([item["user"] for item in history])
+        if len(history) > self.max_history:
+            raise DecisionInputTooLargeError("request requires 5000 tokens; maximum is 4096")
+        return await super().decide(state, questions, timeout=timeout)
+
+
+def _exchanges(count):
+    return tuple(AgentExchange(f"question {index}", f"answer {index}") for index in range(count))
+
+
+@pytest.mark.asyncio
+async def test_too_large_routing_request_retries_with_the_newest_half_of_history(caplog, monkeypatch):
+    events = []
+    monkeypatch.setattr(
+        "xr_ai_routing._router.nemo_relay.scope.event",
+        lambda name, **kwargs: events.append((name, kwargs["data"])),
+    )
+    decisions = _SizeLimitedDecisions("visual", max_history=2)
+    conversation = _Destination("conversation")
+    visual = _Destination("visual", results=(DestinationResult("answer", "It is blue."),))
+    front_end = AgentRouter({"conversation": conversation, "visual": visual}, decisions, output=_emit_control)
+
+    result, output = await _run(front_end, query="What color is it?", history=_exchanges(8))
+
+    assert result == DestinationResult("answer", "It is blue.")
+    assert output == [("visual", "It is blue.")]
+    assert decisions.sent_history == [
+        [f"question {index}" for index in range(8)],
+        [f"question {index}" for index in range(4, 8)],
+        ["question 6", "question 7"],
+    ]
+    assert "retrying with fewer history exchanges" in caplog.text
+    assert [(name, data) for name, data in events if name.endswith("history-trimmed")] == [
+        ("conversation.destination-route-history-trimmed", {"sent_exchanges": 8, "retry_exchanges": 4}),
+        ("conversation.destination-route-history-trimmed", {"sent_exchanges": 4, "retry_exchanges": 2}),
+    ]
+    choice = next(data for name, data in events if name == "conversation.destination-route-choice")
+    assert choice["history_exchanges_sent"] == 2
+    # Only the routing request is trimmed; the destination keeps the router's full history.
+    assert len(visual.answer_turns[0].history) == 8
+
+
+@pytest.mark.asyncio
+async def test_routing_request_too_large_without_history_raises():
+    decisions = _SizeLimitedDecisions("visual", max_history=-1)
+    visual = _Destination("visual")
+    front_end = AgentRouter(
+        {"conversation": _Destination("conversation"), "visual": visual}, decisions, output=_emit_control
+    )
+
+    # The fixed prompt and descriptions alone exceed the limit: an application error, not a history one.
+    with pytest.raises(DecisionInputTooLargeError):
+        await _run(front_end, query="What color is it?", history=_exchanges(3))
+
+    assert decisions.sent_history == [
+        ["question 0", "question 1", "question 2"],
+        ["question 2"],
+        [],
+    ]
+    assert visual.calls == []
+

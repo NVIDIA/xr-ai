@@ -6,10 +6,15 @@
 (task-capture)=
 # Procedure capture and guidance
 
-The procedure-capture-guide sample records narrated demonstrations between
-spoken commands. It saves snapshots, visual captions, and transcribed narration for review and downstream
-processing. Guide mode guides participants through a locally approved procedure
-and verifies progress with visual observations and elapsed-time checks.
+## Overview
+
+Use this reference for applications that record task demonstrations and guide
+users through approved procedures. It shows how to capture images and
+narration, author a guide from the saved evidence, and run that guide with
+spoken instructions and progress checks.
+
+Guide mode is at an early stage of development. For a more comprehensive
+example of procedural guidance, refer to the separate {doc}`tea-making-sample`.
 
 ## Run a demonstration
 
@@ -46,6 +51,11 @@ and stays silent during narration. After **stop capture**, it says
 saving silently; processing errors are logged. Disconnecting finalizes the packet
 without announcements.
 
+On connection, capture mode says: "Say start capture to start the recording and
+demonstrate your procedure. To finish recording, say stop capture." This welcome
+is only sent on connection. Other speech while idle does not trigger a reply,
+and the welcome is not repeated after "Capture stopped."
+
 To stop the sample, press Ctrl+C. The shared model servers remain running.
 To stop the services selected by this sample's deployment:
 
@@ -58,6 +68,10 @@ updating the checkout. If you changed ports in a GPU profile, pass the same
 `--gpu-profile NAME` on stop.
 
 ## Output destination
+
+Recorded procedures are saved under
+`agent-samples/procedure-capture-guide/artifacts/sessions/<session-id>/` (frames, captions,
+transcript, and summary).
 
 Choose an output root at launch without editing configuration:
 
@@ -97,7 +111,8 @@ and then starts rendering while the recorder remains running.
 
 `yaml/media_capture.yaml` selects `session_mode: participant` and the `demo`
 profile. It saves recordings under
-`~/.local/share/xr-ai/captures/procedure-capture-guide/`, retaining raw media and
+`~/.local/share/xr-ai/captures/procedure-capture-guide/` (not the capture
+packets in `artifacts/sessions/`), retaining raw media and
 rendering a captioned MP4 after disconnect. This option requires an NVIDIA GPU with NVENC support
 and `ffmpeg` on `PATH`. Refer to {doc}`../components/server-runtime` for the shared
 recorder's output and encoding contract.
@@ -161,7 +176,7 @@ progress indicators.
 | `artifacts/sessions/<session-id>/frames/` | JPEG samples targeting 2 fps and timestamped `index.jsonl` |
 | `artifacts/sessions/<session-id>/captions.jsonl` | Timestamped captions, activities, phases, and visible changes |
 | `artifacts/sessions/<session-id>/transcript.jsonl` | Final user transcripts inside the task recording boundary |
-| `artifacts/sessions/<session-id>/summary.md` | Human-readable activity and phase summary |
+| `artifacts/sessions/<session-id>/summary.md` | Human-readable activity and phase summary, plus a combined timeline of narration (**Heard**) and captions (**Saw**) in time order |
 | `artifacts/sessions/<session-id>/errors.jsonl` | Frame, caption, or persistence errors, when present |
 
 ### Evidence-packet contract
@@ -269,6 +284,11 @@ to the generation workflow. No separate sample regression suite is needed.
 The authoring model observes runtime results and edits the
 guide. It does not replace the runtime VLM, invent tool answers, compile a plan
 into YAML, or approve the result. The capture worker does not invoke the skills.
+
+Start from `summary.md`: its combined timeline places narration and captions side
+by side and deliberately does not reconcile them. Where they disagree (for example,
+a caption names a different tool than the narrator), the drafting agent resolves the
+conflict using the original frames and records the correction in `review.md`.
 
 From the repository root, give the agent this request:
 

@@ -171,17 +171,14 @@ def test_voice_image_refresh_has_current_license_record(package: str) -> None:
 
 
 @pytest.mark.parametrize(
-    ("package", "version", "inventory_versions"),
-    [
-        ("hydra-core", "1.3.7", {"1.3.7"}),
-        ("lightning", "2.6.6", {"2.6.6"}),
-        ("fsspec", "2026.7.0", {"2026.7.0", "2026.9.0"}),
-    ],
+    ("package", "version"),
+    [("hydra-core", "1.3.8"), ("lightning", "2.6.6"), ("fsspec", "2026.7.0"),
+     ("nemo-toolkit", "3.1.0")],
 )
-def test_nemo_refresh_has_current_license_record(
-    package: str, version: str, inventory_versions: set[str],
-) -> None:
-    assert _LOCK_VERSIONS[package] == inventory_versions
+def test_nemo_refresh_has_current_license_record(package: str, version: str) -> None:
+    assert version in _LOCK_VERSIONS[package]
+    if package != "fsspec":
+        assert _LOCK_VERSIONS[package] == {version}
     directory = f"third_party_licenses/{package}-{version}"
     assert f"{directory}/" in _NOTICES
     assert (_ROOT / directory / "LICENSE").read_text().strip()

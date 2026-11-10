@@ -29,6 +29,8 @@ class _SpeakerTranscriptionFrame(TranscriptionFrame):
 
     speaker_id: int | None
     _control_pending: bool = False
+    # Withheld control-prefix words that turned out to be speech before this transcript.
+    _released: str = ""
 
 
 @dataclass

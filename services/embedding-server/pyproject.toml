@@ -17,7 +17,13 @@ dependencies = [
     "pyjwt>=2.15.1",
     # CVE-2026-80047: check remote-code consent before caching custom generation code.
     "transformers>=5.17.0",
-    "vllm>=0.30.0",
+    # CVE-2026-114050 and CVE-2026-114055: fixed multimodal cache and request validation.
+    # Qualify this exact release with the NGC preview; patch upgrades require
+    # requalification too, so keep the four service environments aligned.
+    "vllm==0.31.0",
+    # vLLM pins protobuf 7.36.1 only on s390x; preserve 7.36.2 elsewhere.
+    "protobuf>=7.36.2; platform_machine != 's390x'",
+    "protobuf==7.36.1; platform_machine == 's390x'",
     # CVE-2026-59951: reclaim stateful Streamable HTTP sessions.
     "mcp>=2.2.0",
     "pillow>=13.0.0",
