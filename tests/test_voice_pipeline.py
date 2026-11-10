@@ -2381,6 +2381,35 @@ async def test_streaming_tts_interrupt_closes_only_target_stream():
 
 
 @pytest.mark.asyncio
+async def test_streaming_tts_interrupt_with_an_inherited_relay_scope_stack():
+    """Each participant's sender runs on its own Relay scope stack.
+
+    Child tasks share their creator's stack. When the caller already has one,
+    Alice's and Bob's ``voice.tts`` scopes would interleave on it, and closing
+    Alice's on interrupt (not on top) raised inside her sender, hanging the
+    interrupt.
+    """
+    with nemo_relay.scope.scope("caller", nemo_relay.ScopeType.Agent):
+        caller_stack = nemo_relay.get_scope_stack()
+
+        tts  = _FakeStreamingTts()
+        gate = VoiceGate(VoiceGateConfig(), audio_sink=_NullSink(), tts=tts)
+        probe = StreamingTtsProcessor(tts=tts, voice_gate=gate)
+        sender = probe._state("alice")  # noqa: SLF001
+        probe._ensure_sender("alice")  # noqa: SLF001
+        try:
+            sender_stack = sender.sender_task.get_context().run(nemo_relay.get_scope_stack)
+            assert sender_stack is not caller_stack
+        finally:
+            sender.sender_task.cancel()
+            await asyncio.gather(sender.sender_task, return_exceptions=True)
+
+        await asyncio.wait_for(
+            test_streaming_tts_interrupt_closes_only_target_stream(), timeout=2,
+        )
+
+
+@pytest.mark.asyncio
 async def test_streaming_tts_sentence_boundary_triggers_synth():
     tts  = _FakeTts(sample_rate=22050)
     gate = VoiceGate(VoiceGateConfig(), audio_sink=_NullSink(), tts=tts)
