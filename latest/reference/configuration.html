@@ -619,11 +619,11 @@ workflow.</p></li>
 <span class="c1"># Input limit for one asynchronous context compaction request.</span>
 <span class="nt">compaction_input_budget_bytes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">12000</span>
 
-<span class="c1"># Optional route-aware intention acknowledgment. When omitted, prediction and</span>
-<span class="c1"># acknowledgment are disabled. Set a positive delay in seconds to enable it.</span>
-<span class="c1"># The selected destination starts immediately; a confident slow prediction can</span>
-<span class="c1"># speak an acknowledgment early, otherwise the delay is the fallback threshold.</span>
-<span class="c1"># acknowledgment_delay_secs: 2.0</span>
+<span class="c1"># Route-aware intention acknowledgment. Comment this out to disable prediction</span>
+<span class="c1"># and acknowledgment. The delay is in seconds. The selected destination starts</span>
+<span class="c1"># immediately; a confident slow prediction can speak an acknowledgment early,</span>
+<span class="c1"># otherwise the delay is the fallback threshold.</span>
+<span class="nt">acknowledgment_delay_secs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
 
 <span class="c1"># Background visual alerts pace their frame checks. Every frame is first screened</span>
 <span class="c1"># by a cheap Clef image call; only a frame that may show the alert's subject also</span>
