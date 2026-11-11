@@ -1383,7 +1383,7 @@ async def test_confident_slow_prediction_acknowledges_then_records_only_real_ans
         "slow",
         {"slow": 0.8, "within_delay": 0.1, "uncertain": 0.1},
     )
-    llm = _AcknowledgmentLLM()
+    llm = _AcknowledgmentLLM(content="Let me compare those prices.")
     front_end = AgentRouter(
         {"destination": destination},
         decisions, output=_emit_control,  # type: ignore[arg-type]
@@ -1408,14 +1408,12 @@ async def test_confident_slow_prediction_acknowledges_then_records_only_real_ans
 
     assert result.disposition == "answer"
     assert output == [
-        ("destination", "Let me think through that. "),
+        ("destination", "Let me compare those prices. "),
         ("destination", "Here is the answer."),
     ]
     assert llm.calls[0][1] == {"max_tokens": 64, "enable_thinking": False}
     acknowledgment_messages = llm.calls[0][0]
     assert acknowledgment_messages[0].role == "system"
-    assert "Let me think through [short neutral restatement" in acknowledgment_messages[0].content
-    assert "Do not include findings, advice, recommendations" in acknowledgment_messages[0].content
     assert "Current user request: Explain the request." in acknowledgment_messages[1].content
     assert acknowledgment_messages[1].content.endswith("Explain the request.")
     assert "prior_first_answer_examples" in decisions.calls[0][0]
@@ -1602,18 +1600,35 @@ async def test_answer_timing_excludes_committed_acknowledgment_output(monkeypatc
     ("text", "valid"),
     [
         ("Let me think through creating a clear walkway.", True),
-        ("One practical way is to create a clear central pathway.", False),
-        ("I can help you rearrange the room to create a clear walkway.", False),
+        ("Let me read the receipt.", True),
+        ("I’ll compare the prices.", True),
+        ("Give me a moment!", True),
+        ("Could I check that?", True),
+        ("Let me check one two three four five six seven eight nine.", True),
+        ("Let me check one two three four five six seven eight nine ten.", False),
+        ("", False),
+        ("   ", False),
+        (".", False),
+        (" .", False),
+        ("Let me read the receipt", False),
+        ("Let me check...", False),
+        ("Let me check.\n", False),
+        ("Let me\ncheck.", False),
+        ("Let me\rcheck.", False),
+        ("One practical way is to create a clear central pathway.", True),
+        ("I can help you rearrange the room to create a clear walkway.", True),
         ("Let me think through creating a clear walkway. Move the chairs.", False),
     ],
 )
-def test_acknowledgment_gate_rejects_answer_content(text, valid):
+def test_acknowledgment_gate_checks_format_only(text, valid):
     assert _is_valid_acknowledgment(text) is valid
 
 
 @pytest.mark.parametrize(
     "generated",
     [
+        "",
+        "Here is the answer. Try this.",
         "Let me think through tell me the next one and then summarize all of them in one paragraph.",
         "Let me think through removing the ceiling light fixture and placing it on the floor safely.",
         "Let me think through moving the desk behind you to a different spot.",
@@ -1637,7 +1652,7 @@ async def test_invalid_acknowledgment_uses_neutral_fallback_without_recording_it
 
     async def emit(source, text):
         output.append((source, text))
-        if text == "Let me think that through. ":
+        if text == "Let me think about that. ":
             fallback_emitted.set()
 
     task = asyncio.create_task(
@@ -1650,7 +1665,7 @@ async def test_invalid_acknowledgment_uses_neutral_fallback_without_recording_it
 
     assert result.disposition == "answer"
     assert output == [
-        ("destination", "Let me think that through. "),
+        ("destination", "Let me think about that. "),
         ("destination", "Here is the answer."),
     ]
     assert front_end._history["alice"][-1].assistant == "Here is the answer."
