@@ -71,11 +71,11 @@ async def test_empty_speaker_utterance_invalidates_control_without_dropping_next
     try:
         await utterance(cfg._speaker.start_phrase, 0)
         gate.push_frame.reset_mock()
-        await utterance("hey agent", 1_000_000)
+        await utterance("stop talking to", 1_000_000)
         await utterance("", 2_000_000)
-        await utterance("let's start talking", 3_000_000)
+        await utterance("me", 3_000_000)
         queries = [c.args[0] for c in gate.push_frame.call_args_list if isinstance(c.args[0], GatedQueryFrame)]
-        assert [q.text for q in queries] == ["let's start talking"]
+        assert [q.text for q in queries] == ["me"]
         assert selection.owner == 7 and "wearer" in gate._conversation_active
     finally:
         await processor.cleanup()
@@ -294,7 +294,7 @@ def _voice_cfg(tmp_path, **overrides):
     import yaml
     path = tmp_path / "voice.yaml"
     path.write_text(yaml.safe_dump({
-        "magic_phrases": ["hey agent"], "listening_chime": False,
+        "magic_phrases": ["hey assistant"], "listening_chime": False,
         "speaker": {"enabled": True, **overrides},
     }))
     return load_voice_gate_config(path)
@@ -312,27 +312,27 @@ async def test_enrollment_interacts_with_wake_gate_and_preserves_typed_input(tmp
         frame.transport_source = pid
         frame.pts = 123000
         await gate.process_frame(frame, FrameDirection.DOWNSTREAM)
-    await speech("a", "hey agent look around")
+    await speech("a", "hey assistant look around")
     assert not gate.push_frame.called
     await gate.process_frame(_SpeakerEnrollmentFrame("a", "enrolled"), FrameDirection.DOWNSTREAM)
     gate.push_frame.reset_mock()
-    await speech("b", "hey agent look around")
+    await speech("b", "hey assistant look around")
     assert not gate.push_frame.called
     await speech("a", "look around")
     queries = [c.args[0] for c in gate.push_frame.call_args_list if isinstance(c.args[0], GatedQueryFrame)]
     assert bool(queries) is (not require_wake)
     gate.push_frame.reset_mock()
-    await speech("a", "hey agent look around")
+    await speech("a", "hey assistant look around")
     queries = [c.args[0] for c in gate.push_frame.call_args_list if isinstance(c.args[0], GatedQueryFrame)]
-    expected = "look around" if require_wake else "hey agent look around"
+    expected = "look around" if require_wake else "hey assistant look around"
     assert len(queries) == 1 and queries[0].text == expected
     assert queries[0].pts_us == 123
     assert queries[0].speaker_id == 7
     await gate.process_frame(_SpeakerEnrollmentFrame("a", "released"), FrameDirection.DOWNSTREAM)
     gate.push_frame.reset_mock()
-    await speech("a", "hey agent look around")
+    await speech("a", "hey assistant look around")
     assert not gate.push_frame.called
-    typed = TranscriptionFrame(text="hey agent typed query", user_id="a", timestamp="now")
+    typed = TranscriptionFrame(text="hey assistant typed query", user_id="a", timestamp="now")
     await gate.process_frame(typed, FrameDirection.DOWNSTREAM)
     assert any(isinstance(c.args[0], GatedQueryFrame) for c in gate.push_frame.call_args_list)
     assert gate._feeding_speaker_id is None
@@ -347,7 +347,7 @@ async def test_early_stop_never_runs_for_unenrolled_voice_or_control_prefix():
     assert not processor.push_frame.called
     await processor._event("a", {"kind": "enrolled"})
     processor.push_frame.reset_mock()
-    await processor._event("a", {"kind": "partial", "text": "Hey agent let's stop"})
+    await processor._event("a", {"kind": "partial", "text": "Stop talking to"})
     assert not processor.push_frame.called
     processor._on_partial.assert_not_awaited()
     await processor._event("a", {"kind": "partial", "text": "stop"})
@@ -699,10 +699,10 @@ async def test_web_audio_queue_allows_two_seconds_before_reset():
 def _config(tmp_path, *, require_wake=False, conversation=True, speaker=True, stop_enabled=True, backend="auto"):
     path = tmp_path / "voice.yaml"
     path.write_text(yaml.safe_dump({
-        "magic_phrases": ["hey agent"], "listening_chime": False,
+        "magic_phrases": ["hey assistant"], "listening_chime": False,
         "stop_commands_enabled": stop_enabled,
         "conversation": {"enabled": conversation, "require_wake_phrase": require_wake,
-                         "start_phrase": "Hey agent, let's start talking", "phrase_window_s": 6},
+                         "start_phrase": "Start talking to me", "phrase_window_s": 6},
         "speaker": {"enabled": speaker, "backend": backend},
     }))
     return load_voice_gate_config(path)
@@ -876,7 +876,7 @@ async def test_speaker_pipeline_honors_stop_policy_for_partial_and_final_transcr
 
     processor.push_frame = to_gate
     gate.push_frame = AsyncMock(side_effect=lambda frame, *_args: emitted.append(frame))
-    final_text = f"hey agent {text}" if require_wake else text
+    final_text = f"hey assistant {text}" if require_wake else text
     try:
         await processor._event("wearer", {"kind": "enrolled"})
         emitted.clear()
@@ -971,46 +971,47 @@ async def test_same_conversation_workflow_through_both_asr_paths(tmp_path, monke
         assert not accepted and captions.await_count == 0
         output.push_frame.assert_not_awaited()
         assert not await gate.handle_partial_transcript("a", "stop")
-        for part in ("hey agent", "let us", "start talking"):
+        for part in ("start", "talking", "to me"):
             await speak(part)
         assert "a" in gate._conversation_active
         assert not accepted and captions.await_count == 0
-        assert not await gate.handle_partial_transcript("a", "hey agent let's stop")
+        assert not await gate.handle_partial_transcript("a", "stop talking to")
         assert await gate.handle_partial_transcript("a", "stop")
 
         await speak("what is that")
         assert len(accepted) == (0 if require_wake else 1)
-        # A wake phrase split from an ordinary command leads the next transcript,
-        # as if spoken unsplit. When wake phrases are required, it opens only its
-        # follow-up window instead.
-        query = "describe this" if require_wake else "hey agent describe this"
-        await speak("hey agent")
+        # A control fragment split from an ordinary command leads the next transcript,
+        # as if spoken unsplit. When wake phrases are required, a bare wake phrase
+        # opens its follow-up window instead.
+        query = "describe this" if require_wake else "start describe this"
+        await speak("hey assistant" if require_wake else "start")
         await speak("describe this")
         assert accepted[-1].text == query
         count = len(accepted)
         if require_wake:
-            await speak("hey agent")
+            await speak("hey assistant")
             gate.gate.forget("a")  # Its follow-up window elapses.
             await speak("describe this")
             assert len(accepted) == count
-        # A wake phrase split across fragments is still one wake phrase.
-        for part in ("hey", "agent", "describe this"):
+        for part in ("hey assistant" if require_wake else "start", "describe this"):
             await speak(part)
         assert len(accepted) == count + 1 and accepted[-1].text == query
         count += 1
         # Released words lead a query, but a STOP is judged on its own utterance.
         responses = []
         gate._emit_text_response = AsyncMock(side_effect=lambda pid, text: responses.append(text))
-        await speak("Hey.")
+        await speak("Star.")
         await speak("stop")
         assert responses == [_STOP_ACK_TEXT] and len(accepted) == count
-        await speak("hey agent")
-        await speak("let's stop talking")
+        await speak("stop talking to")
+        await speak("me")
         assert "a" not in gate._conversation_active and len(accepted) == count
         await speak("do not send this")
         assert len(accepted) == count
         captioned = [call.args[1] for call in captions.await_args_list]
-        assert captioned == ["what is that", query, *(["describe this"] if require_wake else []), query, "stop"]
+        wake = ["hey assistant"] if require_wake else []  # a bare wake phrase is its own final transcript
+        assert captioned == ["what is that", *wake, query, *wake, *(["describe this"] if require_wake else []),
+                             *wake, query, "stop"]
         messages = [call.args[0] for call in display.await_args_list]
         assert len(messages) == len(accepted)
         label = "Speaker 7" if use_speaker else "User"
@@ -1074,7 +1075,7 @@ def test_invalid_backend_configuration_fails_early(settings):
 def test_conversation_owns_controls_when_both_mappings_are_present(tmp_path):
     path = tmp_path / "voice.yaml"
     path.write_text(yaml.safe_dump({
-        "magic_phrases": ["hey agent"],
+        "magic_phrases": ["hey assistant"],
         "conversation": {"enabled": True, "start_phrase": "begin our session", "require_wake_phrase": True},
         "speaker": {"enabled": True, "start_phrase": "ignore this old phrase", "require_wake_phrase": False},
     }))
@@ -1090,7 +1091,7 @@ def test_conversation_can_use_ordinary_stt_or_preserve_legacy_wake_mode(tmp_path
     cfg = _config(tmp_path, conversation=False)
     assert cfg._conversation is None and cfg._speaker is not None
     assert cfg._speaker.mode == "wake_only"
-    assert cfg.magic_phrases == ("hey agent",)
+    assert cfg.magic_phrases == ("hey assistant",)
 
 
 @pytest.mark.asyncio

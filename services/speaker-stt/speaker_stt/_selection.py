@@ -19,7 +19,7 @@ class _Selection:
         self.silence = 0.0
         self.pts_us = 0
         self.text = ""
-        self._controls = _ControlMatcher(cfg)
+        self._controls = _ControlMatcher(cfg, stop_commands_enabled=cfg.stop_commands_enabled)
         self._enrollment_controls: dict[int, _ControlMatcher] = {}
         self._wake_pattern = build_magic_pattern(cfg.magic_phrases)
         self._wake_until: dict[int, int] = {}
@@ -35,7 +35,9 @@ class _Selection:
             # Every completed utterance consumes the prior one-turn permission,
             # including a withheld control. A fresh bare wake can renew it below.
             until = self._wake_until.pop(speaker, None)
-            matcher = self._enrollment_controls.setdefault(speaker, _ControlMatcher(self.cfg))
+            matcher = self._enrollment_controls.setdefault(
+                speaker, _ControlMatcher(self.cfg, stop_commands_enabled=self.cfg.stop_commands_enabled),
+            )
             if truncated:
                 matcher._reset()
                 self._wake_until.pop(speaker, None)

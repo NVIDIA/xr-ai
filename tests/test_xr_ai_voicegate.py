@@ -154,25 +154,25 @@ def test_phrase_at_transcript_start_strips_query_tail():
 
 
 def test_phrase_multi_phrase_both_forms_match():
-    """Case 2: with ['agent', 'hey agent'] both prefixes match and strip."""
-    pat = build_magic_pattern(["agent", "hey agent"])
-    assert strip_magic(pat, "agent, hi")     == "hi"
-    assert strip_magic(pat, "hey agent, hi") == "hi"
+    """Case 2: with ['assistant', 'hey assistant'] both prefixes match and strip."""
+    pat = build_magic_pattern(["assistant", "hey assistant"])
+    assert strip_magic(pat, "assistant, hi")     == "hi"
+    assert strip_magic(pat, "hey assistant, hi") == "hi"
 
 
 def test_phrase_case_insensitive_match():
     """Case 3: STT may upper-case the first letter — must still match."""
-    pat = build_magic_pattern(["hey agent"])
-    assert strip_magic(pat, "Hey Agent, what's up?") == "what's up?"
+    pat = build_magic_pattern(["hey assistant"])
+    assert strip_magic(pat, "Hey Assistant, what's up?") == "what's up?"
 
 
 def test_phrase_tolerates_internal_and_trailing_punctuation():
-    """Case 4: 'Hey, agent.' has a comma between words and a period at the
-    end. The matcher must still treat it as the configured 'hey agent'
+    """Case 4: 'Hey, assistant.' has a comma between words and a period at the
+    end. The matcher must still treat it as the configured 'hey assistant'
     prefix and strip it cleanly."""
-    pat = build_magic_pattern(["hey agent"])
-    stripped = strip_magic(pat, "Hey, agent.")
-    # The configured "hey agent" is matched even with STT punctuation
+    pat = build_magic_pattern(["hey assistant"])
+    stripped = strip_magic(pat, "Hey, assistant.")
+    # The configured "hey assistant" is matched even with STT punctuation
     # spliced in; nothing follows so the tail is empty.
     assert stripped == ""
 
@@ -193,8 +193,8 @@ def test_phrase_no_filler_allowance_before_phrase():
 @pytest.mark.parametrize("boundary", [".", "?", "!"])
 def test_phrase_after_sentence_boundary_strips_preamble(boundary: str):
     """A boundary wake discards noisy preamble and returns only the query."""
-    pat = build_magic_pattern(["hey agent"])
-    text = f"Background speech{boundary} Hey agent, what am I looking at?"
+    pat = build_magic_pattern(["hey assistant"])
+    text = f"Background speech{boundary} Hey assistant, what am I looking at?"
     assert strip_magic(pat, text) == "what am I looking at?"
 
 
@@ -218,8 +218,8 @@ def test_phrase_after_mid_sentence_punctuation_does_not_match(separator: str):
 
 
 def test_partial_phrase_after_sentence_boundary_can_continue_matching():
-    gate, _, _ = _gate(phrases=("hey agent",))
-    assert gate.could_match_magic_phrase("background. hey ag") is True
+    gate, _, _ = _gate(phrases=("hey assistant",))
+    assert gate.could_match_magic_phrase("background. hey assis") is True
 
 
 def test_phrase_empty_list_yields_none_pattern_and_passthrough_strip():
@@ -578,20 +578,20 @@ async def test_feed_stop_wins_over_open_followup_window():
 
 @pytest.mark.asyncio
 async def test_feed_stop_matched_on_magic_stripped_tail():
-    """Case 23: 'hey agent stop' — the gate strips the magic prefix to
+    """Case 23: 'hey assistant stop' — the gate strips the magic prefix to
     'stop' and the STOP regex matches the tail. on_stop fires."""
-    gate, _, _ = _gate(phrases=("hey agent",))
+    gate, _, _ = _gate(phrases=("hey assistant",))
     events = _recording_handlers(gate)
 
-    await gate.feed("p1", "hey agent stop")
+    await gate.feed("p1", "hey assistant stop")
 
     assert events == [("stop", "p1")]
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("phrases,text", [
-    (("hey agent",), "hey agent stop visual monitoring."),
-    (("hey agent",), "hey agent stop monitoring xyz"),
+    (("hey assistant",), "hey assistant stop visual monitoring."),
+    (("hey assistant",), "hey assistant stop monitoring xyz"),
     ((), "stop visual monitoring."),
 ])
 async def test_feed_application_stop_command_dispatches_to_agent(
@@ -604,7 +604,7 @@ async def test_feed_application_stop_command_dispatches_to_agent(
 
     await gate.feed("p1", text)
 
-    expected = text.removeprefix("hey agent ")
+    expected = text.removeprefix("hey assistant ")
     assert events == [("query", "p1", expected, True)]
 
 
@@ -744,10 +744,10 @@ def test_format_phrase_help_one_phrase():
 
 def test_format_phrase_help_two_phrases():
     """Case 30: two-phrase form uses 'or', not a comma."""
-    gate, _, _ = _gate(phrases=("agent", "hey agent"))
+    gate, _, _ = _gate(phrases=("assistant", "hey assistant"))
     assert gate.format_phrase_help() == (
-        'To talk to me, start your question with "agent" or "hey agent". '
-        'For example, "agent, what am I looking at?"'
+        'To talk to me, start your question with "assistant" or "hey assistant". '
+        'For example, "assistant, what am I looking at?"'
     )
 
 
@@ -899,14 +899,14 @@ def test_load_voice_gate_config_full_file(tmp_path: pathlib.Path):
     p = tmp_path / "voice_gate.yaml"
     p.write_text(
         "magic_phrases:\n"
-        '  - "agent"\n'
-        '  - "hey agent"\n'
+        '  - "assistant"\n'
+        '  - "hey assistant"\n'
         "listening_chime:  true\n"
         "followup_grace_s: 7.5\n"
     )
     cfg = load_voice_gate_config(p)
     assert cfg == VoiceGateConfig(
-        magic_phrases    = ("agent", "hey agent"),
+        magic_phrases    = ("assistant", "hey assistant"),
         followup_grace_s = 7.5,
         listening_chime  = True,
     )
@@ -976,19 +976,19 @@ def test_load_voice_gate_config_strips_whitespace_and_drops_empty(tmp_path: path
     p = tmp_path / "voice_gate.yaml"
     p.write_text(
         "magic_phrases:\n"
-        '  - "  agent  "\n'
+        '  - "  assistant  "\n'
         '  - ""\n'
-        '  - "hey agent"\n'
+        '  - "hey assistant"\n'
     )
     cfg = load_voice_gate_config(p)
-    assert cfg.magic_phrases == ("agent", "hey agent")
+    assert cfg.magic_phrases == ("assistant", "hey assistant")
 
 
 def test_load_voice_gate_config_rejects_non_mapping_top_level(tmp_path: pathlib.Path):
     """Case 40: a top-level list (or any non-mapping) raises ValueError —
     catches typo'd files that would otherwise silently degrade."""
     p = tmp_path / "voice_gate.yaml"
-    p.write_text("- agent\n- hey agent\n")
+    p.write_text("- assistant\n- hey assistant\n")
     with pytest.raises(ValueError):
         load_voice_gate_config(p)
 
@@ -1012,7 +1012,7 @@ def test_load_voice_gate_config_simple_vlm_sample_round_trip():
     if not p.exists():
         pytest.skip(f"sample voice_gate.yaml not reachable at {p}")
     cfg = load_voice_gate_config(p)
-    assert cfg.magic_phrases    == ("agent", "hey agent")
+    assert cfg.magic_phrases    == ("assistant", "hey assistant")
     assert cfg.listening_chime  is False
     assert cfg.followup_grace_s == 5.0
 
