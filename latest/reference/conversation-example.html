@@ -535,6 +535,15 @@ a standalone condition and a short relevance phrase naming what the condition is
 about. The spoken confirmation states the compiled condition. When no specific
 visible condition can be resolved, the agent says so, starts nothing, and leaves
 any running alert in place.</p>
+<p>Alert compilation uses a separate server-side thinking-token budget and total
+output limit, defined in <code class="docutils literal notranslate"><span class="pre">_alert_compile.py</span></code>. The thinking-token budget is distinct
+from the ordinary conversation’s soft chat-template reasoning hint. Its instructions
+define a trigger for future frames; an object need not be visible in an earlier
+scene description to request a watch for it. A compilation deadline bounds how
+long model inference can delay an existing alert’s announcement. If it expires,
+the agent reports that setup timed out and preserves any existing alert. External
+turn cancellation still propagates without a timeout reply. These controls do not
+change ordinary conversation or visual-question generation settings.</p>
 <p>Each job then checks frames in a paced loop. A cheap Clef image call screens every
 frame for whether the relevance subject may be visible, and a frame it rejects
 costs nothing more. Only a screened frame runs the two condition checks in
@@ -684,7 +693,7 @@ from a present observation; they do not expire or remove information.</p>
 </tbody>
 </table>
 </div>
-<p>The decision eval is under <code class="docutils literal notranslate"><span class="pre">agent-samples/conversation-example/eval/</span></code>:</p>
+<p>The evaluation tools are under <code class="docutils literal notranslate"><span class="pre">agent-samples/conversation-example/eval/</span></code>:</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>File</p></th>
@@ -697,6 +706,12 @@ from a present observation; they do not expire or remove information.</p>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">conversation-flows.yaml</span></code></p></td>
 <td><p>Ordered participant sessions with expected routing, admission, control actions, and focus</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">run_alert_compile_eval.py</span></code></p></td>
+<td><p>Replays the production alert compiler and records outputs, usage, and latency for semantic review</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">alert-compile-cases.yaml</span></code></p></td>
+<td><p>Alert requests with history/notes, expected status and condition, and grading notes</p></td>
 </tr>
 </tbody>
 </table>
@@ -766,6 +781,33 @@ the configured Clef router is available:</p>
 choice. Answer quality, alert compilation, and the alert frame checks are not
 scored: alert compilation returns a fixed watch, and alert jobs never receive a
 frame.</p>
+<p>The alert compiler has a separate replay tool that calls the configured Omni
+endpoint without creating watches or acquiring camera frames. Run it from the
+repository root with the model endpoint available and other inference idle:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>uv.toml<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/conversation-example/worker<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>python<span class="w"> </span>agent-samples/conversation-example/eval/run_alert_compile_eval.py<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--output<span class="w"> </span>/tmp/alert-compile-eval.jsonl
+</pre></div>
+</div>
+<p>To compare reasoning budgets with the prompt, input, seed, and total-output
+allowance held fixed, run paired trials:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>uv.toml<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/conversation-example/worker<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>python<span class="w"> </span>agent-samples/conversation-example/eval/run_alert_compile_eval.py<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--case<span class="w"> </span>banana_presence_after_raise_refusal<span class="w"> </span>--repeat<span class="w"> </span><span class="m">10</span><span class="w"> </span>--seed<span class="w"> </span><span class="m">100</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--thinking-budgets<span class="w"> </span><span class="m">256</span><span class="w"> </span><span class="m">1024</span><span class="w"> </span>--max-tokens<span class="w"> </span><span class="m">1280</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--output<span class="w"> </span>/tmp/alert-compile-budget-eval.jsonl
+</pre></div>
+</div>
+<p>Each repeat advances the seed and alternates budget order. Output files must not
+already exist. JSONL records include the effective request, actual condition,
+expected condition, grading notes, finish reason, token usage, and compilation
+latency. <code class="docutils literal notranslate"><span class="pre">status_matches</span></code> checks only the status, not trigger correctness; every
+<code class="docutils literal notranslate"><span class="pre">ready</span></code> response requires semantic review against <code class="docutils literal notranslate"><span class="pre">expected_condition</span></code> and
+<code class="docutils literal notranslate"><span class="pre">notes</span></code>. A condition requiring an object to be raised is incorrect for a request
+to detect its presence. Timeouts and malformed outputs are recorded separately.
+The banana fixture is a synthetic reproduction of the failure pattern, not the
+original recorded conversation used in earlier measurements. CPU tests validate
+request handling and replay records; they do not establish model accuracy.</p>
 <p>Router uncertainty still probes the highest-probability currently eligible
 destination through its normal admission step. It produces router clarification
 only when no usable eligible probability remains; a selected destination can
