@@ -16,6 +16,9 @@ dependencies = []
 
 [project.optional-dependencies]
 repository = [
+    "conversation-example",
+    "conversation-example-model-servers",
+    "conversation-example-worker",
     "lab-instrument-monitoring",
     "lab-instrument-monitoring-model-servers",
     "lab-instrument-monitoring-worker",
@@ -72,6 +75,9 @@ package = false
 conflicts = [[{ extra = "repository" }, { extra = "vllm" }]]
 
 [tool.uv.sources]
+"conversation-example"                    = { path = "../agent-samples/conversation-example", editable = true }
+"conversation-example-model-servers"      = { path = "../agent-samples/conversation-example/model-servers", editable = true }
+"conversation-example-worker"             = { path = "../agent-samples/conversation-example/worker", editable = true }
 "lab-instrument-monitoring"               = { path = "../agent-samples/lab-instrument-monitoring", editable = true }
 "lab-instrument-monitoring-model-servers" = { path = "../agent-samples/lab-instrument-monitoring/model-servers", editable = true }
 "lab-instrument-monitoring-worker"        = { path = "../agent-samples/lab-instrument-monitoring/worker", editable = true }

@@ -83,6 +83,29 @@ for Mbed TLS, Apache-2.0 C++ client telemetry, and MIT DeepGEMM notices. The
 license records cover the inspected wheels; other platform artifacts and
 optional execution providers require their own review.
 
+### NeMo dependency security refresh
+
+The STT, Magpie TTS, and speaker STT environments use unmodified upstream NeMo
+3.1 source at `dec3f0d39d869193c00b49a198fe13613be914dc` (Apache-2.0),
+Hydra 1.3.8 (MIT), Lightning 2.6.6 (Apache-2.0), and fsspec 2026.7.0
+(BSD-3-Clause). NeMo supports these Hydra and Lightning versions without
+compatibility overrides. The umbrella Lightning package uses upstream commit
+`771017e4f39b314b49abd4a1d65905c74268d248`.
+
+License texts and source provenance are recorded in
+[`nemo-toolkit-3.1.0`](third_party_licenses/nemo-toolkit-3.1.0/),
+[`hydra-core-1.3.8`](third_party_licenses/hydra-core-1.3.8/),
+[`lightning-2.6.6`](third_party_licenses/lightning-2.6.6/), and
+[`fsspec-2026.7.0`](third_party_licenses/fsspec-2026.7.0/).
+
+NeMo retains OneLogger 2.3.1 as a transitive dependency but disables its default
+callback registration. The services no longer use the patched OneLogger source.
+Its unmodified license and notice remain recorded under
+[`nv-one-logger-pytorch-lightning-integration-2.3.1`](third_party_licenses/nv-one-logger-pytorch-lightning-integration-2.3.1/).
+Neptune logging is unsupported by this NeMo revision. Refer to
+[NeMo service qualification](docs/source/guides/testing.md#nemo-service-qualification)
+for the required runtime validation.
+
 ### Qualified HTTP and JWT security releases
 
 The release security refresh resolves `urllib3` 2.8.0 and `PyJWT` 2.15.1,
@@ -422,6 +445,11 @@ refer to the component disclosures above for applicable license elections.
 | `pillow-13.0.0` | [`LICENSE`](third_party_licenses/pillow-13.0.0/LICENSE) |
 | `onnxruntime-1.31.0` | [`LICENSE`](third_party_licenses/onnxruntime-1.31.0/LICENSE) |
 | `onnxruntime-1.31.0` | [`LICENSE.thirdparty`](third_party_licenses/onnxruntime-1.31.0/LICENSE.thirdparty) |
+| `hydra-core-1.3.8` | [`LICENSE`](third_party_licenses/hydra-core-1.3.8/LICENSE) |
+| `lightning-2.6.6` | [`LICENSE`](third_party_licenses/lightning-2.6.6/LICENSE) |
+| `fsspec-2026.7.0` | [`LICENSE`](third_party_licenses/fsspec-2026.7.0/LICENSE) |
+| `nemo-toolkit-3.1.0` | [`LICENSE`](third_party_licenses/nemo-toolkit-3.1.0/LICENSE) |
+| `nv-one-logger-pytorch-lightning-integration-2.3.1` | [`LICENSE`](third_party_licenses/nv-one-logger-pytorch-lightning-integration-2.3.1/LICENSE) |
 | `vllm-0.31.0` | [`LICENSE`](third_party_licenses/vllm-0.31.0/LICENSE) |
 | `huggingface-hub-1.33.0` | [`LICENSE`](third_party_licenses/huggingface-hub-1.33.0/LICENSE) |
 | `flashinfer-python-0.7.0.post1` | [`LICENSE`](third_party_licenses/flashinfer-python-0.7.0.post1/LICENSE) |

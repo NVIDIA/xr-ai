@@ -193,7 +193,8 @@ async def test_stt_server_transcribes_sine_wav(stt_yaml: tuple[Path, int]) -> No
     cfg_path, port = stt_yaml
 
     proc = subprocess.Popen(
-        ["uv", "run", "--directory", str(_STT_DIR),
+        ["uv", "--config-file", str(_REPO_ROOT / "uv.toml"),
+         "run", "--directory", str(_STT_DIR),
          "stt_server", "--config", str(cfg_path)],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,

@@ -168,3 +168,18 @@ def test_voice_image_refresh_has_current_license_record(package: str) -> None:
     version = _VOICE_IMAGE_AUDITED_VERSIONS[package]
     assert _LOCK_VERSIONS[package] == {version}
     assert f"third_party_licenses/{package}-{version}/" in _NOTICES
+
+
+@pytest.mark.parametrize(
+    ("package", "version"),
+    [("hydra-core", "1.3.8"), ("lightning", "2.6.6"), ("fsspec", "2026.7.0"),
+     ("nemo-toolkit", "3.1.0")],
+)
+def test_nemo_refresh_has_current_license_record(package: str, version: str) -> None:
+    assert version in _LOCK_VERSIONS[package]
+    if package != "fsspec":
+        assert _LOCK_VERSIONS[package] == {version}
+    directory = f"third_party_licenses/{package}-{version}"
+    assert f"{directory}/" in _NOTICES
+    assert (_ROOT / directory / "LICENSE").read_text().strip()
+    assert (_ROOT / directory / "README.md").is_file()

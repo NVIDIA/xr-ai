@@ -435,13 +435,15 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `hydra-core>=1.3.8,<1.4`
+  - `fsspec>=2026.7.0`
   - `multidict>=6.9.1`
   - `werkzeug>=3.1.9`
-  - `pytorch-lightning>=2.6.6`
+  - `pytorch-lightning>=2.6.6,<2.7`
   - `urllib3>=2.8.0`
   - `transformers>=5.17.0`
-  - `nemo_toolkit[tts]>=2.5`
-  - `lightning>2.2.1,<=2.4.0` (source: `https://github.com/Lightning-AI/pytorch-lightning, tag=2.4.0`)
+  - `nemo-toolkit[tts]>=3.1,<3.2` (source: `https://github.com/NVIDIA-NeMo/Speech/archive/dec3f0d39d869193c00b49a198fe13613be914dc.tar.gz`)
+  - `lightning>=2.6.6,<2.7` (source: `https://github.com/Lightning-AI/pytorch-lightning, rev=771017e4f39b314b49abd4a1d65905c74268d248`)
   - `soundfile>=0.12`
   - `numpy>=1.24`
   - `fastapi>=0.111`
@@ -558,9 +560,11 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `hydra-core>=1.3.8,<1.4`
+  - `fsspec>=2026.7.0`
   - `multidict>=6.9.1`
   - `werkzeug>=3.1.9`
-  - `pytorch-lightning>=2.6.6`
+  - `pytorch-lightning>=2.6.6,<2.7`
   - `fastapi>=0.115.0`
   - `uvicorn[standard]>=0.34.0`
   - `anyio>=4.8.0`
@@ -569,8 +573,8 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
   - `xr-ai-voicegate` → [`xr-ai-voicegate`](utils/xr-ai-voicegate/) (local, editable)
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
   - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
-  - `nemo-toolkit[asr]` (source: `https://github.com/NVIDIA-NeMo/Speech, rev=1688cc3d6a9ade854f544987810c53f605dc86fc`)
-  - `lightning>2.2.1,<=2.4.0` (source: `https://github.com/Lightning-AI/pytorch-lightning, tag=2.4.0`)
+  - `nemo-toolkit[asr]>=3.1,<3.2` (source: `https://github.com/NVIDIA-NeMo/Speech/archive/dec3f0d39d869193c00b49a198fe13613be914dc.tar.gz`)
+  - `lightning>=2.6.6,<2.7` (source: `https://github.com/Lightning-AI/pytorch-lightning, rev=771017e4f39b314b49abd4a1d65905c74268d248`)
   - `lhotse==2.0.0a6` (source: `https://files.pythonhosted.org/packages/18/ae/8ba7ee0b1db7fadf8de8f58121723a6b1ae3d88bdb0a1ffeee165b62d4ba/lhotse-2.0.0a6-py3-none-any.whl`)
 - Optional dependency groups: none
 - Commands:
@@ -582,13 +586,15 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `hydra-core>=1.3.8,<1.4`
+  - `fsspec>=2026.7.0`
   - `multidict>=6.9.1`
   - `werkzeug>=3.1.9`
-  - `pytorch-lightning>=2.6.6`
+  - `pytorch-lightning>=2.6.6,<2.7`
   - `urllib3>=2.8.0`
   - `transformers>=5.17.0`
-  - `nemo_toolkit[asr]>=2.5`
-  - `lightning>2.2.1,<=2.4.0` (source: `https://github.com/Lightning-AI/pytorch-lightning, tag=2.4.0`)
+  - `nemo-toolkit[asr]>=3.1,<3.2` (source: `https://github.com/NVIDIA-NeMo/Speech/archive/dec3f0d39d869193c00b49a198fe13613be914dc.tar.gz`)
+  - `lightning>=2.6.6,<2.7` (source: `https://github.com/Lightning-AI/pytorch-lightning, rev=771017e4f39b314b49abd4a1d65905c74268d248`)
   - `fastapi>=0.111`
   - `uvicorn[standard]>=0.29`
   - `python-multipart>=0.0.9`
@@ -1005,6 +1011,9 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Runtime dependencies: none
 - Optional dependency groups:
   - `repository`:
+    - `conversation-example` → [`conversation-example`](agent-samples/conversation-example/) (local, editable)
+    - `conversation-example-model-servers` → [`conversation-example-model-servers`](agent-samples/conversation-example/model-servers/) (local, editable)
+    - `conversation-example-worker` → [`conversation-example-worker`](agent-samples/conversation-example/worker/) (local, editable)
     - `lab-instrument-monitoring` → [`lab-instrument-monitoring`](agent-samples/lab-instrument-monitoring/) (local, editable)
     - `lab-instrument-monitoring-model-servers` → [`lab-instrument-monitoring-model-servers`](agent-samples/lab-instrument-monitoring/model-servers/) (local, editable)
     - `lab-instrument-monitoring-worker` → [`lab-instrument-monitoring-worker`](agent-samples/lab-instrument-monitoring/worker/) (local, editable)

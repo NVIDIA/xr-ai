@@ -34,8 +34,8 @@ VLLM_PROJECTS = frozenset(
         "vlm-server",
     }
 )
-# Speaker STT pins a different NeMo Speech Git revision and lhotse artifact
-# from the repository ASR services; uv cannot combine those sources in one lock.
+# Speaker STT remains separately qualified as a Linux-only Python 3.12 service;
+# including it would narrow the aggregate inventory's Python 3.11 coverage.
 EXCLUDED_PROJECTS = frozenset({"xr-ai-speaker-stt"})
 
 # Lock output varies across uv releases, so the lock is always produced by this

@@ -130,9 +130,9 @@ locks under `dependency-manifest/`; the pre-commit hook does the Python one when
 `uv.toml` is staged. Ordinary dependency or project changes remain deferred to
 the next qualification or targeted security refresh, even when a new project
 is missing from the manifest: it records qualified dependencies, not each PR's
-current resolution. The generator explicitly excludes Speaker STT because its
-NeMo Speech sources conflict with the other ASR services; validate its local
-lock separately.
+current resolution. The generator keeps the Linux-only Python 3.12 Speaker STT environment
+separate to preserve Python 3.11 inventory coverage; validate its local lock
+separately.
 
 For a targeted security refresh, add an `exclude-newer-package` timestamp in
 `uv.toml` for each fixed package and add its minimum safe version to the
