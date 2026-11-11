@@ -235,15 +235,16 @@ class Capabilities:
     json_schema: bool = False
     """Whether the endpoint constrains responses to a JSON Schema.
 
-    Declare it only after the structured-output eval passes for the model;
-    requests with ``response_schema`` are rejected otherwise.
+    Declare it only after the eval's JSON Schema modes pass for the model
+    and server deployment; requests with ``response_schema`` are rejected
+    otherwise.
     """
 
     tool_choice: bool = False
     """Whether the endpoint can force a tool call with ``tool_choice``.
 
-    Declare it only after the structured-output eval passes for the model;
-    requests that force a call are rejected otherwise.
+    Declare it only after the eval's forced-call modes pass for the model
+    and server deployment; requests that force a call are rejected otherwise.
     """
 
 
@@ -348,17 +349,18 @@ class LLMService(Protocol):
     in the model's own dialect, and models without a switch ignore it.
     ``thinking_budget`` caps reasoning tokens on servers that enforce it.
 
-    ``response_schema`` constrains the response text to one JSON value
-    matching that JSON Schema; when reasoning may precede the answer, the
-    service also states the schema in the prompt. ``tool_choice`` selects whether and which tool must be called
-    (see :data:`ToolChoice`). Either constraint raises :class:`ValueError` when
-    the endpoint does not declare support, when reasoning is on without a
-    ``thinking_budget``, or when ``max_tokens`` leaves no room after that
-    budget: a model that reasons until the token limit returns no answer.
-    ``response_schema`` cannot be combined with tools. A forced call is
-    always made, but servers may not enforce every rule of its argument
-    schema. Callers still validate the result: a response truncated at
-    ``max_tokens`` is not a complete value.
+    ``response_schema`` requests that the endpoint constrain response text to
+    one JSON value matching the schema. The service sends the schema as a
+    request field; callers own the messages, including any format instructions
+    their model needs. ``tool_choice`` selects whether and which tool must be
+    called (see :data:`ToolChoice`). Undeclared constraints raise
+    :class:`ValueError` before sending. ``response_schema`` cannot be combined
+    with tools. Forced calls do not guarantee schema-valid arguments.
+
+    Constraint support depends on the model and server configuration. Callers
+    validate results and handle truncation, refusal, and inference failures;
+    neither a token budget nor constrained decoding guarantees completion.
+    Reasoning controls are independent of output constraints.
     """
 
     capabilities: Capabilities

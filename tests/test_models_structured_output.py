@@ -47,17 +47,7 @@ def _llm(stub: StubOpenAI, *, capabilities: Capabilities = BOTH, thinking: Think
     )
 
 
-REASONING = ThinkingSpec(control="chat_template", default=True)
-
-
-def _instruction() -> str:
-    return "Respond with only a JSON value that conforms to this JSON Schema:\n" + json.dumps(
-        SCHEMA, separators=(",", ":"),
-    )
-
-
 async def test_response_schema_without_reasoning_sends_only_the_constraint() -> None:
-    # A stated schema biased enum answers when no reasoning precedes them.
     stub = StubOpenAI()
     stub.set_chat_message(content='{"important": true}')
     async with _llm(stub) as llm:
@@ -71,35 +61,25 @@ async def test_response_schema_without_reasoning_sends_only_the_constraint() -> 
     assert "tool_choice" not in body and "tools" not in body
 
 
-async def test_response_schema_with_reasoning_states_it_in_a_new_system_message() -> None:
-    # After reasoning, an unstated constraint let answers fill with whitespace.
-    stub = StubOpenAI()
-    async with _llm(stub, thinking=REASONING) as llm:
-        await llm.chat(USER, response_schema=SCHEMA, thinking_budget=256)
-    body = stub.last_json()
-    assert body["messages"] == [
-        {"role": "system", "content": _instruction()},
-        {"role": "user", "content": "Did it change?"},
-    ]
-    assert body["response_format"]["json_schema"]["schema"] == SCHEMA
-
-
-@pytest.mark.parametrize(("content", "expected"), [
-    ("Watch the kettle.", f"Watch the kettle.\n\n{_instruction()}"),
-    ("", _instruction()),
-    ([TextPart("Watch the kettle.")], [
-        {"type": "text", "text": "Watch the kettle."}, {"type": "text", "text": _instruction()},
-    ]),
+@pytest.mark.parametrize("thinking", [
+    ThinkingSpec(control="chat_template", default=True),
+    ThinkingSpec(control="system_prompt", default=True),
+    ThinkingSpec(control="none"),
+    ThinkingSpec(),
 ])
-async def test_response_schema_extends_the_callers_system_message(content, expected) -> None:
+@pytest.mark.parametrize("enable", [False, True, None])
+async def test_output_constraints_do_not_infer_reasoning_policy(thinking, enable) -> None:
     stub = StubOpenAI()
-    messages = [ChatMessage(role="system", content=content), *USER]
-    async with _llm(stub, thinking=REASONING) as llm:
-        await llm.chat(messages, response_schema=SCHEMA, thinking_budget=256)
-    sent = stub.last_json()["messages"]
-    assert sent[0] == {"role": "system", "content": expected}
-    assert sent[1:] == [{"role": "user", "content": "Did it change?"}]
-    assert messages[0].content == content  # the caller's messages are not changed
+    messages = [ChatMessage(role="system", content="Watch the kettle."), *USER]
+    capabilities = Capabilities(json_schema=True, reasoning=True)
+    async with _llm(stub, thinking=thinking, capabilities=capabilities) as llm:
+        await llm.chat(messages, enable_thinking=enable)
+        unconstrained = stub.last_json()
+        await llm.chat(messages, response_schema=SCHEMA, enable_thinking=enable)
+        constrained = stub.last_json()
+    assert constrained.pop("response_format")["json_schema"]["schema"] == SCHEMA
+    assert constrained == unconstrained
+    assert messages[0].content == "Watch the kettle."
 
 
 async def test_untitled_schema_gets_a_default_name() -> None:
@@ -160,54 +140,86 @@ async def test_invalid_constraint_requests_are_rejected(kwargs, message) -> None
     assert not stub.requests
 
 
-CONSTRAINTS = [{"response_schema": SCHEMA}, {"tools": [TOOL], "tool_choice": "commit"}]
-
-
-@pytest.mark.parametrize("constraint", CONSTRAINTS)
-@pytest.mark.parametrize(("thinking", "enable", "capabilities"), [
-    (ThinkingSpec(control="chat_template", default=True), None, BOTH),
-    (ThinkingSpec(control="chat_template", default=False), True, BOTH),
-    # An unknown default on a reasoning model may think.
-    (ThinkingSpec(), None, Capabilities(json_schema=True, tool_choice=True, reasoning=True)),
-])
-async def test_reasoning_with_a_constraint_requires_a_budget(constraint, thinking, enable, capabilities) -> None:
+@pytest.mark.parametrize("method", ["chat", "stream", "stream_events"])
+async def test_explicit_request_fields_override_defaults(method) -> None:
     stub = StubOpenAI()
-    async with _llm(stub, thinking=thinking, capabilities=capabilities) as llm:
-        with pytest.raises(ValueError, match="requires thinking_budget"):
-            await llm.chat(USER, enable_thinking=enable, **constraint)
-        with pytest.raises(ValueError, match="max_tokens must exceed thinking_budget"):
-            await llm.chat(USER, enable_thinking=enable, thinking_budget=256, max_tokens=256, **constraint)
-        assert not stub.requests
-        await llm.chat(USER, enable_thinking=enable, thinking_budget=256, max_tokens=1024, **constraint)
-    assert stub.last_json()["thinking_token_budget"] == 256
+    stub.set_stream_chunks([
+        {"choices": [{"index": 0, "delta": {"content": '{"important": true}'}}]},
+        {"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]},
+    ])
+    extras = {
+        "model": "wrong", "messages": [{"role": "user", "content": "wrong"}],
+        "stream": method == "chat", "max_tokens": 64, "temperature": 0.9,
+        "response_format": {"type": "text"},
+        "chat_template_kwargs": {"enable_thinking": True, "custom": "kept"},
+        "thinking_token_budget": 2048,
+    }
+    async with OpenAICompatLLM(
+        "http://stub", "llm", client=stub.client(), capabilities=BOTH, default_extras=extras,
+    ) as llm:
+        result = getattr(llm, method)(
+            USER, response_schema=SCHEMA, max_tokens=1024, temperature=0.0,
+            enable_thinking=True, thinking_budget=256,
+        )
+        if method == "chat":
+            await result
+        else:
+            _ = [chunk async for chunk in result]
+    body = stub.last_json()
+    assert body["model"] == "llm" and body["messages"] == [{"role": "user", "content": "Did it change?"}]
+    assert body.get("stream", False) == (method != "chat")
+    assert body["max_tokens"] == 1024 and body["temperature"] == 0.0
+    assert body["thinking_token_budget"] == 256
+    assert body["chat_template_kwargs"] == {"enable_thinking": True, "custom": "kept"}
+    assert body["response_format"]["json_schema"]["schema"] == SCHEMA
+    assert extras["max_tokens"] == 64 and extras["response_format"] == {"type": "text"}
 
 
-@pytest.mark.parametrize("constraint", CONSTRAINTS)
-@pytest.mark.parametrize(("thinking", "enable"), [
-    (ThinkingSpec(control="chat_template", default=True), False),
-    (ThinkingSpec(control="chat_template", default=False), None),
-    (ThinkingSpec(control="none", default=True), None),
-    (ThinkingSpec(), None),  # unknown default on a model without declared reasoning
+@pytest.mark.parametrize(("extras", "message"), [
+    ({"tools": [TOOL.to_openai()], "response_format": {
+        "type": "json_schema", "json_schema": {"name": "answer", "schema": SCHEMA},
+    }}, "cannot be combined with tools"),
+    ({"tool_choice": "required", "tools": [TOOL.to_openai()]}, "tool_choice support"),
+    ({"tool_choice": "required"}, "requires tools"),
+    ({"response_format": {"type": "json_schema", "json_schema": {"name": "answer", "schema": SCHEMA}}},
+     "json_schema support"),
 ])
-async def test_constraints_without_reasoning_need_no_budget(constraint, thinking, enable) -> None:
+async def test_constraints_from_defaults_are_validated_before_transport(extras, message) -> None:
     stub = StubOpenAI()
-    async with _llm(stub, thinking=thinking) as llm:
-        await llm.chat(USER, enable_thinking=enable, **constraint)
-    assert "thinking_token_budget" not in stub.last_json()
-
-
-@pytest.mark.parametrize("constraint", CONSTRAINTS)
-@pytest.mark.parametrize(("thinking", "capabilities"), [
-    (ThinkingSpec(control="system_prompt", default=True), BOTH),
-    # No switch reaches the model, and it declares reasoning output.
-    (ThinkingSpec(control="none"), Capabilities(json_schema=True, tool_choice=True, reasoning=True)),
-])
-async def test_reasoning_without_an_enforced_budget_cannot_be_constrained(constraint, thinking, capabilities) -> None:
-    stub = StubOpenAI()
-    async with _llm(stub, thinking=thinking, capabilities=capabilities) as llm:
-        with pytest.raises(ValueError, match="enforces a thinking budget"):
-            await llm.chat(USER, thinking_budget=256, **constraint)
+    async with OpenAICompatLLM("http://stub", "llm", client=stub.client(), default_extras=extras) as llm:
+        with pytest.raises(ValueError, match=message):
+            await llm.chat(USER)
     assert not stub.requests
+
+
+async def test_explicit_tools_replace_defaults() -> None:
+    stub = StubOpenAI()
+    async with OpenAICompatLLM(
+        "http://stub", "llm", client=stub.client(), capabilities=BOTH,
+        default_extras={"tools": [TOOL.to_openai()]},
+    ) as llm:
+        await llm.chat(USER, tools=[], response_schema=SCHEMA)
+    assert stub.last_json()["tools"] == []
+
+
+async def test_tool_choice_explicitly_overrides_default_choice() -> None:
+    stub = StubOpenAI()
+    async with OpenAICompatLLM(
+        "http://stub", "llm", client=stub.client(),
+        default_extras={"tools": [TOOL.to_openai()], "tool_choice": "required"},
+    ) as llm:
+        await llm.chat(USER, tool_choice="none")
+    assert stub.last_json()["tool_choice"] == "none"
+
+
+async def test_optional_limits_still_use_deployment_defaults() -> None:
+    stub = StubOpenAI()
+    async with OpenAICompatLLM(
+        "http://stub", "llm", client=stub.client(), capabilities=BOTH,
+        default_extras={"max_tokens": 128, "temperature": 0.2},
+    ) as llm:
+        await llm.chat(USER, response_schema=SCHEMA)
+    assert stub.last_json()["max_tokens"] == 128 and stub.last_json()["temperature"] == 0.2
 
 
 async def test_stream_paths_send_the_same_constraints() -> None:
@@ -246,6 +258,20 @@ async def test_named_tool_choice_stream_accepts_stop_finish() -> None:
     assert events[-1].finish_reason == "stop"
 
 
+async def test_default_named_tool_choice_uses_effective_stream_finish_contract() -> None:
+    stub = StubOpenAI()
+    stub.set_stream_chunks(_tool_stream("stop"))
+    async with OpenAICompatLLM(
+        "http://stub", "llm", client=stub.client(), capabilities=BOTH,
+        default_extras={"tools": [TOOL.to_openai()], "tool_choice": {
+            "type": "function", "function": {"name": "commit"},
+        }},
+    ) as llm:
+        events = [event async for event in llm.stream_events(USER)]
+    assert [e.tool_call.name for e in events if e.kind == "tool_call"] == ["commit"]
+    assert events[-1].finish_reason == "stop"
+
+
 @pytest.mark.parametrize("choice", [None, "auto", "required"])
 async def test_unnamed_tool_choice_stream_still_rejects_stop_with_calls(choice) -> None:
     stub = StubOpenAI()
@@ -258,10 +284,10 @@ async def test_unnamed_tool_choice_stream_still_rejects_stop_with_calls(choice) 
 async def test_multimodal_user_content_is_kept_with_a_schema() -> None:
     stub = StubOpenAI()
     messages = [ChatMessage(role="user", content=[TextPart("What is shown?"), ImagePart("data:image/png;base64,AAAA")])]
-    async with _llm(stub, thinking=REASONING) as llm:
-        await llm.chat(messages, response_schema=SCHEMA, thinking_budget=256)
+    async with _llm(stub) as llm:
+        await llm.chat(messages, response_schema=SCHEMA)
     sent = stub.last_json()["messages"]
-    assert sent[0]["role"] == "system" and sent[1]["content"][0] == {"type": "text", "text": "What is shown?"}
+    assert sent[0]["role"] == "user" and sent[0]["content"][0] == {"type": "text", "text": "What is shown?"}
 
 
 def test_capabilities_declared_by_presets_are_known_fields() -> None:
@@ -269,7 +295,7 @@ def test_capabilities_declared_by_presets_are_known_fields() -> None:
         Capabilities(**get_preset(name).get("capabilities", {}))  # raises on an unknown key
     config = {"models": {"llm": {"adapter": {"preset": "nemotron_omni"}, "endpoint": {"base_url": "http://x"}}}}
     llm = make_llm(load_models_config_from_dict(config, source="test"), "llm")
-    assert llm.capabilities.json_schema and llm.capabilities.tool_choice
+    assert not llm.capabilities.json_schema and llm.capabilities.tool_choice
 
 
 def test_a_profile_declares_capabilities_on_top_of_its_preset() -> None:
@@ -310,12 +336,3 @@ def test_eval_cases_are_well_formed_and_graders_separate_examples() -> None:
         for answer in case["reject"]:
             parsed = json.loads(answer)
             assert not all(evaluation.check(parsed, rule) for rule in case["checks"]), (case["name"], answer)
-
-
-def test_eval_states_the_schema_exactly_as_the_client_does() -> None:
-    # The prompt_only reference must differ from json_schema only by the constraint.
-    from xr_ai_models._openai_compat import _with_schema_instruction
-
-    evaluation = _eval_module()
-    stated = _with_schema_instruction([{"role": "system", "content": "S"}], SCHEMA)[0]["content"]
-    assert stated == "S\n\n" + evaluation._schema_instruction(SCHEMA)

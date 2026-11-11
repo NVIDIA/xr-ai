@@ -208,50 +208,42 @@ different values is rejected.
 - `tool_choice` is `"auto"`, `"none"`, `"required"` (some tool must be called)
   or the name of one supplied tool (that tool must be called).
 
-Both are applied while the model generates, but they promise different things.
-A `response_schema` answer is limited to the schema. A forced tool call is
-always made, but servers may constrain only the call and not every rule of its
-argument schema: on Nemotron Omni with vLLM's `qwen3_coder` tool parser, 6 of
-1,728 forced calls exceeded a `maxLength` or omitted a required field. Native
-tools validate their arguments and return the error to the model, so a tool loop
-recovers; for one value that must match a schema, prefer `response_schema`.
+The client serializes these constraints as request fields. Callers own their
+messages, including format instructions required by their model; the client
+never inserts the schema into a prompt or chooses a reasoning policy.
+Reasoning controls and optional token budgets work independently of output
+constraints. Budget enforcement depends on the server and does not guarantee a
+complete answer.
 
-Callers still validate every result. A response cut off at `max_tokens` is not a
-complete value, and a constrained answer can be cut off: vLLM's xgrammar JSON
-grammar allows any amount of whitespace, and 1 of 1,152 Nemotron Omni answers
-filled the rest of its tokens with it (`finish_reason` `length`). vLLM's server
-option `--structured-outputs-config '{"disable_any_whitespace": true}'` removes
-that freedom; the repository's model servers do not set it yet.
+Request construction applies deployment `adapter.default_extras` first, then
+explicit call arguments. Omitted optional values retain their configured
+defaults. The client owns the model, messages and streaming mode. Validation
+checks the resulting request, including constraints supplied by deployment
+defaults, before sending it. A request cannot combine JSON Schema output with
+tools, name an absent tool, or use an undeclared constraint.
 
-Support depends on the model and its server, so an adapter declares it in
-`capabilities.json_schema` and `capabilities.tool_choice`. A request using an
-undeclared constraint raises `ValueError` before anything is sent, instead of
-being silently ignored. `"auto"` and `"none"` need no declaration.
-
-Two rules apply to every model:
-
-- When reasoning may precede the answer, the client also states the schema in
-  the system message. Without it, Nemotron Omni with reasoning on sometimes
-  filled the constrained answer with whitespace until the token limit. Without
-  reasoning the client leaves the prompt alone: there the constraint alone kept
-  every answer valid, and stating the schema biased an enum answer toward its
-  first value. Tools already carry their schema, so forced tool calls add
-  nothing.
-- With reasoning on, a constrained request requires `thinking_budget`, and
-  `max_tokens` must exceed it. Reasoning comes before the constrained answer
-  and can otherwise use every token, leaving no answer. An endpoint whose
-  reasoning switch cannot carry a budget (`system_prompt`, or `none` on a model
-  that declares `capabilities.reasoning`) rejects constrained requests that may
-  reason.
+A forced tool call requests a call, not strict argument validation. Servers may
+constrain only the call's structure. Callers validate every response and handle
+refusals, truncation and inference failures. A response cut off at `max_tokens`
+is not a complete value; neither constrained decoding nor a reasoning budget
+prevents that failure. Native tools validate arguments before execution.
 
 ### Qualify a model
 
-Before declaring either capability for a new model or server, run the live eval
-in [`agent-sdk/xr-ai-models/eval`](https://github.com/NVIDIA/xr-ai/tree/main/agent-sdk/xr-ai-models/eval)
-against it. It passes only when, with reasoning off and on and through both
-`chat` and `stream_events`, every `response_schema` answer matches its schema
-and every forced tool call is made. Then set the
-capabilities in the preset, or in a deployment profile:
+Support depends on the model and server deployment. An adapter declares
+`capabilities.json_schema` or `capabilities.tool_choice` only after the
+corresponding live eval passes. Run the eval in
+[`agent-sdk/xr-ai-models/eval`](https://github.com/NVIDIA/xr-ai/tree/main/agent-sdk/xr-ai-models/eval)
+against the intended deployment before enabling either capability. Schema
+modes require every answer to match its schema; forced-tool modes require a
+call on every response. Correctness and latency are reported separately from
+those format guarantees.
+
+`nemotron_omni` declares forced tool choice only. Its historical JSON Schema
+run failed qualification, and it has not been qualified with the current
+client, which leaves prompts unchanged. Other presets declare neither until
+they have been evaluated. A qualified deployment can enable a capability in
+its existing profile configuration:
 
 ```yaml
 adapter:
@@ -261,8 +253,8 @@ adapter:
     tool_choice: true
 ```
 
-`nemotron_omni` declares both. The other presets declare neither until they
-have been evaluated.
+An undeclared constraint raises `ValueError` before transport. `"auto"` and
+`"none"` need no forced-call capability.
 
 <a id="protocols"></a>
 (agent-sdk-models-protocols)=

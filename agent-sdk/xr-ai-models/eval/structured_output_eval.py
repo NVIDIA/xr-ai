@@ -28,13 +28,11 @@ import yaml
 from xr_ai_models import (
     ChatMessage,
     LLMService,
-    OpenAICompatLLM,
     ToolDef,
     load_models_config,
     load_models_config_from_dict,
     make_llm,
 )
-from xr_ai_models._openai_compat import _request_headers, _with_schema_instruction
 
 CASES = Path(__file__).resolve().parent / "cases" / "structured_output.yaml"
 TOOL = "commit_answer"
@@ -45,9 +43,8 @@ SCHEMA_MODES = ("json_schema", "json_schema/stream")
 # reported but not gated: servers may constrain only the call, not its schema.
 FORCED_MODES = ("tool_named", "tool_named/stream", "tool_required")
 CONSTRAINED = (*SCHEMA_MODES, *FORCED_MODES)
-# References: what callers can do without the feature, and the ablation that
-# checks the client's choice of when to state the schema in the prompt.
-REFERENCE = ("prompt_only", "tools_auto", "json_schema_flipped")
+# References: what callers can do without an output constraint.
+REFERENCE = ("prompt_only", "tools_auto")
 
 
 @dataclass
@@ -140,29 +137,6 @@ def grade(text: str, schema: dict[str, Any], checks: list[dict[str, Any]]) -> tu
     return True, all(check(answer, rule) for rule in checks)
 
 
-async def _flipped(llm: OpenAICompatLLM, messages, schema, options) -> tuple[str, str | None, int | None]:
-    """Send the constraint with the client's schema statement reversed.
-
-    The client states the schema only when reasoning may precede the answer.
-    This ablation does the opposite, so a model that needs the other choice
-    shows up as a better reference than ``json_schema``.
-    """
-
-    payload = llm._build_payload(messages, tools=None, stream=False, response_schema=schema, **options)
-    if llm._may_reason(options["enable_thinking"]):
-        # Every case has a system message; restore it without the schema.
-        payload["messages"][0]["content"] = messages[0].content
-    else:
-        payload["messages"] = _with_schema_instruction(payload["messages"], schema)
-    resp = await llm._client.post(llm._chat_url, json=payload, headers=_request_headers(llm._api_key, None))
-    resp.raise_for_status()
-    data = resp.json()
-    choice = data["choices"][0]
-    return choice["message"].get("content") or "", choice.get("finish_reason"), data.get("usage", {}).get(
-        "completion_tokens",
-    )
-
-
 async def run_one(llm, case, mode, thinking, args) -> Sample:
     schema = case["schema"]
     system = case["system"]
@@ -209,8 +183,6 @@ async def run_one(llm, case, mode, thinking, args) -> Sample:
                 elif event.kind == "finish":
                     finish = event.finish_reason
             text = "".join(parts)
-        elif mode == "json_schema_flipped":
-            text, finish, tokens = await _flipped(llm, messages, schema, options)
         else:
             raise ValueError(f"unknown mode {mode}")
     # Transport failures and stream validation errors count as failed samples.
@@ -279,8 +251,6 @@ async def main() -> int:
             raise SystemExit(f"unknown cases: {sorted(unknown)}")
         cases = [case for case in cases if case["name"] in args.cases]
     llm = _make_llm(args)
-    if "json_schema_flipped" in args.modes and not isinstance(llm, OpenAICompatLLM):
-        args.modes = [m for m in args.modes if m != "json_schema_flipped"]
     thinking = {"off": (False,), "on": (True,), "both": (False, True)}[args.thinking]
     gate = asyncio.Semaphore(args.concurrency)
 
