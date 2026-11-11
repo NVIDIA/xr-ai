@@ -78,6 +78,16 @@ about. The spoken confirmation states the compiled condition. When no specific
 visible condition can be resolved, the agent says so, starts nothing, and leaves
 any running alert in place.
 
+Alert compilation uses a separate server-side thinking-token budget and total
+output limit, defined in `_alert_compile.py`. The thinking-token budget is distinct
+from the ordinary conversation's soft chat-template reasoning hint. Its instructions
+define a trigger for future frames; an object need not be visible in an earlier
+scene description to request a watch for it. A compilation deadline bounds how
+long model inference can delay an existing alert's announcement. If it expires,
+the agent reports that setup timed out and preserves any existing alert. External
+turn cancellation still propagates without a timeout reply. These controls do not
+change ordinary conversation or visual-question generation settings.
+
 Each job then checks frames in a paced loop. A cheap Clef image call screens every
 frame for whether the relevance subject may be visible, and a frame it rejects
 costs nothing more. Only a screened frame runs the two condition checks in
@@ -201,12 +211,14 @@ The worker package is under
 | `prompts/alert_control.txt`, `prompts/alert_compile.txt`, `prompts/alert_relevance.txt`, `prompts/alert_condition.txt`, `prompts/alert_observation.txt`, `prompts/alert_observation_judge.txt`, `prompts/alert_description.txt` | Start/cancel admission, request compilation, frame screening, direct and observation-based condition checks, and the triggered description |
 | `prompts/conversation.txt` | Application instructions for the conversation destination |
 
-The decision eval is under `agent-samples/conversation-example/eval/`:
+The evaluation tools are under `agent-samples/conversation-example/eval/`:
 
 | File | Responsibility |
 |---|---|
 | `run_decision_eval.py` | Runs every flow through the router against the configured Clef service and fails below a pass rate |
 | `conversation-flows.yaml` | Ordered participant sessions with expected routing, admission, control actions, and focus |
+| `run_alert_compile_eval.py` | Replays the production alert compiler and records outputs, usage, and latency for semantic review |
+| `alert-compile-cases.yaml` | Alert requests with history/notes, expected status and condition, and grading notes |
 
 ## Behavior validation
 
@@ -256,6 +268,38 @@ choice. Answer quality, alert compilation, and the alert frame checks are not
 scored: alert compilation returns a fixed watch, and alert jobs never receive a
 frame.
 
+The alert compiler has a separate replay tool that calls the configured Omni
+endpoint without creating watches or acquiring camera frames. Run it from the
+repository root with the model endpoint available and other inference idle:
+
+```bash
+uv --config-file uv.toml run --project agent-samples/conversation-example/worker \
+  python agent-samples/conversation-example/eval/run_alert_compile_eval.py \
+  --output /tmp/alert-compile-eval.jsonl
+```
+
+To compare reasoning budgets with the prompt, input, seed, and total-output
+allowance held fixed, run paired trials:
+
+```bash
+uv --config-file uv.toml run --project agent-samples/conversation-example/worker \
+  python agent-samples/conversation-example/eval/run_alert_compile_eval.py \
+  --case banana_presence_after_raise_refusal --repeat 10 --seed 100 \
+  --thinking-budgets 256 1024 --max-tokens 1280 \
+  --output /tmp/alert-compile-budget-eval.jsonl
+```
+
+Each repeat advances the seed and alternates budget order. Output files must not
+already exist. JSONL records include the effective request, actual condition,
+expected condition, grading notes, finish reason, token usage, and compilation
+latency. `status_matches` checks only the status, not trigger correctness; every
+`ready` response requires semantic review against `expected_condition` and
+`notes`. A condition requiring an object to be raised is incorrect for a request
+to detect its presence. Timeouts and malformed outputs are recorded separately.
+The banana fixture is a synthetic reproduction of the failure pattern, not the
+original recorded conversation used in earlier measurements. CPU tests validate
+request handling and replay records; they do not establish model accuracy.
+
 Router uncertainty still probes the highest-probability currently eligible
 destination through its normal admission step. It produces router clarification
 only when no usable eligible probability remains; a selected destination can
@@ -300,8 +344,9 @@ to use wake-addressed turns without a persistent conversation. Refer to
 {ref}`voice-conversation-controls`. Relative paths in the worker YAML are resolved from `yaml/`, not
 from the shell's current directory.
 
-The optional `acknowledgment_delay_secs` setting enables route-aware intention
-acknowledgments when set to a positive number; it is disabled when omitted.
+The `acknowledgment_delay_secs` setting enables route-aware intention
+acknowledgments when set to a positive number; the sample YAML sets it to 1.0,
+and it is disabled when omitted.
 The delay is measured from accepted destination execution until its first
 nonblank answer text is ready for emission, excluding routing, admission, and
 any acknowledgment-output serialization. Confident predictions of a slower
@@ -329,8 +374,8 @@ persistent stack, and start it again before restarting this sample.
 Refer to the generated {doc}`configuration <configuration>` reference for exact
 fields, checked-in values, and adjacent YAML comments.
 
-After connecting, say `Hey agent, let's start talking`, then ask questions
-without a wake phrase. Say `Hey agent, let's stop talking` to finish. These
+After connecting, say `Start talking to me`, then ask questions
+without a wake phrase. Say `Stop talking to me` to finish. These
 controls work with the sample's configured speaker-ASR service. To switch to
 native NIM speech, update both the model profile and the voice-gate backend as
 described in {doc}`/guides/deploying-with-nim`. Refer to
