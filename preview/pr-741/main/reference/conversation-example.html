@@ -827,8 +827,9 @@ to also accept wake-addressed one-off questions while closed, or <code class="do
 to use wake-addressed turns without a persistent conversation. Refer to
 <a class="reference internal" href="agent-sdk-voice.html#voice-conversation-controls"><span class="std std-ref">Conversation controls</span></a>. Relative paths in the worker YAML are resolved from <code class="docutils literal notranslate"><span class="pre">yaml/</span></code>, not
 from the shell’s current directory.</p>
-<p>The optional <code class="docutils literal notranslate"><span class="pre">acknowledgment_delay_secs</span></code> setting enables route-aware intention
-acknowledgments when set to a positive number; it is disabled when omitted.
+<p>The <code class="docutils literal notranslate"><span class="pre">acknowledgment_delay_secs</span></code> setting enables route-aware intention
+acknowledgments when set to a positive number; the sample YAML sets it to 1.0,
+and it is disabled when omitted.
 The delay is measured from accepted destination execution until its first
 nonblank answer text is ready for emission, excluding routing, admission, and
 any acknowledgment-output serialization. Confident predictions of a slower
