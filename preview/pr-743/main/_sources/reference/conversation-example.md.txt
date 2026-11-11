@@ -300,8 +300,9 @@ to use wake-addressed turns without a persistent conversation. Refer to
 {ref}`voice-conversation-controls`. Relative paths in the worker YAML are resolved from `yaml/`, not
 from the shell's current directory.
 
-The optional `acknowledgment_delay_secs` setting enables route-aware intention
-acknowledgments when set to a positive number; it is disabled when omitted.
+The `acknowledgment_delay_secs` setting enables route-aware intention
+acknowledgments when set to a positive number; the sample YAML sets it to 1.0,
+and it is disabled when omitted.
 The delay is measured from accepted destination execution until its first
 nonblank answer text is ready for emission, excluding routing, admission, and
 any acknowledgment-output serialization. Confident predictions of a slower
@@ -329,8 +330,8 @@ persistent stack, and start it again before restarting this sample.
 Refer to the generated {doc}`configuration <configuration>` reference for exact
 fields, checked-in values, and adjacent YAML comments.
 
-After connecting, say `Hey agent, let's start talking`, then ask questions
-without a wake phrase. Say `Hey agent, let's stop talking` to finish. These
+After connecting, say `Start talking to me`, then ask questions
+without a wake phrase. Say `Stop talking to me` to finish. These
 controls work with the sample's configured speaker-ASR service. To switch to
 native NIM speech, update both the model profile and the voice-gate backend as
 described in {doc}`/guides/deploying-with-nim`. Refer to
