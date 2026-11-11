@@ -566,3 +566,102 @@ async def test_streaming_image_query_reports_failure_before_output() -> None:
     chunks = [chunk.text async for chunk in tool.stream(ImageQueryRequest(image=images.put(b"image"), query="What?"))]
 
     assert chunks == ["VLM server unavailable — please retry."]
+
+
+class _BlockingVlm:
+    """Hold a VLM call open until cancelled, recording when its cleanup has run."""
+
+    def __init__(self) -> None:
+        self.started = asyncio.Event()
+        self.cleaned_up = False
+
+    async def ask_images(self, *_args, **_kwargs):
+        self.started.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            await asyncio.sleep(0)
+            self.cleaned_up = True
+
+    async def stream_images(self, *_args, **_kwargs):
+        self.started.set()
+        try:
+            await asyncio.Event().wait()
+            yield ""
+        finally:
+            await asyncio.sleep(0)
+            self.cleaned_up = True
+
+
+async def _cancel_when_started(vlm: _BlockingVlm, work) -> None:
+    # Relay runs the VLM call in its own task; run the caller as the sample's alert check does.
+    task = asyncio.create_task(work, context=nemo_relay.fork_asyncio_context())
+    await asyncio.wait_for(vlm.started.wait(), timeout=1)
+    task.cancel()
+    done, _pending = await asyncio.wait({task}, timeout=1.0)
+    assert task in done
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+
+async def test_cancelled_image_query_returns_after_the_vlm_call_finishes() -> None:
+    vlm = _BlockingVlm()
+    images = ImageRegistry()
+    tool = ImageQueryTool(images=images, vlm=cast(VLMService, vlm))
+
+    await _cancel_when_started(vlm, tool.execute(ImageQueryRequest(image=images.put(b"image"), query="What?")))
+
+    assert vlm.cleaned_up
+
+
+async def test_image_query_stream_close_waits_for_vlm_cleanup_after_chunks() -> None:
+    cleanup_started = asyncio.Event()
+    release_cleanup = asyncio.Event()
+    cleaned_up = asyncio.Event()
+
+    class StreamingVlm:
+        async def stream_images(self, *_args, **_kwargs):
+            try:
+                while True:
+                    yield "a token "
+            finally:
+                cleanup_started.set()
+                await release_cleanup.wait()
+                cleaned_up.set()
+
+    images = ImageRegistry()
+    tool = StreamingImageQueryTool(images=images, vlm=cast(VLMService, StreamingVlm()))
+    stream = tool.stream(ImageQueryRequest(image=images.put(b"image"), query="What?"))
+    close = None
+    try:
+        assert (await anext(stream)).text == "a token "
+        assert (await anext(stream)).text == "a token "
+        close = asyncio.create_task(stream.aclose())
+        await asyncio.wait_for(cleanup_started.wait(), timeout=1.0)
+        done, _pending = await asyncio.wait({close}, timeout=0.05)
+        assert close not in done
+        assert not close.done()
+        assert not cleaned_up.is_set()
+    finally:
+        release_cleanup.set()
+        if close is not None:
+            done, _pending = await asyncio.wait({close}, timeout=1.0)
+            assert close in done
+            await close
+        else:
+            await stream.aclose()
+    assert cleaned_up.is_set()
+
+
+async def test_cancelled_image_query_stream_returns_after_the_vlm_stream_finishes() -> None:
+    vlm = _BlockingVlm()
+    images = ImageRegistry()
+    tool = StreamingImageQueryTool(images=images, vlm=cast(VLMService, vlm))
+
+    async def consume() -> None:
+        async for _chunk in tool.stream(ImageQueryRequest(image=images.put(b"image"), query="What?")):
+            pass
+
+    await _cancel_when_started(vlm, consume())
+
+    assert vlm.cleaned_up
