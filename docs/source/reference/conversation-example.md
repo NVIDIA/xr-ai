@@ -300,6 +300,19 @@ The banana fixture is a synthetic reproduction of the failure pattern, not the
 original recorded conversation used in earlier measurements. CPU tests validate
 request handling and replay records; they do not establish model accuracy.
 
+To inspect acknowledgment wording against the configured conversation LLM, run
+from the repository root:
+
+```bash
+uv --config-file uv.toml run --project tests python \
+  tests/eval_routing_acknowledgments.py --output /tmp/acknowledgments.jsonl
+```
+
+The eval records the raw acknowledgment, format acceptance, spoken text after
+fallback, and a review criterion for each request. Review naturalness, relevance,
+and unsupported claims manually; format acceptance is not a quality score. It
+does not measure routing, audio playback, or end-to-end latency.
+
 Router uncertainty still probes the highest-probability currently eligible
 destination through its normal admission step. It produces router clarification
 only when no usable eligible probability remains; a selected destination can

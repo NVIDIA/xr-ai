@@ -268,6 +268,13 @@ The timing sample begins after destination admission and ends when the
 destination signals its first meaningful response. It excludes route selection,
 admission, waiting for committed acknowledgment delivery, and downstream playback.
 Admission preambles suppress the optional acknowledgment for that turn.
+
+The acknowledgment prompt asks for a natural action and short topic, such as
+“Let me read that label.” A format check accepts a nonempty single sentence of
+at most 12 words without requiring a fixed opening. Malformed or overlong output
+is replaced with “Let me think about that.” The check does not judge meaning,
+grammar, or whether the request can be fulfilled.
+
 The `conversation.response-started` trace records that notification. A notification does
 not establish that output has been accepted or played by a downstream transport.
 If prediction or acknowledgment generation fails, the optional task logs the
