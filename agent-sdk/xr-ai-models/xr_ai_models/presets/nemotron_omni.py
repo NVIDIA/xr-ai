@@ -23,5 +23,7 @@ NEMOTRON_OMNI = {
         "vision":     True,
         "video":      True,
         "reasoning":  True,
+        # Forced calls passed qualification; JSON Schema output has not.
+        "tool_choice": True,
     },
 }

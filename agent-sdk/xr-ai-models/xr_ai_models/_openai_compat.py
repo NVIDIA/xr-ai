@@ -39,6 +39,7 @@ from ._protocols import (
     ImagePart,
     TextPart,
     ToolCall,
+    ToolChoice,
     ToolDef,
     _TTSChunk,
     VideoInput,
@@ -50,6 +51,7 @@ from ._protocols import (
 # the machine). Anything else over http:// with a key set is cleartext
 # credential transmission (CWE-319).
 _LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+_TOOL_CHOICE_MODES = frozenset({"auto", "none", "required"})
 
 
 def _is_cleartext_key_transport(base_url: str, api_key: str | None) -> bool:
@@ -144,6 +146,13 @@ def _part_to_openai(part: ContentPart) -> dict[str, Any]:
     if isinstance(part, VideoPart):
         return {"type": "video_url", "video_url": {"url": part.url}}
     raise TypeError(f"unsupported content part: {type(part).__name__}")
+
+
+def _schema_name(schema: Mapping[str, Any]) -> str:
+    # OpenAI-style endpoints require a short identifier for json_schema.
+    title = schema.get("title")
+    name = "".join(c if c.isalnum() or c in "_-" else "_" for c in title)[:64] if isinstance(title, str) else ""
+    return name or "response"
 
 
 def _parse_chat_response(data: dict[str, Any], reasoning_field: str | None) -> ChatResponse:
@@ -272,6 +281,8 @@ class OpenAICompatLLM:
     Used directly for plain LLMs (Nemotron3-Nano, Nemotron-Omni) and indirectly via :class:`OpenAICompatVLM` for VLMs.
     The API key is read once from ``api_key_env`` during construction. An
     injected HTTP client remains owned by the caller and is not closed here.
+    ``default_extras`` fills omitted request fields; explicit call arguments
+    win. The model, messages, and streaming mode belong to the client.
     """
 
     def __init__(
@@ -320,33 +331,79 @@ class OpenAICompatLLM:
         enable_thinking: bool | None,
         thinking_budget: int | None,
         stream: bool,
+        tool_choice: ToolChoice | None = None,
+        response_schema: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
+        if response_schema is not None and not isinstance(response_schema, Mapping):
+            raise ValueError("response_schema must be a JSON Schema mapping")
+        if tool_choice is not None and (not isinstance(tool_choice, str) or not tool_choice):
+            raise ValueError("tool_choice must be 'auto', 'none', 'required', or a tool name")
         payload: dict[str, Any] = {
+            **self._default_extras,
             "model": self._model,
             "messages": [_msg_to_openai(m) for m in messages],
         }
+        # Transport mode belongs to the method, never to model defaults.
         if stream:
             payload["stream"] = True
-        if tools:
+        else:
+            payload.pop("stream", None)
+        if tools is not None:
             payload["tools"] = [t.to_openai() for t in tools]
+        if tool_choice is not None:
+            payload["tool_choice"] = (
+                tool_choice if tool_choice in _TOOL_CHOICE_MODES
+                else {"type": "function", "function": {"name": tool_choice}}
+            )
+        if response_schema is not None:
+            payload["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {"name": _schema_name(response_schema), "schema": dict(response_schema)},
+            }
         if max_tokens is not None:
             payload["max_tokens"] = max_tokens
         if temperature is not None:
             payload["temperature"] = temperature
 
-        for k, v in self._default_extras.items():
-            payload[k] = v
         apply_thinking(
             self._thinking, payload,
             enable_thinking=enable_thinking, thinking_budget=thinking_budget,
         )
+        self._check_constraints(payload)
         return payload
+
+    def _check_constraints(self, payload: Mapping[str, Any]) -> None:
+        # Validate the effective wire request, including deployment defaults.
+        tools = payload.get("tools")
+        choice = payload.get("tool_choice")
+        if choice is not None:
+            if not tools:
+                raise ValueError("tool_choice requires tools")
+            if isinstance(choice, str) and choice in _TOOL_CHOICE_MODES:
+                forced = choice == "required"
+            elif isinstance(choice, Mapping) and choice.get("type") == "function":
+                name = choice.get("function", {}).get("name")
+                if name not in {t.get("function", {}).get("name") for t in tools}:
+                    raise ValueError(f"tool_choice names no supplied tool: {name!r}")
+                forced = True
+            else:
+                raise ValueError("tool_choice must be 'auto', 'none', 'required', or a supplied function")
+            if forced and not self.capabilities.tool_choice:
+                raise ValueError(f"LLM endpoint {self._model!r} does not declare forced tool_choice support")
+        response_format = payload.get("response_format")
+        if isinstance(response_format, Mapping) and response_format.get("type") == "json_schema":
+            if tools:
+                raise ValueError("response_schema cannot be combined with tools")
+            if not self.capabilities.json_schema:
+                raise ValueError(f"LLM endpoint {self._model!r} does not declare json_schema support")
 
     async def chat(
         self,
         messages: Sequence[ChatMessage],
         *,
         tools: Sequence[ToolDef] | None = None,
+        tool_choice: ToolChoice | None = None,
+        response_schema: Mapping[str, Any] | None = None,
         max_tokens: int | None = None,
         temperature: float | None = None,
         enable_thinking: bool | None = None,
@@ -365,7 +422,7 @@ class OpenAICompatLLM:
             messages,
             tools=tools, max_tokens=max_tokens, temperature=temperature,
             enable_thinking=enable_thinking, thinking_budget=thinking_budget,
-            stream=False,
+            stream=False, tool_choice=tool_choice, response_schema=response_schema,
         )
         kwargs: dict[str, Any] = {"json": payload, "headers": _request_headers(self._api_key, headers)}
         if timeout is not None:
@@ -381,6 +438,8 @@ class OpenAICompatLLM:
         messages: Sequence[ChatMessage],
         *,
         tools: Sequence[ToolDef] | None = None,
+        tool_choice: ToolChoice | None = None,
+        response_schema: Mapping[str, Any] | None = None,
         max_tokens: int | None = None,
         temperature: float | None = None,
         enable_thinking: bool | None = None,
@@ -398,7 +457,7 @@ class OpenAICompatLLM:
             messages,
             tools=tools, max_tokens=max_tokens, temperature=temperature,
             enable_thinking=enable_thinking, thinking_budget=thinking_budget,
-            stream=True,
+            stream=True, tool_choice=tool_choice, response_schema=response_schema,
         )
         kwargs: dict[str, Any] = {"json": payload, "headers": _request_headers(self._api_key, headers)}
         if timeout is not None:
@@ -428,6 +487,8 @@ class OpenAICompatLLM:
         messages: Sequence[ChatMessage],
         *,
         tools: Sequence[ToolDef] | None = None,
+        tool_choice: ToolChoice | None = None,
+        response_schema: Mapping[str, Any] | None = None,
         max_tokens: int | None = None,
         temperature: float | None = None,
         enable_thinking: bool | None = None,
@@ -447,7 +508,7 @@ class OpenAICompatLLM:
             messages,
             tools=tools, max_tokens=max_tokens, temperature=temperature,
             enable_thinking=enable_thinking, thinking_budget=thinking_budget,
-            stream=True,
+            stream=True, tool_choice=tool_choice, response_schema=response_schema,
         )
         kwargs: dict[str, Any] = {
             "json": payload,
@@ -550,7 +611,11 @@ class OpenAICompatLLM:
         if finish_reason == "tool_calls" and not tool_fragments:
             raise ValueError("LLM stream finished with tool_calls but no tool call data")
         if tool_fragments:
-            if finish_reason != "tool_calls":
+            # A named tool_choice completes with "stop" on OpenAI-compatible
+            # servers: the call was required, not chosen by the model.
+            choice = payload.get("tool_choice")
+            named = isinstance(choice, Mapping) and choice.get("type") == "function"
+            if finish_reason != "tool_calls" and not (named and finish_reason == "stop"):
                 raise ValueError(
                     f"LLM stream returned tool calls with finish_reason {finish_reason!r}",
                 )

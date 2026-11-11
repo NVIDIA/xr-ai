@@ -142,6 +142,14 @@ class ToolDef:
         }
 
 
+ToolChoice = str
+"""``"auto"``, ``"required"``, ``"none"``, or the name of one supplied tool.
+
+``"required"`` forces some tool call and a name forces that tool. Forcing
+needs :attr:`Capabilities.tool_choice`; ``"auto"`` and ``"none"`` do not.
+"""
+
+
 @dataclass(frozen=True)
 class ChatMessage:
     """One input turn in an LLM or VLM conversation."""
@@ -223,6 +231,21 @@ class Capabilities:
 
     reasoning: bool = False
     """Whether the endpoint can return model reasoning."""
+
+    json_schema: bool = False
+    """Whether the endpoint constrains responses to a JSON Schema.
+
+    Declare it only after the eval's JSON Schema modes pass for the model
+    and server deployment; requests with ``response_schema`` are rejected
+    otherwise.
+    """
+
+    tool_choice: bool = False
+    """Whether the endpoint can force a tool call with ``tool_choice``.
+
+    Declare it only after the eval's forced-call modes pass for the model
+    and server deployment; requests that force a call are rejected otherwise.
+    """
 
 
 @dataclass(frozen=True)
@@ -325,6 +348,19 @@ class LLMService(Protocol):
     ``None`` uses the endpoint's configured default.  The endpoint renders it
     in the model's own dialect, and models without a switch ignore it.
     ``thinking_budget`` caps reasoning tokens on servers that enforce it.
+
+    ``response_schema`` requests that the endpoint constrain response text to
+    one JSON value matching the schema. The service sends the schema as a
+    request field; callers own the messages, including any format instructions
+    their model needs. ``tool_choice`` selects whether and which tool must be
+    called (see :data:`ToolChoice`). Undeclared constraints raise
+    :class:`ValueError` before sending. ``response_schema`` cannot be combined
+    with tools. Forced calls do not guarantee schema-valid arguments.
+
+    Constraint support depends on the model and server configuration. Callers
+    validate results and handle truncation, refusal, and inference failures;
+    neither a token budget nor constrained decoding guarantees completion.
+    Reasoning controls are independent of output constraints.
     """
 
     capabilities: Capabilities
@@ -335,6 +371,8 @@ class LLMService(Protocol):
         messages: Sequence[ChatMessage],
         *,
         tools: Sequence[ToolDef] | None = None,
+        tool_choice: ToolChoice | None = None,
+        response_schema: Mapping[str, Any] | None = None,
         max_tokens: int | None = None,
         temperature: float | None = None,
         enable_thinking: bool | None = None,
@@ -351,6 +389,8 @@ class LLMService(Protocol):
         messages: Sequence[ChatMessage],
         *,
         tools: Sequence[ToolDef] | None = None,
+        tool_choice: ToolChoice | None = None,
+        response_schema: Mapping[str, Any] | None = None,
         max_tokens: int | None = None,
         temperature: float | None = None,
         enable_thinking: bool | None = None,
@@ -367,6 +407,8 @@ class LLMService(Protocol):
         messages: Sequence[ChatMessage],
         *,
         tools: Sequence[ToolDef] | None = None,
+        tool_choice: ToolChoice | None = None,
+        response_schema: Mapping[str, Any] | None = None,
         max_tokens: int | None = None,
         temperature: float | None = None,
         enable_thinking: bool | None = None,

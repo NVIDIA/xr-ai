@@ -135,7 +135,7 @@ refer to {ref}`consumer-model-readiness`.
 | `cosmos3_nano_reasoner` | Cosmos3 Nano VLM | Image; video requires `max_videos_per_prompt >= 1`; no reasoning switch |
 | `cosmos_vlm` | Cosmos-Reason1 compatibility | Image; video requires `max_videos_per_prompt >= 1`; thinking disabled by default |
 | `nemotron3_nano` | Nemotron 3 Nano LLM | Normalizes the `reasoning` field; thinking disabled unless requested |
-| `nemotron_omni` | Nemotron Omni | Tool calls, image and video, `reasoning_content` normalization; thinking disabled unless requested |
+| `nemotron_omni` | Nemotron Omni | Tool calls, forced tool calls and JSON Schema output, image and video, `reasoning_content` normalization; thinking disabled unless requested |
 | `nemotron_embedding` | Embedding server | OpenAI-compatible dense vectors |
 | `nemotron_ocr` | Hugging Face OCR server or OCR NIM 2.0 | Multilingual text, confidence, normalized polygons; `/v1/ocr` |
 | `parakeet_stt` | STT server | OpenAI-compatible transcription |
@@ -195,6 +195,66 @@ boolean is still accepted: with `control: chat_template` or unset it becomes
 `thinking.default`, overriding the preset's, and a call can override it. With
 another control it is sent unchanged. A profile that sets both keys to
 different values is rejected.
+
+(agent-sdk-models-structured-output)=
+## Structured output and forced tool calls
+
+`LLMService.chat`, `stream` and `stream_events` accept two constraints:
+
+- `response_schema`, a JSON Schema mapping (for example a Pydantic model's
+  `model_json_schema()`), limits the response text to one JSON value matching
+  it. It is sent as the OpenAI-compatible `response_format` of type
+  `json_schema`. It cannot be combined with tools.
+- `tool_choice` is `"auto"`, `"none"`, `"required"` (some tool must be called)
+  or the name of one supplied tool (that tool must be called).
+
+The client serializes these constraints as request fields. Callers own their
+messages, including format instructions required by their model; the client
+never inserts the schema into a prompt or chooses a reasoning policy.
+Reasoning controls and optional token budgets work independently of output
+constraints. Budget enforcement depends on the server and does not guarantee a
+complete answer.
+
+Request construction applies deployment `adapter.default_extras` first, then
+explicit call arguments. Omitted optional values retain their configured
+defaults. The client owns the model, messages and streaming mode. Validation
+checks the resulting request, including constraints supplied by deployment
+defaults, before sending it. A request cannot combine JSON Schema output with
+tools, name an absent tool, or use an undeclared constraint.
+
+A forced tool call requests a call, not strict argument validation. Servers may
+constrain only the call's structure. Callers validate every response and handle
+refusals, truncation and inference failures. A response cut off at `max_tokens`
+is not a complete value; neither constrained decoding nor a reasoning budget
+prevents that failure. Native tools validate arguments before execution.
+
+### Qualify a model
+
+Support depends on the model and server deployment. An adapter declares
+`capabilities.json_schema` or `capabilities.tool_choice` only after the
+corresponding live eval passes. Run the eval in
+[`agent-sdk/xr-ai-models/eval`](https://github.com/NVIDIA/xr-ai/tree/main/agent-sdk/xr-ai-models/eval)
+against the intended deployment before enabling either capability. Schema
+modes require every answer to match its schema; forced-tool modes require a
+call on every response. Correctness and latency are reported separately from
+those format guarantees.
+
+`nemotron_omni` declares forced tool choice only. Its historical JSON Schema
+run failed qualification, and it has not been qualified with the current
+client, which leaves prompts unchanged. Other presets declare neither until
+they have been evaluated. A qualified deployment can enable a capability in
+its existing profile configuration:
+
+```yaml
+adapter:
+  preset: nemotron3_nano
+  capabilities:
+    json_schema: true
+    tool_choice: true
+```
+
+An undeclared constraint raises `ValueError` before transport. `"auto"` and
+`"none"` need no forced-call capability.
 
 <a id="protocols"></a>
 (agent-sdk-models-protocols)=
