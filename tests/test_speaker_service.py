@@ -200,6 +200,39 @@ def test_websocket_rejects_invalid_opening_and_text_audio():
     assert not server.sessions
 
 
+def test_websocket_skip_reports_dropped_audio_without_reopening():
+    skipped = []
+
+    class Session(_Session):
+        def _skip(self, samples):
+            skipped.append(samples)
+            return [{"kind": "speech_stop"}]
+
+    server = service._Server(_models(Session))
+    with TestClient(service._build_app(server, _CFG)) as client:
+        with client.websocket_connect(service._STREAM_PATH) as websocket:
+            websocket.send_json(_opening())
+            websocket.receive_json()
+            websocket.send_bytes(bytes(640))
+            assert websocket.receive_json()["events"][0]["text"] == "1"
+            websocket.send_text(json.dumps({"skip_samples": 32000}))
+            assert websocket.receive_json() == {"events": [{"kind": "speech_stop"}]}
+            websocket.send_bytes(bytes(640))
+            assert websocket.receive_json()["events"][0]["text"] == "2"
+            assert len(server.sessions) == 1
+    assert skipped == [32000]
+
+
+@pytest.mark.parametrize("body", [{}, {"skip_samples": 0}, {"skip_samples": -1},
+                                  {"skip_samples": True}, {"skip_samples": 1.5}, [1]])
+def test_invalid_skip_is_a_protocol_error(body):
+    server = service._Server(_models())
+    session = server._open(_opening())
+    with pytest.raises(ValueError, match="skip_samples"):
+        server._skip(session, body)
+    assert session in server.sessions
+
+
 def test_websocket_inference_error_is_stable_and_revokes_session():
     class Failing:
         def _feed(self, _audio):

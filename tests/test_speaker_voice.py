@@ -405,7 +405,7 @@ async def test_model_failure_revokes_enrollment_without_batch_stt_fallback():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("shutdown", ["cancel", "cleanup"])
-async def test_slow_inference_does_not_block_other_participants_and_overload_drops_audio(shutdown):
+async def test_slow_inference_does_not_block_other_participants_and_overload_keeps_enrollment(shutdown):
     processor = _SpeakerSttProcessor(cfg=_SpeakerConfig())
     slow = asyncio.Event()
     other = asyncio.Event()
@@ -419,9 +419,9 @@ async def test_slow_inference_does_not_block_other_participants_and_overload_dro
 
     processor._client = SimpleNamespace(_feed=AsyncMock(side_effect=feed), _forget=AsyncMock(), _close=AsyncMock())
     processor.push_frame = AsyncMock()
-    processor._enrolled.add("slow")
     for pid in ("slow", "other"):
         await processor.process_frame(ParticipantJoinedFrame(pid), FrameDirection.DOWNSTREAM)
+    processor._enrolled.add("slow")
     def audio(pid):
         frame = InputAudioRawFrame(audio=bytes(32000), sample_rate=16000, num_channels=1)
         frame.transport_source = pid
@@ -432,12 +432,13 @@ async def test_slow_inference_does_not_block_other_participants_and_overload_dro
     await asyncio.wait_for(other.wait(), timeout=1)
     for _ in range(3):
         await processor.process_frame(audio("slow"), FrameDirection.DOWNSTREAM)
-    assert "slow" not in processor._enrolled
-    assert "slow" not in processor._queues
-    assert "slow" not in processor._tasks
-    resets = [c.args[0] for c in processor.push_frame.call_args_list if isinstance(c.args[0], _SpeakerEnrollmentFrame)]
-    assert any(f.participant_id == "slow" and f.state == "reset" for f in resets)
-    # A reply from a cancelled request cannot restore enrollment.
+    # The third second overflows: the backlog becomes one skip marker for all
+    # three seconds, and the stalled session keeps its enrollment.
+    assert "slow" in processor._enrolled and "slow" in processor._tasks
+    assert processor._queues["slow"].get_nowait() == (None, 96000)
+    assert processor._queued_bytes["slow"] == 0 and processor._queued_frames["slow"] == 0
+    assert not [c for c in processor.push_frame.call_args_list
+                if isinstance(c.args[0], _SpeakerEnrollmentFrame) and c.args[0].participant_id == "slow"]
     assert processor._client._feed.await_count == 2
     if shutdown == "cancel":
         await processor.process_frame(CancelFrame(), FrameDirection.DOWNSTREAM)
@@ -495,6 +496,30 @@ async def test_stream_isolates_participants_and_reconnects_with_new_origin():
 
 
 @pytest.mark.asyncio
+async def test_skip_to_an_endpoint_without_it_fails_like_any_service_error():
+    async def handler(socket):
+        await socket.recv()
+        await socket.send(json.dumps({"service": "xr-ai-speaker-stt", "protocol": 5}))
+        async for message in socket:
+            if isinstance(message, str):
+                # An earlier service rejects every text frame after opening.
+                await socket.send(json.dumps({"error": "speaker audio frames must be binary PCM"}))
+                await socket.close(code=1008)
+                return
+            await socket.send(json.dumps({"events": []}))
+
+    async with serve(handler, "127.0.0.1", 0) as server:
+        port = server.sockets[0].getsockname()[1]
+        client = _SpeakerClient(_SpeakerConfig(base_url=f"http://127.0.0.1:{port}", timeout_s=1))
+        try:
+            assert await client._feed("wearer", bytes(640), 1) == []
+            with pytest.raises(RuntimeError, match="binary PCM"):
+                await client._skip("wearer", 1600)
+        finally:
+            await client._close()
+
+
+@pytest.mark.asyncio
 async def test_voice_client_uses_actual_service_health_and_stream_contract():
     closed = asyncio.Queue()
 
@@ -513,6 +538,10 @@ async def test_voice_client_uses_actual_service_health_and_stream_contract():
             self.samples += len(audio) // 2
             return [{"kind": "transcript", "text": str(self.samples), "pts_us": pts_us}]
 
+        def _skip(self, samples):
+            self.samples += samples
+            return [{"kind": "speech_stop"}]
+
     models = SimpleNamespace(_session=lambda cfg, *, audio_origin_us: Session(audio_origin_us))
     service = Server(models)
     cfg = {"host": "127.0.0.1", "port": 8102, "asr_model": "asr", "diar_model": "diar"}
@@ -529,7 +558,11 @@ async def test_voice_client_uses_actual_service_health_and_stream_contract():
         assert await client._available()
         assert (await client._feed("wearer", bytes(640), 1_000_000))[0]["pts_us"] == 1_000_000
         assert (await client._feed("wearer", bytes(640), 1_020_000))[0]["pts_us"] == 1_020_000
+        # Dropped audio keeps the session and advances its media clock.
+        assert await client._skip("wearer", 1600) == [{"kind": "speech_stop"}]
+        assert (await client._feed("wearer", bytes(640), 1_140_000))[0]["pts_us"] == 1_140_000
         assert len(service.sessions) == 1
+        assert await client._skip("absent", 1600) == []
         await client._forget("wearer")
         await asyncio.wait_for(closed.get(), timeout=1)
         assert not service.sessions
@@ -626,17 +659,30 @@ async def test_audio_coalescing_retains_next_frame_in_order_and_in_backlog():
 
 
 @pytest.mark.asyncio
-async def test_overload_frame_limit_includes_frame_retained_for_next_batch():
+@pytest.mark.parametrize("skip_fails", [False, True])
+async def test_overload_frame_limit_includes_frame_retained_for_next_batch(monkeypatch, skip_fails):
     processor = _SpeakerSttProcessor(cfg=_SpeakerConfig())
     received, permits = asyncio.Queue(), asyncio.Queue()
+    stopped = asyncio.Event()
 
     async def feed(pid, audio, pts_us):
         await received.put(audio)
         await permits.get()
         return []
 
-    processor._client = SimpleNamespace(_feed=feed, _forget=AsyncMock(), _close=AsyncMock())
-    processor.push_frame = AsyncMock()
+    async def skip(pid, samples):
+        await received.put(("skip", samples))
+        await permits.get()
+        if skip_fails:
+            raise RuntimeError("speaker audio frames must be binary PCM")
+        return [{"kind": "speech_stop"}]
+
+    def pushed(frame, *_args):
+        if isinstance(frame, UserStoppedSpeakingFrame):
+            stopped.set()
+
+    processor._client = SimpleNamespace(_feed=feed, _skip=skip, _forget=AsyncMock(), _close=AsyncMock())
+    processor.push_frame = AsyncMock(side_effect=pushed)
 
     async def submit(size):
         frame = InputAudioRawFrame(audio=bytes(size), sample_rate=16000, num_channels=1)
@@ -646,7 +692,9 @@ async def test_overload_frame_limit_includes_frame_retained_for_next_batch():
     try:
         await processor.process_frame(ParticipantJoinedFrame("wearer"), FrameDirection.DOWNSTREAM)
         processor._enrolled.add("wearer")
+        processor._utterances.add("wearer")
         await submit(320)
+        worker = processor._tasks["wearer"]
         await asyncio.wait_for(received.get(), 1)
         await submit(320)
         await submit(5120)
@@ -660,15 +708,55 @@ async def test_overload_frame_limit_includes_frame_retained_for_next_batch():
         assert processor._queued_bytes["wearer"] == 5518
         assert "wearer" in processor._enrolled
         await submit(2)
-        assert "wearer" not in processor._enrolled
-        assert "wearer" not in processor._tasks
-        assert "wearer" not in processor._queued_frames
+        # The retained frame predates the dropped backlog and is still sent
+        # first; the service then learns that 200 samples are missing.
+        assert "wearer" in processor._enrolled
+        assert processor._queues["wearer"].qsize() == 1
+        assert processor._queued_frames["wearer"] == 1
+        assert processor._queued_bytes["wearer"] == 5120
+        permits.put_nowait(None)
+        assert await asyncio.wait_for(received.get(), 1) == bytes(5120)
+        permits.put_nowait(None)
+        assert await asyncio.wait_for(received.get(), 1) == ("skip", 200)
+        assert processor._queued_frames["wearer"] == 0 and processor._queued_bytes["wearer"] == 0
+        processor._client._forget.assert_not_awaited()
+        permits.put_nowait(None)
+        await asyncio.wait_for(stopped.wait(), 1)
+        assert "wearer" not in processor._utterances
+        if skip_fails:
+            await asyncio.wait_for(worker, 1)
+            resets = [c.args[0] for c in processor.push_frame.call_args_list
+                      if isinstance(c.args[0], _SpeakerEnrollmentFrame)]
+            assert [(frame.participant_id, frame.state) for frame in resets] == [("wearer", "reset")]
+            assert "wearer" not in processor._enrolled
+            assert "wearer" not in processor._tasks and "wearer" not in processor._queues
+            processor._client._forget.assert_awaited_once_with("wearer")
+            # Advance only this processor's existing retry clock; do not wait
+            # in real time or change the event loop's monotonic clock.
+            import time
+
+            deadline = processor._retry_after["wearer"]
+            now = deadline - 1
+            monkeypatch.setattr("xr_ai_voice._processors.speaker_stt.time", SimpleNamespace(
+                monotonic=lambda: now, time_ns=time.time_ns,
+            ))
+            await submit(320)
+            assert "wearer" not in processor._tasks and received.empty()
+            now = deadline
+            await submit(320)
+            assert await asyncio.wait_for(received.get(), 1) == bytes(320)
+            assert processor._tasks["wearer"] is not worker
+        else:
+            assert "wearer" in processor._enrolled
+            assert not [c for c in processor.push_frame.call_args_list
+                        if isinstance(c.args[0], _SpeakerEnrollmentFrame)]
+            processor._client._forget.assert_not_awaited()
     finally:
         await processor.cleanup()
 
 
 @pytest.mark.asyncio
-async def test_web_audio_queue_allows_two_seconds_before_reset():
+async def test_web_audio_queue_allows_two_seconds_before_dropping_it():
     processor = _SpeakerSttProcessor(cfg=_SpeakerConfig())
     started = asyncio.Event()
     async def feed(*_args):
@@ -690,8 +778,12 @@ async def test_web_audio_queue_allows_two_seconds_before_reset():
         assert processor._queued_bytes["web-client"] == 64000
         assert "web-client" in processor._enrolled
         await processor.process_frame(audio(), FrameDirection.DOWNSTREAM)
-        assert "web-client" not in processor._enrolled
-        assert "web-client" not in processor._tasks
+        assert "web-client" in processor._enrolled and "web-client" in processor._tasks
+        assert processor._queues["web-client"].get_nowait() == (None, 64320)
+        assert processor._queued_bytes["web-client"] == 0
+        # Later audio queues behind the marker under the same two-second bound.
+        await processor.process_frame(audio(), FrameDirection.DOWNSTREAM)
+        assert processor._queued_frames["web-client"] == 1
     finally:
         await processor.cleanup()
 

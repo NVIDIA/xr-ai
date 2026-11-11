@@ -507,15 +507,17 @@ only the selected speaker can send queries or release the conversation. Wake
 phrases remain optional through `conversation.require_wake_phrase`; filtering
 cannot determine whom the wearer is addressing.
 
-Interaction state belongs to a participant connection. Disconnect, inference
-failure or processing overload clears temporary permissions and enrollment;
-conversation and hybrid sessions must enroll again to reopen. Per-participant
-queues retain at most two seconds or 200 audio
-frames; overload drops pending audio and revokes enrollment. Workers wait two
-seconds before retrying after failure or overload. Closing the WebSocket releases
-its inference session, and the service bounds their count. At `max_utterance_s`,
-an enrolled speaker's final transcript is retained, but the incomplete utterance
-cannot activate a conversation control or enroll a new speaker.
+Interaction state belongs to a participant connection. Disconnect or inference
+failure clears temporary permissions and enrollment; conversation and hybrid
+sessions must enroll again to reopen. Per-participant queues retain at most two
+seconds or 200 audio frames. Overload drops the queued audio and tells the
+service how much is missing: enrollment survives, but no utterance, control
+phrase or one-turn permission spans the gap, and an utterance in progress ends
+without a transcript. Workers wait two seconds before retrying after failure.
+Closing the WebSocket releases its inference session, and the service bounds
+their count. At `max_utterance_s`, an enrolled speaker's final transcript is
+retained, but the incomplete utterance cannot activate a conversation control or
+enroll a new speaker.
 
 Departure closes admission before asynchronous cleanup, and only an explicit
 participant join permits new audio. Cleanup retains task and queue ownership
