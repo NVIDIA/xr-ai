@@ -36,8 +36,8 @@ The `Process.config` value above passes this file as `--config`.
 # CloudXR runtime configuration.
 cloudxr_install_dir: ~/.cloudxr
 
-# Accept the NVIDIA CloudXR EULA non-interactively.
-# View: https://github.com/NVIDIA/IsaacTeleop/blob/main/deps/cloudxr/CLOUDXR_LICENSE
+# Accept the NVIDIA CloudXR license agreement non-interactively. The agreement
+# ships with the SDK and is copied in third_party_licenses/nvidia-cloudxr-runtime-6.2.0/.
 # Written once to <cloudxr_install_dir>/run/eula_accepted; ignored on subsequent runs.
 accept_eula: true
 
@@ -70,6 +70,11 @@ dynamically.
 
 ## Notes
 
+- On first run the service downloads the pinned CloudXR Runtime SDK from public
+  NGC (no API key needed), verifies its SHA-256, and unpacks it under
+  `<cloudxr_install_dir>/sdk/`. Without network access, place the SDK tarball at
+  the path printed in the download error and restart. The SDK's libraries need
+  the system `libssl3` and `libbsd0` packages, which Ubuntu installs by default.
 - CloudXR and the DeviceIOHub are **independent stacks**. CloudXR streams
   simulation and render content through the transport selected by the device
   profile; the hub handles agent media via LiveKit. They share no ports.
