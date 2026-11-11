@@ -23,8 +23,7 @@ NEMOTRON_OMNI = {
         "vision":     True,
         "video":      True,
         "reasoning":  True,
-        # Measured with eval/structured_output_eval.py; see the eval README.
-        "json_schema": True,
+        # Forced calls passed qualification; JSON Schema output has not.
         "tool_choice": True,
     },
 }

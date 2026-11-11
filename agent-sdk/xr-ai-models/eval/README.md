@@ -44,7 +44,6 @@ reported but do not gate.
 | `tool_required` | `chat(tools=[t], tool_choice="required")` | Gated: every response calls |
 | `prompt_only` | Schema stated in the system message, no constraint | Reference: no feature |
 | `tools_auto` | `chat(tools=[t])`, the model may skip the call | Reference: today's commit-tool pattern |
-| `json_schema_flipped` | `response_format` with the opposite schema statement: stated without reasoning, left out with it | Ablation of the client's rule, not reachable through the API |
 
 With reasoning on, each request sends `thinking_budget` and a `max_tokens` of
 the budget plus 1024. In the `tools_*` modes the answer is the first call's
@@ -61,7 +60,15 @@ of steps. Each case has checks that grade the answer (an expected value, a
 substring, a numeric range or a minimum length), plus accepted and rejected
 example answers that the repository tests use to check the graders offline.
 
-## Results: Nemotron Omni
+## Historical results: Nemotron Omni
+
+These measurements used an earlier client that inserted the schema into the
+prompt when reasoning was enabled. They do not qualify the current client,
+which sends output constraints without modifying caller messages. The
+`json_schema_flipped` rows were an ablation of that removed client policy;
+that mode is no longer part of this eval. `nemotron_omni` declares forced tool
+choice only; JSON Schema output remains disabled pending a passing run with
+the current client and intended server deployment.
 
 `nemotron_omni` on vLLM 0.31.0 (`nemotron_v3` reasoning parser, `qwen3_coder`
 tool parser), 16 samples per case, mode and reasoning setting (96 per row),
@@ -86,7 +93,7 @@ That run failed the gate once: one streamed `json_schema` answer filled its
 remaining tokens with whitespace. Across three full runs (the first made before
 the schema-in-prompt rule was limited to reasoning), 1 of 1,152
 `response_schema` answers failed that way and 6 of 1,728 forced calls had
-arguments outside their schema. The flipped ablation supports the client's
-rule both ways: stating the schema without reasoning cut correct answers
-(an enum biased toward its first value), and leaving it out after reasoning
-lost 12 answers to whitespace.
+arguments outside their schema. The historical ablation showed that prompt
+format instructions affected this deployment's outputs. That observation is
+not a policy for other models; callers and deployment qualification own the
+prompt used for their task.

@@ -22,6 +22,16 @@ before updating the checkout. Start the updated services before restarting
 workers; launchers can reuse a running service whose identity matches even when
 its application code predates the update.
 
+### LLM request defaults
+
+`OpenAICompatLLM` now applies `adapter.default_extras` only when a call omits
+an optional value. Explicit `max_tokens`, `temperature`, tools and output
+constraints override the corresponding defaults. The selected model, caller
+messages and method's streaming mode cannot be replaced by extras. If a
+profile previously relied on extras overriding those values, move that choice
+into the call instead. Constraints supplied through extras are validated
+against endpoint capabilities before transport.
+
 ### Simple VLM example deprecation
 
 The {doc}`simple-vlm-example` sample is deprecated. Existing demo and launch
