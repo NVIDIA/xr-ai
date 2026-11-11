@@ -127,6 +127,13 @@ behavior on hardware and report the device and result separately.
 
 ## Coverage boundaries
 
+For manual voice checks with the shipped conversation-mode sample YAML, say
+`Start talking to me`, ask a question, then say `Stop talking to me` to close
+the conversation. A short `stop` interrupts without closing it. When checking
+wake-required or hybrid behavior, use `assistant` or `hey assistant`. For
+retained private YAML, use its configured phrases instead; adopting new sample
+defaults does not rewrite that configuration.
+
 The suite includes:
 
 - package API and model-profile behavior;

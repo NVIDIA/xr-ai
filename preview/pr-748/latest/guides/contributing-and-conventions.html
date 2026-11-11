@@ -454,16 +454,16 @@ repository contribution tooling described here.</p>
 <section id="repository-contracts">
 <h2>Repository contracts<a class="headerlink" href="#repository-contracts" title="Link to this heading">#</a></h2>
 <p>Refer to the root
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/45b50d6bbbe998e32c0faf8b3f115051ec40df43/CONTRIBUTING.md"><code class="docutils literal notranslate"><span class="pre">CONTRIBUTING.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/606da113c43a4553a79d5855fe8c34e60588d37b/CONTRIBUTING.md"><code class="docutils literal notranslate"><span class="pre">CONTRIBUTING.md</span></code></a>
 for setup, testing, pull requests, and DCO sign-off. Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/45b50d6bbbe998e32c0faf8b3f115051ec40df43/AGENTS.md"><code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code></a> for the
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/606da113c43a4553a79d5855fe8c34e60588d37b/AGENTS.md"><code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code></a> for the
 architecture and change constraints used by humans and coding agents. Refer to
 <a class="reference internal" href="documentation-style.html"><span class="doc">Documentation style</span></a> for requirements governing
 customer-facing Markdown and reStructuredText. Refer to
 <a class="reference internal" href="python-code-style.html"><span class="doc">Python code style</span></a> for public API, exception handling,
 and module layout conventions, including <code class="docutils literal notranslate"><span class="pre">Raises:</span></code> exclusions for caller
 mistakes. Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/45b50d6bbbe998e32c0faf8b3f115051ec40df43/DEPENDENCIES.md"><code class="docutils literal notranslate"><span class="pre">DEPENDENCIES.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/606da113c43a4553a79d5855fe8c34e60588d37b/DEPENDENCIES.md"><code class="docutils literal notranslate"><span class="pre">DEPENDENCIES.md</span></code></a>
 for the package dependency map.</p>
 <p>For a Python change:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>uv.toml<span class="w"> </span>sync<span class="w"> </span>--project<span class="w"> </span>&lt;affected-project&gt;
@@ -614,7 +614,7 @@ is cancelled, the returned handle can be lost. Have the worker record ownership
 or release the resource itself so cleanup does not depend on that return value.</p>
 <p>Budget the full shutdown sequence, including drains and joins, within the
 owning supervisor’s deadline. The repository launcher’s <code class="docutils literal notranslate"><span class="pre">_STOP_TIMEOUT</span></code> in
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/45b50d6bbbe998e32c0faf8b3f115051ec40df43/utils/xr-ai-launcher/xr_ai_launcher/_stack.py"><code class="docutils literal notranslate"><span class="pre">xr_ai_launcher/_stack.py</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/606da113c43a4553a79d5855fe8c34e60588d37b/utils/xr-ai-launcher/xr_ai_launcher/_stack.py"><code class="docutils literal notranslate"><span class="pre">xr_ai_launcher/_stack.py</span></code></a>
 allows 20 seconds before SIGKILL; sequential cleanup timeouts must fit that total.</p>
 </section>
 <section id="migration-entries-and-release-rollover">

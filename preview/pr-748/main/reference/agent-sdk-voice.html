@@ -650,7 +650,7 @@ once against the packaged baseline.</p>
 <span class="c1"># while closed, natural conversation after start. Backend choice is separate.</span>
 <span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">always_on</span>
 
-<span class="c1"># Required and non-empty in wake_only and hybrid modes, e.g. ["hey agent"].</span>
+<span class="c1"># Required and non-empty in wake_only and hybrid modes, e.g. ["hey assistant"].</span>
 <span class="c1"># Ignored by always_on. Matches start a sentence, not a mid-sentence mention.</span>
 <span class="nt">magic_phrases</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span>
 <span class="c1"># After a bare wake phrase, the next utterance may begin this many seconds later</span>
@@ -666,8 +666,8 @@ once against the packaged baseline.</p>
 <span class="c1"># Conversation controls apply in conversation and hybrid modes. Mode selects</span>
 <span class="c1"># activation; these fields only tune controls and the active-session policy.</span>
 <span class="nt">conversation</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">start_phrase</span><span class="p">:</span><span class="w"> </span><span class="s">"Hey</span><span class="nv"> </span><span class="s">agent,</span><span class="nv"> </span><span class="s">let's</span><span class="nv"> </span><span class="s">start</span><span class="nv"> </span><span class="s">talking"</span>
-<span class="w">  </span><span class="nt">stop_phrase</span><span class="p">:</span><span class="w"> </span><span class="s">"Hey</span><span class="nv"> </span><span class="s">agent,</span><span class="nv"> </span><span class="s">let's</span><span class="nv"> </span><span class="s">stop</span><span class="nv"> </span><span class="s">talking"</span>
+<span class="w">  </span><span class="nt">start_phrase</span><span class="p">:</span><span class="w"> </span><span class="s">"Start</span><span class="nv"> </span><span class="s">talking</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">me"</span>
+<span class="w">  </span><span class="nt">stop_phrase</span><span class="p">:</span><span class="w"> </span><span class="s">"Stop</span><span class="nv"> </span><span class="s">talking</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">me"</span>
 <span class="w">  </span><span class="c1"># Advanced: true requires addressing even after the conversation opens.</span>
 <span class="w">  </span><span class="c1"># This does not enable wake-addressed queries while closed; hybrid does that.</span>
 <span class="w">  </span><span class="nt">require_wake_phrase</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
@@ -702,8 +702,8 @@ once against the packaged baseline.</p>
 <p>The <code class="docutils literal notranslate"><span class="pre">simple-vlm-example</span></code>, <code class="docutils literal notranslate"><span class="pre">conversation-example</span></code>, <code class="docutils literal notranslate"><span class="pre">tea-making-sample</span></code>,
 <code class="docutils literal notranslate"><span class="pre">lab-instrument-monitoring</span></code>, and <code class="docutils literal notranslate"><span class="pre">xr-render-demo</span></code> samples start with microphone
 conversation closed.
-After connecting, say <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">start</span> <span class="pre">talking</span></code>, then speak naturally
-without a wake phrase. Say <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">stop</span> <span class="pre">talking</span></code> to close the
+After connecting, say <code class="docutils literal notranslate"><span class="pre">Start</span> <span class="pre">talking</span> <span class="pre">to</span> <span class="pre">me</span></code>, then speak naturally
+without a wake phrase. Say <code class="docutils literal notranslate"><span class="pre">Stop</span> <span class="pre">talking</span> <span class="pre">to</span> <span class="pre">me</span></code> to close the
 conversation and interrupt the current response. A short <code class="docutils literal notranslate"><span class="pre">stop</span></code> interrupts the
 response while keeping the conversation open.</p>
 <p>Choose a mode in each sample’s voice-gate YAML:</p>
@@ -745,32 +745,32 @@ samples explicitly select <code class="docutils literal notranslate"><span class
 ungated narration with STOP disabled. Change the sample’s <code class="docutils literal notranslate"><span class="pre">mode</span></code> field to
 choose another interaction policy without maintaining a separate preset copy.</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hybrid</span>
-<span class="nt">magic_phrases</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">"hey</span><span class="nv"> </span><span class="s">agent"</span><span class="p p-Indicator">]</span>
+<span class="nt">magic_phrases</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">"assistant"</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">"hey</span><span class="nv"> </span><span class="s">assistant"</span><span class="p p-Indicator">]</span>
 </pre></div>
 </div>
-<p>While closed, <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">what</span> <span class="pre">is</span> <span class="pre">this?</span></code> answers one question without opening
+<p>While closed, <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">assistant,</span> <span class="pre">what</span> <span class="pre">is</span> <span class="pre">this?</span></code> answers one question without opening
 the conversation or registering a persistent speaker. The next unaddressed
-utterance is ignored. <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent</span></code> alone permits one next utterance in the
+utterance is ignored. <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">assistant</span></code> alone permits one next utterance in the
 existing <code class="docutils literal notranslate"><span class="pre">followup_grace_s</span></code> window; its onset must be in the window, but it may
 finish later. Speaker ASR binds that permission to the same recognized speaker.
 This temporary permission is not speaker registration or an idle conversation
-timeout. A control prefix such as <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span></code> is withheld, never sent
+timeout. A control prefix such as <code class="docutils literal notranslate"><span class="pre">Start</span> <span class="pre">talking</span></code> is withheld, never sent
 as a question, and consumes an earlier bare-wake permission; it does not preserve
 that permission for a third utterance. The complete start phrase opens the conversation.</p>
 <p>Tune conversation controls separately:</p>
 <p>With explicit <code class="docutils literal notranslate"><span class="pre">mode</span></code>, put all session controls in <code class="docutils literal notranslate"><span class="pre">conversation</span></code>, not <code class="docutils literal notranslate"><span class="pre">speaker</span></code>;
 misplaced controls are rejected instead of silently replaced by defaults.</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">conversation</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">start_phrase</span><span class="p">:</span><span class="w"> </span><span class="s">"Hey</span><span class="nv"> </span><span class="s">agent,</span><span class="nv"> </span><span class="s">let's</span><span class="nv"> </span><span class="s">start</span><span class="nv"> </span><span class="s">talking"</span>
-<span class="w">  </span><span class="nt">stop_phrase</span><span class="p">:</span><span class="w"> </span><span class="s">"Hey</span><span class="nv"> </span><span class="s">agent,</span><span class="nv"> </span><span class="s">let's</span><span class="nv"> </span><span class="s">stop</span><span class="nv"> </span><span class="s">talking"</span>
+<span class="w">  </span><span class="nt">start_phrase</span><span class="p">:</span><span class="w"> </span><span class="s">"Start</span><span class="nv"> </span><span class="s">talking</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">me"</span>
+<span class="w">  </span><span class="nt">stop_phrase</span><span class="p">:</span><span class="w"> </span><span class="s">"Stop</span><span class="nv"> </span><span class="s">talking</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">me"</span>
 <span class="w">  </span><span class="nt">require_wake_phrase</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
 <span class="w">  </span><span class="nt">phrase_window_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">6.0</span>
 </pre></div>
 </div>
 <p>Matching ignores case, punctuation, apostrophes, and spacing; <code class="docutils literal notranslate"><span class="pre">let</span> <span class="pre">us</span></code> also
 matches <code class="docutils literal notranslate"><span class="pre">let's</span></code>. Exact control prefixes can span final STT results, and a
-boundary may fall inside a word: <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent</span></code> (or <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">ag</span></code>), followed by
-<code class="docutils literal notranslate"><span class="pre">let's</span> <span class="pre">start</span> <span class="pre">talking</span></code> (or <code class="docutils literal notranslate"><span class="pre">ent,</span> <span class="pre">let's</span> <span class="pre">start</span> <span class="pre">talking</span></code>), starts the conversation
+boundary may fall inside a word: <code class="docutils literal notranslate"><span class="pre">Start</span> <span class="pre">talking</span></code> (or <code class="docutils literal notranslate"><span class="pre">Start</span> <span class="pre">tal</span></code>), followed by
+<code class="docutils literal notranslate"><span class="pre">to</span> <span class="pre">me</span></code> (or <code class="docutils literal notranslate"><span class="pre">king</span> <span class="pre">to</span> <span class="pre">me</span></code>), starts the conversation
 if their speech onsets fall within <code class="docutils literal notranslate"><span class="pre">phrase_window_s</span></code>.</p>
 <p>An utterance that could begin a control phrase is withheld. The same speaker’s
 next utterance within <code class="docutils literal notranslate"><span class="pre">phrase_window_s</span></code> decides what the withheld words were:</p>
@@ -782,11 +782,19 @@ new utterance could, it begins a new window with the earlier words ahead of it.<
 <li><p>Otherwise the withheld words were speech. In an active conversation they lead
 that utterance’s transcript, which is handled as if spoken unsplit: the agent
 query keeps every word, and with <code class="docutils literal notranslate"><span class="pre">require_wake_phrase</span></code> the wake rule applies
-to the joined text. The exception is withheld words that together form only
-a wake phrase under <code class="docutils literal notranslate"><span class="pre">require_wake_phrase</span></code>: they already opened its follow-up
-window when withheld, so they are not released again. A wake phrase split
-across final results (<code class="docutils literal notranslate"><span class="pre">Hey</span></code> | <code class="docutils literal notranslate"><span class="pre">agent</span></code>) counts as one.</p></li>
+to the joined text. With a custom wake-prefixed control, withheld words that
+form only a wake phrase can open the bare-wake follow-up window. They are not
+released again as query text when wake phrases are required.</p></li>
 </ul>
+<p>A global STOP (<code class="docutils literal notranslate"><span class="pre">stop</span></code>, <code class="docutils literal notranslate"><span class="pre">stop</span> <span class="pre">talking</span></code>) is never withheld, although it begins the
+default stop phrase: it interrupts at once. Its valid control prefix remains
+recognizable in the same source and time window, so <code class="docutils literal notranslate"><span class="pre">Stop</span> <span class="pre">talking</span></code> followed by
+<code class="docutils literal notranslate"><span class="pre">to</span> <span class="pre">me</span></code> still closes the conversation. The interrupted words are never replayed
+as query text. An exact configured control takes precedence over global STOP;
+with <code class="docutils literal notranslate"><span class="pre">stop_commands_enabled:</span> <span class="pre">false</span></code>, prefixes use normal control withholding.
+With the default control phrases, wake phrases are not control prefixes, so a
+wake phrase split across final results is not joined. Custom wake-prefixed
+controls retain prefix joining and the bare-wake follow-up behavior above.</p>
 <p>In every other case the withheld words are discarded: a control or STOP ran,
 no conversation is active, the next utterance comes from another speaker, is
 empty or failed, or does not start within the window, or the participant
@@ -845,9 +853,9 @@ whitespace or a closing quote. Text before the boundary and the phrase are
 removed. A phrase after a comma, semicolon, or inside ordinary prose does not
 activate the gate. In that mode, partial STOP classification checks both raw
 text and the tail after a configured wake phrase, so <code class="docutils literal notranslate"><span class="pre">stop</span></code> and
-<code class="docutils literal notranslate"><span class="pre">hey</span> <span class="pre">agent</span> <span class="pre">stop</span></code> interrupt equally early. With natural speech enabled by
+<code class="docutils literal notranslate"><span class="pre">hey</span> <span class="pre">assistant</span> <span class="pre">stop</span></code> interrupt equally early. With natural speech enabled by
 <code class="docutils literal notranslate"><span class="pre">conversation.require_wake_phrase:</span> <span class="pre">false</span></code>, final transcripts remain intact and
-only a standalone short stop uses the global-stop path; <code class="docutils literal notranslate"><span class="pre">hey</span> <span class="pre">agent</span> <span class="pre">stop</span></code>
+only a standalone short stop uses the global-stop path; <code class="docutils literal notranslate"><span class="pre">hey</span> <span class="pre">assistant</span> <span class="pre">stop</span></code>
 remains a query.</p>
 <p>When enabled, global STOP uses a closed imperative grammar for direct requests
 such as <code class="docutils literal notranslate"><span class="pre">stop</span></code>, <code class="docutils literal notranslate"><span class="pre">stop</span> <span class="pre">it</span></code>, <code class="docutils literal notranslate"><span class="pre">stop</span> <span class="pre">talking</span></code>, <code class="docutils literal notranslate"><span class="pre">be</span> <span class="pre">quiet</span></code>, and <code class="docutils literal notranslate"><span class="pre">shut</span> <span class="pre">up</span></code>, with a bounded set
@@ -861,7 +869,7 @@ stops. They follow the ordinary gate rules.</p>
 acknowledgement. Wake recognition may independently emit the optional chime,
 but chime configuration, initialization, or playback does not control probing.
 If the final transcript remains a global stop, normal stop handling emits the
-acknowledgement. If STT revises partial <code class="docutils literal notranslate"><span class="pre">hey</span> <span class="pre">agent</span> <span class="pre">stop</span></code> to final <code class="docutils literal notranslate"><span class="pre">hey</span> <span class="pre">agent</span> <span class="pre">stop</span> <span class="pre">monitoring</span> <span class="pre">xyz</span></code>, the final transcript instead dispatches <code class="docutils literal notranslate"><span class="pre">stop</span> <span class="pre">monitoring</span> <span class="pre">xyz</span></code>
+acknowledgement. If STT revises partial <code class="docutils literal notranslate"><span class="pre">hey</span> <span class="pre">assistant</span> <span class="pre">stop</span></code> to final <code class="docutils literal notranslate"><span class="pre">hey</span> <span class="pre">assistant</span> <span class="pre">stop</span> <span class="pre">monitoring</span> <span class="pre">xyz</span></code>, the final transcript instead dispatches <code class="docutils literal notranslate"><span class="pre">stop</span> <span class="pre">monitoring</span> <span class="pre">xyz</span></code>
 to the agent; the latency-saving interruption is not undone.</p>
 </section>
 <section id="speaker-filtering-and-backend-selection">
@@ -995,15 +1003,17 @@ without enrollment. After enrollment,
 only the selected speaker can send queries or release the conversation. Wake
 phrases remain optional through <code class="docutils literal notranslate"><span class="pre">conversation.require_wake_phrase</span></code>; filtering
 cannot determine whom the wearer is addressing.</p>
-<p>Interaction state belongs to a participant connection. Disconnect, inference
-failure or processing overload clears temporary permissions and enrollment;
-conversation and hybrid sessions must enroll again to reopen. Per-participant
-queues retain at most two seconds or 200 audio
-frames; overload drops pending audio and revokes enrollment. Workers wait two
-seconds before retrying after failure or overload. Closing the WebSocket releases
-its inference session, and the service bounds their count. At <code class="docutils literal notranslate"><span class="pre">max_utterance_s</span></code>,
-an enrolled speaker’s final transcript is retained, but the incomplete utterance
-cannot activate a conversation control or enroll a new speaker.</p>
+<p>Interaction state belongs to a participant connection. Disconnect or inference
+failure clears temporary permissions and enrollment; conversation and hybrid
+sessions must enroll again to reopen. Per-participant queues retain at most two
+seconds or 200 audio frames. Overload drops the queued audio and tells the
+service how much is missing: enrollment survives, but no utterance, control
+phrase or one-turn permission spans the gap, and an utterance in progress ends
+without a transcript. Workers wait two seconds before retrying after failure.
+Closing the WebSocket releases its inference session, and the service bounds
+their count. At <code class="docutils literal notranslate"><span class="pre">max_utterance_s</span></code>, an enrolled speaker’s final transcript is
+retained, but the incomplete utterance cannot activate a conversation control or
+enroll a new speaker.</p>
 <p>Departure closes admission before asynchronous cleanup, and only an explicit
 participant join permits new audio. Cleanup retains task and queue ownership
 through stream close. Participant lifecycle and enrollment transitions retain
