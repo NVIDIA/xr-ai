@@ -1,28 +1,31 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Load the settings for saving and captioning a procedure demonstration.
+"""Load capture, captioning, and quality-feedback settings for a demonstration.
 
 Read capture-agent-config.yaml into CaptureConfig: the output directory,
-sampling rate, and caption interval. Load the caption prompt from prompts/ and
+sampling rate, caption interval, and quality-warning policy. Load the caption prompt from prompts/ and
 apply an optional output-directory override supplied by the worker configuration.
 Shared voice and frame settings remain in the worker's config.py.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
 
+from .quality import QualityConfig
+
 
 @dataclass(frozen=True, slots=True)
 class CaptureConfig:
-    """Output, sampling, and caption settings used by the capture backend."""
+    """Evidence collection and quality-feedback policy for capture mode."""
 
     artifacts_dir: Path
     caption_prompt: str
     capture_fps: float = 2.0
     caption_interval_s: float = 5.0
+    quality: QualityConfig = field(default_factory=QualityConfig)
 
 
 def load_capture_config(path: Path, *, output_root: Path | None = None) -> CaptureConfig:
@@ -41,5 +44,6 @@ def load_capture_config(path: Path, *, output_root: Path | None = None) -> Captu
             else path.resolve().parent / data.get("artifacts_dir", "../artifacts")
         ).resolve(),
         caption_prompt=(Path(__file__).parent / "prompts/caption.txt").read_text(encoding="utf-8"),
+        quality=QualityConfig.model_validate(data.get("quality", {})),
         **settings,
     )

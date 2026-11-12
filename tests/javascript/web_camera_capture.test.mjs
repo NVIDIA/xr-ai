@@ -758,3 +758,24 @@ test('failed live camera start falls back to persisted Off mode', async () => {
   assert.equal(model.cameraMode, 'off');
   assert.equal(saved.get('streamkit.cameraMode'), 'off');
 });
+
+test('reports camera sender stats with the published track identity', async (t) => {
+  installMediaDevices(async () => ({ getVideoTracks: () => [makeMediaTrack()] }));
+  const video = makePublishedTrack(makeMediaTrack());
+  video.sid = 'TR_quality_camera';
+  video.getRTCStatsReport = async () => new Map([['camera', {
+    id: 'camera', type: 'outbound-rtp', kind: 'video', frameWidth: 640, frameHeight: 360,
+    framesPerSecond: 8, qualityLimitationReason: 'bandwidth',
+  }]]);
+  let resolve;
+  const received = new Promise(r => { resolve = r; });
+  const { backend } = await connectedBackend(t, async () => ({ videoTrack: video }), {
+    configure: b => { b.onNetworkMetrics = value => { if (value.video) resolve(value); }; },
+  });
+  await backend.startCamera();
+  const metrics = await received;
+  assert.equal(metrics.video.trackId, 'TR_quality_camera');
+  assert.equal(metrics.video.width, 640);
+  assert.equal(metrics.video.framesPerSecond, 8);
+  assert.equal(metrics.video.limitation, 'bandwidth');
+});
