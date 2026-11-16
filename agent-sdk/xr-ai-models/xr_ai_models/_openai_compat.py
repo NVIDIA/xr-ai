@@ -674,7 +674,9 @@ class OpenAICompatVLM:
 
     Image and video paths or bytes are converted to ``data:`` URLs before
     submission. An injected HTTP client remains owned by the caller and is not
-    closed here.
+    closed here. Requests are built and validated by the wrapped
+    :class:`OpenAICompatLLM`, so ``response_schema`` and ``default_extras``
+    follow the same rules and are checked against the same capabilities.
     """
 
     def __init__(
@@ -744,6 +746,7 @@ class OpenAICompatVLM:
         question: str,
         *,
         system_prompt: str = "",
+        response_schema: Mapping[str, Any] | None = None,
         max_tokens: int | None = None,
         temperature: float | None = None,
         timeout: float | None = None,
@@ -755,6 +758,7 @@ class OpenAICompatVLM:
             [image],
             question,
             system_prompt=system_prompt,
+            response_schema=response_schema,
             max_tokens=max_tokens,
             temperature=temperature,
             timeout=timeout,
@@ -767,6 +771,7 @@ class OpenAICompatVLM:
         question: str,
         *,
         system_prompt: str = "",
+        response_schema: Mapping[str, Any] | None = None,
         max_tokens: int | None = None,
         temperature: float | None = None,
         timeout: float | None = None,
@@ -779,6 +784,7 @@ class OpenAICompatVLM:
 
         return await self._llm.chat(
             self._build_image_messages(images, question, system_prompt),
+            response_schema=response_schema,
             max_tokens=max_tokens, temperature=temperature, timeout=timeout,
             headers=headers,
         )
@@ -804,6 +810,7 @@ class OpenAICompatVLM:
         question: str,
         *,
         system_prompt: str = "",
+        response_schema: Mapping[str, Any] | None = None,
         max_tokens: int | None = None,
         temperature: float | None = None,
         timeout: float | None = None,
@@ -823,6 +830,7 @@ class OpenAICompatVLM:
             )
         return await self._llm.chat(
             self._build_video_messages(video, question, system_prompt),
+            response_schema=response_schema,
             max_tokens=max_tokens, temperature=temperature, timeout=timeout,
             headers=headers,
         )
@@ -833,6 +841,7 @@ class OpenAICompatVLM:
         question: str,
         *,
         system_prompt: str = "",
+        response_schema: Mapping[str, Any] | None = None,
         max_tokens: int | None = None,
         temperature: float | None = None,
         timeout: float | None = None,
@@ -844,6 +853,7 @@ class OpenAICompatVLM:
             [image],
             question,
             system_prompt=system_prompt,
+            response_schema=response_schema,
             max_tokens=max_tokens,
             temperature=temperature,
             timeout=timeout,
@@ -857,6 +867,7 @@ class OpenAICompatVLM:
         question: str,
         *,
         system_prompt: str = "",
+        response_schema: Mapping[str, Any] | None = None,
         max_tokens: int | None = None,
         temperature: float | None = None,
         timeout: float | None = None,
@@ -869,6 +880,7 @@ class OpenAICompatVLM:
 
         async for chunk in self._llm.stream(
             self._build_image_messages(images, question, system_prompt),
+            response_schema=response_schema,
             max_tokens=max_tokens, temperature=temperature, timeout=timeout,
             headers=headers,
         ):

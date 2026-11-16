@@ -30,7 +30,8 @@ constraints override the corresponding defaults. The selected model, caller
 messages and method's streaming mode cannot be replaced by extras. If a
 profile previously relied on extras overriding those values, move that choice
 into the call instead. Constraints supplied through extras are validated
-against endpoint capabilities before transport.
+against endpoint capabilities before transport. `OpenAICompatVLM` wraps the
+same client, so VLM profile extras follow the same rules.
 
 ### Simple VLM example deprecation
 

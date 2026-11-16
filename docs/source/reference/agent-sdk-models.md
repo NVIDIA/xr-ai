@@ -208,6 +208,13 @@ different values is rejected.
 - `tool_choice` is `"auto"`, `"none"`, `"required"` (some tool must be called)
   or the name of one supplied tool (that tool must be called).
 
+`VLMService.ask_image`, `ask_images`, `ask_video`, `stream` and
+`stream_images` accept `response_schema`; vision methods take no tools or
+`tool_choice`. `OpenAICompatVLM` builds its requests with the same LLM client,
+so the image or video parts and question are sent unchanged, and the default
+precedence, validation and capability rules below apply to them as well. A
+VLM's capabilities are those of its chat endpoint.
+
 The client serializes these constraints as request fields. Callers own their
 messages, including format instructions required by their model; the client
 never inserts the schema into a prompt or chooses a reasoning policy.

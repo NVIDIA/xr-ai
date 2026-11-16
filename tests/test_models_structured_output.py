@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Structured output and forced tool calls on the OpenAI-compatible LLM client.
+"""Structured output and forced tool calls on the OpenAI-compatible LLM and VLM clients.
 
 Uses :class:`_stub_openai.StubOpenAI`, so no model server is required. The
 live behaviour is measured by ``agent-sdk/xr-ai-models/eval``.
@@ -22,6 +22,7 @@ from xr_ai_models import (
     ChatMessage,
     ImagePart,
     OpenAICompatLLM,
+    OpenAICompatVLM,
     TextPart,
     ThinkingSpec,
     ToolDef,
@@ -288,6 +289,96 @@ async def test_multimodal_user_content_is_kept_with_a_schema() -> None:
         await llm.chat(messages, response_schema=SCHEMA)
     sent = stub.last_json()["messages"]
     assert sent[0]["role"] == "user" and sent[0]["content"][0] == {"type": "text", "text": "What is shown?"}
+
+
+# ── Vision client ─────────────────────────────────────────────────────────
+
+IMAGES = ["data:image/png;base64,AAAA", "data:image/png;base64,BBBB"]
+VIDEO = "data:video/mp4;base64,CCCC"
+VISION = Capabilities(vision=True, video=True, json_schema=True)
+
+
+def _vlm(stub: StubOpenAI, *, capabilities: Capabilities = VISION, **kwargs):
+    return OpenAICompatVLM("http://stub", "llm", client=stub.client(), capabilities=capabilities, **kwargs)
+
+
+async def _ask_vision(vlm: OpenAICompatVLM, method: str, **kwargs):
+    if method == "ask_image":
+        return await vlm.ask_image(IMAGES[0], "Did it change?", **kwargs)
+    if method == "ask_images":
+        return await vlm.ask_images(IMAGES, "Did it change?", **kwargs)
+    if method == "ask_video":
+        return await vlm.ask_video(VIDEO, "Did it change?", **kwargs)
+    if method == "stream":
+        return "".join([chunk async for chunk in vlm.stream(IMAGES[0], "Did it change?", **kwargs)])
+    return "".join([chunk async for chunk in vlm.stream_images(IMAGES, "Did it change?", **kwargs)])
+
+
+VISION_METHODS = ["ask_image", "ask_images", "ask_video", "stream", "stream_images"]
+VISION_PARTS = {
+    "ask_image": [{"type": "image_url", "image_url": {"url": IMAGES[0]}}],
+    "ask_images": [{"type": "image_url", "image_url": {"url": url}} for url in IMAGES],
+    "ask_video": [{"type": "video_url", "video_url": {"url": VIDEO}}],
+    "stream": [{"type": "image_url", "image_url": {"url": IMAGES[0]}}],
+    "stream_images": [{"type": "image_url", "image_url": {"url": url}} for url in IMAGES],
+}
+
+
+@pytest.mark.parametrize("method", VISION_METHODS)
+async def test_vision_response_schema_keeps_media_and_question(method) -> None:
+    stub = StubOpenAI()
+    stub.set_chat_message(content='{"important": true}')
+    stub.set_stream_tokens(['{"important":', " true}"])
+    async with _vlm(stub) as vlm:
+        result = await _ask_vision(vlm, method, system_prompt="Watch the kettle.", response_schema=SCHEMA)
+    assert (result if isinstance(result, str) else result.content) == '{"important": true}'
+    body = stub.last_json()
+    assert body["response_format"] == {
+        "type": "json_schema", "json_schema": {"name": "Change_Decision", "schema": SCHEMA},
+    }
+    assert body["messages"] == [
+        {"role": "system", "content": "Watch the kettle."},
+        {"role": "user", "content": [*VISION_PARTS[method], {"type": "text", "text": "Did it change?"}]},
+    ]
+    assert "tools" not in body and "tool_choice" not in body
+
+
+@pytest.mark.parametrize("method", VISION_METHODS)
+async def test_vision_undeclared_json_schema_is_rejected_before_sending(method) -> None:
+    stub = StubOpenAI()
+    async with _vlm(stub, capabilities=Capabilities(vision=True, video=True)) as vlm:
+        with pytest.raises(ValueError, match="json_schema support"):
+            await _ask_vision(vlm, method, response_schema=SCHEMA)
+    assert not stub.requests
+
+
+@pytest.mark.parametrize("method", VISION_METHODS)
+async def test_vision_explicit_schema_overrides_defaults(method) -> None:
+    stub = StubOpenAI()
+    stub.set_stream_tokens(['{"important": true}'])
+    extras = {"model": "wrong", "max_tokens": 64, "temperature": 0.9, "response_format": {"type": "text"}}
+    async with _vlm(stub, default_extras=extras) as vlm:
+        await _ask_vision(vlm, method, response_schema=SCHEMA, max_tokens=1024)
+    body = stub.last_json()
+    assert body["model"] == "llm" and body["max_tokens"] == 1024 and body["temperature"] == 0.9
+    assert body["response_format"]["json_schema"]["schema"] == SCHEMA
+    assert extras["max_tokens"] == 64 and extras["response_format"] == {"type": "text"}
+
+
+async def test_vision_schema_from_defaults_is_validated_before_transport() -> None:
+    stub = StubOpenAI()
+    extras = {"response_format": {"type": "json_schema", "json_schema": {"name": "answer", "schema": SCHEMA}}}
+    async with _vlm(stub, capabilities=Capabilities(vision=True), default_extras=extras) as vlm:
+        with pytest.raises(ValueError, match="json_schema support"):
+            await vlm.ask_image(IMAGES[0], "Did it change?")
+    assert not stub.requests
+
+
+async def test_vision_without_schema_sends_no_response_format() -> None:
+    stub = StubOpenAI()
+    async with _vlm(stub) as vlm:
+        await vlm.ask_images(IMAGES, "Did it change?")
+    assert "response_format" not in stub.last_json()
 
 
 def test_capabilities_declared_by_presets_are_known_fields() -> None:

@@ -437,7 +437,16 @@ class LLMService(Protocol):
 
 @runtime_checkable
 class VLMService(Protocol):
-    """Structural interface for visual chat-completion services."""
+    """Structural interface for visual chat-completion services.
+
+    ``response_schema`` requests that the endpoint constrain response text to
+    one JSON value matching the schema, with the same request field and
+    validation as :class:`LLMService`. Callers own the question and system
+    prompt, including any format instructions their model needs. Support is
+    the chat endpoint's :attr:`Capabilities.json_schema`; undeclared support
+    raises :class:`ValueError` before sending. Callers validate results and
+    handle truncation, refusal, and inference failures.
+    """
 
     capabilities: Capabilities
     """Features supported by this service."""
@@ -448,6 +457,7 @@ class VLMService(Protocol):
         question: str,
         *,
         system_prompt: str = "",
+        response_schema: Mapping[str, Any] | None = None,
         max_tokens: int | None = None,
         temperature: float | None = None,
         timeout: float | None = None,
@@ -463,6 +473,7 @@ class VLMService(Protocol):
         question: str,
         *,
         system_prompt: str = "",
+        response_schema: Mapping[str, Any] | None = None,
         max_tokens: int | None = None,
         temperature: float | None = None,
         timeout: float | None = None,
@@ -478,6 +489,7 @@ class VLMService(Protocol):
         question: str,
         *,
         system_prompt: str = "",
+        response_schema: Mapping[str, Any] | None = None,
         max_tokens: int | None = None,
         temperature: float | None = None,
         timeout: float | None = None,
@@ -493,6 +505,7 @@ class VLMService(Protocol):
         question: str,
         *,
         system_prompt: str = "",
+        response_schema: Mapping[str, Any] | None = None,
         max_tokens: int | None = None,
         temperature: float | None = None,
         timeout: float | None = None,
@@ -508,6 +521,7 @@ class VLMService(Protocol):
         question: str,
         *,
         system_prompt: str = "",
+        response_schema: Mapping[str, Any] | None = None,
         max_tokens: int | None = None,
         temperature: float | None = None,
         timeout: float | None = None,
