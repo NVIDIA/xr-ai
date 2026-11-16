@@ -39,7 +39,7 @@ from procedure_capture_guide_worker.capture.capturing import _Capture  # noqa: E
 from procedure_capture_guide_worker.config import load_config  # noqa: E402
 
 _CAPTURE_WELCOME = (
-    "Say start capture to start the recording and demonstrate your procedure. "
+    "Say check setup to check the network, video frame rate and resolution, or start capture to record. "
     "To finish recording, say stop capture."
 )
 
@@ -550,7 +550,7 @@ async def test_app_drains_voice_transcripts_and_recordings_before_endpoint_close
 
     async def send(message):
         assert not capture_closed
-        assert message.topic == CAPTURE_STT_TOPIC
+        assert message.topic in {CAPTURE_STT_TOPIC, "procedure.capture.quality.control"}
 
     async def receive_forever():
         receiving.set()
@@ -561,6 +561,7 @@ async def test_app_drains_voice_transcripts_and_recordings_before_endpoint_close
 
     capture_endpoint = SimpleNamespace(
         on_participant=lambda cb: callbacks.update(participant=cb),
+        on_frame=Mock(), on_data=Mock(),
         run=receive_forever,
         wait_until_running=receiving.wait,
         send_return_data=AsyncMock(side_effect=send),

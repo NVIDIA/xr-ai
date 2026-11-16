@@ -67,8 +67,12 @@ Open the authenticated web-client URL printed by the hub and connect. Enable
 the microphone and use live video or on-demand image capture. Say **start
 capture**, narrate the demonstration, then say **stop capture**. Repeat
 these commands to record another task without reconnecting. The worker announces
-"Capture started." and "Capture stopped.", and stays silent during narration
-and finalization. On connection, the worker explains these commands once.
+"Capture started." and "Capture stopped." Media-quality notifications can be
+spoken during recording; finalization is silent.
+Before recording, optionally say **check setup** for a spoken network, frame-rate,
+and resolution report. See the
+[media-check reference](https://nvidia.github.io/xr-ai/latest/reference/procedure-capture-guide.html#optional-setup-check-and-recording-alerts).
+On connection, the worker explains the commands once.
 Other speech while idle does not trigger a reply.
 
 Recorded procedures are saved under
@@ -119,7 +123,7 @@ uv run --project model-servers procedure_capture_guide_model_servers --stop
 | File | Common settings |
 |---|---|
 | `yaml/worker.yaml` | Shared frame and speech detection settings; capture configuration path |
-| `yaml/capture-agent-config.yaml` | Task output directory, sampling rate, and caption interval |
+| `yaml/capture-agent-config.yaml` | Task output directory, sampling rate, caption interval, and media-alert repeat interval |
 | `yaml/guide-agent-config.yaml` | Visual verification timeout |
 | `yaml/media_capture.yaml` | Opt-in session recording output and rendering profile |
 | `yaml/models.json` | Client adapters and endpoints for batch STT, LLM, VLM, and acknowledgement TTS |
@@ -127,10 +131,12 @@ uv run --project model-servers procedure_capture_guide_model_servers --stop
 | `yaml/voice_gate.yaml` | Shared wake-word-free speech input for capture and guide |
 | `yaml/device_io_hub.yaml` | Room, ports, and web client |
 
-For example, increase the interval between captions in `yaml/capture-agent-config.yaml`:
+For example, change the minimum interval between audio alerts for the same media
+condition in `yaml/capture-agent-config.yaml`:
 
 ```yaml
-caption_interval_s: 8.0
+quality:
+  repeat_interval_s: 10
 ```
 
 Restart the sample after configuration changes. Refer to the

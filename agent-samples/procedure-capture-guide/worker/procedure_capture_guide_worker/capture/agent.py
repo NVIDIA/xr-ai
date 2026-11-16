@@ -5,7 +5,8 @@
 
 CaptureAgent welcomes participants on connection, handles "start capture" and "stop
 capture", and sends spoken acknowledgements. It passes narration to the capture
-backend in capturing.py and finalizes active capture on disconnect.
+backend in capturing.py and finalizes active capture on disconnect. Optional
+quality feedback has the same capture lifetime and never controls recording.
 """
 
 from __future__ import annotations
@@ -16,20 +17,19 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 
 from loguru import logger
-from xr_ai_hub import ParticipantEvent
+from xr_ai_hub import ParticipantEvent, ProcessorEndpoint
 from xr_ai_interaction import ParticipantJoined, ResponseOutputs, UserQuery
 from xr_ai_runtime import Agent, RuntimeContext, Topic, subscribe
 from xr_ai_voice import VOICE_OUTPUT_TOPIC
 
 from .capturing import _Capture
+from .preflight import check_setup
+from .quality import _MESSAGES, QualityConfig, QualityFeedback
 
 _COMMAND = re.compile(r"\s*(start|stop)\s+capture[.!?]*\s*", re.IGNORECASE)
 CAPTURE_INPUT_TOPIC = Topic("task.capture.input", UserQuery)
 CAPTURE_JOINED_TOPIC = Topic("task.capture.joined", ParticipantJoined)
-_WELCOME = (
-    "Say start capture to start the recording and demonstrate your procedure. "
-    "To finish recording, say stop capture."
-)
+_WELCOME = _MESSAGES["setup"]["welcome"]
 
 
 @dataclass
@@ -40,6 +40,8 @@ class _Connection:
     # Accepted input identity, including a start still queued behind finalization.
     # It can differ from CaptureAgent._sessions, which tracks backend ownership.
     recording: _Recording | None = None
+    quality: QualityFeedback | None = None
+    preflight_task: asyncio.Task | None = None
 
 
 @dataclass
@@ -53,15 +55,22 @@ class CaptureAgent(Agent):
     Order accepted speech and connection events before invoking the capture
     backend so each demonstration keeps its own narration and finalization.
     """
-    def __init__(self, capture_backend: _Capture) -> None:
+    def __init__(
+        self, capture_backend: _Capture, *, quality_config: QualityConfig | None = None,
+        endpoint: ProcessorEndpoint | None = None, capture_fps: float = 2.0,
+    ) -> None:
         super().__init__()
+        if quality_config is not None and quality_config.enabled and endpoint is None:
+            raise ValueError("capture quality feedback requires a hub endpoint")
         self._capture_backend = capture_backend
+        self._quality_config, self._endpoint, self._capture_fps = quality_config, endpoint, capture_fps
         # Recording ownership applied to the backend by queued actions. Keep this
         # separate from connection.recording: newer input may already be accepted.
         self._sessions: dict[str, _Recording] = {}
         self._tails: dict[str, asyncio.Task[None]] = {}
         self._connections: dict[str, _Connection] = {}
         self._closed = False
+        self._preflights: set[asyncio.Task] = set()
 
     def _enqueue(self, pid: str, action: Callable[[], Awaitable[None]]) -> asyncio.Task[None] | None:
         previous = self._tails.get(pid)
@@ -112,14 +121,33 @@ class CaptureAgent(Agent):
             if event.joined and not duplicate:
                 if connection is not None:
                     connection.cancelled.set()
+                    if connection.preflight_task is not None:
+                        connection.preflight_task.cancel()
+                    if connection.quality is not None:
+                        connection.quality.invalidate()
                 self._connections[pid] = _Connection(event.participant_session_id, event.pts_us)
+                if self._quality_config is not None and self._quality_config.enabled:
+                    self._connections[pid].quality = QualityFeedback(
+                        pid, self._endpoint, self._capture_backend, self._quality_config, self._capture_fps,
+                    )
             elif not event.joined and duplicate:
                 connection.cancelled.set()
+                if connection.preflight_task is not None:
+                    connection.preflight_task.cancel()
+                if connection.quality is not None:
+                    connection.quality.invalidate()
                 self._connections.pop(pid, None)
 
         async def apply() -> None:
             if not event.joined and not duplicate:
                 return
+            if connection is not None and connection.quality is not None and not (event.joined and duplicate):
+                await connection.quality.stop()
+            if event.joined and not duplicate:
+                current = self._connections.get(pid)
+                if (current is not None and current.session_id == event.participant_session_id
+                        and current.quality is not None):
+                    await current.quality.connect()
             recording = self._sessions.get(pid)
             try:
                 if recording is not None and recording.connection is connection and not (event.joined and duplicate):
@@ -167,6 +195,36 @@ class CaptureAgent(Agent):
             return
         command = _COMMAND.fullmatch(transcript.text)
         recording = connection.recording
+        if re.fullmatch(r"\s*check\s+setup[.!?]*\s*", transcript.text, re.IGNORECASE) and recording is None:
+            if connection.preflight_task is not None and not connection.preflight_task.done():
+                return
+            previous = self._tails.get(pid)
+
+            async def preflight():
+                if previous is not None:
+                    await asyncio.shield(previous)
+                if connection.cancelled.is_set() or connection.recording is not None:
+                    return
+                _, speech = await check_setup(
+                    lambda: self._capture_backend.sample_frame(pid), connection.quality,
+                    capture_fps=self._capture_fps, config=self._quality_config,
+                )
+                if connection.recording is None:
+                    await self._say(pid, connection, ctx, speech)
+
+            task = asyncio.create_task(preflight(), name=f"capture-setup:{pid}")
+            connection.preflight_task = task
+            self._preflights.add(task)
+
+            def finished(task):
+                self._preflights.discard(task)
+                if not task.cancelled() and task.exception() is not None:
+                    logger.opt(exception=task.exception()).error("capture setup check failed pid={!r}", pid)
+
+            task.add_done_callback(finished)
+            return
+        if command and connection.preflight_task is not None:
+            connection.preflight_task.cancel()
         if command and command[1].lower() == "start":
             if recording is not None:
                 return
@@ -174,6 +232,9 @@ class CaptureAgent(Agent):
             connection.recording = recording
 
             async def start() -> None:
+                if connection.preflight_task is not None:
+                    await asyncio.gather(connection.preflight_task, return_exceptions=True)
+                    connection.preflight_task = None
                 if self._closed or connection.cancelled.is_set():
                     self._forget(pid, recording)
                     return
@@ -184,6 +245,9 @@ class CaptureAgent(Agent):
                     )
                     if self._capture_backend.is_capturing(pid):
                         await self._say(pid, connection, ctx, "Capture started.")
+                        if (connection.quality is not None and connection.recording is recording
+                                and not connection.cancelled.is_set()):
+                            connection.quality.start(ctx)
                 finally:
                     if not self._capture_backend.is_capturing(pid):
                         self._forget(pid, recording)
@@ -191,9 +255,13 @@ class CaptureAgent(Agent):
             self._enqueue(pid, start)
         elif command:
             connection.recording = None
+            if connection.quality is not None:
+                connection.quality.invalidate()
 
             async def finish() -> None:
                 if recording is not None and self._sessions.get(pid) is recording:
+                    if connection.quality is not None:
+                        await connection.quality.stop()
                     await self._say(pid, connection, ctx, "Capture stopped.")
                     try:
                         await self._capture_backend.finish_capture(
@@ -212,11 +280,32 @@ class CaptureAgent(Agent):
             self._enqueue(pid, narrate)
         # Return promptly; this owner drains per-participant writes and boundaries.
 
+    async def on_quality_data(self, message) -> None:
+        connection = self._connections.get(message.participant_id)
+        if connection is not None and connection.quality is not None:
+            connection.quality.telemetry(message)
+
+    async def on_quality_frame(self, frame) -> None:
+        connection = self._connections.get(frame.participant_id)
+        if connection is not None and connection.quality is not None:
+            connection.quality.frame(frame)
+
+    def on_quality_sample(self, participant_id, frame) -> None:
+        connection = self._connections.get(participant_id)
+        if connection is not None and connection.quality is not None:
+            connection.quality.sample(frame)
+
     async def close(self) -> None:
         self._closed = True
+        for task in tuple(self._preflights):
+            task.cancel()
+        await asyncio.gather(*tuple(self._preflights), return_exceptions=True)
         for connection in self._connections.values():
             connection.cancelled.set()
+            if connection.quality is not None:
+                connection.quality.invalidate()
         try:
+            await asyncio.gather(*(c.quality.stop() for c in self._connections.values() if c.quality is not None))
             pending = tuple(self._tails.items())
             results = await asyncio.gather(*(task for _, task in pending), return_exceptions=True)
             for (pid, _), result in zip(pending, results):

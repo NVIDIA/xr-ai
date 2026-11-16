@@ -46,14 +46,13 @@ reconnecting. The worker logs each finalized packet's path and status.
 
 Use live video or on-demand image capture. Speak commands directly, without a
 wake phrase. After **start capture**, the worker says "Capture started."
-and stays silent during narration. After **stop capture**, it says
+and speaks media-quality notifications during recording when needed. After **stop capture**, it says
 "Capture stopped." The evidence packet, transcript, and summary then finish
 saving silently; processing errors are logged. Disconnecting finalizes the packet
 without announcements.
 
-On connection, capture mode says: "Say start capture to start the recording and
-demonstrate your procedure. To finish recording, say stop capture." This welcome
-is only sent on connection. Other speech while idle does not trigger a reply,
+On connection, capture mode offers **check setup**, **start capture**, and
+**stop capture**. This welcome is only sent on connection. Other speech while idle does not trigger a reply,
 and the welcome is not repeated after "Capture stopped."
 
 To stop the sample, press Ctrl+C. The shared model servers remain running.
@@ -137,6 +136,62 @@ continuous camera recording. In capture mode, `--output-root` can be combined wi
 changes only the procedure-packet destination; configure session recording output
 through `out_dir` in `yaml/media_capture.yaml`.
 
+## Optional setup check and recording alerts
+
+Before **start capture**, optionally say **check setup**. The worker samples for
+about ten seconds and speaks network quality, frame rate, and image resolution.
+It creates no recording and calls no vision or decision model. For example:
+"Network quality is good. Received video is 30.0 frames per second. Image
+resolution is 1280 by 720 pixels." A start command cancels an unfinished setup
+check and starts capture; setup is never a prerequisite.
+
+Network quality comes from the web client's LiveKit connection grade, not a
+bandwidth test. Live-video FPS counts received frame metadata over a rolling
+window, independently of the 2 FPS image-saving and 5-second caption intervals.
+For on-demand images, setup reports the rate of successfully acquired distinct
+snapshots instead, explicitly saying "images per second". This is not the
+camera's native streaming rate. Unsupported or stale client telemetry is reported
+as unknown rather than treated as poor quality. These checks do not assess light,
+exposure, microphone quality, narration, or procedure correctness.
+
+While capture is active, a separate monitor speaks these conditions:
+
+| Condition | Default detection |
+| --- | --- |
+| Poor network | Fresh client telemetry reports poor or lost connection quality |
+| Low frame rate | After a full 5-second observation window, received live-video FPS is below 2 or below 50% of a stable initial rate |
+| Video stalled | An expected live stream has delivered no frames for 3 seconds; in on-demand mode, requested snapshots have failed with no successful sample for 3 seconds |
+| Low resolution | Short edge below 480 pixels or pixel count below 50% of the initial resolution; portrait rotation alone is not a drop |
+
+A stalled-video alert replaces the frame-rate alert for that outage. Conditions
+are evaluated once per second by default. Detection thresholds and the sampling
+window are distinct from the repeat interval. A notification never stops, pauses,
+or restarts capture, changes camera mode, or alters captioning. Recovery clears
+eligibility; queued stale alerts are withdrawn. Audio uses the existing TTS and
+return-audio path, so an entirely disconnected client cannot receive worker speech.
+
+`quality.repeat_interval_s` in `yaml/capture-agent-config.yaml` sets the minimum
+interval between notifications for **each condition**, default 10 seconds. A new
+condition is eligible immediately; it does not wait for another condition's timer.
+Conditions due on the same monitor tick are combined in one spoken message:
+
+- Network first detected at 10 seconds: network alerts at 10, 20, 30 seconds.
+- Frame-rate trouble first detected at 15 seconds: frame-rate alerts at 15, 25,
+  35 seconds, independently of network alerts.
+- Both first detected at 10 seconds: one combined alert at 10, then at 20 seconds
+  if both remain. Recovering conditions are omitted.
+
+Times refer to notification submission; speech recognition, detection windows,
+and TTS playback add their normal latency. `quality.enabled: false` disables the
+background monitor. The optional setup command still reports available image
+metadata; without its telemetry lease, network quality remains unknown.
+
+The web client reports telemetry only after a per-connection worker request. A
+connection token and increasing sequence reject stale or replayed reports.
+Disconnect and shutdown drain the monitor; a new recording gets fresh alert
+clocks. `quality.jsonl` records condition changes and submitted alerts separately
+from narration. Sample-owned wording lives in `yaml/capture-messages.yaml`.
+
 ## Recording boundaries
 
 - After connecting, the worker waits for **start capture** to open a packet.
@@ -177,6 +232,7 @@ progress indicators.
 | `artifacts/sessions/<session-id>/captions.jsonl` | Timestamped captions, activities, phases, and visible changes |
 | `artifacts/sessions/<session-id>/transcript.jsonl` | Final user transcripts inside the task recording boundary |
 | `artifacts/sessions/<session-id>/summary.md` | Human-readable activity and phase summary, plus a combined timeline of narration (**Heard**) and captions (**Saw**) in time order |
+| `artifacts/sessions/<session-id>/quality.jsonl` | Media monitor conditions, metrics, and audio-notification submissions |
 | `artifacts/sessions/<session-id>/errors.jsonl` | Frame, caption, or persistence errors, when present |
 
 ### Evidence-packet contract
@@ -886,7 +942,7 @@ cannot cancel its own response.
 | Configuration | Settings |
 |---|---|
 | `yaml/worker.yaml` | Shared frame and speech detection settings; capability configuration paths |
-| `yaml/capture-agent-config.yaml` | Task output directory, sampling rate, and caption interval |
+| `yaml/capture-agent-config.yaml` | Task output directory, sampling rate, caption interval, and media-alert policy |
 | `yaml/guide-agent-config.yaml` | Visual verification timeout |
 | `yaml/models.json` | Shared batch STT, LLM, VLM, and TTS services and endpoints |
 | `yaml/media_capture.yaml` | Opt-in session recording output, profile, and participant lifetime |
