@@ -346,10 +346,6 @@ class _Capture:
             elapsed = time.monotonic() - started_at
             await asyncio.sleep(max(0.0, self._capture_period_s - elapsed))
 
-    async def sample_frame(self, participant_id: str):
-        """Acquire frame metadata for optional setup checks without writing a packet."""
-        return await self._current_frame.execute(CurrentFrameRequest(participant_id=participant_id))
-
     async def _capture(self, state: _Session) -> None:
         frame = await self._current_frame.execute(CurrentFrameRequest(participant_id=state.participant_id))
         # On-demand images have sequence zero; live sequences reset on republish.

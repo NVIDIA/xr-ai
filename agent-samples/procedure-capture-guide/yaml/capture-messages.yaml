@@ -9,7 +9,7 @@ conditions:
 setup:
   welcome: Say check setup to check the network, video frame rate and resolution, or start capture to record. To finish recording, say stop capture.
   network: 'Network quality is {network}.'
-  video_fps: 'Received video is {fps:.1f} frames per second.'
-  sampled_fps: 'Snapshots are arriving at {fps:.1f} images per second.'
+  video_fps: 'The camera is sending {fps:.1f} frames per second.'
+  fps_unavailable: 'The current video frame rate is unavailable.'
   resolution: 'Image resolution is {width} by {height} pixels.'
-  unavailable: 'No camera image was available. Check that the camera is enabled and connected.'
+  unavailable: 'The current image resolution is unavailable. Check that live video is enabled and connected.'

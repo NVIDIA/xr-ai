@@ -196,18 +196,18 @@ class CaptureAgent(Agent):
         command = _COMMAND.fullmatch(transcript.text)
         recording = connection.recording
         if re.fullmatch(r"\s*check\s+setup[.!?]*\s*", transcript.text, re.IGNORECASE) and recording is None:
-            if connection.preflight_task is not None and not connection.preflight_task.done():
-                return
+            pending_setup = connection.preflight_task
             previous = self._tails.get(pid)
 
             async def preflight():
+                if pending_setup is not None and not pending_setup.done():
+                    await pending_setup
                 if previous is not None:
                     await asyncio.shield(previous)
                 if connection.cancelled.is_set() or connection.recording is not None:
                     return
                 _, speech = await check_setup(
-                    lambda: self._capture_backend.sample_frame(pid), connection.quality,
-                    capture_fps=self._capture_fps, config=self._quality_config,
+                    connection.quality, config=self._quality_config,
                 )
                 if connection.recording is None:
                     await self._say(pid, connection, ctx, speech)

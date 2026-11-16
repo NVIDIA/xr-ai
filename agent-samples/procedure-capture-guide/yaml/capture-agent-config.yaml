@@ -12,7 +12,6 @@ caption_interval_s: 5.0
 # Missing telemetry is unknown. Audio notifications never stop capture.
 quality:
   enabled: true
-  setup_duration_s: 10
   repeat_interval_s: 10  # Minimum seconds between alerts for the SAME condition.
   poll_interval_s: 1     # Conditions due on the same tick share one announcement.
   window_s: 5

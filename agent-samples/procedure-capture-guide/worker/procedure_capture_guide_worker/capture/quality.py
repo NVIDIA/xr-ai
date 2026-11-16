@@ -38,7 +38,6 @@ class QualityConfig(BaseModel):
     stall_s: float = Field(default=3, gt=0)
     repeat_interval_s: float = Field(default=10, gt=0)
     poll_interval_s: float = Field(default=1, gt=0)
-    setup_duration_s: float = Field(default=10, gt=0)
     telemetry_ttl_s: float = Field(default=4, gt=0)
     min_short_edge: int = Field(default=480, gt=0, strict=True)
     drop_ratio: float = Field(default=0.5, gt=0, lt=1)
@@ -202,6 +201,8 @@ class QualityFeedback:
         self.control_sequence = 0
         self.latest = None
         self.latest_at = float("-inf")
+        self.latest_frame = None
+        self.latest_frame_at = float("-inf")
         self.state: QualityState | None = None
         self.task: asyncio.Task | None = None
         self.active = False
@@ -239,6 +240,7 @@ class QualityFeedback:
             self.state.telemetry_received(data)
 
     def frame(self, frame):
+        self.latest_frame, self.latest_frame_at = frame, self.clock()
         if self.state is not None:
             self.state.frame(frame)
 

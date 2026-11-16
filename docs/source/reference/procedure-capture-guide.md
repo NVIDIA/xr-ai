@@ -138,20 +138,23 @@ through `out_dir` in `yaml/media_capture.yaml`.
 
 ## Optional setup check and recording alerts
 
-Before **start capture**, optionally say **check setup**. The worker samples for
-about ten seconds and speaks network quality, frame rate, and image resolution.
-It creates no recording and calls no vision or decision model. For example:
-"Network quality is good. Received video is 30.0 frames per second. Image
-resolution is 1280 by 720 pixels." A start command cancels an unfinished setup
-check and starts capture; setup is never a prerequisite.
+Before **start capture**, optionally say **check setup**. Each request immediately
+reports the latest available network quality, video frame rate, and image
+resolution. There is no sampling period or intentional delay before speech; normal
+speech-generation and playback latency still applies. It creates no recording and
+calls no vision or decision model. For example: "Network quality is good. The
+camera is sending 30.0 frames per second. Image resolution is 1280 by 720 pixels."
+A start command cancels an unfinished setup reply; setup is never a prerequisite.
 
 Network quality comes from the web client's LiveKit connection grade, not a
-bandwidth test. Live-video FPS counts received frame metadata over a rolling
-window, independently of the 2 FPS image-saving and 5-second caption intervals.
-For on-demand images, setup reports the rate of successfully acquired distinct
-snapshots instead, explicitly saying "images per second". This is not the
-camera's native streaming rate. Unsupported or stale client telemetry is reported
-as unknown rather than treated as poor quality. These checks do not assess light,
+bandwidth test. Setup FPS is the client's reported outgoing camera frame rate;
+recording alerts independently measure received frames. Resolution comes from
+recent received frame metadata or the client's camera telemetry. Telemetry older
+than `quality.telemetry_ttl_s` is unavailable. Missing metrics, including video
+FPS in on-demand mode, are reported as unavailable immediately rather than waiting
+for samples or treating missing telemetry as a network failure. The configurable
+`quality.repeat_interval_s` applies only to repeated recording alerts.
+These checks do not assess light,
 exposure, microphone quality, narration, or procedure correctness.
 
 While capture is active, a separate monitor speaks these conditions:

@@ -15,7 +15,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from pydantic import ValidationError
 from test_procedure_capture_guide import demo, joined, packet, speak  # noqa: F401
-from xr_ai_hub import DataMessage, FrameUnavailable
+from xr_ai_hub import DataMessage
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "agent-samples/procedure-capture-guide/worker"))
 from procedure_capture_guide_worker.capture import agent as agent_module  # noqa: E402
@@ -311,59 +311,70 @@ async def test_setup_audio_and_capture_command_not_saved_as_narration(demo, monk
     assert packet(state)["counts"]["transcripts"] == 1
 
 
-async def test_setup_reports_only_requested_metrics():
-    acquire = AsyncMock(return_value=frame(1))
-    report, speech = await preflight.check_setup(acquire, duration_s=0.06, capture_fps=100)
-    assert report["network_quality"] == "unknown"
-    assert report["resolution"] == (1280, 720)
-    assert report["fps_source"] == "sampled_images"
-    assert "Network quality is unknown" in speech and "1280 by 720" in speech
-    assert set(report) == {"network_quality", "fps", "fps_source", "resolution", "conditions"}
-    assert report["fps"] < 30  # Duplicate cached frames count only once.
+async def test_setup_reports_unavailable_immediately_without_telemetry():
+    async with asyncio.timeout(0.1):
+        report, speech = await preflight.check_setup()
+    assert report == {
+        "network_quality": "unknown",
+        "fps": None,
+        "fps_source": "unavailable",
+        "resolution": None,
+        "conditions": [],
+    }
+    assert "frame rate is unavailable" in speech and "resolution is unavailable" in speech
 
 
-async def test_setup_failed_acquisition_reports_unavailable():
-    report, speech = await preflight.check_setup(
-        AsyncMock(side_effect=FrameUnavailable("no camera")), duration_s=0.02, capture_fps=100
-    )
-    assert report["resolution"] is None and report["fps"] == 0
-    assert "No camera image was available" in speech
-
-
-async def test_setup_on_demand_samples_at_configured_capture_rate():
-    seq = 0
-
-    async def acquire():
-        nonlocal seq
-        seq += 1
-        return frame(seq)
-
-    report, speech = await preflight.check_setup(acquire, duration_s=1.0, capture_fps=2)
-    assert report["fps"] == pytest.approx(2, abs=0.1)
-    assert "Snapshots are arriving at 2.0" in speech
-
-
-async def test_setup_reports_live_received_rate_and_network():
-    monitor = QualityFeedback("user", Mock(), Mock(), QualityConfig(window_s=0.03), 100)
-    seq = 0
-
-    async def acquire():
-        nonlocal seq
-        monitor.telemetry(
-            DataMessage(
-                "user", TELEMETRY_TOPIC, 1, telemetry(token=monitor.token, sequence=seq + 1).model_dump_json().encode()
-            )
+def setup_monitor(**updates):
+    monitor = QualityFeedback("user", Mock(), Mock(), QualityConfig(), 2)
+    monitor.telemetry(
+        DataMessage(
+            "user",
+            TELEMETRY_TOPIC,
+            1,
+            telemetry(token=monitor.token, sent_fps=30.0, sent_width=1280, sent_height=720, **updates)
+            .model_dump_json()
+            .encode(),
         )
-        for _ in range(4):
-            seq += 1
-            monitor.frame(frame(seq))
-        return frame(seq)
+    )
+    return monitor
 
-    report, speech = await preflight.check_setup(acquire, monitor, duration_s=0.08, capture_fps=100)
-    assert report["fps_source"] == "received_video"
-    assert report["fps"] > 200
-    assert "Network quality is good" in speech and "Received video" in speech
+
+async def test_setup_reports_current_metrics_without_sampling_or_sleeping(monkeypatch):
+    monitor = setup_monitor(quality="poor")
+    # A healthy check uses already received telemetry and must not start a timer.
+    sleep = AsyncMock(side_effect=AssertionError("setup must not sleep"))
+    monkeypatch.setattr(asyncio, "sleep", sleep)
+    async with asyncio.timeout(0.1):
+        report, speech = await preflight.check_setup(monitor)
+    assert report["network_quality"] == "poor"
+    assert report["fps"] == 30
+    assert report["fps_source"] == "client_video"
+    assert report["resolution"] == (1280, 720)
+    assert report["conditions"] == ["poor_network"]
+    assert "camera is sending 30.0" in speech
     assert monitor.state is None
+    sleep.assert_not_awaited()
+
+
+async def test_setup_uses_recent_received_resolution_and_rejects_stale_data():
+    monitor = setup_monitor()
+    monitor.frame(frame(1, width=640, height=360))
+    report, _ = await preflight.check_setup(monitor)
+    assert report["resolution"] == (640, 360)
+    assert report["conditions"] == ["low_resolution"]
+    monitor.latest_at -= 10
+    monitor.latest_frame_at -= 10
+    report, _ = await preflight.check_setup(monitor)
+    assert report["network_quality"] == "unknown"
+    assert report["fps"] is None and report["resolution"] is None
+
+
+async def test_setup_on_demand_does_not_report_stale_video_stats():
+    monitor = setup_monitor(mode="on-demand", streaming=False)
+    report, speech = await preflight.check_setup(monitor)
+    assert report["network_quality"] == "good"
+    assert report["fps"] is None and report["resolution"] is None
+    assert "frame rate is unavailable" in speech
 
 
 async def test_setup_does_not_reopen_stopped_or_replaced_connection(demo, monkeypatch):
@@ -419,3 +430,27 @@ async def test_media_alert_reaches_voice_text_for_tts(demo):
         await speak(demo, "stop capture")
     finally:
         await voice._shutdown()
+
+
+async def test_every_idle_setup_request_gets_a_reply(demo, monkeypatch):
+    await demo.capture.receive(joined())
+    entered, release = asyncio.Event(), asyncio.Event()
+    calls = 0
+
+    async def check(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            entered.set()
+            await release.wait()
+        return {}, f"Setup report {calls}"
+
+    monkeypatch.setattr(agent_module, "check_setup", check)
+    await speak(demo, "check setup")
+    await entered.wait()
+    await speak(demo, "check setup")
+    release.set()
+    await demo.capture._connections["user"].preflight_task
+    assert calls == 2
+    replies = [c.args[1].text for c in demo.output.call_args_list]
+    assert "Setup report 1" in replies and "Setup report 2" in replies
