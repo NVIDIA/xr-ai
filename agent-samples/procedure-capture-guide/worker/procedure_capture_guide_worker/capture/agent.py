@@ -223,8 +223,11 @@ class CaptureAgent(Agent):
 
             task.add_done_callback(finished)
             return
-        if command and connection.preflight_task is not None:
-            connection.preflight_task.cancel()
+        # A queued command may only depend on work accepted before it. A later
+        # setup can wait on this command, so never read its mutable task at execution.
+        pending_setup = connection.preflight_task if command else None
+        if pending_setup is not None:
+            pending_setup.cancel()
         if command and command[1].lower() == "start":
             if recording is not None:
                 return
@@ -232,9 +235,10 @@ class CaptureAgent(Agent):
             connection.recording = recording
 
             async def start() -> None:
-                if connection.preflight_task is not None:
-                    await asyncio.gather(connection.preflight_task, return_exceptions=True)
-                    connection.preflight_task = None
+                if pending_setup is not None:
+                    await asyncio.gather(pending_setup, return_exceptions=True)
+                    if connection.preflight_task is pending_setup:
+                        connection.preflight_task = None
                 if self._closed or connection.cancelled.is_set():
                     self._forget(pid, recording)
                     return

@@ -454,3 +454,54 @@ async def test_every_idle_setup_request_gets_a_reply(demo, monkeypatch):
     assert calls == 2
     replies = [c.args[1].text for c in demo.output.call_args_list]
     assert "Setup report 1" in replies and "Setup report 2" in replies
+
+
+@pytest.mark.parametrize("earlier_setup", [False, True])
+async def test_queued_start_never_waits_for_a_later_setup(demo, monkeypatch, earlier_setup):
+    await demo.capture.receive(joined())
+    await speak(demo, "start capture")
+    first = demo.capture_backend._sessions["user"]
+    entered, release = asyncio.Event(), asyncio.Event()
+    finalize = demo.capture_backend._finalize
+
+    async def delayed(state, **kwargs):
+        if state is first:
+            entered.set()
+            await release.wait()
+        await finalize(state, **kwargs)
+
+    monkeypatch.setattr(demo.capture_backend, "_finalize", delayed)
+    await speak(demo, "stop capture", wait=False)
+    await asyncio.wait_for(entered.wait(), 2)
+    previous_setup = None
+    setup_tasks = []
+    try:
+        if earlier_setup:
+            await speak(demo, "check setup", wait=False)
+            previous_setup = demo.capture._connections["user"].preflight_task
+        await speak(demo, "start capture", wait=False)
+        await speak(demo, "stop capture", wait=False)
+        for _ in range(2):
+            await speak(demo, "check setup", wait=False)
+            setup_tasks.append(demo.capture._connections["user"].preflight_task)
+        tail = demo.capture._tails["user"]
+        release.set()
+        # Do not cancel the command queue on timeout: it owns packet finalization.
+        _, pending = await asyncio.wait([tail, *setup_tasks], timeout=2)
+        assert not pending, "queued capture commands and later setup replies deadlocked"
+        await asyncio.gather(tail, *setup_tasks)
+        assert demo.capture._connections["user"].preflight_task is setup_tasks[-1]
+        assert previous_setup is None or previous_setup.cancelled()
+        packets = list((demo.root / "sessions").glob("*/packet.json"))
+        assert len(packets) == 2
+        assert all(json.loads(path.read_text())["status"] == "complete" for path in packets)
+        assert not demo.capture_backend.is_capturing("user")
+        replies = [c.args[1].text for c in demo.output.call_args_list if c.args[1].text]
+        assert replies.count("Capture started.") == replies.count("Capture stopped.") == 2
+        assert sum("Network quality is unknown" in text for text in replies) == 2
+    finally:
+        release.set()
+        # Cancelling setup breaks its shielded queue wait without cancelling saves.
+        for task in reversed(setup_tasks):
+            task.cancel()
+        await asyncio.gather(*setup_tasks, return_exceptions=True)
