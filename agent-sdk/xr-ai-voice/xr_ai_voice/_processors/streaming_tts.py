@@ -201,9 +201,13 @@ class StreamingTtsProcessor(FrameProcessor):
         st = self._state(pid)
         if st.sender_queue is None or st.sender_task is None or st.sender_task.done():
             st.sender_queue = asyncio.Queue()
+            # Its own Relay scope stack, like the synth tasks below: senders of different participants
+            # run at once, and sharing the caller's stack interleaves their voice.tts scopes (an
+            # interrupt then hangs).
             st.sender_task  = asyncio.create_task(
                 self._sender_loop(st.sender_queue),
                 name=f"tts-sender-{pid}",
+                context=nemo_relay.fork_asyncio_context(),
             )
         return st.sender_queue
 
