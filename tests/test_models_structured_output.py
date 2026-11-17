@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -88,6 +89,17 @@ async def test_untitled_schema_gets_a_default_name() -> None:
     async with _llm(stub) as llm:
         await llm.chat(USER, response_schema={"type": "object"})
     assert stub.last_json()["response_format"]["json_schema"]["name"] == "response"
+
+
+@pytest.mark.parametrize("title", ["Décision", "判断", "answer-" * 20, ""])
+async def test_schema_wire_name_is_ascii_without_changing_title(title) -> None:
+    stub = StubOpenAI()
+    schema = {**SCHEMA, "title": title}
+    async with _llm(stub) as llm:
+        await llm.chat(USER, response_schema=schema)
+    sent = stub.last_json()["response_format"]["json_schema"]
+    assert re.fullmatch(r"[a-zA-Z0-9_-]{1,64}", sent["name"])
+    assert sent["schema"] == schema
 
 
 @pytest.mark.parametrize(("choice", "wire"), [
@@ -200,7 +212,23 @@ async def test_explicit_tools_replace_defaults() -> None:
         default_extras={"tools": [TOOL.to_openai()]},
     ) as llm:
         await llm.chat(USER, tools=[], response_schema=SCHEMA)
-    assert stub.last_json()["tools"] == []
+    assert "tools" not in stub.last_json()
+
+
+@pytest.mark.parametrize("method", ["chat", "stream", "stream_events"])
+@pytest.mark.parametrize("explicit", [False, True])
+async def test_empty_tool_sets_are_omitted_from_effective_payload(method, explicit) -> None:
+    stub = StubOpenAI()
+    stub.set_stream_chunks([{"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]}])
+    async with OpenAICompatLLM(
+        "http://stub", "llm", client=stub.client(), default_extras={"tools": []},
+    ) as llm:
+        result = getattr(llm, method)(USER, **({"tools": []} if explicit else {}))
+        if method == "chat":
+            await result
+        else:
+            _ = [event async for event in result]
+    assert "tools" not in stub.last_json()
 
 
 async def test_tool_choice_explicitly_overrides_default_choice() -> None:
@@ -257,6 +285,57 @@ async def test_named_tool_choice_stream_accepts_stop_finish() -> None:
         events = [event async for event in llm.stream_events(USER, tools=[TOOL], tool_choice="commit")]
     assert [e.tool_call.arguments for e in events if e.kind == "tool_call"] == ['{"important": true}']
     assert events[-1].finish_reason == "stop"
+
+
+@pytest.mark.parametrize("finish", ["stop", "tool_calls", "length"])
+@pytest.mark.parametrize("bad_calls", ["wrong_name", "multiple"])
+@pytest.mark.parametrize("from_defaults", [False, True])
+async def test_named_stream_validates_entire_batch_before_yield(finish, bad_calls, from_defaults) -> None:
+    stub = StubOpenAI()
+    chunks = _tool_stream(finish)
+    calls = chunks[0]["choices"][0]["delta"]["tool_calls"]
+    if bad_calls == "wrong_name":
+        calls[0]["function"]["name"] = "other"
+    else:
+        calls.append({"index": 1, "id": "call_2", "function": {
+            "name": "commit", "arguments": '{"important": false}',
+        }})
+    stub.set_stream_chunks(chunks)
+    extras = {"tools": [TOOL.to_openai()], "tool_choice": {
+        "type": "function", "function": {"name": "commit"},
+    }} if from_defaults else {}
+    yielded = []
+    async with OpenAICompatLLM(
+        "http://stub", "llm", client=stub.client(), capabilities=BOTH, default_extras=extras,
+    ) as llm:
+        kwargs = {} if from_defaults else {"tools": [TOOL], "tool_choice": "commit"}
+        with pytest.raises(ValueError, match="finish_reason|exactly the named"):
+            async for event in llm.stream_events(USER, **kwargs):
+                yielded.append(event)
+    assert not yielded
+
+
+async def test_named_stream_still_rejects_truncated_correct_call() -> None:
+    stub = StubOpenAI()
+    stub.set_stream_chunks(_tool_stream("length"))
+    async with _llm(stub) as llm:
+        with pytest.raises(ValueError, match="finish_reason 'length'"):
+            _ = [event async for event in llm.stream_events(USER, tools=[TOOL], tool_choice="commit")]
+
+
+@pytest.mark.parametrize("choice", ["required", "commit"])
+@pytest.mark.parametrize("from_defaults", [False, True])
+async def test_text_stream_rejects_effective_forced_choice_before_transport(choice, from_defaults) -> None:
+    stub = StubOpenAI()
+    wire = choice if choice == "required" else {"type": "function", "function": {"name": choice}}
+    extras = {"tools": [TOOL.to_openai()], "tool_choice": wire} if from_defaults else {}
+    async with OpenAICompatLLM(
+        "http://stub", "llm", client=stub.client(), capabilities=BOTH, default_extras=extras,
+    ) as llm:
+        kwargs = {} if from_defaults else {"tools": [TOOL], "tool_choice": choice}
+        with pytest.raises(ValueError, match="requires stream_events"):
+            _ = [chunk async for chunk in llm.stream(USER, **kwargs)]
+    assert not stub.requests
 
 
 async def test_default_named_tool_choice_uses_effective_stream_finish_contract() -> None:
@@ -427,3 +506,57 @@ def test_eval_cases_are_well_formed_and_graders_separate_examples() -> None:
         for answer in case["reject"]:
             parsed = json.loads(answer)
             assert not all(evaluation.check(parsed, rule) for rule in case["checks"]), (case["name"], answer)
+
+
+@pytest.mark.parametrize("modes", [[], ["prompt_only"], ["tools_auto"]])
+def test_eval_cannot_pass_without_a_constrained_sample(modes) -> None:
+    evaluation = _eval_module()
+    samples = [evaluation.Sample("case", mode, False, True, True, "stop", 0.1, None) for mode in modes]
+    _, failures = evaluation.summarize(samples, modes)
+    assert failures == ["no constrained samples ran; no capability was qualified"]
+
+
+def test_eval_rejects_unknown_mode() -> None:
+    with pytest.raises(SystemExit):
+        _eval_module()._parser().parse_args(["--modes", "json_schmea"])
+
+
+@pytest.mark.parametrize("option", ["--samples", "--concurrency"])
+async def test_eval_rejects_nonpositive_job_counts(monkeypatch, option) -> None:
+    evaluation = _eval_module()
+    monkeypatch.setattr(sys, "argv", ["eval", option, "0"])
+    with pytest.raises(SystemExit):
+        await evaluation.main()
+
+
+async def test_eval_accepts_null_usage_through_real_chat_client() -> None:
+    evaluation = _eval_module()
+    case = {"name": "case", "schema": SCHEMA, "system": "Answer.", "user": "Changed?", "checks": []}
+    stub = StubOpenAI()
+    stub.set_chat_message(content='{"important": true}')
+    stub._chat_response["usage"] = None
+    args = evaluation._parser().parse_args([])
+    async with _llm(stub) as llm:
+        sample = await evaluation.run_one(llm, case, "json_schema", False, args)
+    assert sample.valid and sample.error is None and sample.tokens is None
+
+
+async def test_eval_records_unexpected_sample_failure_and_finishes_batch(monkeypatch, tmp_path, caplog) -> None:
+    evaluation = _eval_module()
+    report = tmp_path / "results.json"
+    monkeypatch.setattr(sys, "argv", [
+        "eval", "--samples", "1", "--thinking", "off", "--modes", "json_schema", "--report", str(report),
+    ])
+    closed = []
+    class Client:
+        async def close(self):
+            closed.append(True)
+    monkeypatch.setattr(evaluation, "_make_llm", lambda args: Client())
+    async def broken(*args):
+        raise AttributeError("malformed remote response")
+    monkeypatch.setattr(evaluation, "run_one", broken)
+    assert await evaluation.main() == 1
+    samples = json.loads(report.read_text())
+    assert len(samples) > 1 and all(s["error"].startswith("AttributeError:") for s in samples)
+    assert closed == [True]
+    assert "Eval sample failed" in caplog.text

@@ -135,7 +135,7 @@ refer to {ref}`consumer-model-readiness`.
 | `cosmos3_nano_reasoner` | Cosmos3 Nano VLM | Image; video requires `max_videos_per_prompt >= 1`; no reasoning switch |
 | `cosmos_vlm` | Cosmos-Reason1 compatibility | Image; video requires `max_videos_per_prompt >= 1`; thinking disabled by default |
 | `nemotron3_nano` | Nemotron 3 Nano LLM | Normalizes the `reasoning` field; thinking disabled unless requested |
-| `nemotron_omni` | Nemotron Omni | Tool calls, forced tool calls and JSON Schema output, image and video, `reasoning_content` normalization; thinking disabled unless requested |
+| `nemotron_omni` | Nemotron Omni | Tool calls and forced tool calls, image and video, `reasoning_content` normalization; thinking disabled unless requested |
 | `nemotron_embedding` | Embedding server | OpenAI-compatible dense vectors |
 | `nemotron_ocr` | Hugging Face OCR server or OCR NIM 2.0 | Multilingual text, confidence, normalized polygons; `/v1/ocr` |
 | `parakeet_stt` | STT server | OpenAI-compatible transcription |
@@ -208,12 +208,21 @@ different values is rejected.
 - `tool_choice` is `"auto"`, `"none"`, `"required"` (some tool must be called)
   or the name of one supplied tool (that tool must be called).
 
+Use `chat` or `stream_events` for forced tool calls. The text-only `stream`
+method rejects a forced choice instead of silently discarding the tool call.
+For a named streamed choice, the completed batch must contain exactly one call
+to that tool before any tool call is emitted. Truncated batches are rejected.
+
 `VLMService.ask_image`, `ask_images`, `ask_video`, `stream` and
 `stream_images` accept `response_schema`; vision methods take no tools or
 `tool_choice`. `OpenAICompatVLM` builds its requests with the same LLM client,
 so the image or video parts and question are sent unchanged, and the default
 precedence, validation and capability rules below apply to them as well. A
 VLM's capabilities are those of its chat endpoint.
+The text-only eval below does not qualify image or video requests. Before
+enabling `json_schema` for a VLM deployment, exercise its actual image and video
+methods with representative media and schemas, including streaming image
+requests, and validate every response against its schema.
 
 The client serializes these constraints as request fields. Callers own their
 messages, including format instructions required by their model; the client
@@ -246,11 +255,15 @@ modes require every answer to match its schema; forced-tool modes require a
 call on every response. Correctness and latency are reported separately from
 those format guarantees.
 
-`nemotron_omni` declares forced tool choice only. Its historical JSON Schema
-run failed qualification, and it has not been qualified with the current
-client, which leaves prompts unchanged. Other presets declare neither until
-they have been evaluated. A qualified deployment can enable a capability in
-its existing profile configuration:
+`nemotron_omni` declares forced tool choice only; JSON Schema output is not
+qualified. Recorded forced-call qualification covers non-streaming named and
+required calls, not every streaming mode or externally hosted deployment.
+The streamed `"required"` path requires `finish_reason="tool_calls"`; accepting
+`"stop"` for that mode is unqualified. NIM forced-call behavior is also
+unqualified. Qualify the modes on the intended deployment rather than inheriting
+a preset's declaration as deployment-specific evidence. Other presets declare
+neither capability. A qualified deployment can enable a capability in its
+existing profile configuration:
 
 ```yaml
 adapter:

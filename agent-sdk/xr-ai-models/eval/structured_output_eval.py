@@ -3,7 +3,7 @@
 
 """Live eval: does an LLM endpoint honour JSON Schema and forced tool calls?
 
-Run it against any configured model before declaring ``json_schema`` or
+Run it against a configured LLM deployment before declaring ``json_schema`` or
 ``tool_choice`` in its capabilities. The eval enables both capabilities on the
 client it builds, so it measures what the endpoint does rather than what its
 preset claims. It exits non-zero when a JSON Schema mode returns any answer
@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import logging
 import statistics
 import sys
 import time
@@ -72,7 +73,7 @@ def _parser() -> argparse.ArgumentParser:
     arguments.add_argument("--temperature", type=float, default=0.6)
     arguments.add_argument("--thinking-budget", type=int, default=512)
     arguments.add_argument("--concurrency", type=int, default=4)
-    arguments.add_argument("--modes", nargs="*", default=[*CONSTRAINED, *REFERENCE])
+    arguments.add_argument("--modes", nargs="+", choices=(*CONSTRAINED, *REFERENCE), default=[*CONSTRAINED, *REFERENCE])
     arguments.add_argument("--cases", nargs="*", help="case names to run (default: all)")
     arguments.add_argument("--thinking", choices=("off", "on", "both"), default="both")
     arguments.add_argument("--report", type=Path, help="write per-sample results as JSON")
@@ -167,7 +168,7 @@ async def run_one(llm, case, mode, thinking, args) -> Sample:
             if "tools" in kwargs:
                 called = bool(response.tool_calls)
             finish = response.finish_reason
-            tokens = response.raw.get("usage", {}).get("completion_tokens")
+            tokens = (response.raw.get("usage") or {}).get("completion_tokens")
         elif mode in {"json_schema/stream", "tool_named/stream"}:
             kwargs = {"response_schema": schema} if mode == "json_schema/stream" else {
                 "tools": tools, "tool_choice": TOOL,
@@ -208,6 +209,8 @@ def summarize(samples: list[Sample], modes: list[str]) -> tuple[str, list[str]]:
         "|---|---|---|---|---|---|---|---|---|---|",
     ]
     failures = []
+    if not any(sample.mode in CONSTRAINED for sample in samples):
+        failures.append("no constrained samples ran; no capability was qualified")
     for mode in modes:
         for thinking in (False, True):
             group = rows.get((mode, thinking))
@@ -239,7 +242,10 @@ def summarize(samples: list[Sample], modes: list[str]) -> tuple[str, list[str]]:
 
 
 async def main() -> int:
-    args = _parser().parse_args()
+    parser = _parser()
+    args = parser.parse_args()
+    if args.samples <= 0 or args.concurrency <= 0:
+        parser.error("--samples and --concurrency must be positive")
     from jsonschema import Draft202012Validator
 
     cases = yaml.safe_load(CASES.read_text(encoding="utf-8"))["cases"]
@@ -254,9 +260,16 @@ async def main() -> int:
     thinking = {"off": (False,), "on": (True,), "both": (False, True)}[args.thinking]
     gate = asyncio.Semaphore(args.concurrency)
 
-    async def bounded(*job):
+    async def bounded(case, mode, think):
         async with gate:
-            return await run_one(llm, *job, args)
+            start = time.perf_counter()
+            try:
+                return await run_one(llm, case, mode, think, args)
+            except Exception as exc:  # noqa: BLE001 -- supervise independent eval jobs
+                # isolation boundary: one failed sample must not abort the eval batch.
+                logging.getLogger(__name__).exception("Eval sample failed: %s %s", case["name"], mode)
+                return Sample(case["name"], mode, think, False, False, None, time.perf_counter() - start, None,
+                              f"{type(exc).__name__}: {exc}"[:200], called=False if mode in FORCED_MODES else None)
 
     jobs = [
         bounded(case, mode, think)

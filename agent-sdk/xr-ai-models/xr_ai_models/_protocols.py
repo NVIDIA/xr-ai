@@ -361,6 +361,9 @@ class LLMService(Protocol):
     validate results and handle truncation, refusal, and inference failures;
     neither a token budget nor constrained decoding guarantees completion.
     Reasoning controls are independent of output constraints.
+
+    Forced tool choices require ``chat`` or ``stream_events``. The text-only
+    ``stream`` method rejects them because it cannot yield tool calls.
     """
 
     capabilities: Capabilities

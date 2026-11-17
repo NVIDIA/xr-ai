@@ -5,9 +5,9 @@
 
 # Structured-output eval
 
-A live-model eval of JSON Schema output and forced tool calls. Run it for any
-model or server before declaring `capabilities.json_schema` or
-`capabilities.tool_choice` for it. See the
+A text-only live-model eval of JSON Schema output and forced tool calls. Run it
+for an LLM deployment before declaring `capabilities.json_schema` or
+`capabilities.tool_choice` for the modes it exercises. Refer to the
 [models reference](https://nvidia.github.io/xr-ai/latest/reference/agent-sdk-models.html#structured-output-and-forced-tool-calls)
 for the API.
 
@@ -32,6 +32,12 @@ answer that does not match its schema, or a forced tool mode returns no call.
 Forced-call arguments are checked against the schema and reported, but do not
 gate: a server may constrain only the call. Correct answers and latency are
 reported but do not gate.
+
+No image or video requests run here. Qualify VLM profiles through their actual
+vision methods with representative media and schemas, including streaming image
+requests. `tool_required/stream` is not measured; the client requires
+`finish_reason="tool_calls"` for that path. A preset's capability declaration
+does not qualify a different model server or an external NIM deployment.
 
 ## Modes
 

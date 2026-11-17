@@ -151,7 +151,9 @@ def _part_to_openai(part: ContentPart) -> dict[str, Any]:
 def _schema_name(schema: Mapping[str, Any]) -> str:
     # OpenAI-style endpoints require a short identifier for json_schema.
     title = schema.get("title")
-    name = "".join(c if c.isalnum() or c in "_-" else "_" for c in title)[:64] if isinstance(title, str) else ""
+    if not isinstance(title, str):
+        return "response"
+    name = "".join(c if c.isascii() and (c.isalnum() or c in "_-") else "_" for c in title)[:64]
     return name or "response"
 
 
@@ -350,6 +352,8 @@ class OpenAICompatLLM:
             payload.pop("stream", None)
         if tools is not None:
             payload["tools"] = [t.to_openai() for t in tools]
+        if payload.get("tools") == []:
+            payload.pop("tools")
         if tool_choice is not None:
             payload["tool_choice"] = (
                 tool_choice if tool_choice in _TOOL_CHOICE_MODES
@@ -450,7 +454,8 @@ class OpenAICompatLLM:
         """Stream user-visible text deltas from a chat completion.
 
         Malformed server-sent event lines and deltas without content are
-        skipped. Tool-call and reasoning deltas are not yielded.
+        skipped. Tool-call and reasoning deltas are not yielded. Forced tool
+        choices require :meth:`stream_events`, which exposes tool calls.
         """
 
         payload = self._build_payload(
@@ -459,6 +464,9 @@ class OpenAICompatLLM:
             enable_thinking=enable_thinking, thinking_budget=thinking_budget,
             stream=True, tool_choice=tool_choice, response_schema=response_schema,
         )
+        choice = payload.get("tool_choice")
+        if choice == "required" or isinstance(choice, Mapping):
+            raise ValueError("forced tool_choice requires stream_events; stream yields text only")
         kwargs: dict[str, Any] = {"json": payload, "headers": _request_headers(self._api_key, headers)}
         if timeout is not None:
             kwargs["timeout"] = timeout
@@ -619,6 +627,11 @@ class OpenAICompatLLM:
                 raise ValueError(
                     f"LLM stream returned tool calls with finish_reason {finish_reason!r}",
                 )
+            if named and (
+                len(tool_fragments) != 1
+                or next(iter(tool_fragments.values()))["name"] != choice["function"]["name"]
+            ):
+                raise ValueError("LLM stream did not return exactly the named tool_choice")
             # Validate the complete batch before exposing any call, avoiding
             # partial execution when a later call in the batch is malformed.
             for index in sorted(tool_fragments):
