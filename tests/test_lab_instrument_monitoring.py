@@ -473,6 +473,31 @@ def test_instrument_reading_normalization_retains_units() -> None:
     assert normalize_meter_reading("UNKNOWN", previous_unit="V") is None
 
 
+def test_instrument_reading_normalization_handles_separators_and_two_word_units() -> None:
+    assert normalize_meter_reading("1,234.5 Hz") == (
+        Decimal("1234.5"),
+        "Hz",
+        "1234.5 Hz",
+    )
+    assert normalize_meter_reading("1,234,567 Ω") == (
+        Decimal("1234567"),
+        "Ω",
+        "1234567 Ω",
+    )
+    assert normalize_meter_reading("-4 degrees C") == (Decimal("-4"), "°C", "-4 °C")
+    assert normalize_meter_reading("98.6 degrees F") == (
+        Decimal("98.6"),
+        "°F",
+        "98.6 °F",
+    )
+    assert normalize_meter_reading("1,5 V") == (Decimal("1.5"), "V", "1.5 V")
+    assert normalize_meter_reading("12 degrees") == (
+        Decimal("12"),
+        "degrees",
+        "12 degrees",
+    )
+
+
 def test_instrument_reader_uses_configured_prompt_without_rgb_hex_query(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
