@@ -525,7 +525,7 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Runtime dependencies:
   - `urllib3>=2.8.0`
   - `anyio>=4.0`
-  - `pocket-tts==3.0.2`
+  - `pocket-tts==3.1.0`
   - `torch>=2.5.0`
   - `huggingface-hub>=0.32.0`
   - `hf-xet>=1.1.2,<2.0.0`

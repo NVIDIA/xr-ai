@@ -34,6 +34,7 @@ from .._frames import (
     GatedQueryFrame,
     ParticipantJoinedFrame,
     ParticipantLeftFrame,
+    TextResponseEndFrame,
     _OutputDoneFrame,
     _SpeakerDiagnosticFrame,
     _SpeakerGatedQueryFrame,
@@ -453,15 +454,14 @@ class _VoiceIOProcessor(FrameProcessor):
             # Settle the floor before closing the stream: a cancel landing in
             # aclose() would otherwise skip it and hold the floor forever.
             current = self._floor.get(pid) is output
-            if current and not cancelled and not dropped:
+            if current and not dropped:
                 try:
-                    await self.push_frame(
-                        AssistantResponseEndFrame(
-                            pid=pid,
-                            text="".join(chunks),
-                            pts_us=item.pts_us,
-                        )
+                    end = (
+                        TextResponseEndFrame(pid=pid, cancelled=True)
+                        if cancelled else
+                        AssistantResponseEndFrame(pid=pid, text="".join(chunks), pts_us=item.pts_us)
                     )
+                    await self.push_frame(end)
                 except Exception:
                     logger.exception("emit voice response end failed pid={!r}", pid)
             if current and output.playing:

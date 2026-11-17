@@ -208,6 +208,68 @@ async def test_idle_chime_clears_speaking_without_fallback(monkeypatch: pytest.M
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("tail", ["Old answer.", "Old answer", "The value is 11."])
+@pytest.mark.parametrize("prefix", ["", "Already spoken. "])
+async def test_query_supersession_discards_unsent_text_without_interrupting_audio(
+    monkeypatch: pytest.MonkeyPatch, tail: str, prefix: str,
+) -> None:
+    buffered = asyncio.Event()
+    closed = asyncio.Event()
+    handle_text = StreamingTtsProcessor._handle_text  # noqa: SLF001
+    processor: StreamingTtsProcessor | None = None
+
+    async def observe_text(self, frame):
+        nonlocal processor
+        await handle_text(self, frame)
+        if frame.text == prefix + tail:
+            processor = self
+            buffered.set()
+
+    monkeypatch.setattr(StreamingTtsProcessor, "_handle_text", observe_text)
+
+    async def old_response() -> AsyncIterator[str]:
+        try:
+            yield prefix + tail
+            await asyncio.Event().wait()
+        finally:
+            closed.set()
+
+    async with _pipeline(monkeypatch) as (io_processor, _worker, tts, endpoint, gate):
+        completed: list[str] = []
+        interruptions: list[Frame] = []
+        process_frame = gate.process_frame
+
+        async def record(frame: Frame, direction: FrameDirection) -> None:
+            if isinstance(frame, AssistantResponseEndFrame):
+                completed.append(frame.text)
+            if isinstance(frame, InterruptionFrame):
+                interruptions.append(frame)
+            await process_frame(frame, direction)
+
+        gate.process_frame = record  # type: ignore[method-assign]
+        await io_processor.enqueue_reply(_PID, old_response(), request_id="r1")
+        await asyncio.wait_for(buffered.wait(), _TIMEOUT_S)
+        assert processor is not None
+        if prefix:
+            await asyncio.wait_for(endpoint.first_chunk.wait(), _TIMEOUT_S)
+            assert processor.has_active_response(_PID)
+
+        await io_processor.enqueue_query(_PID, "next question")
+        await asyncio.wait_for(closed.wait(), _TIMEOUT_S)
+        endpoint.release.set()
+        await _until(lambda: _PID not in io_processor._floor)  # noqa: SLF001
+        # Floor release alone does not close the ordered audio response.
+        await _until(lambda: not processor.has_active_response(_PID))
+        await io_processor.enqueue_reply(_PID, _one_reply("New answer."), request_id="r2")
+        await _until(lambda: _PID not in io_processor._floor)  # noqa: SLF001
+
+        expected = ["Already spoken.", "New answer."] if prefix else ["New answer."]
+        assert tts.calls == expected
+        assert completed == ["New answer."]
+        assert interruptions == []
+
+
+@pytest.mark.asyncio
 async def test_new_request_cancels_reply_audio_still_being_synthesized(monkeypatch: pytest.MonkeyPatch) -> None:
     async with _pipeline(monkeypatch) as (io_processor, _worker, tts, endpoint, _gate):
         synthesis = asyncio.Event()
@@ -292,14 +354,17 @@ async def test_queued_reply_does_not_let_an_urgent_update_cut_a_playing_one(monk
 
 
 @pytest.mark.asyncio
-async def test_another_participants_interruption_keeps_the_done_marker(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("interrupt_pid", [_PID, "bob"])
+async def test_interruption_preserves_response_boundaries(
+    monkeypatch: pytest.MonkeyPatch, interrupt_pid: str,
+) -> None:
     async with _pipeline(monkeypatch) as (io_processor, worker, tts, endpoint, gate):
         endpoint.release.set()
         held = asyncio.Event()
         interrupted = asyncio.Event()
         process_frame = gate.process_frame
 
-        # Hold Bob's response end in the gate until Alice's interruption has
+        # Hold Bob's response end in the gate until the interruption has
         # passed it, so Bob's done marker waits in the gate's queue meanwhile.
         async def hold_bob(frame: Frame, direction: FrameDirection) -> None:
             if isinstance(frame, AssistantResponseEndFrame) and frame.pid == "bob":
@@ -315,10 +380,15 @@ async def test_another_participants_interruption_keeps_the_done_marker(monkeypat
         await io_processor.enqueue_reply("bob", _one_reply("Two."), request_id="r1")
 
         interruption = InterruptionFrame()
-        interruption.transport_source = _PID
+        interruption.transport_source = interrupt_pid
         await worker.queue_frame(interruption)
 
-        await _until(lambda: tts.calls == ["One.", "Two."])
+        await asyncio.wait_for(interrupted.wait(), _TIMEOUT_S)
+        if interrupt_pid == "bob":
+            await io_processor.enqueue_reply("bob", _one_reply("New reply."), request_id="r2")
+            await _until(lambda: tts.calls == ["New reply."])
+        else:
+            await _until(lambda: tts.calls == ["One.", "Two."])
 
 
 @pytest.mark.asyncio

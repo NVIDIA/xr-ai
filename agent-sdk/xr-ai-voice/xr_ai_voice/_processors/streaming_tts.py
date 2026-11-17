@@ -66,12 +66,9 @@ if TYPE_CHECKING:
     from .._transport import HubVoiceTransport
 
 
-_SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
-# A sentence-final char optionally followed by closing punctuation (quote,
-# paren, bracket) and trailing whitespace, e.g. ``... looking at?"``. A plain
-# ``endswith((".", "!", "?"))`` would miss the trailing quote and leave the tail
-# in the buffer to concatenate onto the next turn.
-_TRAILING_SENTENCE_END = re.compile(r"""[.!?]["')\]]*\s*$""")
+# A chunk ending in punctuation may still be part of a number or word. Only
+# following whitespace confirms a boundary; response-end resolves the final tail.
+_SENTENCE_END = re.compile(r"""[.!?]["')\]]*\s+""")
 
 
 @dataclass(frozen=True, slots=True)
@@ -226,18 +223,17 @@ class StreamingTtsProcessor(FrameProcessor):
         await self._flush_complete_sentences(pid)
 
     async def _handle_text_response_end(self, frame: TextResponseEndFrame) -> None:
-        """Flush trailing text and queue its participant-scoped audio boundary.
+        """Resolve pending text before closing the response's ordered audio.
 
-        A producer may finish an utterance with text that has no sentence-final
-        punctuation. The boundary regex would leave that fragment buffered
-        forever, so end-of-response flushes it before placing the boundary on
-        the same ordered queue as synthesis.
+        Cancellation discards only text not yet dispatched. Queued synthesis
+        still drains when supersession does not interrupt playback.
         """
         st = self._by_pid.get(frame.pid)
-        if st is not None and st.pending.strip():
+        if st is not None:
             sentence = st.pending.strip()
             st.pending = ""
-            await self._dispatch_sentence(sentence, pid=frame.pid)
+            if sentence and not frame.cancelled:
+                await self._dispatch_sentence(sentence, pid=frame.pid)
 
         # The output transport aggregates small frames into 40 ms chunks. Put
         # the boundary on the same FIFO as synthesis so it arrives only after
@@ -272,10 +268,12 @@ class StreamingTtsProcessor(FrameProcessor):
             )
 
     async def _flush_complete_sentences(self, pid: str) -> None:
-        """Drain every complete sentence in ``pid``'s pending buffer, leaving a
-        trailing fragment in place until more text arrives. A buffer already
-        ending in sentence-final punctuation is flushed in one shot — covers the
-        assistant-returns-a-complete-string case with no trailing whitespace."""
+        """Dispatch whitespace-confirmed sentences, retaining an ambiguous tail.
+
+        TextFrame boundaries carry no sentence-completion guarantee: a chunk
+        ending in ``11.`` can be followed by ``2``. TextResponseEndFrame resolves
+        the final fragment on completion or cancellation.
+        """
         st = self._state(pid)
         while True:
             m = _SENTENCE_END.search(st.pending)
@@ -286,11 +284,6 @@ class StreamingTtsProcessor(FrameProcessor):
             if not sentence:
                 continue
             await self._dispatch_sentence(sentence, pid=pid)
-        if st.pending and _TRAILING_SENTENCE_END.search(st.pending):
-            sentence  = st.pending.strip()
-            st.pending = ""
-            if sentence:
-                await self._dispatch_sentence(sentence, pid=pid)
 
     async def _dispatch_sentence(self, sentence: str, *, pid: str) -> None:
         logger.info("tts sentence dispatch pid={!r} len={}", pid, len(sentence))

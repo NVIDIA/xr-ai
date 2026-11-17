@@ -2267,7 +2267,10 @@ async def test_streaming_tts_gate_observation_failure_does_not_drop_audio(
     )
     proc = StreamingTtsProcessor(tts=tts, voice_gate=gate)
 
-    sink = await _run_chain(proc, sends=[_text_for("hello.", "alice")])
+    sink = await _run_chain(
+        proc,
+        sends=[_text_for("hello.", "alice"), TextResponseEndFrame(pid="alice")],
+    )
 
     audio = [
         frame
@@ -2412,6 +2415,105 @@ async def test_streaming_tts_interrupt_with_an_inherited_relay_scope_stack(monke
         await asyncio.wait_for(
             _assert_streaming_tts_interrupt_closes_only_target_stream(), timeout=2,
         )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize(
+    "chunks",
+    [
+        ["The value is 11.2 volts."],
+        ["The value is 11.", "2 volts."],
+        ["The value is 11", ".", "2 volts."],
+        list("The value is 11.2 volts."),
+        ["The value is -0.", "25 volts."],
+        ["The value is ", ".", "5 volts."],
+    ],
+)
+async def test_streaming_tts_preserves_decimal_across_chunks(chunks, streaming):
+    expected = "".join(chunks)
+    tts = _FakeStreamingTts() if streaming else _FakeTts()
+    if streaming:
+        tts.configure(expected, b"\x01\x00")
+    gate = VoiceGate(VoiceGateConfig(), audio_sink=_NullSink(), tts=tts)
+    proc = StreamingTtsProcessor(tts=tts, voice_gate=gate)
+
+    sink = await _run_chain(
+        proc,
+        sends=[
+            *[_text_for(chunk, "alice") for chunk in chunks],
+            TextResponseEndFrame(pid="alice"),
+        ],
+    )
+
+    assert (tts.stream_calls if streaming else tts.calls) == [expected]
+    assert any(isinstance(frame, TTSAudioRawFrame) for frame in sink.frames)
+
+
+@pytest.mark.asyncio
+async def test_streaming_tts_waits_for_boundary_after_trailing_period():
+    tts = _FakeTts()
+    gate = VoiceGate(VoiceGateConfig(), audio_sink=_NullSink(), tts=tts)
+    proc = StreamingTtsProcessor(tts=tts, voice_gate=gate)
+
+    await _run_chain(proc, sends=[_text_for("The value is 11.", "alice")])
+
+    assert tts.calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("chunks", "expected"),
+    [
+        (["The value is 11.", "2.", " Next reading."],
+         ["The value is 11.2.", "Next reading."]),
+        (["The count is 11.", " Next reading."],
+         ["The count is 11.", "Next reading."]),
+        (['He said "11.', '2.', '"', ' Next reading.'],
+         ['He said "11.2."', "Next reading."]),
+    ],
+)
+async def test_streaming_tts_streams_confirmed_boundary_before_response_end(chunks, expected):
+    tts = _FakeTts()
+    gate = VoiceGate(VoiceGateConfig(), audio_sink=_NullSink(), tts=tts)
+    proc = StreamingTtsProcessor(tts=tts, voice_gate=gate)
+
+    await _run_chain(proc, sends=[_text_for(chunk, "alice") for chunk in chunks])
+
+    # The next sentence remains pending; the first does not wait for turn end.
+    assert tts.calls == expected[:1]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("interrupt", [False, True])
+async def test_streaming_tts_decimal_tail_is_participant_scoped(interrupt):
+    tts = _FakeTts()
+    gate = VoiceGate(VoiceGateConfig(), audio_sink=_NullSink(), tts=tts)
+    proc = StreamingTtsProcessor(tts=tts, voice_gate=gate)
+    sends = [
+        _text_for("The value is 11.", "alice"),
+        _text_for("Bob's value is 22.3.", "bob"),
+        TextResponseEndFrame(pid="bob"),
+    ]
+    if interrupt:
+        sends.extend([_interrupt_for("alice"), _text_for("New reading.", "alice")])
+        expected = "New reading."
+    else:
+        sends.append(_text_for("2 volts.", "alice"))
+        expected = "The value is 11.2 volts."
+    sends.extend([
+        TextResponseEndFrame(pid="alice"),
+        _text_for("Next response.", "alice"),
+        TextResponseEndFrame(pid="alice"),
+    ])
+
+    sink = await _run_chain(proc, sends=sends, per_send_delay_s=0.01)
+
+    assert tts.calls == ["Bob's value is 22.3.", expected, "Next response."]
+    assert [
+        frame.transport_destination for frame in sink.frames
+        if isinstance(frame, TTSStoppedFrame)
+    ] == ["bob", "alice", "alice"]
 
 
 @pytest.mark.asyncio
@@ -3744,7 +3846,10 @@ async def test_streaming_tts_publishes_capture_caption_before_first_pcm():
     gate = VoiceGate(VoiceGateConfig(), audio_sink=_NullSink(), tts=tts)
     proc = StreamingTtsProcessor(tts=tts, voice_gate=gate, transport=_RecordingTransport())
 
-    sink = await _run_chain(proc, sends=[_text_for("Spoken sentence.", "alice")])
+    sink = await _run_chain(
+        proc,
+        sends=[_text_for("Spoken sentence.", "alice"), TextResponseEndFrame(pid="alice")],
+    )
 
     capture_frames = [
         frame
@@ -3832,33 +3937,24 @@ async def test_streaming_tts_flushes_trailing_text_on_response_end():
 
 
 @pytest.mark.asyncio
-async def test_streaming_tts_flushes_sentence_ending_with_closing_quote():
-    """Sentence-final punctuation followed by a closing quote/bracket
-    must still flush the trailing fragment.
-
-    Regression: the voice-gate greeting ends with ``... what am I
-    looking at?"`` — the ``?`` is the sentence end but the buffer's
-    last char is ``"``. A plain ``endswith((".", "!", "?"))`` check
-    misses this; the tail stays in pending and concatenates onto the
-    next turn's response, so the user hears half the greeting up front
-    and the other half glued to their first query reply.
-    """
+async def test_streaming_tts_response_end_separates_quoted_tail_from_next_response():
+    """Response completion flushes a quoted tail without joining the next turn."""
     tts  = _FakeTts()
     gate = VoiceGate(VoiceGateConfig(), audio_sink=_NullSink(), tts=tts)
     proc = StreamingTtsProcessor(tts=tts, voice_gate=gate)
 
     await _run_chain(
         proc,
-        sends=[TextFrame(text='How are you? "I am fine."')],
+        sends=[
+            TextFrame(text='"I am fine."'),
+            TextResponseEndFrame(pid=""),
+            TextFrame(text="Next answer."),
+            TextResponseEndFrame(pid=""),
+        ],
         settle_s=0.15,
     )
 
-    # Both sentences must be dispatched in one turn — no residual
-    # waiting to be glued onto the next reply.
-    assert tts.calls == ['How are you?', '"I am fine."']
-    # Both sentences dispatched (nothing left in pending), and the pipeline
-    # EndFrame tore down all per-participant state.
-    assert proc._by_pid == {}  # noqa: SLF001
+    assert tts.calls == ['"I am fine."', "Next answer."]
 
 
 def _text_for(text: str, pid: str) -> TextFrame:

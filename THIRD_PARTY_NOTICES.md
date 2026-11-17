@@ -37,7 +37,7 @@ qualified lock; the reciprocal-license table records exact resolved versions.
 | `nemo-relay`   | >=0.10.0,<0.11 | Apache-2.0  | https://github.com/NVIDIA/NeMo-Relay |
 | `Pillow`       | >=13.0.0 | MIT-CMU          | https://github.com/python-pillow/Pillow |
 | `pipecat-ai`   | >=1.14.0    | BSD-2-Clause  | https://github.com/pipecat-ai/pipecat |
-| `pocket-tts`   | 3.0.2    | MIT           | https://github.com/kyutai-labs/pocket-tts |
+| `pocket-tts`   | 3.1.0    | MIT           | https://github.com/kyutai-labs/pocket-tts |
 | `num2words`    | 0.5.14   | LGPL-2.1-or-later | https://github.com/savoirfairelinux/num2words |
 | `pycountry`    | 26.2.16  | LGPL-2.1-only | https://github.com/pycountry/pycountry |
 | `soxr`         | 1.0.0    | LGPL-2.1-or-later | https://github.com/dofuuz/python-soxr |
@@ -156,7 +156,7 @@ repositories for their license texts and download terms.
 
 ### Pocket TTS model and voice
 
-Pocket TTS 3.0.2 pins the following downloaded artifacts for the default
+Pocket TTS 3.1.0 pins the following downloaded artifacts for the default
 English configuration. XR AI does not redistribute them.
 
 - Gated weights from `kyutai/pocket-tts` at revision
