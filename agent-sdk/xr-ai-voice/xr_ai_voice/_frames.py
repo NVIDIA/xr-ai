@@ -11,7 +11,7 @@ and synthesized-text response boundaries live here.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from pipecat.frames.frames import DataFrame, InputAudioRawFrame, TranscriptionFrame, UninterruptibleFrame
 
@@ -130,6 +130,9 @@ class TextResponseEndFrame(DataFrame):
     """
 
     pid: str
+    # Completion must survive another participant's interruption; TTS owns
+    # cancellation of the addressed participant's pending text and audio.
+    interruptible: bool = field(default=False, init=False)
 
 
 @dataclass

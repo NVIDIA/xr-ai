@@ -66,12 +66,9 @@ if TYPE_CHECKING:
     from .._transport import HubVoiceTransport
 
 
-_SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
-# A sentence-final char optionally followed by closing punctuation (quote,
-# paren, bracket) and trailing whitespace, e.g. ``... looking at?"``. A plain
-# ``endswith((".", "!", "?"))`` would miss the trailing quote and leave the tail
-# in the buffer to concatenate onto the next turn.
-_TRAILING_SENTENCE_END = re.compile(r"""[.!?]["')\]]*\s*$""")
+# A chunk ending in punctuation may still be part of a number or word. Only
+# following whitespace confirms a boundary; response-end flushes the final tail.
+_SENTENCE_END = re.compile(r"""[.!?]["')\]]*\s+""")
 
 
 @dataclass(frozen=True, slots=True)
@@ -272,10 +269,12 @@ class StreamingTtsProcessor(FrameProcessor):
             )
 
     async def _flush_complete_sentences(self, pid: str) -> None:
-        """Drain every complete sentence in ``pid``'s pending buffer, leaving a
-        trailing fragment in place until more text arrives. A buffer already
-        ending in sentence-final punctuation is flushed in one shot — covers the
-        assistant-returns-a-complete-string case with no trailing whitespace."""
+        """Dispatch whitespace-confirmed sentences, retaining an ambiguous tail.
+
+        TextFrame boundaries carry no sentence-completion guarantee: a chunk
+        ending in ``11.`` can be followed by ``2``. TextResponseEndFrame flushes
+        the final fragment even when it has no trailing whitespace.
+        """
         st = self._state(pid)
         while True:
             m = _SENTENCE_END.search(st.pending)
@@ -286,11 +285,6 @@ class StreamingTtsProcessor(FrameProcessor):
             if not sentence:
                 continue
             await self._dispatch_sentence(sentence, pid=pid)
-        if st.pending and _TRAILING_SENTENCE_END.search(st.pending):
-            sentence  = st.pending.strip()
-            st.pending = ""
-            if sentence:
-                await self._dispatch_sentence(sentence, pid=pid)
 
     async def _dispatch_sentence(self, sentence: str, *, pid: str) -> None:
         logger.info("tts sentence dispatch pid={!r} len={}", pid, len(sentence))

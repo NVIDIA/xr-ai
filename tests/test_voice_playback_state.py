@@ -292,14 +292,17 @@ async def test_queued_reply_does_not_let_an_urgent_update_cut_a_playing_one(monk
 
 
 @pytest.mark.asyncio
-async def test_another_participants_interruption_keeps_the_done_marker(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("interrupt_pid", [_PID, "bob"])
+async def test_interruption_preserves_response_boundaries(
+    monkeypatch: pytest.MonkeyPatch, interrupt_pid: str,
+) -> None:
     async with _pipeline(monkeypatch) as (io_processor, worker, tts, endpoint, gate):
         endpoint.release.set()
         held = asyncio.Event()
         interrupted = asyncio.Event()
         process_frame = gate.process_frame
 
-        # Hold Bob's response end in the gate until Alice's interruption has
+        # Hold Bob's response end in the gate until the interruption has
         # passed it, so Bob's done marker waits in the gate's queue meanwhile.
         async def hold_bob(frame: Frame, direction: FrameDirection) -> None:
             if isinstance(frame, AssistantResponseEndFrame) and frame.pid == "bob":
@@ -315,10 +318,15 @@ async def test_another_participants_interruption_keeps_the_done_marker(monkeypat
         await io_processor.enqueue_reply("bob", _one_reply("Two."), request_id="r1")
 
         interruption = InterruptionFrame()
-        interruption.transport_source = _PID
+        interruption.transport_source = interrupt_pid
         await worker.queue_frame(interruption)
 
-        await _until(lambda: tts.calls == ["One.", "Two."])
+        await asyncio.wait_for(interrupted.wait(), _TIMEOUT_S)
+        if interrupt_pid == "bob":
+            await io_processor.enqueue_reply("bob", _one_reply("New reply."), request_id="r2")
+            await _until(lambda: tts.calls == ["New reply."])
+        else:
+            await _until(lambda: tts.calls == ["One.", "Two."])
 
 
 @pytest.mark.asyncio
