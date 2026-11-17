@@ -1,0 +1,7 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+interface:
+  display_name: "Maintain XR-AI Pull Requests"
+  short_description: "Keep human-directed XR-AI PRs reviewable"
+  default_prompt: "Use $gh-develop-xr-ai to implement this human-directed XR-AI change and keep its pull request clean and ready."
