@@ -13,7 +13,8 @@ dependencies = [
     # CVE-2026-97687 and CVE-2026-97689: fixed HTTP transport.
     "urllib3>=2.8.0",
     "anyio>=4.0",
-    "pocket-tts==3.0.2",
+    # 3.1.0 preserves decimal periods in the upstream sentence chunker.
+    "pocket-tts==3.1.0",
     # The PyPI build includes CUDA libraries on Linux so one environment can
     # run the configured GPU path or fall back to CPU execution.
     "torch>=2.5.0",
