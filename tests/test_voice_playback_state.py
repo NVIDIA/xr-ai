@@ -208,6 +208,61 @@ async def test_idle_chime_clears_speaking_without_fallback(monkeypatch: pytest.M
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("tail", ["Old answer.", "Old answer", "The value is 11."])
+@pytest.mark.parametrize("prefix", ["", "Already spoken. "])
+async def test_query_supersession_discards_unsent_text_without_interrupting_audio(
+    monkeypatch: pytest.MonkeyPatch, tail: str, prefix: str,
+) -> None:
+    buffered = asyncio.Event()
+    closed = asyncio.Event()
+    handle_text = StreamingTtsProcessor._handle_text  # noqa: SLF001
+
+    async def observe_text(self, frame):
+        await handle_text(self, frame)
+        if frame.text == prefix + tail:
+            buffered.set()
+
+    monkeypatch.setattr(StreamingTtsProcessor, "_handle_text", observe_text)
+
+    async def old_response() -> AsyncIterator[str]:
+        try:
+            yield prefix + tail
+            await asyncio.Event().wait()
+        finally:
+            closed.set()
+
+    async with _pipeline(monkeypatch) as (io_processor, _worker, tts, endpoint, gate):
+        completed: list[str] = []
+        interruptions: list[Frame] = []
+        process_frame = gate.process_frame
+
+        async def record(frame: Frame, direction: FrameDirection) -> None:
+            if isinstance(frame, AssistantResponseEndFrame):
+                completed.append(frame.text)
+            if isinstance(frame, InterruptionFrame):
+                interruptions.append(frame)
+            await process_frame(frame, direction)
+
+        gate.process_frame = record  # type: ignore[method-assign]
+        await io_processor.enqueue_reply(_PID, old_response(), request_id="r1")
+        await asyncio.wait_for(buffered.wait(), _TIMEOUT_S)
+        if prefix:
+            await asyncio.wait_for(endpoint.first_chunk.wait(), _TIMEOUT_S)
+
+        await io_processor.enqueue_query(_PID, "next question")
+        await asyncio.wait_for(closed.wait(), _TIMEOUT_S)
+        endpoint.release.set()
+        await _until(lambda: _PID not in io_processor._floor)  # noqa: SLF001
+        await io_processor.enqueue_reply(_PID, _one_reply("New answer."), request_id="r2")
+        await _until(lambda: _PID not in io_processor._floor)  # noqa: SLF001
+
+        expected = ["Already spoken.", "New answer."] if prefix else ["New answer."]
+        assert tts.calls == expected
+        assert completed == ["New answer."]
+        assert interruptions == []
+
+
+@pytest.mark.asyncio
 async def test_new_request_cancels_reply_audio_still_being_synthesized(monkeypatch: pytest.MonkeyPatch) -> None:
     async with _pipeline(monkeypatch) as (io_processor, _worker, tts, endpoint, _gate):
         synthesis = asyncio.Event()

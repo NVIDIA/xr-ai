@@ -123,13 +123,14 @@ class _SpeakerGatedQueryFrame(GatedQueryFrame):
 class TextResponseEndFrame(DataFrame):
     """One participant-scoped sequence of synthesized text has ended.
 
-    Every producer that emits ``TextFrame`` objects for one utterance follows
-    them with this frame. ``StreamingTtsProcessor`` uses it to flush trailing
-    text and place the audio boundary behind all synthesis already queued for
-    the participant.
+    Producers end their text with this frame unless an interruption already
+    cleared the output. ``StreamingTtsProcessor`` flushes trailing text on
+    completion, or discards it when ``cancelled`` is true. Both paths place an
+    audio boundary behind synthesis already queued for the participant.
     """
 
     pid: str
+    cancelled: bool = field(default=False, kw_only=True)
     # Completion must survive another participant's interruption; TTS owns
     # cancellation of the addressed participant's pending text and audio.
     interruptible: bool = field(default=False, init=False)
