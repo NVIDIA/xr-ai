@@ -435,9 +435,49 @@ async def test_tool_cancellation_propagates_and_closes_handler() -> None:
     task = asyncio.create_task(tool.execute(AddRequest(left=1, right=2)))
     await asyncio.wait_for(started.wait(), timeout=1.0)
     task.cancel()
+    done, _pending = await asyncio.wait({task}, timeout=1.0)
+    assert task in done
     with pytest.raises(asyncio.CancelledError):
         await task
-    await asyncio.wait_for(closed.wait(), timeout=1.0)
+    assert closed.is_set()
+
+
+async def test_tool_cancellation_waits_for_cleanup_after_repeated_cancellation() -> None:
+    started = asyncio.Event()
+    cleanup_started = asyncio.Event()
+    release_cleanup = asyncio.Event()
+    closed = asyncio.Event()
+
+    async def block(_request: AddRequest) -> AddResult:
+        started.set()
+        try:
+            await asyncio.Future()
+        finally:
+            cleanup_started.set()
+            await release_cleanup.wait()
+            closed.set()
+
+    tool = Tool("drain_finite", "Wait for cleanup.", AddRequest, AddResult, block)
+    task = asyncio.create_task(tool.execute(AddRequest(left=1, right=2)))
+    try:
+        await asyncio.wait_for(started.wait(), timeout=1.0)
+        task.cancel("initial cancellation")
+        await asyncio.wait_for(cleanup_started.wait(), timeout=1.0)
+        task.cancel("cancellation during cleanup")
+        done, _pending = await asyncio.wait({task}, timeout=0.05)
+        assert task not in done
+        assert not closed.is_set()
+        task.cancel("another cancellation during cleanup")
+        done, _pending = await asyncio.wait({task}, timeout=0.05)
+        assert task not in done
+    finally:
+        release_cleanup.set()
+        done, _pending = await asyncio.wait({task}, timeout=1.0)
+        assert task in done
+        with pytest.raises(asyncio.CancelledError) as raised:
+            await task
+    assert raised.value.args == ("cancellation during cleanup",)
+    assert closed.is_set()
 
 
 async def test_side_effect_tool_rejects_non_none_result() -> None:
