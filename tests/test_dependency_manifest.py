@@ -381,3 +381,18 @@ def test_manifest_excludes_only_explicit_incompatible_project(tmp_path: Path) ->
     assert "xr-ai-speaker-stt" not in manifest["tool"]["uv"]["sources"]
     assert "clef-server" in manifest["tool"]["uv"]["sources"].keys()
     assert manifest["project"]["requires-python"] == ">=3.11,<3.13"
+
+
+@pytest.mark.parametrize("service", ["stt-server", "magpie-tts"])
+@pytest.mark.parametrize("package", ["nemo-toolkit", "lightning"])
+def test_nemo_inventory_preserves_service_source(service: str, package: str) -> None:
+    """The inventory must identify the same upstream artifacts as inference."""
+    lock = tomllib.loads((_ROOT / MANIFEST / "uv.lock").read_text())
+    resolved = [item for item in lock["package"] if item["name"] == package]
+    assert len(resolved) == 1
+    project = tomllib.loads((_ROOT / "services" / service / "pyproject.toml").read_text())
+    source = project["tool"]["uv"]["sources"][package]
+    if "url" in source:
+        assert resolved[0]["source"] == source
+    else:
+        assert resolved[0]["source"]["git"] == f"{source['git']}?rev={source['rev']}#{source['rev']}"

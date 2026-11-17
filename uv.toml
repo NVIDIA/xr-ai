@@ -7,3 +7,6 @@ exclude-newer = "2026-10-22T21:39:43Z"
 # Pipecat 1.14 permits the Pillow 13 security release in voice environments.
 [exclude-newer-package]
 pipecat-ai = "2026-10-24T01:24:20.438725Z"
+
+# NeMo 3.1 requires the Hydra security release with updated target policy.
+hydra-core = "2026-10-25T13:42:22.491290Z"
