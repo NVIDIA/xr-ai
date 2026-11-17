@@ -281,17 +281,18 @@
 <div class="version-switcher">
   <label for="version-select" class="version-switcher__label">Version</label>
   <select id="version-select" class="version-switcher__select">
-    <option value="0" >v0.3.0-beta</option>
-    <option value="1" >v0.2.0-beta.2</option>
-    <option value="2" >v0.1.0-beta</option>
-    <option value="3" selected>main (development)</option>
+    <option value="0" selected>v0.4.0-beta</option>
+    <option value="1" >v0.3.0-beta</option>
+    <option value="2" >v0.2.0-beta.2</option>
+    <option value="3" >v0.1.0-beta</option>
+    <option value="4" >main (development)</option>
   </select>
 </div>
 <script>
   (function () {
     // Navigate by index into a build-time list, never by reading the URL back
     // out of the DOM, so page text can never become a navigation target.
-    var urls = ["../../v0.3.0-beta/index.html", "../../v0.2.0-beta.2/index.html", "../../v0.1.0-beta/index.html", "agent-sdk-routing.html"];
+    var urls = ["agent-sdk-routing.html", "../../v0.3.0-beta/index.html", "../../v0.2.0-beta.2/index.html", "../../v0.1.0-beta/index.html", "../../main/reference/agent-sdk-routing.html"];
     var select = document.getElementById("version-select");
     select.addEventListener("change", function () {
       var url = urls[select.selectedIndex];
@@ -713,8 +714,13 @@ the application.</p>
 <p>The timing sample begins after destination admission and ends when the
 destination signals its first meaningful response. It excludes route selection,
 admission, waiting for committed acknowledgment delivery, and downstream playback.
-Admission preambles suppress the optional acknowledgment for that turn.
-The <code class="docutils literal notranslate"><span class="pre">conversation.response-started</span></code> trace records that notification. A notification does
+Admission preambles suppress the optional acknowledgment for that turn.</p>
+<p>The acknowledgment prompt asks for a natural action and short topic, such as
+“Let me read that label.” A format check accepts a nonempty single sentence of
+at most 12 words without requiring a fixed opening. Malformed or overlong output
+is replaced with “Let me think about that.” The check does not judge meaning,
+grammar, or whether the request can be fulfilled.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">conversation.response-started</span></code> trace records that notification. A notification does
 not establish that output has been accepted or played by a downstream transport.
 If prediction or acknowledgment generation fails, the optional task logs the
 failure once and ends; the destination answer continues. The decision service
