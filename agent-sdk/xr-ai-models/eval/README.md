@@ -5,9 +5,9 @@
 
 # Structured-output eval
 
-A text-only live-model eval of JSON Schema output and forced tool calls. Run it
-for an LLM deployment before declaring `capabilities.json_schema` or
-`capabilities.tool_choice` for the modes it exercises. Refer to the
+A text-only live-model eval of JSON Schema output and forced tool calls. It
+measures schema validity, tool-call presence, correctness, and latency on a
+configured deployment. Refer to the
 [models reference](https://nvidia.github.io/xr-ai/latest/reference/agent-sdk-models.html#structured-output-and-forced-tool-calls)
 for the API.
 
@@ -32,12 +32,13 @@ answer that does not match its schema, or a forced tool mode returns no call.
 Forced-call arguments are checked against the schema and reported, but do not
 gate: a server may constrain only the call. Correct answers and latency are
 reported but do not gate.
+The exit status reports failures observed in this run; it does not decide
+whether the client allows a supported request feature.
 
 No image or video requests run here. Qualify VLM profiles through their actual
 vision methods with representative media and schemas, including streaming image
-requests. `tool_required/stream` is not measured; the client requires
-`finish_reason="tool_calls"` for that path. A preset's capability declaration
-does not qualify a different model server or an external NIM deployment.
+requests. A preset's capability declaration does not qualify a different model
+server or an external NIM deployment.
 
 ## Modes
 
@@ -48,6 +49,7 @@ does not qualify a different model server or an external NIM deployment.
 | `tool_named` | `chat(tools=[t], tool_choice="t")` | Gated: every response calls |
 | `tool_named/stream` | `stream_events(tools=[t], tool_choice="t")` | Gated: every response calls |
 | `tool_required` | `chat(tools=[t], tool_choice="required")` | Gated: every response calls |
+| `tool_required/stream` | `stream_events(tools=[t], tool_choice="required")` | Gated: every response calls |
 | `prompt_only` | Schema stated in the system message, no constraint | Reference: no feature |
 | `tools_auto` | `chat(tools=[t])`, the model may skip the call | Reference: today's commit-tool pattern |
 
@@ -69,12 +71,12 @@ example answers that the repository tests use to check the graders offline.
 ## Historical results: Nemotron Omni
 
 These measurements used an earlier client that inserted the schema into the
-prompt when reasoning was enabled. They do not qualify the current client,
-which sends output constraints without modifying caller messages. The
+prompt when reasoning was enabled. They are not measurements of the current
+client, which sends output constraints without modifying caller messages. The
 `json_schema_flipped` rows were an ablation of that removed client policy;
-that mode is no longer part of this eval. `nemotron_omni` declares forced tool
-choice only; JSON Schema output remains disabled pending a passing run with
-the current client and intended server deployment.
+that mode is no longer part of this eval. `nemotron_omni` supports JSON Schema
+and forced tool requests through vLLM. These results describe reliability, not
+a reason to reject supported requests in the client.
 
 `nemotron_omni` on vLLM 0.31.0 (`nemotron_v3` reasoning parser, `qwen3_coder`
 tool parser), 16 samples per case, mode and reasoning setting (96 per row),

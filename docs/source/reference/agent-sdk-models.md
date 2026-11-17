@@ -135,7 +135,7 @@ refer to {ref}`consumer-model-readiness`.
 | `cosmos3_nano_reasoner` | Cosmos3 Nano VLM | Image; video requires `max_videos_per_prompt >= 1`; no reasoning switch |
 | `cosmos_vlm` | Cosmos-Reason1 compatibility | Image; video requires `max_videos_per_prompt >= 1`; thinking disabled by default |
 | `nemotron3_nano` | Nemotron 3 Nano LLM | Normalizes the `reasoning` field; thinking disabled unless requested |
-| `nemotron_omni` | Nemotron Omni | Tool calls and forced tool calls, image and video, `reasoning_content` normalization; thinking disabled unless requested |
+| `nemotron_omni` | Nemotron Omni | Tool calls, forced tool calls and JSON Schema output, image and video, `reasoning_content` normalization; thinking disabled unless requested |
 | `nemotron_embedding` | Embedding server | OpenAI-compatible dense vectors |
 | `nemotron_ocr` | Hugging Face OCR server or OCR NIM 2.0 | Multilingual text, confidence, normalized polygons; `/v1/ocr` |
 | `parakeet_stt` | STT server | OpenAI-compatible transcription |
@@ -244,26 +244,22 @@ refusals, truncation and inference failures. A response cut off at `max_tokens`
 is not a complete value; neither constrained decoding nor a reasoning budget
 prevents that failure. Native tools validate arguments before execution.
 
-### Qualify a model
+### Endpoint support and evaluation
 
-Support depends on the model and server deployment. An adapter declares
-`capabilities.json_schema` or `capabilities.tool_choice` only after the
-corresponding live eval passes. Run the eval in
+Support depends on the model and server deployment. The adapter's
+`capabilities.json_schema` and `capabilities.tool_choice` declare which request
+features the endpoint supports, not that every generation will succeed.
+`nemotron_omni` declares both for its vLLM endpoint. A refused or truncated
+generation remains a per-request outcome; it does not disable the feature.
+
+Use the eval in
 [`agent-sdk/xr-ai-models/eval`](https://github.com/NVIDIA/xr-ai/tree/main/agent-sdk/xr-ai-models/eval)
-against the intended deployment before enabling either capability. Schema
-modes require every answer to match its schema; forced-tool modes require a
-call on every response. Correctness and latency are reported separately from
-those format guarantees.
-
-`nemotron_omni` declares forced tool choice only; JSON Schema output is not
-qualified. Recorded forced-call qualification covers non-streaming named and
-required calls, not every streaming mode or externally hosted deployment.
-The streamed `"required"` path requires `finish_reason="tool_calls"`; accepting
-`"stop"` for that mode is unqualified. NIM forced-call behavior is also
-unqualified. Qualify the modes on the intended deployment rather than inheriting
-a preset's declaration as deployment-specific evidence. Other presets declare
-neither capability. A qualified deployment can enable a capability in its
-existing profile configuration:
+to measure schema validity, tool-call presence, correctness, and latency on
+the intended deployment. The text-only eval does not establish image and video
+behavior or support on an external NIM endpoint. Check the target server's
+supported request features and exercise the modes the application uses.
+Other presets declare neither capability by default; an endpoint profile can
+declare its supported features through the existing configuration:
 
 ```yaml
 adapter:

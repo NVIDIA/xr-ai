@@ -3,8 +3,8 @@
 
 """Live eval: does an LLM endpoint honour JSON Schema and forced tool calls?
 
-Run it against a configured LLM deployment before declaring ``json_schema`` or
-``tool_choice`` in its capabilities. The eval enables both capabilities on the
+Run it against a configured LLM deployment to measure its JSON Schema and
+forced-tool behavior. The eval enables both capabilities on the
 client it builds, so it measures what the endpoint does rather than what its
 preset claims. It exits non-zero when a JSON Schema mode returns any answer
 that does not match its schema, or a forced tool mode returns no call.
@@ -42,7 +42,7 @@ TOOL = "commit_answer"
 SCHEMA_MODES = ("json_schema", "json_schema/stream")
 # Every response in these modes must contain a tool call. Their arguments are
 # reported but not gated: servers may constrain only the call, not its schema.
-FORCED_MODES = ("tool_named", "tool_named/stream", "tool_required")
+FORCED_MODES = ("tool_named", "tool_named/stream", "tool_required", "tool_required/stream")
 CONSTRAINED = (*SCHEMA_MODES, *FORCED_MODES)
 # References: what callers can do without an output constraint.
 REFERENCE = ("prompt_only", "tools_auto")
@@ -169,9 +169,9 @@ async def run_one(llm, case, mode, thinking, args) -> Sample:
                 called = bool(response.tool_calls)
             finish = response.finish_reason
             tokens = (response.raw.get("usage") or {}).get("completion_tokens")
-        elif mode in {"json_schema/stream", "tool_named/stream"}:
+        elif mode in {"json_schema/stream", "tool_named/stream", "tool_required/stream"}:
             kwargs = {"response_schema": schema} if mode == "json_schema/stream" else {
-                "tools": tools, "tool_choice": TOOL,
+                "tools": tools, "tool_choice": "required" if mode == "tool_required/stream" else TOOL,
             }
             parts = []
             called = False if "tools" in kwargs else None

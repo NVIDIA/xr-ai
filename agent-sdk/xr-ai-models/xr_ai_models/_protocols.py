@@ -235,16 +235,16 @@ class Capabilities:
     json_schema: bool = False
     """Whether the endpoint constrains responses to a JSON Schema.
 
-    Declare it only after the eval's JSON Schema modes pass for the model
-    and server deployment; requests with ``response_schema`` are rejected
-    otherwise.
+    Declares support for the request, not a guarantee that every generation
+    completes successfully. Requests with ``response_schema`` are rejected
+    when the endpoint does not declare this feature.
     """
 
     tool_choice: bool = False
     """Whether the endpoint can force a tool call with ``tool_choice``.
 
-    Declare it only after the eval's forced-call modes pass for the model
-    and server deployment; requests that force a call are rejected otherwise.
+    Declares support for the request, not a guarantee against refusal or token
+    truncation. Requests that force a call are rejected without this feature.
     """
 
 

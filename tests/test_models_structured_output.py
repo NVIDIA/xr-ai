@@ -27,6 +27,7 @@ from xr_ai_models import (
     TextPart,
     ThinkingSpec,
     ToolDef,
+    _factory,
     load_models_config_from_dict,
     make_llm,
 )
@@ -465,7 +466,18 @@ def test_capabilities_declared_by_presets_are_known_fields() -> None:
         Capabilities(**get_preset(name).get("capabilities", {}))  # raises on an unknown key
     config = {"models": {"llm": {"adapter": {"preset": "nemotron_omni"}, "endpoint": {"base_url": "http://x"}}}}
     llm = make_llm(load_models_config_from_dict(config, source="test"), "llm")
-    assert not llm.capabilities.json_schema and llm.capabilities.tool_choice
+    assert llm.capabilities.json_schema and llm.capabilities.tool_choice
+
+
+async def test_stock_omni_profile_sends_supported_schema_request(monkeypatch) -> None:
+    stub = StubOpenAI()
+    constructor = _factory.OpenAICompatLLM
+    monkeypatch.setattr(_factory, "OpenAICompatLLM", lambda **kwargs: constructor(client=stub.client(), **kwargs))
+    config = {"models": {"llm": {"adapter": {"preset": "nemotron_omni"}, "endpoint": {"base_url": "http://stub"}}}}
+    async with make_llm(load_models_config_from_dict(config, source="test"), "llm") as llm:
+        await llm.chat(USER, response_schema=SCHEMA)
+    assert stub.last_json()["response_format"]["json_schema"]["schema"] == SCHEMA
+    assert stub.last_json()["messages"] == [{"role": "user", "content": "Did it change?"}]
 
 
 def test_a_profile_declares_capabilities_on_top_of_its_preset() -> None:
@@ -539,6 +551,20 @@ async def test_eval_accepts_null_usage_through_real_chat_client() -> None:
     async with _llm(stub) as llm:
         sample = await evaluation.run_one(llm, case, "json_schema", False, args)
     assert sample.valid and sample.error is None and sample.tokens is None
+
+
+async def test_eval_required_stream_uses_production_event_client() -> None:
+    evaluation = _eval_module()
+    stub = StubOpenAI()
+    chunks = _tool_stream("tool_calls")
+    chunks[0]["choices"][0]["delta"]["tool_calls"][0]["function"]["name"] = "commit_answer"
+    stub.set_stream_chunks(chunks)
+    case = {"name": "case", "schema": SCHEMA, "system": "Answer.", "user": "Changed?", "checks": []}
+    async with _llm(stub) as llm:
+        sample = await evaluation.run_one(llm, case, "tool_required/stream", False, evaluation._parser().parse_args([]))
+    assert sample.called and sample.valid and sample.error is None
+    assert sample.finish == "tool_calls"
+    assert stub.last_json()["tool_choice"] == "required" and stub.last_json()["stream"]
 
 
 async def test_eval_records_unexpected_sample_failure_and_finishes_batch(monkeypatch, tmp_path, caplog) -> None:

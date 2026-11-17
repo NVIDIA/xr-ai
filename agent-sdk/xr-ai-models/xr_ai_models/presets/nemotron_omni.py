@@ -23,8 +23,7 @@ NEMOTRON_OMNI = {
         "vision":     True,
         "video":      True,
         "reasoning":  True,
-        # Non-streaming named and required calls qualified on the vLLM deployment.
-        # Other deployments and streaming modes need separate qualification.
+        "json_schema": True,
         "tool_choice": True,
     },
 }
