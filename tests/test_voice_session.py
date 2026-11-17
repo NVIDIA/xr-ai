@@ -417,3 +417,122 @@ async def test_voice_session_starts_without_checking_model_health() -> None:
     ) as session:
         assert session.transport is transport
     assert transport.shutdown_called
+
+
+def _stoppable_pipeline(monkeypatch):
+    stopped = asyncio.Event()
+    task = _PipelineTask(on_cancel=stopped.set)
+
+    class _Runner:
+        async def run(self, _worker) -> None:
+            await stopped.wait()
+
+    monkeypatch.setattr(
+        session_module, "_build_voice_pipeline", lambda **_kwargs: (object(), task)
+    )
+    monkeypatch.setattr(session_module, "PipelineRunner", _Runner)
+    return task
+
+
+def _session(**kwargs) -> VoiceSession:
+    transport = _Transport()
+    transport.started.set()
+    return VoiceSession(
+        stt=_Service(),  # type: ignore[arg-type]
+        tts=_Service(),  # type: ignore[arg-type]
+        vad=VadConfig(),
+        voice_gate=VoiceGateConfig(),
+        transport=transport,  # type: ignore[arg-type]
+        **kwargs,
+    )
+
+
+def _record_signal_handlers(monkeypatch) -> list[tuple[str, object]]:
+    loop = asyncio.get_running_loop()
+    calls: list[tuple[str, object]] = []
+    monkeypatch.setattr(
+        loop, "add_signal_handler", lambda sig, *_a: calls.append(("add", sig))
+    )
+    monkeypatch.setattr(
+        loop, "remove_signal_handler", lambda sig: calls.append(("remove", sig))
+    )
+    return calls
+
+
+async def test_voice_session_installs_signal_handlers_by_default(monkeypatch) -> None:
+    task = _stoppable_pipeline(monkeypatch)
+    calls = _record_signal_handlers(monkeypatch)
+    async with _session() as session:
+        run_task = asyncio.create_task(session.run(_ignore_query))
+        while session._request_stop is None:
+            await asyncio.sleep(0)
+        session.request_stop()
+        await run_task
+    assert {s for kind, s in calls if kind == "add"} == {
+        session_module.signal.SIGINT,
+        session_module.signal.SIGTERM,
+    }
+    assert task.cancel_calls == 1
+
+
+async def test_voice_session_leaves_signal_handlers_alone_when_disabled(
+    monkeypatch,
+) -> None:
+    task = _stoppable_pipeline(monkeypatch)
+    calls = _record_signal_handlers(monkeypatch)
+    async with _session(install_signal_handlers=False) as session:
+        run_task = asyncio.create_task(session.run(_ignore_query))
+        while session._request_stop is None:
+            await asyncio.sleep(0)
+        session.request_stop()
+        session.request_stop()
+        await run_task
+    assert calls == []
+    assert task.cancel_calls == 1
+
+
+async def test_voice_session_latches_stop_requested_before_pipeline_starts(
+    monkeypatch,
+) -> None:
+    task = _stoppable_pipeline(monkeypatch)
+    async with _session(install_signal_handlers=False) as session:
+        session.request_stop()
+        await asyncio.wait_for(session.run(_ignore_query), timeout=5)
+    assert task.cancel_calls == 1
+
+
+async def test_voice_session_owns_cancel_task_until_done(monkeypatch) -> None:
+    release = asyncio.Event()
+    stopped = asyncio.Event()
+
+    class _SlowTask(_PipelineTask):
+        async def cancel(self) -> None:
+            await release.wait()
+            stopped.set()
+
+    class _Runner:
+        async def run(self, _worker) -> None:
+            await stopped.wait()
+
+    monkeypatch.setattr(
+        session_module, "_build_voice_pipeline", lambda **_kw: (object(), _SlowTask())
+    )
+    monkeypatch.setattr(session_module, "PipelineRunner", _Runner)
+    async with _session(install_signal_handlers=False) as session:
+        run_task = asyncio.create_task(session.run(_ignore_query))
+        while session._request_stop is None:
+            await asyncio.sleep(0)
+        session.request_stop()
+        assert len(session._cancel_tasks) == 1
+        release.set()
+        await run_task
+        await asyncio.sleep(0)
+    assert not session._cancel_tasks
+
+
+async def test_voice_session_request_stop_after_close_is_a_no_op() -> None:
+    session = _session(install_signal_handlers=False)
+    async with session:
+        pass
+    session.request_stop()
+    assert not session._stop_requested
