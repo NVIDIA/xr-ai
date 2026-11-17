@@ -1009,8 +1009,10 @@ class AgentRouter:
         delay_task = asyncio.create_task(
             asyncio.sleep(max(0.0, delay_secs - (_monotonic() - answer_started_at)))
         )
+        # Own Relay scope stack: the prediction scope stays open while intent-acknowledgment opens here.
         prediction_task = asyncio.create_task(
-            self._predict_slow_answer(turn, destination, description, prediction_trace)
+            self._predict_slow_answer(turn, destination, description, prediction_trace),
+            context=nemo_relay.fork_asyncio_context(),
         )
         try:
             done, _ = await asyncio.wait(

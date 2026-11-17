@@ -2089,3 +2089,51 @@ async def test_routing_request_too_large_without_history_raises():
     ]
     assert visual.calls == []
 
+
+@pytest.mark.asyncio
+async def test_acknowledgment_opens_while_a_blocked_prediction_is_cancelled_cleanly():
+    """The prediction runs on its own Relay scope stack.
+
+    Child tasks share their creator's stack, so the prediction's still-open
+    ``acknowledgment-prediction`` scope sat below ``intent-acknowledgment`` and
+    closed out of order on cancellation, ending the task with RuntimeError.
+    """
+    relay = router_module.nemo_relay
+    stacks = {}
+
+    class RecordingPrediction(_Prediction):
+        async def decide(self, state, questions, **kwargs):
+            stacks["prediction"] = relay.get_scope_stack()
+            return await super().decide(state, questions, **kwargs)
+
+    class RecordingLLM(_AcknowledgmentLLM):
+        async def chat(self, messages, **kwargs):
+            stacks["acknowledgment"] = relay.get_scope_stack()
+            return await super().chat(messages, **kwargs)
+
+    destination = _AckDestination(blocked=True)
+    decisions = RecordingPrediction(blocked=True)
+    llm = RecordingLLM(content="Let me look into that.")
+    router = AgentRouter(
+        {"destination": destination},
+        decisions,  # type: ignore[arg-type]
+        output=_emit_control,
+        default_destination="destination",
+        acknowledgment_llm=llm,  # type: ignore[arg-type]
+        acknowledgment_delay_secs=0.01,
+    )
+    emitted = asyncio.Event()
+
+    async def emit(_source, _text):
+        emitted.set()
+
+    task = asyncio.create_task(_route(router, AgentTurn("alice", "turn-1", "Explain the request."), emit=emit))
+    await asyncio.wait_for(emitted.wait(), timeout=2)
+    await asyncio.wait_for(decisions.finished.wait(), timeout=2)
+    destination.release_answer.set()
+    await asyncio.wait_for(task, timeout=2)
+    assert decisions.task is not None
+    await asyncio.wait({decisions.task}, timeout=2)
+    assert decisions.task.cancelled()
+    assert stacks["prediction"] is not stacks["acknowledgment"]
+
