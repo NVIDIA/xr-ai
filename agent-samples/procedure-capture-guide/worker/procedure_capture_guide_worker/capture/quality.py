@@ -235,7 +235,8 @@ class QualityFeedback:
         await self.backend.capture_quality(self.pid, {"kind": kind, **data})
 
     async def _run(self, publisher):
-        outputs = ResponseOutputs(publisher, VOICE_OUTPUT_TOPIC, source=f"capture-quality:{uuid4().hex}")
+        source = f"capture-quality:{uuid4().hex}"
+        batches: dict[frozenset[str], ResponseOutputs] = {}
         schedule = NotificationSchedule(self.config.repeat_interval_s)
         previous = set()
         try:
@@ -244,14 +245,26 @@ class QualityFeedback:
                 now = self.clock()
                 conditions = self.state.evaluate()
                 if conditions != previous:
-                    # Withdraw a queued description of conditions that changed.
-                    await outputs.withdraw(self.pid)
+                    for batch in list(batches):
+                        if not batch <= conditions:
+                            await batches[batch].withdraw(self.pid)
+                            del batches[batch]
                     await self._record("conditions_changed", conditions=sorted(conditions), metrics=self.state.metrics)
                     previous = set(conditions)
                 due = schedule.due(conditions, now)
                 if due:
+                    # Conditions submitted together share a repeat clock. Replace
+                    # their unheard batch, preserving unrelated pending warnings.
+                    # Withdrawal never interrupts a warning already playing.
+                    for batch in list(batches):
+                        if batch.intersection(due):
+                            await batches[batch].withdraw(self.pid)
+                            del batches[batch]
+                    outputs = ResponseOutputs(
+                        publisher, VOICE_OUTPUT_TOPIC, source=f"{source}:{','.join(due)}",
+                    )
+                    batches[frozenset(due)] = outputs
                     text = " ".join(_MESSAGES["conditions"][name] for name in due)
-                    # Queue behind command acknowledgements already in the voice floor.
                     await outputs.update(self.pid, text)
                     schedule.sent(due, self.clock())
                     await self._record("warning_submitted", conditions=due, text=text)
@@ -260,7 +273,8 @@ class QualityFeedback:
             logger.exception("capture quality feedback failed pid={!r}: {}", self.pid, exc)
         finally:
             try:
-                await outputs.withdraw(self.pid)
+                for outputs in batches.values():
+                    await outputs.withdraw(self.pid)
                 await self._record("monitor_stopped")
             except Exception as exc:  # noqa: BLE001 — voice can close before diagnostics cleanup.
                 logger.warning("capture quality cleanup unavailable pid={!r}: {}", self.pid, exc)

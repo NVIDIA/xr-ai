@@ -412,3 +412,66 @@ async def test_queued_capture_and_setup_reply_in_input_order(demo, monkeypatch, 
     replies = ["setup" if text.startswith("Network quality") else text for text in announcements(demo)]
     pair = ["Capture started.", "Capture stopped."]
     assert replies == pair + (["setup"] if earlier_setup else []) + pair + ["setup", "setup"]
+
+
+@pytest.mark.parametrize("staggered", [False, True])
+async def test_pending_media_alerts_replace_repeats_without_erasing_other_conditions(monkeypatch, staggered):
+    from pipecat.frames.frames import UserStartedSpeakingFrame, UserStoppedSpeakingFrame
+    from test_voice_playback_state import _PID, _pipeline
+
+    now = [0.0]
+    conditions = {"poor_network"}
+    ticks, resume = asyncio.Queue(), asyncio.Queue()
+
+    async def sleep(_seconds):
+        ticks.put_nowait(True)
+        await resume.get()
+
+    async with _pipeline(monkeypatch) as (voice, worker, tts, endpoint, _gate):
+        endpoint.release.set()
+        started = UserStartedSpeakingFrame()
+        started.transport_source = _PID
+        await worker.queue_frame(started)
+        await wait_for(lambda: _PID in voice._user_speaking)
+
+        async def publish(_topic, message, *, participant_id, source):
+            if message.kind == "update":
+                await voice.enqueue_update(participant_id, message.text, source=source, urgent=message.urgent)
+            elif message.kind == "withdraw":
+                await voice.withdraw_updates(participant_id, source=source)
+
+        monitor = QualityFeedback(
+            _PID, "session", SimpleNamespace(capture_quality=AsyncMock()), QualityConfig(), 2,
+            clock=lambda: now[0], sleep=sleep,
+        )
+        monitor.start(SimpleNamespace(publish=publish))
+        monitor.state.evaluate = lambda: set(conditions)
+        try:
+            await ticks.get()  # First warning at t=0 remains queued behind narration.
+            await voice.enqueue_update(_PID, "Unrelated notice.", source="other-producer")
+            for value in ([5, 10, 15, 20] if staggered else [10, 20]):
+                now[0] = value
+                if staggered and value == 5:
+                    conditions.add("low_frame_rate")
+                resume.put_nowait(True)
+                await ticks.get()
+            assert not tts.calls
+            stopped = UserStoppedSpeakingFrame()
+            stopped.transport_source = _PID
+            await worker.queue_frame(stopped)
+            await wait_for(lambda: bool(tts.calls) and not voice._floor)
+            spoken = " ".join(tts.calls)
+            assert spoken.count("The network connection is poor.") == 1
+            assert spoken.count("The video frame rate has dropped.") == int(staggered)
+            assert spoken.count("Unrelated notice.") == 1
+            # Replacing unheard copies must not disable reminders once heard.
+            now[0] = 30
+            resume.put_nowait(True)
+            await ticks.get()
+            await wait_for(lambda: " ".join(tts.calls).count("The network connection is poor.") == 2)
+            await wait_for(lambda: not voice._floor)
+            spoken = " ".join(tts.calls)
+            assert spoken.count("The network connection is poor.") == 2
+            assert spoken.count("The video frame rate has dropped.") == 2 * int(staggered)
+        finally:
+            await monitor.stop()

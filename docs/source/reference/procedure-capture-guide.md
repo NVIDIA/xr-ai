@@ -168,7 +168,10 @@ are evaluated once per second by default. Detection thresholds and the sampling
 window are distinct from the repeat interval. A notification never stops, pauses,
 or restarts capture, changes camera mode, or alters captioning. Recovery clears
 eligibility and withdraws queued stale alerts. Alerts wait for ongoing speech,
-including the capture start acknowledgement, to finish. They use the existing
+including the capture start acknowledgement, to finish. A repeat replaces an
+unheard copy of the same warning batch rather than adding another copy to the
+voice queue. Unrelated pending warning batches are preserved, and batches that
+mention recovered conditions are withdrawn. They use the existing
 TTS and return-audio path, so a fully disconnected client cannot hear them.
 
 `quality.repeat_interval_s` in `yaml/capture-agent-config.yaml` sets the minimum
