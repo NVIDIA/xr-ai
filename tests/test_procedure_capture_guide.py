@@ -38,10 +38,7 @@ from procedure_capture_guide_worker.capture.captioning import caption_query  # n
 from procedure_capture_guide_worker.capture.capturing import _Capture  # noqa: E402
 from procedure_capture_guide_worker.config import load_config  # noqa: E402
 
-_CAPTURE_WELCOME = (
-    "Say check setup to check the network, video frame rate and resolution, or start capture to record. "
-    "To finish recording, say stop capture."
-)
+_CAPTURE_WELCOME = "Say start capture to record. To finish recording, say stop capture."
 
 
 @pytest.mark.parametrize("session_recording", [False, True])

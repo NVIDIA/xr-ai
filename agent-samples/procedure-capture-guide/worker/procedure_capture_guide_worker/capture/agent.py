@@ -26,10 +26,10 @@ from .capturing import _Capture
 from .preflight import check_setup
 from .quality import _MESSAGES, QualityConfig, QualityFeedback
 
+_SETUP_COMMAND = re.compile(r"\s*check\s+set(?:\s+|-)?up[.!?]*\s*", re.IGNORECASE)
 _COMMAND = re.compile(r"\s*(start|stop)\s+capture[.!?]*\s*", re.IGNORECASE)
 CAPTURE_INPUT_TOPIC = Topic("task.capture.input", UserQuery)
 CAPTURE_JOINED_TOPIC = Topic("task.capture.joined", ParticipantJoined)
-_WELCOME = _MESSAGES["setup"]["welcome"]
 
 
 @dataclass
@@ -41,7 +41,6 @@ class _Connection:
     # It can differ from CaptureAgent._sessions, which tracks backend ownership.
     recording: _Recording | None = None
     quality: QualityFeedback | None = None
-    preflight_task: asyncio.Task | None = None
 
 
 @dataclass
@@ -70,7 +69,6 @@ class CaptureAgent(Agent):
         self._tails: dict[str, asyncio.Task[None]] = {}
         self._connections: dict[str, _Connection] = {}
         self._closed = False
-        self._preflights: set[asyncio.Task] = set()
 
     def _enqueue(self, pid: str, action: Callable[[], Awaitable[None]]) -> asyncio.Task[None] | None:
         previous = self._tails.get(pid)
@@ -121,8 +119,6 @@ class CaptureAgent(Agent):
             if event.joined and not duplicate:
                 if connection is not None:
                     connection.cancelled.set()
-                    if connection.preflight_task is not None:
-                        connection.preflight_task.cancel()
                     if connection.quality is not None:
                         connection.quality.invalidate()
                 self._connections[pid] = _Connection(event.participant_session_id, event.pts_us)
@@ -132,8 +128,6 @@ class CaptureAgent(Agent):
                     )
             elif not event.joined and duplicate:
                 connection.cancelled.set()
-                if connection.preflight_task is not None:
-                    connection.preflight_task.cancel()
                 if connection.quality is not None:
                     connection.quality.invalidate()
                 self._connections.pop(pid, None)
@@ -177,7 +171,10 @@ class CaptureAgent(Agent):
         connection = self._connections.get(pid)
         if self._closed or (connection is not None and connection.recording is not None):
             return
-        await ResponseOutputs(ctx, VOICE_OUTPUT_TOPIC).update(pid, _WELCOME)
+        enabled = self._quality_config is not None and self._quality_config.enabled
+        messages = _MESSAGES["setup"]
+        welcome = messages["welcome"] if enabled else messages["welcome_disabled"]
+        await ResponseOutputs(ctx, VOICE_OUTPUT_TOPIC).update(pid, welcome)
 
     @subscribe(CAPTURE_INPUT_TOPIC)
     async def on_input(self, transcript: UserQuery, ctx: RuntimeContext) -> None:
@@ -195,39 +192,15 @@ class CaptureAgent(Agent):
             return
         command = _COMMAND.fullmatch(transcript.text)
         recording = connection.recording
-        if re.fullmatch(r"\s*check\s+setup[.!?]*\s*", transcript.text, re.IGNORECASE) and recording is None:
-            pending_setup = connection.preflight_task
-            previous = self._tails.get(pid)
-
-            async def preflight():
-                if pending_setup is not None and not pending_setup.done():
-                    await pending_setup
-                if previous is not None:
-                    await asyncio.shield(previous)
-                if connection.cancelled.is_set() or connection.recording is not None:
+        quality = connection.quality
+        if quality is not None and recording is None and _SETUP_COMMAND.fullmatch(transcript.text):
+            async def preflight() -> None:
+                if self._closed or connection.cancelled.is_set() or self._capture_backend.is_capturing(pid):
                     return
-                _, speech = await check_setup(
-                    connection.quality, config=self._quality_config,
-                )
-                if connection.recording is None:
-                    await self._say(pid, connection, ctx, speech)
+                await self._say(pid, connection, ctx, check_setup(quality))
 
-            task = asyncio.create_task(preflight(), name=f"capture-setup:{pid}")
-            connection.preflight_task = task
-            self._preflights.add(task)
-
-            def finished(task):
-                self._preflights.discard(task)
-                if not task.cancelled() and task.exception() is not None:
-                    logger.opt(exception=task.exception()).error("capture setup check failed pid={!r}", pid)
-
-            task.add_done_callback(finished)
+            self._enqueue(pid, preflight)
             return
-        # A queued command may only depend on work accepted before it. A later
-        # setup can wait on this command, so never read its mutable task at execution.
-        pending_setup = connection.preflight_task if command else None
-        if pending_setup is not None:
-            pending_setup.cancel()
         if command and command[1].lower() == "start":
             if recording is not None:
                 return
@@ -235,10 +208,6 @@ class CaptureAgent(Agent):
             connection.recording = recording
 
             async def start() -> None:
-                if pending_setup is not None:
-                    await asyncio.gather(pending_setup, return_exceptions=True)
-                    if connection.preflight_task is pending_setup:
-                        connection.preflight_task = None
                 if self._closed or connection.cancelled.is_set():
                     self._forget(pid, recording)
                     return
@@ -301,9 +270,6 @@ class CaptureAgent(Agent):
 
     async def close(self) -> None:
         self._closed = True
-        for task in tuple(self._preflights):
-            task.cancel()
-        await asyncio.gather(*tuple(self._preflights), return_exceptions=True)
         for connection in self._connections.values():
             connection.cancelled.set()
             if connection.quality is not None:

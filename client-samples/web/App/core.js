@@ -27,8 +27,6 @@ import {
   LiveKitConfig,
 } from '/StreamKit/index.js';
 
-import { CaptureQualityClient } from './CaptureQuality.js';
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Pure helpers
 // ─────────────────────────────────────────────────────────────────────────────
@@ -421,6 +419,7 @@ export function resolvedTokenURL(model) {
  *   startCamera: () => Promise<void>,
  *   stopCamera: () => Promise<void>,
  *   onStateChange?: (state: string) => void,
+ *   onNetworkMetrics?: (metrics: import('/StreamKit/index.js').NetworkMetrics) => void,
  *   onDataReceived?: (topic: string, data: Uint8Array) => boolean,
  * }} opts
  *   `stopCamera` is the caller wrapper used to synchronize local UI state
@@ -429,7 +428,7 @@ export function resolvedTokenURL(model) {
 export async function connect(model, {
   render, showError, enumerateCameras: _ec,
   startCamera: _startCamera, stopCamera: _stopCamera,
-  onStateChange, onDataReceived,
+  onStateChange, onDataReceived, onNetworkMetrics,
 }) {
   if (model.connectionState !== ConnectionState.DISCONNECTED) return;
   model.connectionState = ConnectionState.CONNECTING;
@@ -445,7 +444,6 @@ export async function connect(model, {
     tokenURL: model.token.trim()  ? null : resolvedTokenURL(model),
   });
 
-  model.captureQuality?.close();
   let newSession;
   try {
     newSession = await StreamSession.create(BackendConfiguration.liveKit(lkConfig));
@@ -456,11 +454,6 @@ export async function connect(model, {
     return;
   }
 
-  const captureQuality = new CaptureQualityClient({
-    send: (data, options) => newSession.send(data, options),
-    read: () => ({ ...model, cameraTrackId: newSession.cameraTrack?.id ?? '' }),
-  });
-  model.captureQuality = captureQuality;
   newSession.onConnectionStateChanged = (state) => {
     const wasCameraActive = model.isCameraActive;
     model.connectionState = state;
@@ -491,7 +484,7 @@ export async function connect(model, {
 
   newSession.onNetworkMetrics = (metrics) => {
     model.networkMetrics = metrics;
-    captureQuality.network(metrics);
+    onNetworkMetrics?.(metrics);
     renderNetworkMetrics(model);
   };
 
@@ -543,7 +536,6 @@ export async function connect(model, {
     : null;
 
   newSession.onDataReceived = (topic, data) => {
-    if (captureQuality.control(topic, data)) return;
     // Let the caller intercept topics first (returns true to suppress list append).
     if (onDataReceived?.(topic, data)) return;
 
@@ -577,7 +569,6 @@ export async function connect(model, {
     await newSession.connect(sessionConfig);
   } catch (err) {
     showError(err instanceof StreamError ? err.message : String(err));
-    captureQuality.close();
     await newSession.disconnect().catch(() => {});
     model.session         = null;
     model.connectionState = ConnectionState.DISCONNECTED;
@@ -687,7 +678,6 @@ async function captureCameraTrack(track, signal, { settleExposure = false } = {}
 
 /** @param {object} model @param {() => void} render */
 export async function disconnect(model, render) {
-  model.captureQuality?.close();
   await model.session?.disconnect();
   model.captureSequence += 1;
   if (model.capturedImageURL) URL.revokeObjectURL(model.capturedImageURL);
@@ -761,7 +751,6 @@ export async function startCamera(model, { render, showError, enumerateCameras: 
       return;
     }
     model.isCameraActive = true;
-    void model.captureQuality?.report();
   } catch (err) {
     showError(err instanceof StreamError ? err.message : String(err));
     fallBackToCameraOff(model);
@@ -777,7 +766,6 @@ export async function stopCamera(model, render, showError) {
     showError(err instanceof StreamError ? err.message : String(err));
   }
   model.isCameraActive = false;
-  void model.captureQuality?.report();
   render();
 }
 
@@ -791,7 +779,6 @@ export async function stopCamera(model, render, showError) {
 export async function setCameraMode(model, mode, { render, startCamera, stopCamera }) {
   if (!CAMERA_MODES.has(mode)) return;
   model.cameraMode = mode;
-  void model.captureQuality?.report();
   saveCameraMode(mode);
   if (model.session) {
     model.session.onImageCaptureRequested = mode === 'on-demand'

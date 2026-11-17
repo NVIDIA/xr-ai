@@ -14,11 +14,10 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 from pydantic import ValidationError
-from test_procedure_capture_guide import demo, joined, packet, speak  # noqa: F401
+from test_procedure_capture_guide import announcements, demo, joined, packet, speak  # noqa: F401
 from xr_ai_hub import DataMessage
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "agent-samples/procedure-capture-guide/worker"))
-from procedure_capture_guide_worker.capture import agent as agent_module  # noqa: E402
 from procedure_capture_guide_worker.capture import preflight  # noqa: E402
 from procedure_capture_guide_worker.capture.agent import CaptureAgent  # noqa: E402
 from procedure_capture_guide_worker.capture.quality import (  # noqa: E402
@@ -38,8 +37,6 @@ def telemetry(**updates):
             "token": "a" * 32,
             "sequence": 1,
             "mode": "live",
-            "profile": "camera-1",
-            "track_id": "camera",
             "streaming": True,
             "quality": "good",
             **updates,
@@ -83,8 +80,8 @@ class Scene:
             {"low_frame_rate", "low_resolution", "poor_network"},
         ),
         ({"width": 720, "height": 1280}, set()),
-        ({"fps": 0, "mode": "off", "streaming": False, "track_id": ""}, set()),
-        ({"fps": 0, "mode": "on-demand", "streaming": False, "track_id": ""}, set()),
+        ({"fps": 0, "mode": "off", "streaming": False}, set()),
+        ({"fps": 0, "mode": "on-demand", "streaming": False}, set()),
         ({"send_telemetry": False}, set()),
     ],
 )
@@ -100,7 +97,7 @@ def test_media_conditions_and_recovery(values, expected):
     assert not conditions
 
 
-def test_profile_reset_duplicate_frames_and_snapshot_rate():
+def test_track_change_duplicate_frames_and_snapshot_rate():
     scene = Scene()
     for _ in range(12):
         scene.state.sample(frame(1))
@@ -111,8 +108,10 @@ def test_profile_reset_duplicate_frames_and_snapshot_rate():
     scene.state.frame(frame(scene.seq))
     scene.state.frame(frame(scene.seq + 1, track="old"))
     assert len(scene.state.frames) == count
+    # Stopping and republishing the camera resets cadence and resolution baselines.
+    scene.state.telemetry_received(telemetry(mode="off", streaming=False))
     for _ in range(12):
-        assert not scene.second(fps=8, profile="new-camera", width=960, height=540)
+        assert not scene.second(fps=8, width=960, height=540)
 
 
 def test_missing_telemetry_does_not_invent_network_or_live_rate():
@@ -213,11 +212,11 @@ async def wait_for(predicate):
             await asyncio.sleep(0.005)
 
 
-def install_quality(demo):
+def install_quality(demo, *, enabled=True):
     endpoint = SimpleNamespace(send_return_data=AsyncMock())
     demo.capture = CaptureAgent(
         demo.capture_backend,
-        quality_config=QualityConfig(poll_interval_s=0.01, repeat_interval_s=0.05),
+        quality_config=QualityConfig(enabled=enabled, poll_interval_s=0.01, repeat_interval_s=0.05),
         endpoint=endpoint,
     )
     demo.capture_backend.on_sample = demo.capture.on_quality_sample
@@ -234,13 +233,13 @@ async def test_lease_rejects_replays_and_previous_connection(demo):
         await demo.capture.on_quality_data(DataMessage("user", TELEMETRY_TOPIC, 1, data.model_dump_json().encode()))
 
     await send("wrong", 99)
-    assert monitor.latest is None
+    assert monitor.preview.telemetry is None
     await send(monitor.token, 2)
     await send(monitor.token, 1)
-    assert monitor.latest.sequence == 2
+    assert monitor.preview.telemetry.sequence == 2
     await demo.capture.receive(joined(session="replacement"))
     await send(monitor.token, 3)
-    assert demo.capture._connections["user"].quality.latest is None
+    assert demo.capture._connections["user"].quality.preview.telemetry is None
 
 
 async def test_audio_notifications_never_stop_recording_and_stop_drains_them(demo):
@@ -265,44 +264,43 @@ async def test_audio_notifications_never_stop_recording_and_stop_drains_them(dem
     assert len(demo.output.call_args_list) == before
 
 
-@pytest.mark.parametrize("end", ["start", "disconnect", "close"])
-async def test_setup_is_optional_nonblocking_and_cancelled_on_lifecycle_change(demo, monkeypatch, end):
-    entered, cancelled = asyncio.Event(), asyncio.Event()
-
-    async def blocked(*args, **kwargs):
-        entered.set()
-        try:
-            await asyncio.Future()
-        finally:
-            cancelled.set()
-
-    monkeypatch.setattr(agent_module, "check_setup", blocked)
-    await demo.capture.receive(joined())
-    await speak(demo, "check setup")
-    await entered.wait()
-    assert not demo.capture_backend.is_capturing("user")
-    if end == "start":
-        await speak(demo, "start capture")
-        assert demo.capture_backend.is_capturing("user")
-    elif end == "disconnect":
-        event = joined()
+@pytest.mark.parametrize("ending", ["disconnect", "restart", "close"])
+async def test_quality_lifetime_drains_and_only_offers_telemetry_on_join(demo, ending):
+    endpoint = install_quality(demo)
+    event = joined()
+    await demo.capture.receive(event)
+    monitor = demo.capture._connections["user"].quality
+    data = telemetry(token=monitor.token, quality="poor")
+    await demo.capture.on_quality_data(DataMessage("user", TELEMETRY_TOPIC, 1, data.model_dump_json().encode()))
+    await speak(demo, "start capture")
+    state = demo.capture_backend._sessions["user"]
+    await wait_for(lambda: any("network connection is poor" in text for text in announcements(demo)))
+    first_task = monitor.task
+    if ending == "disconnect":
         await demo.capture.receive(
             type(event)("user", False, event.pts_us + 1, participant_session_id=event.participant_session_id)
         )
+    elif ending == "restart":
+        await speak(demo, "stop capture")
+        assert first_task.done()
+        await speak(demo, "start capture")
+        assert monitor.task is not first_task
+        await speak(demo, "stop capture")
     else:
         await demo.capture.close()
-    await asyncio.wait_for(cancelled.wait(), 1)
-    assert not any("Network quality" in c.args[1].text for c in demo.output.call_args_list if c.args[1].text)
+    assert first_task.done()
+    assert monitor.task is None and monitor.state is None
+    assert packet(state)["status"] == "complete"
+    assert not demo.capture_backend.is_capturing("user")
+    endpoint.send_return_data.assert_awaited_once()
 
 
-async def test_setup_audio_and_capture_command_not_saved_as_narration(demo, monkeypatch):
-    monkeypatch.setattr(
-        agent_module, "check_setup", AsyncMock(return_value=({}, "Network quality is good. Video is 20 fps."))
-    )
+@pytest.mark.parametrize("command", ["Check setup", "Check set up.", "Check set-up!"])
+async def test_setup_audio_and_capture_command_not_saved_as_narration(demo, command):
+    install_quality(demo)
     await demo.capture.receive(joined())
-    await speak(demo, "check setup")
-    await demo.capture._connections["user"].preflight_task
-    assert any("Network quality is good" in c.args[1].text for c in demo.output.call_args_list if c.args[1].text)
+    await speak(demo, command)
+    assert any("Network quality is unknown" in text for text in announcements(demo))
     assert not list((demo.root / "sessions").glob("*/packet.json"))
     await speak(demo, "start capture")
     state = demo.capture_backend._sessions["user"]
@@ -311,88 +309,54 @@ async def test_setup_audio_and_capture_command_not_saved_as_narration(demo, monk
     assert packet(state)["counts"]["transcripts"] == 1
 
 
-async def test_setup_reports_unavailable_immediately_without_telemetry():
-    async with asyncio.timeout(0.1):
-        report, speech = await preflight.check_setup()
-    assert report == {
-        "network_quality": "unknown",
-        "fps": None,
-        "fps_source": "unavailable",
-        "resolution": None,
-        "conditions": [],
-    }
-    assert "frame rate is unavailable" in speech and "resolution is unavailable" in speech
+async def test_quality_disabled_hides_setup_and_leaves_capture_available(demo):
+    from xr_ai_interaction import ParticipantJoined
 
-
-def setup_monitor(**updates):
-    monitor = QualityFeedback("user", Mock(), Mock(), QualityConfig(), 2)
-    monitor.telemetry(
-        DataMessage(
-            "user",
-            TELEMETRY_TOPIC,
-            1,
-            telemetry(token=monitor.token, sent_fps=30.0, sent_width=1280, sent_height=720, **updates)
-            .model_dump_json()
-            .encode(),
-        )
-    )
-    return monitor
-
-
-async def test_setup_reports_current_metrics_without_sampling_or_sleeping(monkeypatch):
-    monitor = setup_monitor(quality="poor")
-    # A healthy check uses already received telemetry and must not start a timer.
-    sleep = AsyncMock(side_effect=AssertionError("setup must not sleep"))
-    monkeypatch.setattr(asyncio, "sleep", sleep)
-    async with asyncio.timeout(0.1):
-        report, speech = await preflight.check_setup(monitor)
-    assert report["network_quality"] == "poor"
-    assert report["fps"] == 30
-    assert report["fps_source"] == "client_video"
-    assert report["resolution"] == (1280, 720)
-    assert report["conditions"] == ["poor_network"]
-    assert "camera is sending 30.0" in speech
-    assert monitor.state is None
-    sleep.assert_not_awaited()
-
-
-async def test_setup_uses_recent_received_resolution_and_rejects_stale_data():
-    monitor = setup_monitor()
-    monitor.frame(frame(1, width=640, height=360))
-    report, _ = await preflight.check_setup(monitor)
-    assert report["resolution"] == (640, 360)
-    assert report["conditions"] == ["low_resolution"]
-    monitor.latest_at -= 10
-    monitor.latest_frame_at -= 10
-    report, _ = await preflight.check_setup(monitor)
-    assert report["network_quality"] == "unknown"
-    assert report["fps"] is None and report["resolution"] is None
-
-
-async def test_setup_on_demand_does_not_report_stale_video_stats():
-    monitor = setup_monitor(mode="on-demand", streaming=False)
-    report, speech = await preflight.check_setup(monitor)
-    assert report["network_quality"] == "good"
-    assert report["fps"] is None and report["resolution"] is None
-    assert "frame rate is unavailable" in speech
-
-
-async def test_setup_does_not_reopen_stopped_or_replaced_connection(demo, monkeypatch):
-    entered = asyncio.Event()
-
-    async def blocked(*args, **kwargs):
-        entered.set()
-        await asyncio.Future()
-
-    monkeypatch.setattr(agent_module, "check_setup", blocked)
+    endpoint = install_quality(demo, enabled=False)
     await demo.capture.receive(joined())
+    ctx = SimpleNamespace(metadata=SimpleNamespace(participant_id="user"), publish=demo.output)
+    await demo.capture.participant_joined(ParticipantJoined(), ctx)
+    assert len(announcements(demo)) == 1
+    assert "start capture" in announcements(demo)[0]
+    assert "check setup" not in announcements(demo)[0]
     await speak(demo, "check setup")
-    await entered.wait()
-    old = demo.capture._connections["user"].preflight_task
-    await demo.capture.receive(joined(session="new"))
-    await asyncio.gather(old, return_exceptions=True)
-    assert old.cancelled()
-    assert demo.capture._connections["user"].preflight_task is None
+    assert len(announcements(demo)) == 1
+    await speak(demo, "start capture")
+    assert demo.capture_backend.is_capturing("user")
+    await speak(demo, "stop capture")
+    endpoint.send_return_data.assert_not_awaited()
+
+
+def test_setup_reports_latest_received_fps_resolution_and_fresh_grade():
+    scene = Scene()
+    monitor = QualityFeedback("user", Mock(), Mock(), QualityConfig(), 2, clock=lambda: scene.now)
+    text = preflight.check_setup(monitor)
+    assert "Network quality is unknown" in text
+    assert "frame rate is unavailable" in text and "resolution is unavailable" in text
+    monitor.preview.telemetry_received(telemetry(quality="poor"))
+    for i in range(10):
+        scene.now = i / 20
+        monitor.frame(frame(i, width=640, height=360))
+    text = preflight.check_setup(monitor)
+    assert "Received video is 20.0 frames per second." in text
+    assert "640 by 360" in text and "resolution is low" in text
+    assert "Network quality is poor" in text
+    assert monitor.state is None
+    scene.now = 5
+    text = preflight.check_setup(monitor)
+    assert "Network quality is unknown" in text
+    assert "frame rate is unavailable" in text and "resolution is unavailable" in text
+
+
+def test_setup_on_demand_does_not_report_old_live_video():
+    monitor = QualityFeedback("user", Mock(), Mock(), QualityConfig(), 2)
+    monitor.preview.telemetry_received(telemetry())
+    monitor.frame(frame(1))
+    assert "1280 by 720" in preflight.check_setup(monitor)
+    monitor.preview.telemetry_received(telemetry(mode="on-demand", streaming=False))
+    text = preflight.check_setup(monitor)
+    assert "Network quality is good" in text
+    assert "frame rate is unavailable" in text and "resolution is unavailable" in text
 
 
 def test_browser_media_telemetry():
@@ -401,63 +365,65 @@ def test_browser_media_telemetry():
     assert result.returncode == 0, result.stdout + result.stderr
 
 
-async def test_media_alert_reaches_voice_text_for_tts(demo):
-    from pipecat.frames.frames import TextFrame
-    from xr_ai_voice._processors.io import _VoiceIOProcessor
+def test_browser_payload_matches_strict_worker_schema():
+    root = Path(__file__).resolve().parents[1]
+    source = """
+import { CaptureQualityClient } from './client-samples/web/App/CaptureQuality.js';
+const client = new CaptureQualityClient({
+  send: data => console.log(data),
+  read: () => ({ connectionState: 'connected', cameraMode: 'live', isCameraActive: true }),
+});
+client.enable(new TextEncoder().encode(JSON.stringify({ version: 1, token: 'a'.repeat(32) })));
+await client.report({ quality: 'poor' });
+"""
+    result = subprocess.run(
+        ["node", "--input-type=module", "-e", source],
+        cwd=root,
+        capture_output=True,
+        check=True,
+        timeout=15,
+    )
+    data = Telemetry.model_validate_json(result.stdout)
+    assert data.mode == "live" and data.streaming and data.quality == "poor"
+
+
+async def test_initial_alert_waits_for_start_acknowledgement(demo, monkeypatch):
+    from test_voice_playback_state import _PID, _one_reply, _pipeline
 
     install_quality(demo)
-    voice = _VoiceIOProcessor(AsyncMock())
-    voice.push_frame = AsyncMock()
+    await demo.capture.receive(joined(_PID))
+    monitor = demo.capture._connections[_PID].quality
+    data = telemetry(token=monitor.token, quality="poor")
+    await demo.capture.on_quality_data(DataMessage(_PID, TELEMETRY_TOPIC, 1, data.model_dump_json().encode()))
+    async with _pipeline(monkeypatch) as (voice, _, tts, endpoint, _gate):
+        warning = asyncio.Event()
 
-    async def output(_topic, message, *, participant_id, source=None):
-        if source and source.startswith("capture-quality:"):
-            if message.kind == "update":
+        async def output(_topic, message, *, participant_id, source=None):
+            if message.kind == "reply" and message.text:
+                await voice.enqueue_reply(participant_id, _one_reply(message.text), request_id=message.request_id)
+                if message.text == "Capture started.":
+                    await asyncio.wait_for(endpoint.first_chunk.wait(), 2)
+            elif message.kind == "update":
                 await voice.enqueue_update(participant_id, message.text, source=source, urgent=message.urgent)
-            elif message.kind == "withdraw":
+                warning.set()
+            elif message.kind == "withdraw" and source:
                 await voice.withdraw_updates(participant_id, source=source)
 
-    demo.output.side_effect = output
-    try:
-        await demo.capture.receive(joined())
-        await speak(demo, "start capture")
-        monitor = demo.capture._connections["user"].quality
-        monitor.state.telemetry_received(telemetry(quality="poor", mode="off", streaming=False))
-        await wait_for(lambda: any(isinstance(c.args[0], TextFrame) for c in voice.push_frame.call_args_list))
-        text = next(c.args[0] for c in voice.push_frame.call_args_list if isinstance(c.args[0], TextFrame))
-        assert "network connection is poor" in text.text
-        assert text.transport_destination == "user"
-        assert demo.capture_backend.is_capturing("user")
-        await speak(demo, "stop capture")
-    finally:
-        await voice._shutdown()
-
-
-async def test_every_idle_setup_request_gets_a_reply(demo, monkeypatch):
-    await demo.capture.receive(joined())
-    entered, release = asyncio.Event(), asyncio.Event()
-    calls = 0
-
-    async def check(*args, **kwargs):
-        nonlocal calls
-        calls += 1
-        if calls == 1:
-            entered.set()
-            await release.wait()
-        return {}, f"Setup report {calls}"
-
-    monkeypatch.setattr(agent_module, "check_setup", check)
-    await speak(demo, "check setup")
-    await entered.wait()
-    await speak(demo, "check setup")
-    release.set()
-    await demo.capture._connections["user"].preflight_task
-    assert calls == 2
-    replies = [c.args[1].text for c in demo.output.call_args_list]
-    assert "Setup report 1" in replies and "Setup report 2" in replies
+        demo.output.side_effect = output
+        await speak(demo, "start capture", pid=_PID)
+        await asyncio.wait_for(warning.wait(), 2)
+        alert = next(c.args[1] for c in demo.output.call_args_list if c.args[1].kind == "update")
+        assert not alert.urgent
+        assert tts.calls == ["Capture started."]
+        endpoint.release.set()
+        await wait_for(lambda: any("network connection is poor" in text for text in tts.calls))
+        assert demo.capture_backend.is_capturing(_PID)
+        await speak(demo, "stop capture", pid=_PID)
 
 
 @pytest.mark.parametrize("earlier_setup", [False, True])
-async def test_queued_start_never_waits_for_a_later_setup(demo, monkeypatch, earlier_setup):
+async def test_queued_capture_and_setup_reply_in_input_order(demo, monkeypatch, earlier_setup):
+    install_quality(demo)
     await demo.capture.receive(joined())
     await speak(demo, "start capture")
     first = demo.capture_backend._sessions["user"]
@@ -472,36 +438,21 @@ async def test_queued_start_never_waits_for_a_later_setup(demo, monkeypatch, ear
 
     monkeypatch.setattr(demo.capture_backend, "_finalize", delayed)
     await speak(demo, "stop capture", wait=False)
-    await asyncio.wait_for(entered.wait(), 2)
-    previous_setup = None
-    setup_tasks = []
     try:
+        await asyncio.wait_for(entered.wait(), 2)
         if earlier_setup:
             await speak(demo, "check setup", wait=False)
-            previous_setup = demo.capture._connections["user"].preflight_task
         await speak(demo, "start capture", wait=False)
         await speak(demo, "stop capture", wait=False)
-        for _ in range(2):
-            await speak(demo, "check setup", wait=False)
-            setup_tasks.append(demo.capture._connections["user"].preflight_task)
-        tail = demo.capture._tails["user"]
-        release.set()
-        # Do not cancel the command queue on timeout: it owns packet finalization.
-        _, pending = await asyncio.wait([tail, *setup_tasks], timeout=2)
-        assert not pending, "queued capture commands and later setup replies deadlocked"
-        await asyncio.gather(tail, *setup_tasks)
-        assert demo.capture._connections["user"].preflight_task is setup_tasks[-1]
-        assert previous_setup is None or previous_setup.cancelled()
-        packets = list((demo.root / "sessions").glob("*/packet.json"))
-        assert len(packets) == 2
-        assert all(json.loads(path.read_text())["status"] == "complete" for path in packets)
-        assert not demo.capture_backend.is_capturing("user")
-        replies = [c.args[1].text for c in demo.output.call_args_list if c.args[1].text]
-        assert replies.count("Capture started.") == replies.count("Capture stopped.") == 2
-        assert sum("Network quality is unknown" in text for text in replies) == 2
+        await speak(demo, "check setup", wait=False)
+        await speak(demo, "check setup", wait=False)
     finally:
         release.set()
-        # Cancelling setup breaks its shielded queue wait without cancelling saves.
-        for task in reversed(setup_tasks):
-            task.cancel()
-        await asyncio.gather(*setup_tasks, return_exceptions=True)
+    await asyncio.wait_for(asyncio.shield(demo.capture._tails["user"]), 3)
+    packets = list((demo.root / "sessions").glob("*/packet.json"))
+    assert len(packets) == 2
+    assert all(json.loads(path.read_text())["status"] == "complete" for path in packets)
+    assert not demo.capture_backend.is_capturing("user")
+    replies = ["setup" if text.startswith("Network quality") else text for text in announcements(demo)]
+    pair = ["Capture started.", "Capture stopped."]
+    assert replies == pair + (["setup"] if earlier_setup else []) + pair + ["setup", "setup"]
