@@ -24,6 +24,7 @@ from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field
 from xr_ai_hub import FrameSignal, MediaStatus
 from xr_ai_interaction import ResponseOutputs
+from xr_ai_runtime import AgentRuntime
 from xr_ai_voice import VOICE_OUTPUT_TOPIC
 
 _MESSAGES = yaml.safe_load((Path(__file__).resolve().parents[3] / "yaml/capture-messages.yaml").read_text())
@@ -212,7 +213,7 @@ class QualityFeedback:
         if self.state is not None:
             self.state.sample(frame)
 
-    def start(self, publisher):
+    def start(self, publisher: AgentRuntime):
         if self.task is not None and not self.task.done():
             raise RuntimeError("previous capture quality task must be drained before restart")
         self.state = QualityState(self.config, self.capture_fps, clock=self.clock)
@@ -234,7 +235,7 @@ class QualityFeedback:
     async def _record(self, kind, **data):
         await self.backend.capture_quality(self.pid, {"kind": kind, **data})
 
-    async def _run(self, publisher):
+    async def _run(self, publisher: AgentRuntime):
         source = f"capture-quality:{uuid4().hex}"
         batches: dict[frozenset[str], ResponseOutputs] = {}
         schedule = NotificationSchedule(self.config.repeat_interval_s)

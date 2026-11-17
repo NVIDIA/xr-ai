@@ -74,7 +74,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
         # One owner orders command boundaries and admitted narration, including
         # repeated captures on the same participant connection.
         capture = runtime.register("capture", CaptureAgent(
-            capture_backend, quality_config=config.capture.quality,
+            capture_backend, runtime=runtime, quality_config=config.capture.quality,
             capture_fps=config.capture.capture_fps,
         ))
         capture_backend.on_sample = capture.on_quality_sample

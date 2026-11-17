@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from loguru import logger
 from xr_ai_hub import MediaStatus, ParticipantEvent
 from xr_ai_interaction import ParticipantJoined, ResponseOutputs, UserQuery
-from xr_ai_runtime import Agent, RuntimeContext, Topic, subscribe
+from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, Topic, subscribe
 from xr_ai_voice import VOICE_OUTPUT_TOPIC
 
 from .capturing import _Capture
@@ -55,11 +55,14 @@ class CaptureAgent(Agent):
     backend so each demonstration keeps its own narration and finalization.
     """
     def __init__(
-        self, capture_backend: _Capture, *, quality_config: QualityConfig | None = None,
+        self, capture_backend: _Capture, *, runtime: AgentRuntime,
+        quality_config: QualityConfig | None = None,
         capture_fps: float = 2.0,
     ) -> None:
         super().__init__()
         self._capture_backend = capture_backend
+        # Background alerts own source scopes; input contexts retain the command source.
+        self._runtime = runtime
         self._quality_config, self._capture_fps = quality_config, capture_fps
         # Recording ownership applied to the backend by queued actions. Keep this
         # separate from connection.recording: newer input may already be accepted.
@@ -214,7 +217,7 @@ class CaptureAgent(Agent):
                         await self._say(pid, connection, ctx, "Capture started.")
                         if (connection.quality is not None and connection.recording is recording
                                 and not connection.cancelled.is_set()):
-                            connection.quality.start(ctx)
+                            connection.quality.start(self._runtime)
                 finally:
                     if not self._capture_backend.is_capturing(pid):
                         self._forget(pid, recording)

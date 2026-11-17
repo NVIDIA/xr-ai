@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 from pydantic import ValidationError
-from test_procedure_capture_guide import announcements, demo, joined, packet, speak  # noqa: F401
+from test_procedure_capture_guide import announcements, capture_context, demo, joined, packet, speak  # noqa: F401
 from xr_ai_hub import MediaStatus
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "agent-samples/procedure-capture-guide/worker"))
@@ -204,7 +204,7 @@ async def wait_for(predicate):
 
 def install_quality(demo, *, enabled=True):
     demo.capture = CaptureAgent(
-        demo.capture_backend,
+        demo.capture_backend, runtime=demo.runtime,
         quality_config=QualityConfig(enabled=enabled, poll_interval_s=0.01, repeat_interval_s=0.05),
     )
     demo.capture_backend.on_sample = demo.capture.on_quality_sample
@@ -299,7 +299,7 @@ async def test_quality_disabled_hides_setup_and_leaves_capture_available(demo):
 
     install_quality(demo, enabled=False)
     await demo.capture.receive(joined())
-    ctx = SimpleNamespace(metadata=SimpleNamespace(participant_id="user"), publish=demo.output)
+    ctx = capture_context(demo)
     await demo.capture.participant_joined(ParticipantJoined(), ctx)
     assert len(announcements(demo)) == 1
     assert "start capture" in announcements(demo)[0]

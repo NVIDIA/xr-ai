@@ -216,7 +216,8 @@ async def test_late_manual_subscriber_initializes_sessions_without_subscribing_e
         await processor.wait_until_running()
         await settle()
     processor.subscribe("alice")
-    await processor.wait_for_subscriptions()
+    await processor.wait_until_running()
+    assert await processor.wait_for_subscriptions()
     client, _ = room_client(connector)
     for i in range(3):
         await client._report_media_status()

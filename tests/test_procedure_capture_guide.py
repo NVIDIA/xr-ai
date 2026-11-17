@@ -17,11 +17,11 @@ from urllib.parse import urlsplit
 
 import pytest
 from PIL import Image
-from xr_ai_hub import FrameUnavailable, ParticipantEvent
+from xr_ai_hub import FrameUnavailable, MediaStatus, ParticipantEvent
 from xr_ai_hub._capture import CAPTURE_STT_TOPIC
-from xr_ai_interaction import ParticipantJoined, UserQuery
+from xr_ai_interaction import ParticipantJoined, ResponseOutput, UserQuery
 from xr_ai_models import load_models_config
-from xr_ai_runtime import AgentRuntime
+from xr_ai_runtime import Agent, AgentRuntime, MessageMetadata, RuntimeContext, subscribe
 from xr_ai_tools.current_frame import ImageFrame
 from xr_ai_tools.image import ImageRegistry
 from xr_ai_voice import VOICE_OUTPUT_TOPIC
@@ -262,27 +262,44 @@ async def demo(tmp_path):
         sessions_dir=tmp_path / "sessions", current_frame=frames, images=images,
         query_images=captioner, capture_fps=2, caption_interval_s=5,
     )
-    capture = CaptureAgent(capture_backend)
+    runtime, output = AgentRuntime(), AsyncMock()
+
+    class Recorder(Agent):
+        @subscribe(VOICE_OUTPUT_TOPIC)
+        async def record(self, message: ResponseOutput, ctx: RuntimeContext):
+            await output(VOICE_OUTPUT_TOPIC, message, participant_id=ctx.metadata.participant_id,
+                         source=ctx.metadata.source)
+
+    runtime.register("recorder", Recorder())
+    await runtime.start()
+    fixture = SimpleNamespace(
+        capture_backend=capture_backend, capture=CaptureAgent(capture_backend, runtime=runtime),
+        root=tmp_path, frames=frames, captioner=captioner, output=output, runtime=runtime,
+    )
     try:
-        yield SimpleNamespace(
-            capture_backend=capture_backend, capture=capture, root=tmp_path, frames=frames,
-            captioner=captioner, output=AsyncMock(),
-        )
+        yield fixture
     finally:
-        await capture.close()
+        await fixture.capture.close()
+        await runtime.stop()
 
 
 def joined(pid="user", session="session", pts_us=1):
     return ParticipantEvent(pid, True, pts_us, participant_session_id=session)
 
 
+def capture_context(demo, pid="user", timestamp_us=1):
+    request_id = f"request-{timestamp_us}"
+    return RuntimeContext(demo.runtime, "capture", MessageMetadata(
+        message_id=request_id, correlation_id=request_id, participant_id=pid,
+        source="test-input", parent_message_id=None, timestamp_us=timestamp_us,
+    ))
+
+
 async def speak(demo, text, pid="user", timestamp_us=None, wait=True):
     timestamp_us = time.time_ns() // 1000 if timestamp_us is None else timestamp_us
     await demo.capture.on_input(
         UserQuery(text=text, timestamp_us=timestamp_us),
-        SimpleNamespace(
-            metadata=SimpleNamespace(participant_id=pid, message_id=f"request-{timestamp_us}"), publish=demo.output,
-        ),
+        capture_context(demo, pid, timestamp_us),
     )
     if wait and (task := demo.capture._tails.get(pid)):
         await asyncio.shield(task)
@@ -348,7 +365,7 @@ async def test_join_is_idle_and_voice_can_record_multiple_sessions(demo):
 
 @pytest.mark.parametrize("hub_first", [False, True])
 async def test_welcome_uses_voice_join_regardless_of_endpoint_order(demo, hub_first):
-    ctx = SimpleNamespace(metadata=SimpleNamespace(participant_id="user"), publish=demo.output)
+    ctx = capture_context(demo)
     if hub_first:
         await demo.capture.receive(joined())
     await demo.capture.participant_joined(ParticipantJoined(), ctx)
@@ -558,7 +575,7 @@ async def test_app_drains_voice_transcripts_and_recordings_before_endpoint_close
 
     capture_endpoint = SimpleNamespace(
         on_participant=lambda cb: callbacks.update(participant=cb),
-        on_frame=Mock(), on_media_status=Mock(),
+        on_frame=Mock(), on_media_status=lambda cb: callbacks.update(media_status=cb),
         run=receive_forever,
         wait_until_running=receiving.wait,
         send_return_data=AsyncMock(side_effect=send),
@@ -581,8 +598,15 @@ async def test_app_drains_voice_transcripts_and_recordings_before_endpoint_close
     monkeypatch.setattr(app, "ImageRegistry", lambda: demo.capture_backend._images)
     monkeypatch.setattr(app, "CurrentFrameTool", lambda **kwargs: demo.frames)
     monkeypatch.setattr(app, "setup_logging", lambda *args: None)
-    for name in ("make_stt", "make_tts", "make_vlm"):
+    for name in ("make_stt", "make_tts"):
         monkeypatch.setattr(app, name, lambda *args: Mock(health=AsyncMock(return_value=True), close=AsyncMock()))
+
+    monkeypatch.setattr(app, "make_vlm", lambda *args: Mock(
+        health=AsyncMock(return_value=True), close=AsyncMock(),
+        ask_images=AsyncMock(return_value=SimpleNamespace(content=json.dumps({
+            "activity": "Setup", "phase": "Arrange", "caption": "A blue block", "delta": "Initial view",
+        }))),
+    ))
 
     def shutdown_voice():
         nonlocal voice_closed
@@ -601,13 +625,21 @@ async def test_app_drains_voice_transcripts_and_recordings_before_endpoint_close
         consumers.append(asyncio.create_task(consume()))
 
     spoken = AsyncMock(side_effect=enqueue_reply)
+    warnings, withdrawals = [], []
+
+    async def enqueue_update(participant_id, text, *, source, urgent=False, pts_us=None):
+        warnings.append((participant_id, source, text))
+
+    async def withdraw_updates(participant_id, *, source):
+        withdrawals.append((participant_id, source))
 
     def make_voice(**kwargs):
         assert set(kwargs["probes"]) == {"stt", "tts", "vlm"}
         assert kwargs["participant_joined_topic"] == CAPTURE_JOINED_TOPIC
         voice = real_voice(transport=transport, **kwargs)
         monkeypatch.setattr(voice._session, "enqueue_reply", spoken)
-        monkeypatch.setattr(voice._session, "withdraw_updates", AsyncMock())
+        monkeypatch.setattr(voice._session, "enqueue_update", enqueue_update)
+        monkeypatch.setattr(voice._session, "withdraw_updates", withdraw_updates)
         voices.append(voice)
         return voice
 
@@ -620,7 +652,11 @@ async def test_app_drains_voice_transcripts_and_recordings_before_endpoint_close
             await voices[0]._publish_transcript("user", text, ts)
             await voices[0]._publish_input(VoiceQuery(participant_id="user", text=text, timestamp_us=ts))
 
-        await callbacks["participant"](joined())
+        event = joined()
+        await callbacks["participant"](event)
+        await callbacks["media_status"](MediaStatus(
+            "user", event.participant_session_id, time.time_ns() // 1000, "poor", False,
+        ))
         # End the voice run while the participant is still connected.
         # VoiceAgent's real finally path closes only its own transport.
         await speech("Start capture.")
@@ -629,6 +665,11 @@ async def test_app_drains_voice_transcripts_and_recordings_before_endpoint_close
                 await asyncio.sleep(0.001)
             while spoken.await_count < 1:
                 await asyncio.sleep(0.001)
+        async with asyncio.timeout(1):
+            while sum("network connection is poor" in text for _, _, text in warnings) < 2:
+                await asyncio.sleep(0.001)
+        assert all(pid == "user" and source.startswith("capture-quality:") for pid, source, _ in warnings)
+        assert any((pid, source) in withdrawals for pid, source, _ in warnings)
         await speech("Place a cup")
         # Delivered final transcripts must drain into the packet; speech still
         # awaiting STT at transport shutdown is outside this guarantee.
@@ -652,7 +693,10 @@ async def test_app_drains_voice_transcripts_and_recordings_before_endpoint_close
 
     monkeypatch.setattr(_VoiceSession, "run", run_session)
     config = load_config(_SAMPLE / "yaml/worker.yaml")
-    config = replace(config, capture=replace(config.capture, artifacts_dir=demo.root / "app-sessions"))
+    config = replace(config, capture=replace(
+        config.capture, artifacts_dir=demo.root / "app-sessions",
+        quality=config.capture.quality.model_copy(update={"poll_interval_s": 0.01, "repeat_interval_s": 0.05}),
+    ))
     task = asyncio.create_task(app.run_app(config))
     try:
         done, _ = await asyncio.wait({task}, timeout=2)
@@ -662,6 +706,11 @@ async def test_app_drains_voice_transcripts_and_recordings_before_endpoint_close
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
     assert capture_closed
+    if stop_command:
+        for pid, source in {(pid, source) for pid, source, _ in warnings}:
+            assert (pid, source) in withdrawals
+        network_source = next(source for _, source, text in warnings if "network connection is poor" in text)
+        assert withdrawals.count(("user", network_source)) >= 2  # Replacement and stop cleanup.
     assert receiver_cancelled.is_set()
     await asyncio.wait_for(asyncio.gather(*consumers), 2)
     assert texts == [("user", "Capture started.")] + ([("user", "Capture stopped.")] if stop_command else [])
