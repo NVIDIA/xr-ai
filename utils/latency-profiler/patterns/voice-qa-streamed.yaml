@@ -1,0 +1,8 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+title: Plain voice question, streamed sentence by sentence
+description: The same question with the LLM stream cut at the first sentence and fed to streaming TTS.
+stages:
+  - {kind: endpoint, name: End of speech to final transcript}
+  - {kind: speak, name: LLM to first audio, prompt_tokens: 1800, cached: true, out_tokens: 80, first_sentence_tokens: 20, strategy: sentence, playback_ms: 140}

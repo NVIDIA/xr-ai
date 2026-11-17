@@ -1,0 +1,8 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+title: Plain voice question, whole answer then TTS
+description: One LLM call whose text is not streamed, then batch speech. The simplest agent and the slowest to first audio.
+stages:
+  - {kind: endpoint, name: End of speech to final transcript}
+  - {kind: speak, name: LLM whole text then TTS, prompt_tokens: 1800, cached: true, out_tokens: 80, strategy: batch, playback_ms: 140}
