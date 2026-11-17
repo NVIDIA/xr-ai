@@ -54,6 +54,7 @@ class _VoiceSession:
         text_topic: str = "agent.response",
         idle_timeout_secs: float | None = None,
         transport: HubVoiceTransport | None = None,
+        install_signal_handlers: bool = True,
     ) -> None:
         if stt is None:
             speaker = voice_gate._speaker
@@ -69,6 +70,10 @@ class _VoiceSession:
         self.text_topic = text_topic
         self.idle_timeout_secs = idle_timeout_secs
         self._transport = transport
+        self.install_signal_handlers = install_signal_handlers
+        self._request_stop: Callable[[], None] | None = None
+        self._stop_requested = False
+        self._cancel_tasks: set[asyncio.Task[None]] = set()
         self._io_processor: _VoiceIOProcessor | None = None
         self._closed = False
         self._use_speaker_asr: bool | None = None
@@ -155,10 +160,16 @@ class _VoiceSession:
             if cancel_requested:
                 return
             cancel_requested = True
-            asyncio.create_task(task.cancel())
+            cancel_task = asyncio.create_task(task.cancel())
+            self._cancel_tasks.add(cancel_task)
+            cancel_task.add_done_callback(self._cancel_tasks.discard)
 
+        self._request_stop = request_cancel
+        if self._stop_requested:
+            # A stop that arrived during startup (probes, speaker ASR) is not lost.
+            request_cancel()
         installed: list[signal.Signals] = []
-        for sig in (signal.SIGINT, signal.SIGTERM):
+        for sig in (signal.SIGINT, signal.SIGTERM) if self.install_signal_handlers else ():
             try:
                 loop.add_signal_handler(sig, request_cancel)
             except NotImplementedError:
@@ -206,8 +217,21 @@ class _VoiceSession:
             with contextlib.suppress(asyncio.CancelledError):
                 _ = await started_task
             self._io_processor = None
+            self._request_stop = None
             for sig in installed:
                 loop.remove_signal_handler(sig)
+
+    def request_stop(self) -> None:
+        """Ask the pipeline to stop.
+
+        A stop requested while the session is still starting stops it as soon
+        as the pipeline is built. After the session closed it has no effect.
+        """
+        if self._closed:
+            return
+        self._stop_requested = True
+        if self._request_stop is not None:
+            self._request_stop()
 
     async def enqueue_query(
         self,
