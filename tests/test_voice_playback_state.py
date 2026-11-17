@@ -216,10 +216,13 @@ async def test_query_supersession_discards_unsent_text_without_interrupting_audi
     buffered = asyncio.Event()
     closed = asyncio.Event()
     handle_text = StreamingTtsProcessor._handle_text  # noqa: SLF001
+    processor: StreamingTtsProcessor | None = None
 
     async def observe_text(self, frame):
+        nonlocal processor
         await handle_text(self, frame)
         if frame.text == prefix + tail:
+            processor = self
             buffered.set()
 
     monkeypatch.setattr(StreamingTtsProcessor, "_handle_text", observe_text)
@@ -246,13 +249,17 @@ async def test_query_supersession_discards_unsent_text_without_interrupting_audi
         gate.process_frame = record  # type: ignore[method-assign]
         await io_processor.enqueue_reply(_PID, old_response(), request_id="r1")
         await asyncio.wait_for(buffered.wait(), _TIMEOUT_S)
+        assert processor is not None
         if prefix:
             await asyncio.wait_for(endpoint.first_chunk.wait(), _TIMEOUT_S)
+            assert processor.has_active_response(_PID)
 
         await io_processor.enqueue_query(_PID, "next question")
         await asyncio.wait_for(closed.wait(), _TIMEOUT_S)
         endpoint.release.set()
         await _until(lambda: _PID not in io_processor._floor)  # noqa: SLF001
+        # Floor release alone does not close the ordered audio response.
+        await _until(lambda: not processor.has_active_response(_PID))
         await io_processor.enqueue_reply(_PID, _one_reply("New answer."), request_id="r2")
         await _until(lambda: _PID not in io_processor._floor)  # noqa: SLF001
 

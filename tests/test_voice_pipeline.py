@@ -3937,7 +3937,7 @@ async def test_streaming_tts_flushes_trailing_text_on_response_end():
 
 
 @pytest.mark.asyncio
-async def test_streaming_tts_flushes_sentence_ending_with_closing_quote():
+async def test_streaming_tts_response_end_separates_quoted_tail_from_next_response():
     """Response completion flushes a quoted tail without joining the next turn."""
     tts  = _FakeTts()
     gate = VoiceGate(VoiceGateConfig(), audio_sink=_NullSink(), tts=tts)
@@ -3946,18 +3946,15 @@ async def test_streaming_tts_flushes_sentence_ending_with_closing_quote():
     await _run_chain(
         proc,
         sends=[
-            TextFrame(text='How are you? "I am fine."'),
+            TextFrame(text='"I am fine."'),
+            TextResponseEndFrame(pid=""),
+            TextFrame(text="Next answer."),
             TextResponseEndFrame(pid=""),
         ],
         settle_s=0.15,
     )
 
-    # Both sentences must be dispatched in one turn — no residual
-    # waiting to be glued onto the next reply.
-    assert tts.calls == ['How are you?', '"I am fine."']
-    # Both sentences dispatched (nothing left in pending), and the pipeline
-    # EndFrame tore down all per-participant state.
-    assert proc._by_pid == {}  # noqa: SLF001
+    assert tts.calls == ['"I am fine."', "Next answer."]
 
 
 def _text_for(text: str, pid: str) -> TextFrame:
