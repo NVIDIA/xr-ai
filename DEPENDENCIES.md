@@ -986,6 +986,7 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
   - `xr-rag-service` → [`xr-rag-service`](services/rag-service/) (local, editable)
   - `pytest>=8.0`
   - `pytest-asyncio>=0.23`
+  - `jsonschema>=4.23`
   - `coverage>=7.10`
   - `numpy>=1.24`
   - `audioop-lts; python_version >= '3.13'`

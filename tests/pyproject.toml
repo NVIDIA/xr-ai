@@ -37,6 +37,8 @@ dependencies = [
     # Test runner.
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
+    # Offline structured-output eval tests exercise the real JSON Schema grader.
+    "jsonschema>=4.23",
     # Measures which SDK and service code the suite exercises; see [tool.coverage].
     "coverage>=7.10",
     "numpy>=1.24",

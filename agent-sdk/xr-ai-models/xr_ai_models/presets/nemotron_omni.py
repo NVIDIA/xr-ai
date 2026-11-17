@@ -23,5 +23,7 @@ NEMOTRON_OMNI = {
         "vision":     True,
         "video":      True,
         "reasoning":  True,
+        "json_schema": True,
+        "tool_choice": True,
     },
 }
