@@ -41,8 +41,10 @@ unneeded data, audio, or frame signals at the ZMQ socket. Explicit-assignment
 workers disable automatic subscription and call `subscribe(participant_id)`.
 
 `run()` requests the current roster so a worker started mid-session receives
-ordinary joined events for participants already present. Join callbacks must
-therefore be idempotent. Because ZMQ subscription changes are asynchronous,
+ordinary joined events for participants already present. This discovery also
+runs with `auto_subscribe=False`: session identities are initialized, while media
+subscriptions remain limited to participants explicitly selected with
+`subscribe()`. Join callbacks must therefore be idempotent. Because ZMQ subscription changes are asynchronous,
 workers that own readiness wait for `wait_for_subscriptions()` before announcing
 availability.
 

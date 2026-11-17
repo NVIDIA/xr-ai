@@ -30,8 +30,9 @@ every client. Two knobs control this:
 Endpoints created mid-session use a roster request to learn about
 participants who joined before they did. The hub re-publishes
 ``PARTICIPANT_EVENT(joined=True)`` for every current pid, so already-
-connected pids are auto-subscribed retroactively. The replays go on the
-regular ``participant`` topic. The endpoint treats repeated joins and leaves
+connected pids are auto-subscribed retroactively only when ``auto_subscribe``
+is enabled. Manual endpoints learn sessions without changing subscriptions.
+The replays go on the regular ``participant`` topic. The endpoint treats repeated joins and leaves
 as no-ops, so callbacks observe lifecycle transitions once.
 
 Video frame access is two-step:
@@ -577,10 +578,10 @@ class ProcessorEndpoint:
         Ask the hub to re-publish ``PARTICIPANT_EVENT(joined=True)`` for
         every currently-connected participant.
 
-        Useful when starting up mid-session so the auto-subscribe handler
-        can pick up clients who joined before this endpoint connected.
-        Called automatically once at the start of :meth:`run` when
-        ``auto_subscribe=True``.
+        Called automatically once at the start of :meth:`run` so session-bound
+        messages also work for clients connected before this endpoint started.
+        With ``auto_subscribe=False``, the roster initializes session identities
+        without subscribing to participants the caller has not selected.
         """
         await self._push.send(encode(MsgType.ROSTER_REQUEST, RosterRequest()))
 
@@ -749,11 +750,9 @@ class ProcessorEndpoint:
                 ),
             ]
 
-        # Ask the hub to replay PARTICIPANT_EVENTs for already-connected
-        # pids so the auto-subscribe handler can scoop them up. Safe even
-        # when there are none: the hub responds with zero events.
-        if self._auto_subscribe:
-            asyncio.create_task(self._catch_up_roster())
+        # Session discovery is independent of subscription policy: explicitly
+        # selected participants also need an identity for session-bound messages.
+        roster_task = asyncio.create_task(self._catch_up_roster(), name="processor-roster")
 
         try:
             while self._running:
@@ -772,9 +771,9 @@ class ProcessorEndpoint:
                 except Exception:
                     log.exception("Error dispatching message")
         finally:
-            for task in file_tasks:
+            for task in [roster_task, *file_tasks]:
                 task.cancel()
-            await asyncio.gather(*file_tasks, return_exceptions=True)
+            await asyncio.gather(roster_task, *file_tasks, return_exceptions=True)
             self._running = False
             self._running_event.clear()
             self._announce_presence(attached=False)

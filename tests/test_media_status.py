@@ -190,3 +190,48 @@ async def test_existing_data_subscribers_do_not_receive_new_wire_type(hub, hub_a
         assert decode(payload) == (MsgType.DATA_MESSAGE, original)
     finally:
         subscriber.close(linger=0)
+
+
+@pytest.mark.parametrize("subscribe_before_start", [False, True])
+async def test_late_manual_subscriber_initializes_sessions_without_subscribing_everyone(
+    hub, make_connector, make_processor, settle, subscribe_before_start,
+):
+    connector = make_connector()
+    await settle()
+    await connector.notify_participant_joined("alice", 1, "session")
+    await connector.notify_participant_joined("bob", 1, "bob-session")
+    await settle()
+    processor = make_processor(auto_subscribe=False, filter=Subscribe.DATA)
+    statuses, data = [], []
+
+    async def status_received(message):
+        statuses.append(message)
+
+    async def data_received(message):
+        data.append(message)
+
+    processor.on_media_status(status_received)
+    processor.on_data(data_received)
+    if not subscribe_before_start:
+        await processor.wait_until_running()
+        await settle()
+    processor.subscribe("alice")
+    await processor.wait_for_subscriptions()
+    client, _ = room_client(connector)
+    for i in range(3):
+        await client._report_media_status()
+        await connector.push_data(DataMessage("alice", "chat", i, b"hello"))
+        await settle()
+    assert len(data) == 3
+    assert statuses, "manual subscriptions must receive current-session media status without a roster request"
+    assert processor.subscribed_participants == {"alice"}
+    assert all(msg.participant_session_id == "session" for msg in statuses)
+    old_count = len(statuses)
+    await connector.notify_participant_joined("alice", 5, "replacement")
+    await wait_for(lambda: processor._participant_sessions.get("alice") == "replacement")
+    await client._report_media_status()  # The old session must still be rejected.
+    client._participant_sessions["alice"] = "replacement"
+    await client._report_media_status()
+    await wait_for(lambda: len(statuses) > old_count)
+    assert len(statuses) == old_count + 1
+    assert statuses[-1].participant_session_id == "replacement"
