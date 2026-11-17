@@ -186,8 +186,9 @@ Conditions due on the same monitor tick are combined in one spoken message:
 
 Times refer to notification submission; speech recognition, detection windows,
 and TTS playback add their normal latency. `quality.enabled: false` disables the
-background monitor. The optional setup command still reports available image
-metadata; without its telemetry lease, network quality remains unknown.
+metadata collector and background monitor. The optional setup command still
+responds, but reports unknown network quality and unavailable frame rate and
+resolution.
 
 The web client reports telemetry only after a per-connection worker request. A
 connection token and increasing sequence reject stale or replayed reports.
