@@ -280,6 +280,7 @@ class ProcessorEndpoint:
         self._data_cbs:        list[DataCallback]        = []
         self._image_capture_cbs: list[ImageCaptureCallback] = []
         self._file_cbs:        list[FileCallback]        = []
+        self._background_tasks: set[asyncio.Task]        = set()
         self._participant_cbs: list[ParticipantCallback] = []
 
         # Pending request_frame() calls keyed by (participant_id, track_id).
@@ -737,7 +738,8 @@ class ProcessorEndpoint:
         # pids so the auto-subscribe handler can scoop them up. Safe even
         # when there are none: the hub responds with zero events.
         if self._auto_subscribe:
-            asyncio.create_task(self._catch_up_roster())
+            self._track(
+                asyncio.create_task(self._catch_up_roster()), log_failure=True)
 
         try:
             while self._running:
@@ -953,11 +955,10 @@ class ProcessorEndpoint:
                     try:
                         await cb(msg)
                     except Exception as exc:
-                        log.critical(
-                            "Unhandled error in processor file callback; crashing",
+                        log.error(
+                            "Unhandled error in processor file callback",
                             exc_info=exc,
                         )
-                        os._exit(1)
             finally:
                 self._file_queue.task_done()
 
@@ -1102,15 +1103,20 @@ class ProcessorEndpoint:
         else:
             log.debug("Unhandled message type %d on processor endpoint", type_id)
 
-    @staticmethod
-    def _spawn(coro) -> None:
-        t = asyncio.create_task(coro)
+    def _spawn(self, coro) -> None:
+        """Run a callback task; log its failure and keep the endpoint running."""
+        self._track(asyncio.create_task(coro), log_failure=True)
+
+    def _track(self, task: asyncio.Task, *, log_failure: bool) -> None:
+        # The loop holds tasks weakly, so keep a reference until each finishes.
+        self._background_tasks.add(task)
+
         def _on_done(t: asyncio.Task) -> None:
-            if not t.cancelled() and (exc := t.exception()):
-                log.critical("Unhandled error in processor callback — crashing",
-                             exc_info=exc)
-                os._exit(1)
-        t.add_done_callback(_on_done)
+            self._background_tasks.discard(t)
+            if not t.cancelled() and (exc := t.exception()) and log_failure:
+                log.error("Unhandled error in processor callback", exc_info=exc)
+
+        task.add_done_callback(_on_done)
 
     # ── lifecycle ─────────────────────────────────────────────────────────────
 
