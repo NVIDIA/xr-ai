@@ -243,8 +243,8 @@ Package Contents
 
    The launcher spawns every member at once and waits for *all* of them to
    signal readiness before advancing to the next item in the stack sequence.
-   A member that signals readiness remains monitored until the whole group is
-   ready. An unexpected exit during that interval stops owned processes and
+   Every launched child remains monitored until the whole stack is ready.
+   An unexpected exit during that interval stops owned processes and
    persistent processes that have not signaled readiness. A successful
    ``persist`` process may exit after readiness only when
    ``run_stack(..., exit_after_ready=True)`` permits bootstrap wrappers to
@@ -374,6 +374,9 @@ Package Contents
    The JSON body reports ``status``, spawned ``processes`` (running or exited),
    and ``unchecked_reuse`` process names. HEAD is also supported.
 
+   Every launched child is supervised throughout startup. Only a ``persist``
+   wrapper under ``exit_after_ready=True`` may exit with status 0 after creating
+   its ready file; all other exits abort startup.
    After all processes are ready the launcher monitors them: if any exits,
    the remaining foreground processes are terminated. The launcher preserves
    a positive child status, maps a signal to ``128 + signal``, and maps an
