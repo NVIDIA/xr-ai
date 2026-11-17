@@ -4,30 +4,28 @@
 """Warn about sustained loss of usable media during a procedure capture.
 
 Frame metadata measures arrival quality independently of snapshot sampling and
-caption inference. Client telemetry supplies camera intent and network evidence;
-missing telemetry is unknown, never proof of a broken stream. Each connection
+caption inference. Connector status supplies publication and network evidence;
+missing status is unknown, never proof of a broken stream. Each connection
 owns a monitor, and each capture owns its warning task and voice-output source.
 """
 
 from __future__ import annotations
 
 import asyncio
-import json
 import time
 from collections import deque
 from collections.abc import Callable
+from dataclasses import asdict
 from pathlib import Path
 from uuid import uuid4
 
 import yaml
 from loguru import logger
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
-from xr_ai_hub import DataMessage, FrameSignal
+from pydantic import BaseModel, ConfigDict, Field
+from xr_ai_hub import FrameSignal, MediaStatus
 from xr_ai_interaction import ResponseOutputs
 from xr_ai_voice import VOICE_OUTPUT_TOPIC
 
-CONTROL_TOPIC = "procedure.capture.quality.control"
-TELEMETRY_TOPIC = "procedure.capture.quality.telemetry"
 _MESSAGES = yaml.safe_load((Path(__file__).resolve().parents[3] / "yaml/capture-messages.yaml").read_text())
 
 
@@ -38,19 +36,9 @@ class QualityConfig(BaseModel):
     stall_s: float = Field(default=3, gt=0)
     repeat_interval_s: float = Field(default=10, gt=0)
     poll_interval_s: float = Field(default=1, gt=0)
-    telemetry_ttl_s: float = Field(default=4, gt=0)
+    status_ttl_s: float = Field(default=4, gt=0)
     min_short_edge: int = Field(default=480, gt=0, strict=True)
     drop_ratio: float = Field(default=0.5, gt=0, lt=1)
-
-
-class Telemetry(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True, allow_inf_nan=False)
-    version: int = Field(ge=2, le=2)
-    token: str = Field(min_length=1, max_length=64)
-    sequence: int = Field(ge=0)
-    mode: str = Field(pattern="^(off|live|on-demand)$")
-    streaming: bool
-    quality: str = Field(pattern="^(unknown|excellent|good|poor|lost)$")
 
 
 class QualityState:
@@ -58,8 +46,8 @@ class QualityState:
 
     def __init__(self, config: QualityConfig, capture_fps: float, *, clock: Callable[[], float] = time.monotonic):
         self.config, self.capture_fps, self.clock = config, capture_fps, clock
-        self.telemetry: Telemetry | None = None
-        self.telemetry_at = float("-inf")
+        self.status: MediaStatus | None = None
+        self.status_at = float("-inf")
         self.frames: deque[float] = deque(maxlen=4096)
         self.samples: deque[float] = deque(maxlen=4096)
         self.track_id: str | None = None
@@ -75,12 +63,12 @@ class QualityState:
         self.active: set[str] = set()
         self.metrics: dict = {}
 
-    def telemetry_received(self, value: Telemetry):
+    def status_received(self, value: MediaStatus):
         now = self.clock()
-        previous = self.telemetry
-        if previous is not None and (value.mode, value.streaming) != (previous.mode, previous.streaming):
+        previous = self.status
+        if previous is not None and value.video_expected != previous.video_expected:
             self._reset_video(now)
-        self.telemetry, self.telemetry_at = value, now
+        self.status, self.status_at = value, now
 
     def _reset_video(self, now: float) -> None:
         self.track_id = None
@@ -93,13 +81,13 @@ class QualityState:
         self.baseline_rates.clear()
         self.image_failures = 0
 
-    def fresh_telemetry(self, now: float) -> Telemetry | None:
-        return self.telemetry if now - self.telemetry_at <= self.config.telemetry_ttl_s else None
+    def fresh_status(self, now: float) -> MediaStatus | None:
+        return self.status if now - self.status_at <= self.config.status_ttl_s else None
 
     def frame(self, frame: FrameSignal) -> None:
         now = self.clock()
-        data = self.fresh_telemetry(now)
-        if data is not None and (data.mode != "live" or not data.streaming):
+        data = self.fresh_status(now)
+        if data is not None and not data.video_expected:
             return
         if self.track_id is not None and frame.track_id != self.track_id:
             # Keep a single stream's cadence when adjacent track callbacks overlap.
@@ -132,7 +120,7 @@ class QualityState:
 
     def evaluate(self) -> set[str]:
         now, c = self.clock(), self.config
-        data = self.fresh_telemetry(now)
+        data = self.fresh_status(now)
         while self.frames and self.frames[0] < now - c.window_s:
             self.frames.popleft()
         while self.samples and self.samples[0] < now - c.window_s:
@@ -141,7 +129,7 @@ class QualityState:
         fps = len(self.frames) / c.window_s
         if data is not None:
             observed["poor_network"] = data.quality in {"poor", "lost"} if data.quality != "unknown" else None
-            live = data.mode == "live" and data.streaming
+            live = data.video_expected
             if live:
                 age = now - (self.last_frame if self.last_frame is not None else self.started)
                 observed["video_stalled"] = age >= c.stall_s
@@ -156,7 +144,6 @@ class QualityState:
         if (
             self.resolution is not None
             and now - self.resolution_at <= 2 * c.window_s
-            and not (data is not None and data.mode == "off")
         ):
             width, height = self.resolution
             pixels = width * height
@@ -166,30 +153,30 @@ class QualityState:
                 min(width, height) < c.min_short_edge or pixels < self.baseline_pixels * c.drop_ratio
             )
         # On-demand capture has no incoming video stream. Only failed, actually
-        # requested snapshots establish a stall; missing telemetry alone does not.
-        if data is not None and data.mode == "on-demand" and self.image_failures:
+        # requested snapshots establish a stall; missing status alone does not.
+        if self.image_failures and not (data is not None and data.video_expected):
             last = self.samples[-1] if self.samples else self.started
             observed["video_stalled"] = now - last >= c.stall_s
         self.active = {name for name, bad in observed.items() if bad is True}
         self.metrics = {
-            "telemetry_available": data is not None,
+            "status_available": data is not None,
             "saved_fps": len(self.samples) / c.window_s,
-            "received_fps": fps if data is not None and data.mode == "live" else None,
+            "received_fps": fps if data is not None and data.video_expected else None,
             "resolution": self.resolution,
             "baseline_fps": self.baseline_fps,
-            "client": data.model_dump(exclude={"token"}) if data is not None else None,
+            "connector": asdict(data) if data is not None else None,
         }
         # A stall subsumes a rate warning and avoids two messages for one outage.
         return self.active - ({"low_frame_rate"} if "video_stalled" in self.active else set())
 
 
 class QualityFeedback:
-    """Own one connection's telemetry lease and each capture's warning lifetime."""
+    """Own one connection's observations and each capture's warning lifetime."""
 
     def __init__(
         self,
         pid,
-        endpoint,
+        session_id,
         backend,
         config: QualityConfig,
         capture_fps: float,
@@ -197,43 +184,24 @@ class QualityFeedback:
         clock=time.monotonic,
         sleep=asyncio.sleep,
     ):
-        self.pid, self.endpoint, self.backend = pid, endpoint, backend
+        self.pid, self.session_id, self.backend = pid, session_id, backend
         self.clock, self.sleep = clock, sleep
         self.config, self.capture_fps = config, capture_fps
-        self.token = uuid4().hex
-        self.sequence = -1
+        self.last_status_us = -1
         self.preview = QualityState(config, capture_fps, clock=clock)
         self.state: QualityState | None = None
         self.task: asyncio.Task | None = None
 
-    async def connect(self):
-        message = {"version": 1, "token": self.token}
-        try:
-            async with asyncio.timeout(2):
-                await self.endpoint.send_return_data(
-                    DataMessage(
-                        self.pid,
-                        CONTROL_TOPIC,
-                        time.time_ns() // 1000,
-                        json.dumps(message).encode(),
-                    )
-                )
-        except Exception as exc:  # noqa: BLE001 — feedback cannot block capture/finalization on transport failure.
-            logger.warning("capture quality control unavailable pid={!r}: {}", self.pid, exc)
-
-    def telemetry(self, msg: DataMessage):
-        if msg.topic != TELEMETRY_TOPIC or len(msg.data) > 4096:
+    def status(self, data: MediaStatus) -> None:
+        if (
+            data.participant_id != self.pid or data.participant_session_id != self.session_id
+            or data.pts_us <= self.last_status_us
+        ):
             return
-        try:
-            data = Telemetry.model_validate_json(msg.data)
-        except ValidationError:
-            return
-        if data.token != self.token or data.sequence <= self.sequence:
-            return
-        self.sequence = data.sequence
-        self.preview.telemetry_received(data)
+        self.last_status_us = data.pts_us
+        self.preview.status_received(data)
         if self.state is not None:
-            self.state.telemetry_received(data)
+            self.state.status_received(data)
 
     def frame(self, frame: FrameSignal) -> None:
         self.preview.frame(frame)
@@ -248,8 +216,8 @@ class QualityFeedback:
         if self.task is not None and not self.task.done():
             raise RuntimeError("previous capture quality task must be drained before restart")
         self.state = QualityState(self.config, self.capture_fps, clock=self.clock)
-        if (telemetry := self.preview.fresh_telemetry(self.clock())) is not None:
-            self.state.telemetry_received(telemetry)
+        if (status := self.preview.fresh_status(self.clock())) is not None:
+            self.state.status_received(status)
         self.task = asyncio.create_task(self._run(publisher), name=f"capture-quality:{self.pid}")
 
     def invalidate(self):

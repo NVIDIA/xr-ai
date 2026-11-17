@@ -67,7 +67,7 @@ from ._codec import decode, encode
 from ._file_ordering import FileRoute, FileSessionOrderer
 from ._types import (AgentPresence, AudioChunk, DataMessage, FileMessage, FrameData,
                      FrameRequest, FrameSignal, ImageCaptureCancel,
-                     ImageCaptureData, ImageCaptureRequest, MsgType,
+                     ImageCaptureData, ImageCaptureRequest, MediaStatus, MsgType,
                      ParticipantEvent, ReturnAudioFlush, RosterRequest,
                      SubscriptionProbe)
 
@@ -76,6 +76,7 @@ log = logging.getLogger(__name__)
 FrameSignalCallback = Callable[[FrameSignal], Awaitable[None]]
 FrameDataCallback   = Callable[[FrameData],   Awaitable[None]]
 AudioCallback       = Callable[[AudioChunk],       Awaitable[None]]
+MediaStatusCallback = Callable[[MediaStatus], Awaitable[None]]
 DataCallback        = Callable[[DataMessage],      Awaitable[None]]
 ImageCaptureCallback = Callable[[ImageCaptureData], Awaitable[None]]
 FileCallback        = Callable[[FileMessage],      Awaitable[None]]
@@ -119,8 +120,8 @@ class Subscribe(Flag):
         # Per-pid override at subscribe time:
         ep.subscribe("alice", filter=Subscribe.DATA)
     """
-    DATA  = auto()  # `data.{pid}.*`
-    """Application data messages for a participant."""
+    DATA  = auto()  # `data.{pid}.*` and `media_status.{pid}.*`
+    """Application data and connector media-status messages for a participant."""
 
     AUDIO = auto()  # `audio.{pid}.*`
     """PCM audio chunks for a participant."""
@@ -146,7 +147,7 @@ class Subscribe(Flag):
 # ``.{pid}.`` is appended at subscribe time so e.g. ``data.alice`` does not
 # accidentally match ``data.alice2.chat``.
 _PREFIXES_BY_FLAG: dict["Subscribe", tuple[bytes, ...]] = {
-    Subscribe.DATA:  (b"data",),
+    Subscribe.DATA:  (b"data", b"media_status"),
     Subscribe.AUDIO: (b"audio",),
     Subscribe.VIDEO: (b"video", b"video_data"),
 }
@@ -277,6 +278,7 @@ class ProcessorEndpoint:
         self._frame_cbs:       list[FrameSignalCallback] = []
         self._frame_data_cbs:  list[FrameDataCallback]   = []
         self._audio_cbs:       list[AudioCallback]       = []
+        self._media_status_cbs: list[MediaStatusCallback] = []
         self._data_cbs:        list[DataCallback]        = []
         self._image_capture_cbs: list[ImageCaptureCallback] = []
         self._file_cbs:        list[FileCallback]        = []
@@ -485,6 +487,20 @@ class ProcessorEndpoint:
     def on_audio(self, cb: AudioCallback) -> None:
         """Register an async callback for inbound PCM audio chunks."""
         self._audio_cbs.append(cb)
+
+    def on_media_status(self, cb: MediaStatusCallback) -> CallbackUnsubscribe:
+        """Observe connector media status through the DATA subscription category.
+
+        No LiveKit dependency or client telemetry implementation is required.
+        Returns a function that unregisters this callback.
+        """
+        self._media_status_cbs.append(cb)
+
+        def unsubscribe() -> None:
+            if cb in self._media_status_cbs:
+                self._media_status_cbs.remove(cb)
+
+        return unsubscribe
 
     def on_data(self, cb: DataCallback) -> CallbackUnsubscribe:
         """Register an async data callback and return an idempotent unsubscriber."""
@@ -1036,6 +1052,11 @@ class ProcessorEndpoint:
                 self._spawn(cb(msg))
         elif type_id == MsgType.AUDIO_CHUNK:
             for cb in self._audio_cbs:
+                self._spawn(cb(msg))
+        elif type_id == MsgType.MEDIA_STATUS:
+            if self._participant_sessions.get(msg.participant_id) != msg.participant_session_id:
+                return
+            for cb in self._media_status_cbs:
                 self._spawn(cb(msg))
         elif type_id == MsgType.DATA_MESSAGE:
             for cb in self._data_cbs:

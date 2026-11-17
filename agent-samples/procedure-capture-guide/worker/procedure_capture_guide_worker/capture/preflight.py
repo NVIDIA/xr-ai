@@ -8,7 +8,7 @@ from .quality import _MESSAGES, QualityFeedback
 
 def check_setup(quality: QualityFeedback) -> str:
     now = quality.clock()
-    data = quality.preview.fresh_telemetry(now)
+    data = quality.preview.fresh_status(now)
     network = data.quality if data is not None else "unknown"
     fps, resolution = quality.preview.setup_video(now)
     messages = _MESSAGES["setup"]

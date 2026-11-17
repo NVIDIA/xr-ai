@@ -144,10 +144,12 @@ It answers as soon as earlier commands are processed, using data it already has.
 For example, "Network quality is good. Received video is 30.0 frames per second.
 Image resolution is 1280 by 720 pixels."
 
-The network grade comes from the web client's LiveKit connection rating.
+The existing LiveKit connector reads the remote participant's connection rating
+and publishes transport-neutral `MediaStatus` messages through the hub. This
+works for web and native clients without sample-specific client code.
 The worker estimates frame rate from the arrival times of recent live frames
 and reports the dimensions of the latest frame. If the connection grade is
-missing or older than `quality.telemetry_ttl_s`, it reports unknown network
+missing or older than `quality.status_ttl_s`, it reports unknown network
 quality. If the worker has received only one recent frame, it can report
 resolution while frame rate is still unavailable. Setup does not request
 snapshots in on-demand mode or create a recording.
@@ -156,7 +158,7 @@ While capture is active, a separate monitor speaks these conditions:
 
 | Condition | Default detection |
 | --- | --- |
-| Poor network | Fresh client telemetry reports poor or lost connection quality |
+| Poor network | Fresh connector status reports poor or lost connection quality |
 | Low frame rate | After a full 5-second observation window, received live-video FPS is below the configured `capture_fps` (2 by default) or below 50% of a stable initial rate |
 | Video stalled | An expected live stream has delivered no frames for 3 seconds; in on-demand mode, requested snapshots have failed with no successful sample for 3 seconds |
 | Low resolution | Short edge below 480 pixels or pixel count below 50% of the initial resolution; portrait rotation alone is not a drop |
@@ -182,12 +184,16 @@ Conditions due on the same monitor tick are combined in one spoken message:
 
 Times refer to notification submission; speech recognition, detection windows,
 and TTS playback add their normal latency. `quality.enabled: false` disables the
-setup command, media collection for quality checks, and spoken media alerts.
+setup command, worker-side quality monitoring, and spoken media alerts.
 Recording is still available.
 
-The web client sends connection grade and camera intent after a per-connection
-opt-in from the capture worker. It uses the existing network stats poll. A
-connection token and increasing sequence reject stale or replayed reports.
+The connector publishes a status snapshot every second using LiveKit SDK state;
+it does not poll RTC statistics or request camera images. It reports whether an
+unmuted video publication should deliver frames. An unpublished or muted camera
+is not treated as a stalled live stream; when snapshots are requested, their
+failures can still establish a capture problem. Frame rate and resolution come
+from the existing frame-metadata path. The hub and worker never access LiveKit.
+Session identity and observation time reject stale or replayed reports.
 Disconnect and shutdown drain the monitor; a new recording gets fresh alert
 clocks. `quality.jsonl` records condition changes and submitted alerts separately
 from narration. Sample-owned wording lives in `yaml/capture-messages.yaml`.

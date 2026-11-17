@@ -6,7 +6,6 @@
 # ruff: noqa: F811
 import asyncio
 import json
-import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -15,33 +14,24 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from pydantic import ValidationError
 from test_procedure_capture_guide import announcements, demo, joined, packet, speak  # noqa: F401
-from xr_ai_hub import DataMessage
+from xr_ai_hub import MediaStatus
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "agent-samples/procedure-capture-guide/worker"))
 from procedure_capture_guide_worker.capture import preflight  # noqa: E402
 from procedure_capture_guide_worker.capture.agent import CaptureAgent  # noqa: E402
 from procedure_capture_guide_worker.capture.quality import (  # noqa: E402
-    TELEMETRY_TOPIC,
     NotificationSchedule,
     QualityConfig,
     QualityFeedback,
     QualityState,
-    Telemetry,
 )
 
 
-def telemetry(**updates):
-    return Telemetry.model_validate(
-        {
-            "version": 2,
-            "token": "a" * 32,
-            "sequence": 1,
-            "mode": "live",
-            "streaming": True,
-            "quality": "good",
-            **updates,
-        }
-    )
+def status(**updates):
+    return MediaStatus(**{
+        "participant_id": "user", "participant_session_id": "session",
+        "pts_us": 1, "video_expected": True, "quality": "good", **updates,
+    })
 
 
 def frame(seq, width=1280, height=720, track="camera"):
@@ -55,9 +45,9 @@ class Scene:
         self.now, self.seq = 0.0, 0
         self.state = QualityState(QualityConfig(), 2, clock=lambda: self.now)
 
-    def second(self, fps=20, width=1280, height=720, *, send_telemetry=True, **updates):
-        if send_telemetry:
-            self.state.telemetry_received(telemetry(**updates))
+    def second(self, fps=20, width=1280, height=720, *, send_status=True, **updates):
+        if send_status:
+            self.state.status_received(status(**updates))
         start = self.now
         for i in range(fps):
             self.now = start + i / fps
@@ -80,9 +70,9 @@ class Scene:
             {"low_frame_rate", "low_resolution", "poor_network"},
         ),
         ({"width": 720, "height": 1280}, set()),
-        ({"fps": 0, "mode": "off", "streaming": False}, set()),
-        ({"fps": 0, "mode": "on-demand", "streaming": False}, set()),
-        ({"send_telemetry": False}, set()),
+        ({"fps": 0, "video_expected": False}, set()),
+        ({"fps": 0, "video_expected": False}, set()),
+        ({"send_status": False}, set()),
     ],
 )
 def test_media_conditions_and_recovery(values, expected):
@@ -109,12 +99,12 @@ def test_track_change_duplicate_frames_and_snapshot_rate():
     scene.state.frame(frame(scene.seq + 1, track="old"))
     assert len(scene.state.frames) == count
     # Stopping and republishing the camera resets cadence and resolution baselines.
-    scene.state.telemetry_received(telemetry(mode="off", streaming=False))
+    scene.state.status_received(status(video_expected=False))
     for _ in range(12):
         assert not scene.second(fps=8, width=960, height=540)
 
 
-def test_missing_telemetry_does_not_invent_network_or_live_rate():
+def test_missing_status_does_not_invent_network_or_live_rate():
     state = QualityState(QualityConfig(), 2)
     state.sample(frame(1))
     assert not state.evaluate()
@@ -123,7 +113,7 @@ def test_missing_telemetry_does_not_invent_network_or_live_rate():
 
 def test_requested_snapshots_stall_and_recover():
     scene = Scene()
-    scene.state.telemetry_received(telemetry(mode="on-demand", streaming=False))
+    scene.state.status_received(status(video_expected=False))
     scene.state.sample(None)
     scene.now = 3
     assert scene.state.evaluate() == {"video_stalled"}
@@ -178,7 +168,7 @@ async def test_monitor_submits_audio_on_independent_deadlines(simultaneous):
 
     monitor = QualityFeedback(
         "user",
-        SimpleNamespace(send_return_data=AsyncMock()),
+        "session",
         SimpleNamespace(capture_quality=AsyncMock()),
         QualityConfig(),
         2,
@@ -213,33 +203,29 @@ async def wait_for(predicate):
 
 
 def install_quality(demo, *, enabled=True):
-    endpoint = SimpleNamespace(send_return_data=AsyncMock())
     demo.capture = CaptureAgent(
         demo.capture_backend,
         quality_config=QualityConfig(enabled=enabled, poll_interval_s=0.01, repeat_interval_s=0.05),
-        endpoint=endpoint,
     )
     demo.capture_backend.on_sample = demo.capture.on_quality_sample
-    return endpoint
 
 
-async def test_lease_rejects_replays_and_previous_connection(demo):
+async def test_status_rejects_replays_and_previous_connection(demo):
     install_quality(demo)
     await demo.capture.receive(joined())
     monitor = demo.capture._connections["user"].quality
 
-    async def send(token, seq):
-        data = telemetry(token=token, sequence=seq)
-        await demo.capture.on_quality_data(DataMessage("user", TELEMETRY_TOPIC, 1, data.model_dump_json().encode()))
+    async def send(session, timestamp):
+        await demo.capture.on_media_status(status(participant_session_id=session, pts_us=timestamp))
 
     await send("wrong", 99)
-    assert monitor.preview.telemetry is None
-    await send(monitor.token, 2)
-    await send(monitor.token, 1)
-    assert monitor.preview.telemetry.sequence == 2
+    assert monitor.preview.status is None
+    await send(monitor.session_id, 2)
+    await send(monitor.session_id, 1)
+    assert monitor.preview.status.pts_us == 2
     await demo.capture.receive(joined(session="replacement"))
-    await send(monitor.token, 3)
-    assert demo.capture._connections["user"].quality.preview.telemetry is None
+    await send(monitor.session_id, 3)
+    assert demo.capture._connections["user"].quality.preview.status is None
 
 
 async def test_audio_notifications_never_stop_recording_and_stop_drains_them(demo):
@@ -248,7 +234,7 @@ async def test_audio_notifications_never_stop_recording_and_stop_drains_them(dem
     await speak(demo, "start capture")
     state = demo.capture_backend._sessions["user"]
     monitor = demo.capture._connections["user"].quality
-    monitor.state.telemetry_received(telemetry(quality="poor", mode="off", streaming=False))
+    monitor.state.status_received(status(quality="poor", video_expected=False))
     await wait_for(lambda: sum(c.args[1].kind == "update" for c in demo.output.call_args_list) >= 2)
     assert demo.capture_backend.is_capturing("user")
     await speak(demo, "Narration while the connection is poor")
@@ -265,13 +251,13 @@ async def test_audio_notifications_never_stop_recording_and_stop_drains_them(dem
 
 
 @pytest.mark.parametrize("ending", ["disconnect", "restart", "close"])
-async def test_quality_lifetime_drains_and_only_offers_telemetry_on_join(demo, ending):
-    endpoint = install_quality(demo)
+async def test_quality_lifetime_drains_on_leave_restart_and_shutdown(demo, ending):
+    install_quality(demo)
     event = joined()
     await demo.capture.receive(event)
     monitor = demo.capture._connections["user"].quality
-    data = telemetry(token=monitor.token, quality="poor")
-    await demo.capture.on_quality_data(DataMessage("user", TELEMETRY_TOPIC, 1, data.model_dump_json().encode()))
+    data = status(participant_id=monitor.pid, participant_session_id=monitor.session_id, quality="poor")
+    await demo.capture.on_media_status(data)
     await speak(demo, "start capture")
     state = demo.capture_backend._sessions["user"]
     await wait_for(lambda: any("network connection is poor" in text for text in announcements(demo)))
@@ -292,7 +278,6 @@ async def test_quality_lifetime_drains_and_only_offers_telemetry_on_join(demo, e
     assert monitor.task is None and monitor.state is None
     assert packet(state)["status"] == "complete"
     assert not demo.capture_backend.is_capturing("user")
-    endpoint.send_return_data.assert_awaited_once()
 
 
 @pytest.mark.parametrize("command", ["Check setup", "Check set up.", "Check set-up!"])
@@ -312,7 +297,7 @@ async def test_setup_audio_and_capture_command_not_saved_as_narration(demo, comm
 async def test_quality_disabled_hides_setup_and_leaves_capture_available(demo):
     from xr_ai_interaction import ParticipantJoined
 
-    endpoint = install_quality(demo, enabled=False)
+    install_quality(demo, enabled=False)
     await demo.capture.receive(joined())
     ctx = SimpleNamespace(metadata=SimpleNamespace(participant_id="user"), publish=demo.output)
     await demo.capture.participant_joined(ParticipantJoined(), ctx)
@@ -324,16 +309,15 @@ async def test_quality_disabled_hides_setup_and_leaves_capture_available(demo):
     await speak(demo, "start capture")
     assert demo.capture_backend.is_capturing("user")
     await speak(demo, "stop capture")
-    endpoint.send_return_data.assert_not_awaited()
 
 
 def test_setup_reports_latest_received_fps_resolution_and_fresh_grade():
     scene = Scene()
-    monitor = QualityFeedback("user", Mock(), Mock(), QualityConfig(), 2, clock=lambda: scene.now)
+    monitor = QualityFeedback("user", "session", Mock(), QualityConfig(), 2, clock=lambda: scene.now)
     text = preflight.check_setup(monitor)
     assert "Network quality is unknown" in text
     assert "frame rate is unavailable" in text and "resolution is unavailable" in text
-    monitor.preview.telemetry_received(telemetry(quality="poor"))
+    monitor.preview.status_received(status(quality="poor"))
     for i in range(10):
         scene.now = i / 20
         monitor.frame(frame(i, width=640, height=360))
@@ -349,42 +333,14 @@ def test_setup_reports_latest_received_fps_resolution_and_fresh_grade():
 
 
 def test_setup_on_demand_does_not_report_old_live_video():
-    monitor = QualityFeedback("user", Mock(), Mock(), QualityConfig(), 2)
-    monitor.preview.telemetry_received(telemetry())
+    monitor = QualityFeedback("user", "session", Mock(), QualityConfig(), 2)
+    monitor.preview.status_received(status())
     monitor.frame(frame(1))
     assert "1280 by 720" in preflight.check_setup(monitor)
-    monitor.preview.telemetry_received(telemetry(mode="on-demand", streaming=False))
+    monitor.preview.status_received(status(video_expected=False))
     text = preflight.check_setup(monitor)
     assert "Network quality is good" in text
     assert "frame rate is unavailable" in text and "resolution is unavailable" in text
-
-
-def test_browser_media_telemetry():
-    script = Path(__file__).parent / "javascript/capture_quality.test.mjs"
-    result = subprocess.run(["node", "--test", str(script)], capture_output=True, text=True, timeout=15)
-    assert result.returncode == 0, result.stdout + result.stderr
-
-
-def test_browser_payload_matches_strict_worker_schema():
-    root = Path(__file__).resolve().parents[1]
-    source = """
-import { CaptureQualityClient } from './client-samples/web/App/CaptureQuality.js';
-const client = new CaptureQualityClient({
-  send: data => console.log(data),
-  read: () => ({ connectionState: 'connected', cameraMode: 'live', isCameraActive: true }),
-});
-client.enable(new TextEncoder().encode(JSON.stringify({ version: 1, token: 'a'.repeat(32) })));
-await client.report({ quality: 'poor' });
-"""
-    result = subprocess.run(
-        ["node", "--input-type=module", "-e", source],
-        cwd=root,
-        capture_output=True,
-        check=True,
-        timeout=15,
-    )
-    data = Telemetry.model_validate_json(result.stdout)
-    assert data.mode == "live" and data.streaming and data.quality == "poor"
 
 
 async def test_initial_alert_waits_for_start_acknowledgement(demo, monkeypatch):
@@ -393,8 +349,8 @@ async def test_initial_alert_waits_for_start_acknowledgement(demo, monkeypatch):
     install_quality(demo)
     await demo.capture.receive(joined(_PID))
     monitor = demo.capture._connections[_PID].quality
-    data = telemetry(token=monitor.token, quality="poor")
-    await demo.capture.on_quality_data(DataMessage(_PID, TELEMETRY_TOPIC, 1, data.model_dump_json().encode()))
+    data = status(participant_id=monitor.pid, participant_session_id=monitor.session_id, quality="poor")
+    await demo.capture.on_media_status(data)
     async with _pipeline(monkeypatch) as (voice, _, tts, endpoint, _gate):
         warning = asyncio.Event()
 

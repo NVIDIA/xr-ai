@@ -419,7 +419,6 @@ export function resolvedTokenURL(model) {
  *   startCamera: () => Promise<void>,
  *   stopCamera: () => Promise<void>,
  *   onStateChange?: (state: string) => void,
- *   onNetworkMetrics?: (metrics: import('/StreamKit/index.js').NetworkMetrics) => void,
  *   onDataReceived?: (topic: string, data: Uint8Array) => boolean,
  * }} opts
  *   `stopCamera` is the caller wrapper used to synchronize local UI state
@@ -428,7 +427,7 @@ export function resolvedTokenURL(model) {
 export async function connect(model, {
   render, showError, enumerateCameras: _ec,
   startCamera: _startCamera, stopCamera: _stopCamera,
-  onStateChange, onDataReceived, onNetworkMetrics,
+  onStateChange, onDataReceived,
 }) {
   if (model.connectionState !== ConnectionState.DISCONNECTED) return;
   model.connectionState = ConnectionState.CONNECTING;
@@ -484,7 +483,6 @@ export async function connect(model, {
 
   newSession.onNetworkMetrics = (metrics) => {
     model.networkMetrics = metrics;
-    onNetworkMetrics?.(metrics);
     renderNetworkMetrics(model);
   };
 

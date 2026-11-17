@@ -547,7 +547,7 @@ async def test_app_drains_voice_transcripts_and_recordings_before_endpoint_close
 
     async def send(message):
         assert not capture_closed
-        assert message.topic in {CAPTURE_STT_TOPIC, "procedure.capture.quality.control"}
+        assert message.topic == CAPTURE_STT_TOPIC
 
     async def receive_forever():
         receiving.set()
@@ -558,7 +558,7 @@ async def test_app_drains_voice_transcripts_and_recordings_before_endpoint_close
 
     capture_endpoint = SimpleNamespace(
         on_participant=lambda cb: callbacks.update(participant=cb),
-        on_frame=Mock(), on_data=Mock(),
+        on_frame=Mock(), on_media_status=Mock(),
         run=receive_forever,
         wait_until_running=receiving.wait,
         send_return_data=AsyncMock(side_effect=send),

@@ -17,7 +17,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 
 from loguru import logger
-from xr_ai_hub import ParticipantEvent, ProcessorEndpoint
+from xr_ai_hub import MediaStatus, ParticipantEvent
 from xr_ai_interaction import ParticipantJoined, ResponseOutputs, UserQuery
 from xr_ai_runtime import Agent, RuntimeContext, Topic, subscribe
 from xr_ai_voice import VOICE_OUTPUT_TOPIC
@@ -56,13 +56,11 @@ class CaptureAgent(Agent):
     """
     def __init__(
         self, capture_backend: _Capture, *, quality_config: QualityConfig | None = None,
-        endpoint: ProcessorEndpoint | None = None, capture_fps: float = 2.0,
+        capture_fps: float = 2.0,
     ) -> None:
         super().__init__()
-        if quality_config is not None and quality_config.enabled and endpoint is None:
-            raise ValueError("capture quality feedback requires a hub endpoint")
         self._capture_backend = capture_backend
-        self._quality_config, self._endpoint, self._capture_fps = quality_config, endpoint, capture_fps
+        self._quality_config, self._capture_fps = quality_config, capture_fps
         # Recording ownership applied to the backend by queued actions. Keep this
         # separate from connection.recording: newer input may already be accepted.
         self._sessions: dict[str, _Recording] = {}
@@ -124,7 +122,8 @@ class CaptureAgent(Agent):
                 self._connections[pid] = _Connection(event.participant_session_id, event.pts_us)
                 if self._quality_config is not None and self._quality_config.enabled:
                     self._connections[pid].quality = QualityFeedback(
-                        pid, self._endpoint, self._capture_backend, self._quality_config, self._capture_fps,
+                        pid, event.participant_session_id, self._capture_backend,
+                        self._quality_config, self._capture_fps,
                     )
             elif not event.joined and duplicate:
                 connection.cancelled.set()
@@ -137,11 +136,6 @@ class CaptureAgent(Agent):
                 return
             if connection is not None and connection.quality is not None and not (event.joined and duplicate):
                 await connection.quality.stop()
-            if event.joined and not duplicate:
-                current = self._connections.get(pid)
-                if (current is not None and current.session_id == event.participant_session_id
-                        and current.quality is not None):
-                    await current.quality.connect()
             recording = self._sessions.get(pid)
             try:
                 if recording is not None and recording.connection is connection and not (event.joined and duplicate):
@@ -253,10 +247,10 @@ class CaptureAgent(Agent):
             self._enqueue(pid, narrate)
         # Return promptly; this owner drains per-participant writes and boundaries.
 
-    async def on_quality_data(self, message) -> None:
+    async def on_media_status(self, message: MediaStatus) -> None:
         connection = self._connections.get(message.participant_id)
         if connection is not None and connection.quality is not None:
-            connection.quality.telemetry(message)
+            connection.quality.status(message)
 
     async def on_quality_frame(self, frame) -> None:
         connection = self._connections.get(frame.participant_id)

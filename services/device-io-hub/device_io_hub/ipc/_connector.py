@@ -38,6 +38,7 @@ from xr_ai_hub import (
     DataMessage,
     FileMessage,
     FrameSignal,
+    MediaStatus,
     MsgType,
     ParticipantEvent,
     PixelFormat,
@@ -314,6 +315,14 @@ class ConnectorEndpoint:
 
     async def push_audio(self, chunk: AudioChunk) -> None:
         await self._push.send(encode(MsgType.AUDIO_CHUNK, chunk))
+
+    async def push_media_status(self, msg: MediaStatus) -> None:
+        """Forward an observation only for this connector's current session."""
+        if self._participant_sessions.get(msg.participant_id) != msg.participant_session_id:
+            return
+        await self._push.send(encode(
+            MsgType.MEDIA_STATUS, replace(msg, connector_id=self._connector_id),
+        ))
 
     async def push_data(self, msg: DataMessage) -> None:
         await self._push.send(encode(MsgType.DATA_MESSAGE, msg))

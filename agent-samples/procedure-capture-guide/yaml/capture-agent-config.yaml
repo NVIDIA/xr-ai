@@ -8,14 +8,14 @@ artifacts_dir: ../artifacts
 capture_fps: 2.0
 caption_interval_s: 5.0
 
-# Media checks use client telemetry and received frames, never models.
-# Missing telemetry is unknown. Audio notifications never stop capture.
+# Media checks use connector status and received frames, never models.
+# Missing status is unknown. Audio notifications never stop capture.
 quality:
   enabled: true
   repeat_interval_s: 10  # Minimum seconds between alerts for the SAME condition.
   poll_interval_s: 1     # Conditions due on the same tick share one announcement.
   window_s: 5
   stall_s: 3
-  telemetry_ttl_s: 4
+  status_ttl_s: 4
   min_short_edge: 480
   drop_ratio: 0.5

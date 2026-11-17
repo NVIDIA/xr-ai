@@ -28,7 +28,6 @@ import {
   sendCustom        as _sendCustom,
   wireBaseEvents,
 } from '/App/core.js';
-import { CaptureQualityClient, CAPTURE_QUALITY_CONTROL } from './CaptureQuality.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Model state  (mirrors AppModel.swift field-for-field)
@@ -45,7 +44,6 @@ const model = {
 // uses `agent.response`); both route into the Agent panel and are suppressed
 // from the "Received" list.
 const AGENT_REPLY_TOPICS = new Set(['agent.response', 'vlm.response']);
-let captureQuality = null;
 
 function clearCameraPreview() {
   const videoEl = $('camera-preview');
@@ -176,21 +174,7 @@ function sendCustom(text)   { return _sendCustom(model, text, showError); }
 function connect()          {
   return _connect(model, {
     render, showError, enumerateCameras, startCamera, stopCamera,
-    onStateChange(state) {
-      if (state === 'disconnected') captureQuality = null;
-    },
-    onNetworkMetrics(metrics) {
-      void captureQuality?.report(metrics);
-    },
     onDataReceived(topic, data) {
-      if (topic === CAPTURE_QUALITY_CONTROL) {
-        captureQuality ??= new CaptureQualityClient({
-          send: (text, options) => model.session.send(text, options),
-          read: () => model,
-        });
-        if (captureQuality.enable(data)) void captureQuality.report(model.networkMetrics);
-        return true;
-      }
       if (AGENT_REPLY_TOPICS.has(topic)) {
         model.agentResponse = new TextDecoder().decode(data);
         render();
