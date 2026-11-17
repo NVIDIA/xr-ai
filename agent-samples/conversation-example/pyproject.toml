@@ -8,6 +8,7 @@ build-backend = "hatchling.build"
 [project]
 name = "conversation-example"
 version = "0.1.0"
+description = "Voice and text conversation with visual questions, one-shot visual alerts, and note-taking."
 requires-python = ">=3.11,<3.15"
 dependencies = [
     "xr-ai-launcher",
