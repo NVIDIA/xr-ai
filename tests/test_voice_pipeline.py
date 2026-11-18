@@ -5042,4 +5042,49 @@ async def test_audio_power_observer_reuses_vad_and_preserves_window_timestamps(m
     assert windows[40].power == pytest.approx((3277 / 32768) ** 2)
     transcripts = [f for f in sink.frames if isinstance(f, TranscriptionFrame)]
     assert len(transcripts) == 1 and transcripts[0].text == "check setup"
-    assert transcripts[0].pts == windows[44].timestamp_us * 1000
+    # The transcript keeps the existing packet-based speech-onset clock.
+    crossing_byte = 45 * 512 * 2 - 1
+    assert transcripts[0].pts == frames[crossing_byte // chunk_bytes].pts
+
+
+def test_vad_config_preserves_positional_probe_setting():
+    config = VadConfig(.8, .15, .5, 0)
+    assert config.stop_probe_after_s == 0
+    assert config.on_audio_window is None
+
+
+@pytest.mark.parametrize("packet_samples", [160, 512])
+async def test_audio_observer_does_not_change_transcript_time_with_packet_gaps(monkeypatch, packet_samples):
+    from xr_ai_vad import detector
+
+    class Silero:
+        def __call__(self, tensor, sample_rate):
+            return 0.9 if tensor.abs().max().item() > 0.01 else 0.0
+
+        def reset_states(self):
+            pass
+
+    monkeypatch.setattr(detector, "load_silero_vad", lambda **kwargs: Silero())
+    results, windows = [], []
+    for observe in (None, windows.append):
+        proc = VadSttProcessor(stt=_FakeStt(text="narration"), vad_cfg=VadConfig(
+            stop_probe_after_s=0, on_audio_window=observe,
+        ))
+        frames = []
+        for i in range(1200):
+            value = 3277 if 1000 <= i < 1032 else 32
+            frame = InputAudioRawFrame(audio=np.full(packet_samples, value, np.int16).tobytes(),
+                                       sample_rate=16000, num_channels=1)
+            frame.transport_source = "alice"
+            frame.pts = 1_000_000_000 + i * packet_samples * 1_000_000_000 // 16000 + (i // 10) * 20_000_000
+            frames.append(frame)
+        sink = await _run_chain(proc, sends=frames)
+        results.append([f.pts for f in sink.frames if isinstance(f, TranscriptionFrame)])
+    crossing_sample = (1000 * packet_samples // 512 + 5) * 512
+    crossing_packet = (crossing_sample - 1) // packet_samples
+    assert results[0] == results[1] == [frames[crossing_packet].pts]
+    assert [w.timestamp_us for w in windows] == [
+        frames[i * 512 // packet_samples].pts // 1000
+        + (i * 512 % packet_samples) * 1_000_000 // 16000
+        for i in range(len(windows))
+    ]

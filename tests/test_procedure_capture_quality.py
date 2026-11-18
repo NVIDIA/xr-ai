@@ -409,7 +409,8 @@ async def test_queued_capture_and_setup_reply_in_input_order(demo, monkeypatch, 
 
 
 @pytest.mark.parametrize("staggered", [False, True])
-async def test_pending_media_alerts_replace_repeats_without_erasing_other_conditions(monkeypatch, staggered):
+@pytest.mark.parametrize("recover", [False, True])
+async def test_pending_media_alerts_replace_repeats_without_erasing_other_conditions(monkeypatch, staggered, recover):
     from pipecat.frames.frames import UserStartedSpeakingFrame, UserStoppedSpeakingFrame
     from test_voice_playback_state import _PID, _pipeline
 
@@ -418,7 +419,7 @@ async def test_pending_media_alerts_replace_repeats_without_erasing_other_condit
     )
     rate_warning = "The video frame rate has dropped by at least 50 percent from its initial value."
     now = [0.0]
-    conditions = {"low_resolution"}
+    conditions = {"low_resolution", "low_frame_rate"} if recover else {"low_resolution"}
     ticks, resume = asyncio.Queue(), asyncio.Queue()
 
     async def sleep(_seconds):
@@ -433,7 +434,9 @@ async def test_pending_media_alerts_replace_repeats_without_erasing_other_condit
         await wait_for(lambda: _PID in voice._user_speaking)
 
         async def publish(_topic, message, *, participant_id, source):
-            if message.kind == "update":
+            if message.replace_pending:
+                await voice.replace_pending_update(participant_id, message.text, source=source)
+            elif message.kind == "update":
                 await voice.enqueue_update(participant_id, message.text, source=source, urgent=message.urgent)
             elif message.kind == "withdraw":
                 await voice.withdraw_updates(participant_id, source=source)
@@ -453,23 +456,81 @@ async def test_pending_media_alerts_replace_repeats_without_erasing_other_condit
                     conditions.add("low_frame_rate")
                 resume.put_nowait(True)
                 await ticks.get()
+            if recover:
+                now[0] = 21
+                conditions.discard("low_resolution")
+                resume.put_nowait(True)
+                await ticks.get()
             assert not tts.calls
             stopped = UserStoppedSpeakingFrame()
             stopped.transport_source = _PID
             await worker.queue_frame(stopped)
             await wait_for(lambda: bool(tts.calls) and not voice._floor)
             spoken = " ".join(tts.calls)
-            assert spoken.count(resolution_warning) == 1
-            assert spoken.count(rate_warning) == int(staggered)
+            assert spoken.count(resolution_warning) == int(not recover)
+            assert spoken.count(rate_warning) == int(staggered or recover)
             assert spoken.count("Unrelated notice.") == 1
             # Replacing unheard copies must not disable reminders once heard.
             now[0] = 30
             resume.put_nowait(True)
             await ticks.get()
-            await wait_for(lambda: " ".join(tts.calls).count(resolution_warning) == 2)
+            await wait_for(lambda: " ".join(tts.calls).count(rate_warning if recover else resolution_warning) == 2)
             await wait_for(lambda: not voice._floor)
             spoken = " ".join(tts.calls)
-            assert spoken.count(resolution_warning) == 2
-            assert spoken.count(rate_warning) == 2 * int(staggered)
+            assert spoken.count(resolution_warning) == 2 * int(not recover)
+            assert spoken.count(rate_warning) == 2 * int(staggered or recover)
+            if staggered and not recover:
+                calls = len(tts.calls)
+                now[0] = 31
+                conditions.discard("low_resolution")
+                resume.put_nowait(True)
+                await ticks.get()
+                await asyncio.sleep(.02)
+                assert len(tts.calls) == calls
+        finally:
+            await monitor.stop()
+
+
+async def test_recovery_does_not_replay_an_already_heard_combined_warning(monkeypatch):
+    from test_voice_playback_state import _PID, _pipeline
+
+    now, conditions = [0.0], {"low_resolution", "low_frame_rate"}
+    ticks, resume = asyncio.Queue(), asyncio.Queue()
+
+    async def sleep(_):
+        ticks.put_nowait(True)
+        await resume.get()
+
+    async with _pipeline(monkeypatch) as (voice, worker, tts, endpoint, _gate):
+        endpoint.release.set()
+
+        async def publish(_topic, message, *, participant_id, source):
+            if message.replace_pending:
+                await voice.replace_pending_update(participant_id, message.text, source=source)
+            elif message.kind == "update":
+                await voice.enqueue_update(participant_id, message.text, source=source)
+            else:
+                await voice.withdraw_updates(participant_id, source=source)
+
+        monitor = QualityFeedback(_PID, SimpleNamespace(capture_quality=AsyncMock()), QualityConfig(),
+                                  clock=lambda: now[0], sleep=sleep)
+        monitor.state.evaluate = lambda: set(conditions)
+        monitor.start(SimpleNamespace(publish=publish))
+        try:
+            await ticks.get()
+            await wait_for(lambda: bool(tts.calls) and not voice._floor)
+            calls = list(tts.calls)
+            assert "resolution" in " ".join(calls) and "frame rate" in " ".join(calls)
+            now[0] = 1
+            conditions.remove("low_resolution")
+            resume.put_nowait(True)
+            await ticks.get()
+            await asyncio.sleep(.02)
+            assert tts.calls == calls
+            now[0] = 10
+            resume.put_nowait(True)
+            await ticks.get()
+            await wait_for(lambda: len(tts.calls) > len(calls) and not voice._floor)
+            assert "resolution" not in " ".join(tts.calls[len(calls):])
         finally:
             await monitor.stop()

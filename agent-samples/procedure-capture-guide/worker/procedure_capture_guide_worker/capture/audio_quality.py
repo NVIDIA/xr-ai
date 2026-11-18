@@ -14,7 +14,7 @@ import math
 from collections import deque
 from dataclasses import dataclass
 
-from xr_ai_voice import VoiceAudioWindow
+from xr_ai_voice import VoiceAudioUtterance, VoiceAudioWindow
 
 
 @dataclass(frozen=True)
@@ -26,8 +26,8 @@ class _Estimate:
 
 
 class AudioQuality:
-    def __init__(self, config, *, clock, silence_s: float):
-        self.config, self.clock, self.silence_s = config, clock, silence_s
+    def __init__(self, config, *, clock):
+        self.config, self.clock = config, clock
         self.reset()
 
     def reset(self):
@@ -42,7 +42,7 @@ class AudioQuality:
     def _clear_utterance(self):
         self.start_us = None
         self.noise_power = None
-        self.energy = self.speech_s = self.silence = self.total_s = 0.0
+        self.energy = self.speech_s = 0.0
 
     def observe(self, window: VoiceAudioWindow):
         if not math.isfinite(window.power) or window.power < 0 or not 0 < window.duration_s <= 0.1:
@@ -68,25 +68,21 @@ class AudioQuality:
                     self.noise_power = sum(w.power * w.duration_s for w in quiet) / duration
             self.energy += window.power * window.duration_s
             self.speech_s += window.duration_s
-            self.silence = 0.0
         else:
-            self.silence += window.duration_s
             self.noise.append(window)
-        if self.start_us is not None:
-            self.total_s += window.duration_s
-            if self.silence >= self.silence_s or self.total_s >= 30:
+
+    def finish(self, utterance: VoiceAudioUtterance):
+        ratio = None
+        if (self.speech_s >= self.config.audio_min_speech_s
+                and self.noise_power is not None and self.noise_power > 0):
+            ratio = self.energy / self.speech_s / self.noise_power - 1
+            if ratio <= 0 or not math.isfinite(ratio):
                 ratio = None
-                if (self.speech_s >= self.config.audio_min_speech_s
-                        and self.noise_power is not None and self.noise_power > 0):
-                    ratio = self.energy / self.speech_s / self.noise_power - 1
-                    if ratio <= 0 or not math.isfinite(ratio):
-                        ratio = None
-                self.estimates.append(_Estimate(self.start_us, self.speech_s, ratio, self.clock()))
-                self._clear_utterance()
+        self.estimates.append(_Estimate(utterance.timestamp_us, self.speech_s, ratio, self.clock()))
+        self._clear_utterance()
 
     def accept(self, timestamp_us: int, *, setup: bool = False):
-        candidates = [e for e in self.estimates if abs(e.start_us - timestamp_us) <= 500_000]
-        estimate = min(candidates, key=lambda e: abs(e.start_us - timestamp_us)) if candidates else None
+        estimate = next((e for e in reversed(self.estimates) if e.start_us == timestamp_us), None)
         if estimate is not None and self.clock() - estimate.received_at > self.config.audio_max_age_s:
             estimate = None
         if setup:

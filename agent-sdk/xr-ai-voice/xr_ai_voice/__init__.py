@@ -10,7 +10,7 @@ audio framing, and pipeline processors are implementation details.
 
 from ._combiner import llm_update_combiner
 from ._processors import VadConfig
-from ._processors.vad_stt import VoiceAudioWindow
+from ._processors.vad_stt import VoiceAudioUtterance, VoiceAudioWindow
 from ._runtime import VOICE_OUTPUT_TOPIC, VOICE_TRANSCRIPT_TOPIC, VoiceAgent, VoiceStreamClosedError, VoiceTranscript
 from ._transport import HubVoiceTransport
 
@@ -18,6 +18,7 @@ __all__ = [
     "HubVoiceTransport",
     "VadConfig",
     "VoiceAudioWindow",
+    "VoiceAudioUtterance",
     "llm_update_combiner",
     "VOICE_OUTPUT_TOPIC",
     "VOICE_TRANSCRIPT_TOPIC",

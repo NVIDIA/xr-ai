@@ -171,7 +171,9 @@ network condition.
 
 Audio SNR uses the existing batch-STT Silero VAD windows, without additional
 inference or a LiveKit status message. The worker keeps bounded power summaries,
-not raw audio. An accepted **check setup** utterance establishes the audio
+not raw audio. Estimates finalize at the voice pipeline's actual utterance boundary,
+including its length limit, and use the resulting transcript timestamp for matching.
+Monitoring does not change narration timestamps. An accepted **check setup** utterance establishes the audio
 baseline from speech power and preceding non-speech power. A brief quiet pause
 before the command helps supply the noise reference. Setup replies immediately;
 insufficient speech, missing noise, or a zero noise floor produces an unavailable

@@ -420,6 +420,11 @@ class VoiceAgent(Agent):
                     streaming=False,
                     status="completed",
                 ):
+                    if output.replace_pending:
+                        await self._session.replace_pending_update(
+                            participant_id, output.text, source=metadata.source,
+                        )
+                        return
                     await self._session.enqueue_update(
                         participant_id,
                         output.text,

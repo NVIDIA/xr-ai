@@ -71,7 +71,12 @@ presentation timestamp, duration, mean-square power and the existing Silero spee
 decision. It performs no extra inference and is available only with batch STT.
 Callbacks must not block. Observer failures are isolated from transcription.
 Observations precede voice-gate filtering; applications should associate them with
-accepted input before acting on speech measurements.
+accepted input before acting on speech measurements. The companion
+`VadConfig.on_audio_utterance` callback receives
+{py:class}`~xr_ai_voice.VoiceAudioUtterance` when the VAD finalizes, before STT,
+including at its maximum utterance length. Use this boundary to finalize
+measurements, and its transcript-matching timestamp to associate accepted input.
+Both callbacks are keyword-only; neither changes transcript timing.
 
 For the startup probe contract, refer to {py:class}`~xr_ai_voice.VoiceAgent`.
 For deployment order and model availability requirements, refer to

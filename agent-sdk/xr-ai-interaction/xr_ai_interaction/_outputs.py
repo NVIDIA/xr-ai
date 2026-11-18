@@ -84,6 +84,14 @@ class ResponseOutputs:
             ResponseOutput(kind="update", text=text, urgent=urgent, timestamp_us=timestamp_us),
         )
 
+    async def replace_pending(self, participant_id: str, text: str) -> None:
+        """Revise this producer's queued nonurgent updates, without repeating heard output.
+
+        :param participant_id: Participant whose queued updates are revised.
+        :param text: Replacement notice; use :meth:`withdraw` to remove it entirely.
+        """
+        await self._publish(participant_id, ResponseOutput(kind="update", text=text, replace_pending=True))
+
     async def withdraw(self, participant_id: str) -> None:
         """Drop this producer's updates for a participant that have not started playing.
 

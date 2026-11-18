@@ -135,13 +135,12 @@ class QualityFeedback:
         *,
         clock=time.monotonic,
         sleep=asyncio.sleep,
-        audio_silence_s=0.8,
     ):
         self.pid, self.backend = pid, backend
         self.clock, self.sleep = clock, sleep
         self.config = config
         self.state = QualityState(config, clock=clock)
-        self.audio = AudioQuality(config, clock=clock, silence_s=audio_silence_s)
+        self.audio = AudioQuality(config, clock=clock)
         self.audio_track = None
         self.audio_track_started_us = 0
         self.task: asyncio.Task | None = None
@@ -184,11 +183,30 @@ class QualityFeedback:
                 self.state.metrics.update(audio_metrics)
                 if audio_low:
                     conditions.add("low_audio_snr")
+                ratios = {
+                    "low_frame_rate": self.config.frame_rate_drop_ratio,
+                    "low_resolution": self.config.resolution_drop_ratio,
+                    "low_audio_snr": self.config.audio_snr_drop_ratio,
+                }
+
+                def warning(names):
+                    return " ".join(
+                        _MESSAGES["conditions"][name].format(
+                            drop_percent=100 * (1 - ratios[name]),
+                            snr_drop_db=audio_metrics["audio_snr_drop_db"],
+                        ) for name in _MESSAGES["conditions"] if name in names
+                    )
+
                 if conditions != previous:
                     for batch in list(batches):
                         if not batch <= conditions:
-                            await batches[batch].withdraw(self.pid)
-                            del batches[batch]
+                            outputs = batches.pop(batch)
+                            remaining = batch.intersection(conditions)
+                            if remaining:
+                                await outputs.replace_pending(self.pid, warning(remaining))
+                                batches[frozenset(remaining)] = outputs
+                            else:
+                                await outputs.withdraw(self.pid)
                     await self._record("conditions_changed", conditions=sorted(conditions), metrics=self.state.metrics)
                     previous = set(conditions)
                 due = schedule.due(conditions, now)
@@ -204,17 +222,7 @@ class QualityFeedback:
                         publisher, VOICE_OUTPUT_TOPIC, source=f"{source}:{','.join(due)}",
                     )
                     batches[frozenset(due)] = outputs
-                    ratios = {
-                        "low_frame_rate": self.config.frame_rate_drop_ratio,
-                        "low_resolution": self.config.resolution_drop_ratio,
-                        "low_audio_snr": self.config.audio_snr_drop_ratio,
-                    }
-                    text = " ".join(
-                        _MESSAGES["conditions"][name].format(
-                            drop_percent=100 * (1 - ratios[name]),
-                            snr_drop_db=audio_metrics["audio_snr_drop_db"],
-                        ) for name in due
-                    )
+                    text = warning(due)
                     await outputs.update(self.pid, text)
                     schedule.sent(due, self.clock())
                     await self._record("warning_submitted", conditions=due, text=text)

@@ -229,3 +229,12 @@ async def test_cancellation_during_a_fragment_publish_still_publishes_the_termin
 
     assert [o.text for o in publisher.outputs] == ["one", ""]
     assert reply.delivered is True
+
+
+async def test_replace_pending_keeps_source_and_does_not_submit_an_ordinary_update():
+    publisher = _Publisher()
+    await ResponseOutputs(publisher, TOPIC, source="quality").replace_pending("alice", "Video is slow.")
+    assert publisher.calls == [(
+        TOPIC, ResponseOutput(kind="update", text="Video is slow.", replace_pending=True),
+        "alice", {"source": "quality"},
+    )]

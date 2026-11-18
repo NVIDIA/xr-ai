@@ -57,14 +57,12 @@ class CaptureAgent(Agent):
     def __init__(
         self, capture_backend: _Capture, *, runtime: AgentRuntime,
         quality_config: QualityConfig | None = None,
-        audio_silence_s: float = 0.8,
     ) -> None:
         super().__init__()
         self._capture_backend = capture_backend
         # Background alerts own source scopes; input contexts retain the command source.
         self._runtime = runtime
         self._quality_config = quality_config
-        self._audio_silence_s = audio_silence_s
         # Recording ownership applied to the backend by queued actions. Keep this
         # separate from connection.recording: newer input may already be accepted.
         self._sessions: dict[str, _Recording] = {}
@@ -127,7 +125,7 @@ class CaptureAgent(Agent):
                 if self._quality_config is not None and self._quality_config.enabled:
                     self._connections[pid].quality = QualityFeedback(
                         pid, self._capture_backend,
-                        self._quality_config, audio_silence_s=self._audio_silence_s,
+                        self._quality_config,
                     )
             elif not event.joined and duplicate:
                 connection.cancelled.set()
@@ -262,6 +260,13 @@ class CaptureAgent(Agent):
                 and not connection.cancelled.is_set()
                 and window.timestamp_us >= max(connection.joined_at_us, connection.quality.audio_track_started_us)):
             connection.quality.audio.observe(window)
+
+    def on_audio_utterance(self, utterance) -> None:
+        connection = self._connections.get(utterance.participant_id)
+        if (not self._closed and connection is not None and connection.quality is not None
+                and not connection.cancelled.is_set()
+                and utterance.timestamp_us >= max(connection.joined_at_us, connection.quality.audio_track_started_us)):
+            connection.quality.audio.finish(utterance)
 
     async def on_quality_audio(self, chunk) -> None:
         connection = self._connections.get(chunk.participant_id)

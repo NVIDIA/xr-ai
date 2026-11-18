@@ -15,7 +15,7 @@ from unittest.mock import AsyncMock
 import pytest
 from test_procedure_capture_guide import announcements, demo, joined, speak  # noqa: F401
 from test_procedure_capture_quality import Scene, install_quality
-from xr_ai_voice import VoiceAudioWindow
+from xr_ai_voice import VoiceAudioUtterance, VoiceAudioWindow
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "agent-samples/procedure-capture-guide/worker"))
 from procedure_capture_guide_worker.capture.audio_quality import AudioQuality  # noqa: E402
@@ -26,8 +26,9 @@ class AudioScene:
     def __init__(self, config=None):
         self.now = 1.0
         self.config = config or QualityConfig()
-        self.audio = AudioQuality(self.config, clock=lambda: self.now, silence_s=0.8)
+        self.audio = AudioQuality(self.config, clock=lambda: self.now)
         self.observer = self.audio.observe
+        self.finish = self.audio.finish
 
     def windows(self, count, power, speech):
         for _ in range(count):
@@ -39,6 +40,7 @@ class AudioScene:
         onset = round(self.now * 1e6)
         self.windows(count, noise * (1 + ratio), True)
         self.windows(26, noise, False)
+        self.finish(VoiceAudioUtterance("user", onset + 128_000))
         return onset + 128_000  # Accepted timestamp follows the VAD minimum speech delay.
 
 
@@ -122,6 +124,7 @@ async def test_setup_and_narration_use_real_agent_wiring_and_mic_change_resets(d
     scene = AudioScene()
     quality.clock = quality.audio.clock = lambda: scene.now
     scene.observer = demo.capture.on_audio_window
+    scene.finish = demo.capture.on_audio_utterance
     await demo.capture.on_quality_audio(SimpleNamespace(
         participant_id="user", track_id="mic1", sample_rate=16000, channels=1, pts_us=round(scene.now * 1e6),
     ))
@@ -203,8 +206,50 @@ async def test_audio_baselines_are_per_participant_and_reconnect_clears_them(dem
     quality = demo.capture._connections["user"].quality
     quality.audio.clock = lambda: scene.now
     scene.observer = demo.capture.on_audio_window
+    scene.finish = demo.capture.on_audio_utterance
     await speak(demo, "check setup", timestamp_us=scene.utterance())
     assert quality.audio.baseline == pytest.approx(100)
     assert demo.capture._connections["bob"].quality.audio.baseline is None
     await demo.capture.receive(joined(session="new-session", pts_us=round(scene.now * 1e6)))
     assert demo.capture._connections["user"].quality.audio.baseline is None
+
+
+async def test_long_narration_snr_is_ready_before_real_vad_transcription(monkeypatch):
+    import numpy as np
+    from pipecat.frames.frames import InputAudioRawFrame
+    from test_voice_pipeline import _FakeStt, _run_chain
+    from xr_ai_vad import detector
+    from xr_ai_voice._processors.vad_stt import VadConfig, VadSttProcessor
+
+    class Silero:
+        def __call__(self, tensor, sample_rate):
+            return 0.9 if tensor.abs().max().item() > 0.01 else 0.0
+
+        def reset_states(self):
+            pass
+
+    monkeypatch.setattr(detector, "load_silero_vad", lambda **kwargs: Silero())
+    scene = AudioScene()
+    scene.audio.baseline = 1000
+    accepted = []
+
+    async def accept(pid, text, timestamp_us):
+        scene.audio.accept(timestamp_us)
+        accepted.append(scene.audio.evaluate())
+
+    proc = VadSttProcessor(stt=_FakeStt(text="narration"),
+                          vad_cfg=VadConfig(stop_probe_after_s=0, on_audio_window=scene.audio.observe,
+                                            on_audio_utterance=scene.audio.finish),
+                          on_final_transcript=accept)
+    frames = []
+    # The real VAD's 30-second limit includes its ten pre-roll windows.
+    for i in range(1000):
+        frame = InputAudioRawFrame(audio=np.full(512, 1638 if i >= 40 else 163, np.int16).tobytes(),
+                                   sample_rate=16000, num_channels=1)
+        frame.transport_source = "user"
+        frame.pts = 1_000_000_000 + i * 32_000_000
+        frames.append(frame)
+    await _run_chain(proc, sends=frames)
+    assert len(accepted) == 1
+    assert accepted[0][0]  # Accepted speech must already have its low-SNR measurement.
+    assert accepted[0][1]["audio_snr_db"] == pytest.approx(20, abs=.1)
