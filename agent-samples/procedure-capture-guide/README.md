@@ -69,7 +69,7 @@ capture**, narrate the demonstration, then say **stop capture**. Repeat
 these commands to record another task without reconnecting. The worker announces
 "Capture started." and "Capture stopped." Media-quality notifications can be
 spoken during recording; finalization is silent.
-Before recording, optionally say **check setup** for a spoken network, frame-rate,
+Before recording, optionally say **check setup** for a spoken frame-rate
 and resolution report. See the
 [media-check reference](https://nvidia.github.io/xr-ai/latest/reference/procedure-capture-guide.html#optional-setup-check-and-recording-alerts).
 On connection, the worker explains the commands once.

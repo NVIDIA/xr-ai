@@ -24,7 +24,6 @@ from typing import NamedTuple
 import numpy as np
 from livekit import rtc
 from loguru import logger
-from xr_ai_hub import MediaStatus
 from xr_ai_hub._image_capture import _CAPTURE_REJECTION_MIME_TYPE
 from xr_ai_hub._types import ImageCaptureData
 
@@ -466,46 +465,9 @@ class RoomClient:
                 track.sid, self._stream_audio(track, identity, track.sid),
             )
 
-    async def _report_media_status(self) -> None:
-        """Read transport observations here; the hub only routes typed IPC."""
-        if not self._room.isconnected():
-            return
-        grades = {
-            rtc.ConnectionQuality.QUALITY_EXCELLENT: "excellent",
-            rtc.ConnectionQuality.QUALITY_GOOD: "good",
-            rtc.ConnectionQuality.QUALITY_POOR: "poor",
-            rtc.ConnectionQuality.QUALITY_LOST: "lost",
-        }
-        for participant in list(self._room.remote_participants.values()):
-            session_id = self._participant_sessions.get(participant.identity)
-            if (
-                session_id is None
-                or self._room.remote_participants.get(participant.identity) is not participant
-            ):
-                continue
-            await self._ep.push_media_status(MediaStatus(
-                participant_id=participant.identity,
-                participant_session_id=session_id,
-                pts_us=_now_us(),
-                quality=grades.get(participant.connection_quality, "unknown"),
-                video_expected=any(
-                    pub.kind == rtc.TrackKind.KIND_VIDEO and not pub.muted
-                    for pub in participant.track_publications.values()
-                ),
-            ))
-
     async def run(self) -> None:
-        """Publish media observations each second until the connector stops.
-
-        This reads SDK state, not RTC stats or camera images. Periodic snapshots
-        let late-joining workers observe unchanged quality and detect stale IPC.
-        """
-        while not self._stop.is_set():
-            await self._report_media_status()
-            try:
-                await asyncio.wait_for(self._stop.wait(), timeout=1.0)
-            except TimeoutError:
-                pass
+        """Wait until stop() is called."""
+        await self._stop.wait()
 
     def stop(self) -> None:
         self._stop.set()

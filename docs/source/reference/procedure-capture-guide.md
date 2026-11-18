@@ -139,67 +139,50 @@ through `out_dir` in `yaml/media_capture.yaml`.
 ## Optional setup check and recording alerts
 
 Before **start capture**, optionally say **check setup**. The worker reports the
-latest available network grade, received video frame rate, and image resolution.
-It answers as soon as earlier commands are processed, using data it already has.
-For example, "Network quality is good. Received video is 30.0 frames per second.
-Image resolution is 1280 by 720 pixels."
+latest received video frame rate and image resolution as soon as earlier commands
+are processed. For example, "Received video is 30.0 frames per second. Image
+resolution is 1280 by 720 pixels."
 
-The existing LiveKit connector reads the remote participant's connection rating
-and publishes transport-neutral `MediaStatus` messages through the hub. This
-works for web and native clients without sample-specific client code.
-The worker estimates frame rate from the arrival times of recent live frames
-and reports the dimensions of the latest frame. If the connection grade is
-missing or older than `quality.status_ttl_s`, it reports unknown network
-quality. If the worker has received only one recent frame, it can report
-resolution while frame rate is still unavailable. Setup does not request
-snapshots in on-demand mode or create a recording.
+Measurements use the existing `FrameSignal` callbacks: local arrival times give
+frame rate, and the latest frame supplies dimensions. Setup does not wait for a
+new sampling period, request snapshots, or create a recording. One recent frame
+is enough for resolution; frame rate requires at least two. When frames have not
+arrived for `quality.stall_s`, both setup measurements are reported as unavailable.
+On-demand snapshots are not a continuous video stream and do not supply these
+measurements. Enable live video to use the checks.
 
 While capture is active, a separate monitor speaks these conditions:
 
 | Condition | Default detection |
 | --- | --- |
-| Poor network | Fresh connector status reports poor or lost connection quality |
-| Low frame rate | After a full 5-second observation window, received live-video FPS is below the configured `capture_fps` (2 by default) or below 50% of a stable initial rate |
-| Video stalled | An expected live stream has delivered no frames for 3 seconds; in on-demand mode, requested snapshots have failed with no successful sample for 3 seconds |
-| Low resolution | Short edge below 480 pixels or pixel count below 50% of the initial resolution; portrait rotation alone is not a drop |
+| Low frame rate | After a full 5-second observation window, received FPS is below `capture_fps` (2 by default) or below 50% of a stable initial rate; an observed stream delivering no frames for 3 seconds also triggers this warning |
+| Low resolution | A recent frame has a short edge below 480 pixels or pixel count below 50% of the initial resolution; portrait rotation alone is not a drop |
 
-A stalled-video alert replaces the frame-rate alert for that outage. Conditions
-are evaluated once per second by default. Detection thresholds and the sampling
-window are distinct from the repeat interval. A notification never stops, pauses,
-or restarts capture, changes camera mode, or alters captioning. Recovery clears
-eligibility and withdraws queued stale alerts. Alerts wait for ongoing speech,
-including the capture start acknowledgement, to finish. A repeat replaces an
-unheard copy of the same warning batch rather than adding another copy to the
-voice queue. Unrelated pending warning batches are preserved, and batches that
-mention recovered conditions are withdrawn. They use the existing
-TTS and return-audio path, so a fully disconnected client cannot hear them.
+No frame-rate failure is inferred before the first frame arrives. Once a stream
+has been observed, stopping it intentionally also produces a frame-rate warning
+while recording. These checks measure video delivery; they do not diagnose a
+network condition or assess audio.
+
+Conditions are evaluated once per second by default. Notifications never stop,
+pause, or restart recording, change camera mode, or alter captioning. They wait
+for ongoing speech, including the capture acknowledgement. Repeats replace an
+unheard copy of the same warning batch; unrelated pending notices remain queued.
+Recovery withdraws pending warnings about recovered conditions. Spoken feedback
+uses the existing TTS and return-audio path.
 
 `quality.repeat_interval_s` in `yaml/capture-agent-config.yaml` sets the minimum
-interval between notifications for **each condition**, default 10 seconds. A new
-condition is eligible immediately; it does not wait for another condition's timer.
-Conditions due on the same monitor tick are combined in one spoken message:
+interval between submissions for each condition independently, defaulting to
+10 seconds:
 
-- Network first detected at 10 seconds: network alerts at 10, 20, 30 seconds.
-- Frame-rate trouble first detected at 15 seconds: frame-rate alerts at 15, 25,
-  35 seconds, independently of network alerts.
-- Both first detected at 10 seconds: one combined alert at 10, then at 20 seconds
-  if both remain. Recovering conditions are omitted.
+- Resolution drops at 10 seconds: alerts at 10, 20, 30 seconds while it stays low.
+- Frame rate drops at 15 seconds: alerts at 15, 25, 35 seconds independently.
+- Both appear at 10 seconds: one combined announcement, repeated at 20 seconds.
 
-Times refer to notification submission; speech recognition, detection windows,
-and TTS playback add their normal latency. `quality.enabled: false` disables the
-setup command, worker-side quality monitoring, and spoken media alerts.
-Recording is still available.
-
-The connector publishes a status snapshot every second using LiveKit SDK state;
-it does not poll RTC statistics or request camera images. It reports whether an
-unmuted video publication should deliver frames. An unpublished or muted camera
-is not treated as a stalled live stream; when snapshots are requested, their
-failures can still establish a capture problem. Frame rate and resolution come
-from the existing frame-metadata path. The hub and worker never access LiveKit.
-Session identity and observation time reject stale or replayed reports.
-Disconnect and shutdown drain the monitor; a new recording gets fresh alert
-clocks. `quality.jsonl` records condition changes and submitted alerts separately
-from narration. Sample-owned wording lives in `yaml/capture-messages.yaml`.
+Detection windows and TTS playback add their normal latency. `quality.enabled:
+false` disables the setup command and monitoring; recording remains available.
+Disconnect and shutdown drain the monitor. A new recording gets fresh warning
+clocks and baselines. `quality.jsonl` records condition changes and submitted
+alerts separately from narration. Wording lives in `yaml/capture-messages.yaml`.
 
 ## Recording boundaries
 

@@ -2,14 +2,11 @@
 # SPDX-License-Identifier: Apache-2.0
 
 conditions:
-  video_stalled: Video has stopped arriving. Check the camera and connection.
-  poor_network: The network connection is poor. Move closer to the router or hold still.
   low_frame_rate: The video frame rate has dropped. Please move more slowly or check the connection.
   low_resolution: The image resolution is low or has dropped. Hold still or move closer for small text.
 setup:
-  welcome: Say check setup to check the network, video frame rate and resolution, or start capture to record. To finish recording, say stop capture.
+  welcome: Say check setup to check video frame rate and resolution, or start capture to record. To finish recording, say stop capture.
   welcome_disabled: Say start capture to record. To finish recording, say stop capture.
-  network: 'Network quality is {network}.'
   video_fps: 'Received video is {fps:.1f} frames per second.'
   fps_unavailable: 'The current video frame rate is unavailable.'
   resolution: 'Image resolution is {width} by {height} pixels.'

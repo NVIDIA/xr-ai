@@ -30,9 +30,8 @@ every client. Two knobs control this:
 Endpoints created mid-session use a roster request to learn about
 participants who joined before they did. The hub re-publishes
 ``PARTICIPANT_EVENT(joined=True)`` for every current pid, so already-
-connected pids are auto-subscribed retroactively only when ``auto_subscribe``
-is enabled. Manual endpoints learn sessions without changing subscriptions.
-The replays go on the regular ``participant`` topic. The endpoint treats repeated joins and leaves
+connected pids are auto-subscribed retroactively. The replays go on the
+regular ``participant`` topic. The endpoint treats repeated joins and leaves
 as no-ops, so callbacks observe lifecycle transitions once.
 
 Video frame access is two-step:
@@ -68,7 +67,7 @@ from ._codec import decode, encode
 from ._file_ordering import FileRoute, FileSessionOrderer
 from ._types import (AgentPresence, AudioChunk, DataMessage, FileMessage, FrameData,
                      FrameRequest, FrameSignal, ImageCaptureCancel,
-                     ImageCaptureData, ImageCaptureRequest, MediaStatus, MsgType,
+                     ImageCaptureData, ImageCaptureRequest, MsgType,
                      ParticipantEvent, ReturnAudioFlush, RosterRequest,
                      SubscriptionProbe)
 
@@ -77,7 +76,6 @@ log = logging.getLogger(__name__)
 FrameSignalCallback = Callable[[FrameSignal], Awaitable[None]]
 FrameDataCallback   = Callable[[FrameData],   Awaitable[None]]
 AudioCallback       = Callable[[AudioChunk],       Awaitable[None]]
-MediaStatusCallback = Callable[[MediaStatus], Awaitable[None]]
 DataCallback        = Callable[[DataMessage],      Awaitable[None]]
 ImageCaptureCallback = Callable[[ImageCaptureData], Awaitable[None]]
 FileCallback        = Callable[[FileMessage],      Awaitable[None]]
@@ -121,8 +119,8 @@ class Subscribe(Flag):
         # Per-pid override at subscribe time:
         ep.subscribe("alice", filter=Subscribe.DATA)
     """
-    DATA  = auto()  # `data.{pid}.*` and `media_status.{pid}.*`
-    """Application data and connector media-status messages for a participant."""
+    DATA  = auto()  # `data.{pid}.*`
+    """Application data messages for a participant."""
 
     AUDIO = auto()  # `audio.{pid}.*`
     """PCM audio chunks for a participant."""
@@ -148,7 +146,7 @@ class Subscribe(Flag):
 # ``.{pid}.`` is appended at subscribe time so e.g. ``data.alice`` does not
 # accidentally match ``data.alice2.chat``.
 _PREFIXES_BY_FLAG: dict["Subscribe", tuple[bytes, ...]] = {
-    Subscribe.DATA:  (b"data", b"media_status"),
+    Subscribe.DATA:  (b"data",),
     Subscribe.AUDIO: (b"audio",),
     Subscribe.VIDEO: (b"video", b"video_data"),
 }
@@ -279,7 +277,6 @@ class ProcessorEndpoint:
         self._frame_cbs:       list[FrameSignalCallback] = []
         self._frame_data_cbs:  list[FrameDataCallback]   = []
         self._audio_cbs:       list[AudioCallback]       = []
-        self._media_status_cbs: list[MediaStatusCallback] = []
         self._data_cbs:        list[DataCallback]        = []
         self._image_capture_cbs: list[ImageCaptureCallback] = []
         self._file_cbs:        list[FileCallback]        = []
@@ -489,20 +486,6 @@ class ProcessorEndpoint:
         """Register an async callback for inbound PCM audio chunks."""
         self._audio_cbs.append(cb)
 
-    def on_media_status(self, cb: MediaStatusCallback) -> CallbackUnsubscribe:
-        """Observe connector media status through the DATA subscription category.
-
-        No LiveKit dependency or client telemetry implementation is required.
-        Returns a function that unregisters this callback.
-        """
-        self._media_status_cbs.append(cb)
-
-        def unsubscribe() -> None:
-            if cb in self._media_status_cbs:
-                self._media_status_cbs.remove(cb)
-
-        return unsubscribe
-
     def on_data(self, cb: DataCallback) -> CallbackUnsubscribe:
         """Register an async data callback and return an idempotent unsubscriber."""
 
@@ -578,10 +561,10 @@ class ProcessorEndpoint:
         Ask the hub to re-publish ``PARTICIPANT_EVENT(joined=True)`` for
         every currently-connected participant.
 
-        Called automatically once at the start of :meth:`run` so session-bound
-        messages also work for clients connected before this endpoint started.
-        With ``auto_subscribe=False``, the roster initializes session identities
-        without subscribing to participants the caller has not selected.
+        Useful when starting up mid-session so the auto-subscribe handler
+        can pick up clients who joined before this endpoint connected.
+        Called automatically once at the start of :meth:`run` when
+        ``auto_subscribe=True``.
         """
         await self._push.send(encode(MsgType.ROSTER_REQUEST, RosterRequest()))
 
@@ -750,9 +733,11 @@ class ProcessorEndpoint:
                 ),
             ]
 
-        # Session discovery is independent of subscription policy: explicitly
-        # selected participants also need an identity for session-bound messages.
-        roster_task = asyncio.create_task(self._catch_up_roster(), name="processor-roster")
+        # Ask the hub to replay PARTICIPANT_EVENTs for already-connected
+        # pids so the auto-subscribe handler can scoop them up. Safe even
+        # when there are none: the hub responds with zero events.
+        if self._auto_subscribe:
+            asyncio.create_task(self._catch_up_roster())
 
         try:
             while self._running:
@@ -771,9 +756,9 @@ class ProcessorEndpoint:
                 except Exception:
                     log.exception("Error dispatching message")
         finally:
-            for task in [roster_task, *file_tasks]:
+            for task in file_tasks:
                 task.cancel()
-            await asyncio.gather(roster_task, *file_tasks, return_exceptions=True)
+            await asyncio.gather(*file_tasks, return_exceptions=True)
             self._running = False
             self._running_event.clear()
             self._announce_presence(attached=False)
@@ -1051,11 +1036,6 @@ class ProcessorEndpoint:
                 self._spawn(cb(msg))
         elif type_id == MsgType.AUDIO_CHUNK:
             for cb in self._audio_cbs:
-                self._spawn(cb(msg))
-        elif type_id == MsgType.MEDIA_STATUS:
-            if self._participant_sessions.get(msg.participant_id) != msg.participant_session_id:
-                return
-            for cb in self._media_status_cbs:
                 self._spawn(cb(msg))
         elif type_id == MsgType.DATA_MESSAGE:
             for cb in self._data_cbs:

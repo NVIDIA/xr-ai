@@ -17,7 +17,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 
 from loguru import logger
-from xr_ai_hub import MediaStatus, ParticipantEvent
+from xr_ai_hub import ParticipantEvent
 from xr_ai_interaction import ParticipantJoined, ResponseOutputs, UserQuery
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, Topic, subscribe
 from xr_ai_voice import VOICE_OUTPUT_TOPIC
@@ -125,7 +125,7 @@ class CaptureAgent(Agent):
                 self._connections[pid] = _Connection(event.participant_session_id, event.pts_us)
                 if self._quality_config is not None and self._quality_config.enabled:
                     self._connections[pid].quality = QualityFeedback(
-                        pid, event.participant_session_id, self._capture_backend,
+                        pid, self._capture_backend,
                         self._quality_config, self._capture_fps,
                     )
             elif not event.joined and duplicate:
@@ -250,20 +250,10 @@ class CaptureAgent(Agent):
             self._enqueue(pid, narrate)
         # Return promptly; this owner drains per-participant writes and boundaries.
 
-    async def on_media_status(self, message: MediaStatus) -> None:
-        connection = self._connections.get(message.participant_id)
-        if connection is not None and connection.quality is not None:
-            connection.quality.status(message)
-
     async def on_quality_frame(self, frame) -> None:
         connection = self._connections.get(frame.participant_id)
         if connection is not None and connection.quality is not None:
             connection.quality.frame(frame)
-
-    def on_quality_sample(self, participant_id, frame) -> None:
-        connection = self._connections.get(participant_id)
-        if connection is not None and connection.quality is not None:
-            connection.quality.sample(frame)
 
     async def close(self) -> None:
         self._closed = True

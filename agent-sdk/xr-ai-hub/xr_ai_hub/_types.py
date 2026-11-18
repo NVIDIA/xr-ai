@@ -96,9 +96,6 @@ class MsgType(IntEnum):
     FILE_MESSAGE = 18
     """Completed inbound file or byte transfer from a connector."""
 
-    MEDIA_STATUS = 19
-    """Connector-observed connection quality and video publication state."""
-
     # Add new types here; existing code is unaffected.
 
 
@@ -177,39 +174,6 @@ class DataMessage:
 
     data:           bytes
     """Opaque message payload."""
-
-
-@dataclass(slots=True, frozen=True)
-class MediaStatus:
-    """Transport-neutral media status supplied by a connector, not client data.
-
-    Frame rate and resolution remain available through :class:`FrameSignal`.
-    A missing status or an ``unknown`` grade provides no network diagnosis.
-    """
-
-    participant_id: str
-    """Participant whose media connection was observed."""
-
-    participant_session_id: str
-    """Connection incarnation; consumers reject older sessions."""
-
-    pts_us: int
-    """Observation time in Unix microseconds."""
-
-    quality: str
-    """Normalized grade: unknown, excellent, good, poor, or lost."""
-
-    video_expected: bool
-    """Whether an unmuted video publication should deliver frames."""
-
-    connector_id: str = ""
-    """Originating connector, stamped by its IPC endpoint."""
-
-    def __post_init__(self) -> None:
-        if self.quality not in {"unknown", "excellent", "good", "poor", "lost"}:
-            raise ValueError("unsupported media quality grade")
-        if type(self.video_expected) is not bool:
-            raise ValueError("video_expected must be a boolean")
 
 
 @dataclass(slots=True)

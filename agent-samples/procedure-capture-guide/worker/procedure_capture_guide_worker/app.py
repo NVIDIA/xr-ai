@@ -77,9 +77,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
             capture_backend, runtime=runtime, quality_config=config.capture.quality,
             capture_fps=config.capture.capture_fps,
         ))
-        capture_backend.on_sample = capture.on_quality_sample
         endpoint.on_frame(capture.on_quality_frame)
-        endpoint.on_media_status(capture.on_media_status)
         endpoint.on_participant(capture.receive)
         voice_options["participant_joined_topic"] = CAPTURE_JOINED_TOPIC
     else:

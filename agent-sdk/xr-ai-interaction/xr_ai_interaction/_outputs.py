@@ -17,8 +17,7 @@ from ._messages import ResponseOutput
 class _Publisher(Protocol):
     """Anything that publishes one message to a topic for one participant.
 
-    ``AgentRuntime`` supports an explicit source; ``RuntimeContext`` uses its
-    handling agent as the source and must be used without a source override.
+    ``AgentRuntime`` and ``RuntimeContext`` both satisfy it.
     """
 
     async def publish(
@@ -42,8 +41,7 @@ class ResponseOutputs:
         method, such as ``AgentRuntime`` or ``RuntimeContext``.
     :param topic: Topic that carries :class:`ResponseOutput` messages.
     :param source: Producer name passed to ``publish`` as ``source``. Omitted from the call
-        when ``None``. An explicit source requires a publisher such as ``AgentRuntime``
-        that accepts this keyword; ``RuntimeContext`` does not.
+        when ``None``.
     :param closed_errors: Exception types that mean the consumer is already closed.
         :class:`Reply` suppresses them when it publishes the terminator.
     """

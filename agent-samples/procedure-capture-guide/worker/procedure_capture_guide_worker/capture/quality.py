@@ -1,12 +1,10 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Warn about sustained loss of usable media during a procedure capture.
+"""Report received video frame rate and resolution independently of recording.
 
-Frame metadata measures arrival quality independently of snapshot sampling and
-caption inference. Connector status supplies publication and network evidence;
-missing status is unknown, never proof of a broken stream. Each connection
-owns a monitor, and each capture owns its warning task and voice-output source.
+Each participant connection owns frame observations; each capture owns its
+warning task and voice-output sources. No camera or model requests are made.
 """
 
 from __future__ import annotations
@@ -15,14 +13,13 @@ import asyncio
 import time
 from collections import deque
 from collections.abc import Callable
-from dataclasses import asdict
 from pathlib import Path
 from uuid import uuid4
 
 import yaml
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field
-from xr_ai_hub import FrameSignal, MediaStatus
+from xr_ai_hub import FrameSignal
 from xr_ai_interaction import ResponseOutputs
 from xr_ai_runtime import AgentRuntime
 from xr_ai_voice import VOICE_OUTPUT_TOPIC
@@ -37,70 +34,47 @@ class QualityConfig(BaseModel):
     stall_s: float = Field(default=3, gt=0)
     repeat_interval_s: float = Field(default=10, gt=0)
     poll_interval_s: float = Field(default=1, gt=0)
-    status_ttl_s: float = Field(default=4, gt=0)
     min_short_edge: int = Field(default=480, gt=0, strict=True)
     drop_ratio: float = Field(default=0.5, gt=0, lt=1)
 
 
 class QualityState:
-    """Evaluate transport and resolution using local monotonic receipt times."""
+    """Measure one incoming video stream with local monotonic receipt times."""
 
     def __init__(self, config: QualityConfig, capture_fps: float, *, clock: Callable[[], float] = time.monotonic):
         self.config, self.capture_fps, self.clock = config, capture_fps, clock
-        self.status: MediaStatus | None = None
-        self.status_at = float("-inf")
         self.frames: deque[float] = deque(maxlen=4096)
-        self.samples: deque[float] = deque(maxlen=4096)
         self.track_id: str | None = None
         self.started = clock()
         self.last_frame = None
         self.last_sequence = -1
         self.resolution = None
-        self.resolution_at = float("-inf")
+        self.metrics: dict = {}
+        self.reset_baseline()
+
+    def reset_baseline(self) -> None:
         self.baseline_fps = None
         self.baseline_pixels = None
         self.baseline_rates: deque[float] = deque(maxlen=3)
-        self.image_failures = 0
-        self.active: set[str] = set()
-        self.metrics: dict = {}
-
-    def status_received(self, value: MediaStatus):
-        now = self.clock()
-        previous = self.status
-        if previous is not None and value.video_expected != previous.video_expected:
-            self._reset_video(now)
-        self.status, self.status_at = value, now
-
-    def _reset_video(self, now: float) -> None:
-        self.track_id = None
-        self.started = now
-        self.frames.clear()
-        self.samples.clear()
-        self.last_frame, self.resolution = None, None
-        self.last_sequence = -1
-        self.baseline_fps = self.baseline_pixels = None
-        self.baseline_rates.clear()
-        self.image_failures = 0
-
-    def fresh_status(self, now: float) -> MediaStatus | None:
-        return self.status if now - self.status_at <= self.config.status_ttl_s else None
 
     def frame(self, frame: FrameSignal) -> None:
         now = self.clock()
-        data = self.fresh_status(now)
-        if data is not None and not data.video_expected:
-            return
         if self.track_id is not None and frame.track_id != self.track_id:
-            # Keep a single stream's cadence when adjacent track callbacks overlap.
-            if self.last_frame is not None and now - self.last_frame < self.config.stall_s:
+            # Keep one stream's cadence when adjacent track callbacks overlap.
+            if now - self.last_frame < self.config.stall_s:
                 return
-            self._reset_video(now)
+            self.frames.clear()
+            self.track_id = None
+            self.last_sequence = -1
+            self.reset_baseline()
         if frame.seq <= self.last_sequence:
             return
+        if self.track_id is None:
+            self.started = now
         self.track_id = frame.track_id
         self.frames.append(now)
         self.last_frame, self.last_sequence = now, frame.seq
-        self.resolution, self.resolution_at = (frame.width, frame.height), now
+        self.resolution = (frame.width, frame.height)
 
     def setup_video(self, now: float) -> tuple[float | None, tuple[int, int] | None]:
         if self.last_frame is None or now - self.last_frame >= self.config.stall_s:
@@ -110,65 +84,33 @@ class QualityState:
         fps = (len(frames) - 1) / span if span > 0 else None
         return fps, self.resolution
 
-    def sample(self, frame):
-        now = self.clock()
-        if frame is None:
-            self.image_failures += 1
-        else:
-            self.samples.append(now)
-            self.image_failures = 0
-            self.resolution, self.resolution_at = (frame.width, frame.height), now
-
     def evaluate(self) -> set[str]:
         now, c = self.clock(), self.config
-        data = self.fresh_status(now)
         while self.frames and self.frames[0] < now - c.window_s:
             self.frames.popleft()
-        while self.samples and self.samples[0] < now - c.window_s:
-            self.samples.popleft()
-        observed: dict[str, bool | None] = dict.fromkeys(name for name in _MESSAGES["conditions"])
-        fps = len(self.frames) / c.window_s
-        if data is not None:
-            observed["poor_network"] = data.quality in {"poor", "lost"} if data.quality != "unknown" else None
-            live = data.video_expected
-            if live:
-                age = now - (self.last_frame if self.last_frame is not None else self.started)
-                observed["video_stalled"] = age >= c.stall_s
-                if now - self.started >= c.window_s and age < c.stall_s:
-                    if self.baseline_fps is None and fps > 0:
-                        self.baseline_rates.append(fps)
-                        if len(self.baseline_rates) == 3 and min(self.baseline_rates) >= 0.8 * max(self.baseline_rates):
-                            self.baseline_fps = sum(self.baseline_rates) / 3
-                    observed["low_frame_rate"] = fps < self.capture_fps or (
-                        self.baseline_fps is not None and fps < self.baseline_fps * c.drop_ratio
-                    )
-        if (
-            self.resolution is not None
-            and now - self.resolution_at <= 2 * c.window_s
-        ):
-            width, height = self.resolution
-            pixels = width * height
-            if self.baseline_pixels is None:
-                self.baseline_pixels = pixels
-            observed["low_resolution"] = (
-                min(width, height) < c.min_short_edge or pixels < self.baseline_pixels * c.drop_ratio
-            )
-        # On-demand capture has no incoming video stream. Only failed, actually
-        # requested snapshots establish a stall; missing status alone does not.
-        if self.image_failures and not (data is not None and data.video_expected):
-            last = self.samples[-1] if self.samples else self.started
-            observed["video_stalled"] = now - last >= c.stall_s
-        self.active = {name for name, bad in observed.items() if bad is True}
-        self.metrics = {
-            "status_available": data is not None,
-            "saved_fps": len(self.samples) / c.window_s,
-            "received_fps": fps if data is not None and data.video_expected else None,
-            "resolution": self.resolution,
-            "baseline_fps": self.baseline_fps,
-            "connector": asdict(data) if data is not None else None,
-        }
-        # A stall subsumes a rate warning and avoids two messages for one outage.
-        return self.active - ({"low_frame_rate"} if "video_stalled" in self.active else set())
+        conditions = set()
+        fps = None
+        if self.last_frame is not None:
+            if now - self.last_frame >= c.stall_s:
+                conditions.add("low_frame_rate")
+                fps = 0.0
+            elif now - self.started >= c.window_s:
+                fps = len(self.frames) / c.window_s
+                if self.baseline_fps is None and fps > 0:
+                    self.baseline_rates.append(fps)
+                    if len(self.baseline_rates) == 3 and min(self.baseline_rates) >= 0.8 * max(self.baseline_rates):
+                        self.baseline_fps = sum(self.baseline_rates) / 3
+                if fps < self.capture_fps or (self.baseline_fps is not None and fps < self.baseline_fps * c.drop_ratio):
+                    conditions.add("low_frame_rate")
+            if now - self.last_frame < c.stall_s:
+                width, height = self.resolution
+                pixels = width * height
+                if self.baseline_pixels is None:
+                    self.baseline_pixels = pixels
+                if min(width, height) < c.min_short_edge or pixels < self.baseline_pixels * c.drop_ratio:
+                    conditions.add("low_resolution")
+        self.metrics = {"received_fps": fps, "resolution": self.setup_video(now)[1], "baseline_fps": self.baseline_fps}
+        return conditions
 
 
 class QualityFeedback:
@@ -177,7 +119,6 @@ class QualityFeedback:
     def __init__(
         self,
         pid,
-        session_id,
         backend,
         config: QualityConfig,
         capture_fps: float,
@@ -185,40 +126,19 @@ class QualityFeedback:
         clock=time.monotonic,
         sleep=asyncio.sleep,
     ):
-        self.pid, self.session_id, self.backend = pid, session_id, backend
+        self.pid, self.backend = pid, backend
         self.clock, self.sleep = clock, sleep
         self.config, self.capture_fps = config, capture_fps
-        self.last_status_us = -1
-        self.preview = QualityState(config, capture_fps, clock=clock)
-        self.state: QualityState | None = None
+        self.state = QualityState(config, capture_fps, clock=clock)
         self.task: asyncio.Task | None = None
 
-    def status(self, data: MediaStatus) -> None:
-        if (
-            data.participant_id != self.pid or data.participant_session_id != self.session_id
-            or data.pts_us <= self.last_status_us
-        ):
-            return
-        self.last_status_us = data.pts_us
-        self.preview.status_received(data)
-        if self.state is not None:
-            self.state.status_received(data)
-
     def frame(self, frame: FrameSignal) -> None:
-        self.preview.frame(frame)
-        if self.state is not None:
-            self.state.frame(frame)
-
-    def sample(self, frame):
-        if self.state is not None:
-            self.state.sample(frame)
+        self.state.frame(frame)
 
     def start(self, publisher: AgentRuntime):
         if self.task is not None and not self.task.done():
             raise RuntimeError("previous capture quality task must be drained before restart")
-        self.state = QualityState(self.config, self.capture_fps, clock=self.clock)
-        if (status := self.preview.fresh_status(self.clock())) is not None:
-            self.state.status_received(status)
+        self.state.reset_baseline()
         self.task = asyncio.create_task(self._run(publisher), name=f"capture-quality:{self.pid}")
 
     def invalidate(self):
@@ -230,7 +150,6 @@ class QualityFeedback:
         if self.task is not None:
             await asyncio.gather(self.task, return_exceptions=True)
             self.task = None
-        self.state = None
 
     async def _record(self, kind, **data):
         await self.backend.capture_quality(self.pid, {"kind": kind, **data})

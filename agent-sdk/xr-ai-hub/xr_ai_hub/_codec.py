@@ -29,7 +29,6 @@ from ._types import (
     ImageCaptureCancel,
     ImageCaptureData,
     ImageCaptureRequest,
-    MediaStatus,
     MsgType,
     ParticipantEvent,
     PixelFormat,
@@ -119,13 +118,6 @@ register_decoder(
 
 register_encoder(MsgType.CONTROL,      lambda m: [m.topic, m.payload])
 register_decoder(MsgType.CONTROL,      lambda p: ControlMessage(p[0], p[1]))
-
-register_encoder(
-    MsgType.MEDIA_STATUS,
-    lambda m: [m.participant_id, m.participant_session_id, m.pts_us,
-               m.quality, m.video_expected, m.connector_id],
-)
-register_decoder(MsgType.MEDIA_STATUS, lambda p: MediaStatus(*p))
 
 register_encoder(MsgType.DATA_MESSAGE, lambda m: [m.participant_id, m.topic, m.pts_us, m.data])
 register_decoder(MsgType.DATA_MESSAGE, lambda p: DataMessage(p[0], p[1], p[2], bytes(p[3])))

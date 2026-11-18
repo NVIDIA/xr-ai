@@ -677,15 +677,6 @@ class HubEndpoint:
             topic = f"audio.{msg.participant_id}.{msg.track_id}".encode()
             await self._pub.send_multipart([topic, encode(MsgType.AUDIO_CHUNK, msg)])
 
-        elif type_id == MsgType.MEDIA_STATUS:
-            if (
-                self._participant_sessions.get(msg.participant_id) != msg.participant_session_id
-                or self._participant_connector.get(msg.participant_id) != msg.connector_id
-            ):
-                return
-            topic = f"media_status.{msg.participant_id}.".encode()
-            await self._pub.send_multipart([topic, encode(MsgType.MEDIA_STATUS, msg)])
-
         elif type_id == MsgType.DATA_MESSAGE:
             for cb in self._data_cbs:
                 try:

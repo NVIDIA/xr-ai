@@ -41,36 +41,14 @@ unneeded data, audio, or frame signals at the ZMQ socket. Explicit-assignment
 workers disable automatic subscription and call `subscribe(participant_id)`.
 
 `run()` requests the current roster so a worker started mid-session receives
-ordinary joined events for participants already present. This discovery also
-runs with `auto_subscribe=False`: session identities are initialized, while media
-subscriptions remain limited to participants explicitly selected with
-`subscribe()`. Join callbacks must therefore be idempotent. Because ZMQ subscription changes are asynchronous,
+ordinary joined events for participants already present. Join callbacks must
+therefore be idempotent. Because ZMQ subscription changes are asynchronous,
 workers that own readiness wait for `wait_for_subscriptions()` before announcing
 availability.
 
 `Subscribe.REALTIME` combines data, audio, and video. `Subscribe.DEFAULT` is
 the same real-time-only filter. `Subscribe.ALL` remains an equivalent but
 deprecated compatibility alias; completed files stay explicitly opt-in.
-
-### Media status
-
-Register `endpoint.on_media_status(callback)` to receive `MediaStatus` through
-`Subscribe.DATA`, on a separate `media_status.<participant>.` routing prefix.
-Older SDKs subscribing only to `data.<participant>.` do not receive this new wire
-message. The existing LiveKit connector normalizes remote connection
-grades (`unknown`, `excellent`, `good`, `poor`, `lost`) and reports whether an
-unmuted video publication should be delivering frames. It emits a snapshot every
-second, including when the grade is unchanged, so workers that start later get
-current observations. The hub routes these typed messages; neither the hub's IPC
-layer nor the agent SDK imports LiveKit to obtain them.
-
-Status includes the participant session ID and observation timestamp. The hub
-rejects a status from a departed session or a different connector, and ordinary
-client data messages cannot impersonate it. Missing status is unknown, not proof
-of a network failure. Frame rate and resolution remain available through
-`on_frame`; applications own freshness limits, warning thresholds and speech.
-Connectors without media-status support can continue providing frames and other
-input without a network grade.
 
 ### Completed files
 

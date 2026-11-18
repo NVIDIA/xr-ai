@@ -14,7 +14,6 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from pydantic import ValidationError
 from test_procedure_capture_guide import announcements, capture_context, demo, joined, packet, speak  # noqa: F401
-from xr_ai_hub import MediaStatus
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "agent-samples/procedure-capture-guide/worker"))
 from procedure_capture_guide_worker.capture import preflight  # noqa: E402
@@ -27,16 +26,9 @@ from procedure_capture_guide_worker.capture.quality import (  # noqa: E402
 )
 
 
-def status(**updates):
-    return MediaStatus(**{
-        "participant_id": "user", "participant_session_id": "session",
-        "pts_us": 1, "video_expected": True, "quality": "good", **updates,
-    })
-
-
-def frame(seq, width=1280, height=720, track="camera"):
+def frame(seq, width=1280, height=720, track="camera", pid="user"):
     return SimpleNamespace(
-        seq=seq, sequence=seq, timestamp_us=seq, width=width, height=height, track_id=track, participant_id="user"
+        seq=seq, sequence=seq, timestamp_us=seq, width=width, height=height, track_id=track, participant_id=pid
     )
 
 
@@ -45,37 +37,24 @@ class Scene:
         self.now, self.seq = 0.0, 0
         self.state = QualityState(QualityConfig(), 2, clock=lambda: self.now)
 
-    def second(self, fps=20, width=1280, height=720, *, send_status=True, **updates):
-        if send_status:
-            self.state.status_received(status(**updates))
+    def second(self, fps=20, width=1280, height=720, track="camera"):
         start = self.now
         for i in range(fps):
             self.now = start + i / fps
             self.seq += 1
-            self.state.frame(frame(self.seq, width, height))
+            self.state.frame(frame(self.seq, width, height, track))
         self.now = start + 1
         return self.state.evaluate()
 
 
-@pytest.mark.parametrize(
-    "values,expected",
-    [
-        ({"quality": "poor"}, {"poor_network"}),
-        ({"quality": "lost"}, {"poor_network"}),
-        ({"fps": 2}, {"low_frame_rate"}),
-        ({"width": 640, "height": 360}, {"low_resolution"}),
-        ({"fps": 0}, {"video_stalled"}),
-        (
-            {"fps": 2, "width": 320, "height": 180, "quality": "poor"},
-            {"low_frame_rate", "low_resolution", "poor_network"},
-        ),
-        ({"width": 720, "height": 1280}, set()),
-        ({"fps": 0, "video_expected": False}, set()),
-        ({"fps": 0, "video_expected": False}, set()),
-        ({"send_status": False}, set()),
-    ],
-)
-def test_media_conditions_and_recovery(values, expected):
+@pytest.mark.parametrize("values,expected", [
+    ({"fps": 2}, {"low_frame_rate"}),
+    ({"width": 640, "height": 360}, {"low_resolution"}),
+    ({"fps": 0}, {"low_frame_rate"}),
+    ({"fps": 2, "width": 320, "height": 180}, {"low_frame_rate", "low_resolution"}),
+    ({"width": 720, "height": 1280}, set()),
+])
+def test_video_conditions_and_recovery(values, expected):
     scene = Scene()
     for _ in range(12):
         assert not scene.second()
@@ -87,38 +66,41 @@ def test_media_conditions_and_recovery(values, expected):
     assert not conditions
 
 
-def test_track_change_duplicate_frames_and_snapshot_rate():
+def test_track_change_and_duplicate_frames():
     scene = Scene()
     for _ in range(12):
-        scene.state.sample(frame(1))
         assert not scene.second()
     assert scene.state.metrics["received_fps"] == 20
-    assert scene.state.metrics["saved_fps"] < 2
     count = len(scene.state.frames)
     scene.state.frame(frame(scene.seq))
     scene.state.frame(frame(scene.seq + 1, track="old"))
     assert len(scene.state.frames) == count
-    # Stopping and republishing the camera resets cadence and resolution baselines.
-    scene.state.status_received(status(video_expected=False))
+    # A new track replaces a stopped stream and gets its own baselines.
+    scene.now += 3
     for _ in range(12):
-        assert not scene.second(fps=8, width=960, height=540)
+        assert not scene.second(fps=8, width=960, height=540, track="new")
+    assert scene.state.track_id == "new"
+    assert scene.state.metrics["received_fps"] == 8
 
 
-def test_missing_status_does_not_invent_network_or_live_rate():
-    state = QualityState(QualityConfig(), 2)
-    state.sample(frame(1))
-    assert not state.evaluate()
-    assert state.metrics["received_fps"] is None
-
-
-def test_requested_snapshots_stall_and_recover():
+def test_no_frames_means_unknown_not_zero_fps_or_an_alert():
     scene = Scene()
-    scene.state.status_received(status(video_expected=False))
-    scene.state.sample(None)
-    scene.now = 3
-    assert scene.state.evaluate() == {"video_stalled"}
-    scene.state.sample(frame(1))
+    scene.now = 60
     assert not scene.state.evaluate()
+    assert scene.state.metrics["received_fps"] is None
+    assert scene.state.setup_video(scene.now) == (None, None)
+
+
+def test_stopped_stream_is_a_rate_drop_after_the_stall_threshold():
+    scene = Scene()
+    scene.state.frame(frame(1))
+    scene.now = 2.99
+    assert not scene.state.evaluate()
+    scene.now = 3
+    assert scene.state.evaluate() == {"low_frame_rate"}
+    assert scene.state.metrics["received_fps"] == 0
+    assert scene.state.setup_video(scene.now) == (None, None)
+    assert not scene.second()
 
 
 @pytest.mark.parametrize("value", [0, -1, float("inf"), float("nan")])
@@ -130,20 +112,20 @@ def test_repeat_interval_must_be_finite_and_positive(value):
 @pytest.mark.parametrize("interval", [10, 7])
 def test_independent_notification_clocks_and_recovery(interval):
     schedule = NotificationSchedule(interval)
-    network, rate = {"poor_network"}, {"low_frame_rate"}
-    assert schedule.due(network, 10) == ["poor_network"]
-    schedule.sent(network, 10)
-    assert schedule.due(network | rate, 15) == ["low_frame_rate"]
+    resolution, rate = {"low_resolution"}, {"low_frame_rate"}
+    assert schedule.due(resolution, 10) == ["low_resolution"]
+    schedule.sent(resolution, 10)
+    assert schedule.due(resolution | rate, 15) == ["low_frame_rate"]
     schedule.sent(rate, 15)
-    assert schedule.due(network | rate, 10 + interval) == ["poor_network"]
-    schedule.sent(network, 10 + interval)
-    assert schedule.due(network | rate, 15 + interval) == ["low_frame_rate"]
+    assert schedule.due(resolution | rate, 10 + interval) == ["low_resolution"]
+    schedule.sent(resolution, 10 + interval)
+    assert schedule.due(resolution | rate, 15 + interval) == ["low_frame_rate"]
     assert schedule.due(set(), 100) == []
 
 
 def test_simultaneous_conditions_share_message_and_repeat_time():
     schedule = NotificationSchedule(10)
-    conditions = {"poor_network", "low_frame_rate"}
+    conditions = {"low_resolution", "low_frame_rate"}
     assert set(schedule.due(conditions, 10)) == conditions
     schedule.sent(conditions, 10)
     assert not schedule.due(conditions, 19.999)
@@ -168,7 +150,6 @@ async def test_monitor_submits_audio_on_independent_deadlines(simultaneous):
 
     monitor = QualityFeedback(
         "user",
-        "session",
         SimpleNamespace(capture_quality=AsyncMock()),
         QualityConfig(),
         2,
@@ -177,7 +158,7 @@ async def test_monitor_submits_audio_on_independent_deadlines(simultaneous):
     )
     monitor.start(SimpleNamespace(publish=publish))
     await ticks.get()
-    conditions = {"poor_network", "low_frame_rate"} if simultaneous else {"poor_network"}
+    conditions = {"low_resolution", "low_frame_rate"} if simultaneous else {"low_resolution"}
     monitor.state.evaluate = Mock(side_effect=lambda: set(conditions))
     try:
         for value in [10, 15, 19, 20, 25]:
@@ -188,9 +169,9 @@ async def test_monitor_submits_audio_on_independent_deadlines(simultaneous):
             await ticks.get()
         assert [t for t, _ in spoken] == ([10, 20] if simultaneous else [10, 15, 20, 25])
         if simultaneous:
-            assert all("network" in text and "frame rate" in text for _, text in spoken)
+            assert all("resolution" in text and "frame rate" in text for _, text in spoken)
         else:
-            assert ["network" in text for _, text in spoken] == [True, False, True, False]
+            assert ["resolution" in text for _, text in spoken] == [True, False, True, False]
     finally:
         await monitor.stop()
     assert monitor.task is None
@@ -207,25 +188,17 @@ def install_quality(demo, *, enabled=True):
         demo.capture_backend, runtime=demo.runtime,
         quality_config=QualityConfig(enabled=enabled, poll_interval_s=0.01, repeat_interval_s=0.05),
     )
-    demo.capture_backend.on_sample = demo.capture.on_quality_sample
 
 
-async def test_status_rejects_replays_and_previous_connection(demo):
+async def test_reconnect_and_participants_have_separate_frame_observations(demo):
     install_quality(demo)
     await demo.capture.receive(joined())
-    monitor = demo.capture._connections["user"].quality
-
-    async def send(session, timestamp):
-        await demo.capture.on_media_status(status(participant_session_id=session, pts_us=timestamp))
-
-    await send("wrong", 99)
-    assert monitor.preview.status is None
-    await send(monitor.session_id, 2)
-    await send(monitor.session_id, 1)
-    assert monitor.preview.status.pts_us == 2
+    await demo.capture.receive(joined("bob", "bob-session"))
+    await demo.capture.on_quality_frame(frame(1, width=320, height=240))
+    assert demo.capture._connections["user"].quality.state.evaluate() == {"low_resolution"}
+    assert not demo.capture._connections["bob"].quality.state.evaluate()
     await demo.capture.receive(joined(session="replacement"))
-    await send(monitor.session_id, 3)
-    assert demo.capture._connections["user"].quality.preview.status is None
+    assert "resolution is unavailable" in preflight.check_setup(demo.capture._connections["user"].quality)
 
 
 async def test_audio_notifications_never_stop_recording_and_stop_drains_them(demo):
@@ -234,10 +207,10 @@ async def test_audio_notifications_never_stop_recording_and_stop_drains_them(dem
     await speak(demo, "start capture")
     state = demo.capture_backend._sessions["user"]
     monitor = demo.capture._connections["user"].quality
-    monitor.state.status_received(status(quality="poor", video_expected=False))
+    await demo.capture.on_quality_frame(frame(1, width=320, height=240))
     await wait_for(lambda: sum(c.args[1].kind == "update" for c in demo.output.call_args_list) >= 2)
     assert demo.capture_backend.is_capturing("user")
-    await speak(demo, "Narration while the connection is poor")
+    await speak(demo, "Narration while the resolution is low")
     assert state.transcript_count == 1
     await speak(demo, "stop capture")
     assert monitor.task is None and not demo.capture_backend.is_capturing("user")
@@ -256,11 +229,10 @@ async def test_quality_lifetime_drains_on_leave_restart_and_shutdown(demo, endin
     event = joined()
     await demo.capture.receive(event)
     monitor = demo.capture._connections["user"].quality
-    data = status(participant_id=monitor.pid, participant_session_id=monitor.session_id, quality="poor")
-    await demo.capture.on_media_status(data)
+    await demo.capture.on_quality_frame(frame(1, width=320, height=240, pid=monitor.pid))
     await speak(demo, "start capture")
     state = demo.capture_backend._sessions["user"]
-    await wait_for(lambda: any("network connection is poor" in text for text in announcements(demo)))
+    await wait_for(lambda: any("image resolution is low" in text for text in announcements(demo)))
     first_task = monitor.task
     if ending == "disconnect":
         await demo.capture.receive(
@@ -275,7 +247,7 @@ async def test_quality_lifetime_drains_on_leave_restart_and_shutdown(demo, endin
     else:
         await demo.capture.close()
     assert first_task.done()
-    assert monitor.task is None and monitor.state is None
+    assert monitor.task is None
     assert packet(state)["status"] == "complete"
     assert not demo.capture_backend.is_capturing("user")
 
@@ -285,7 +257,7 @@ async def test_setup_audio_and_capture_command_not_saved_as_narration(demo, comm
     install_quality(demo)
     await demo.capture.receive(joined())
     await speak(demo, command)
-    assert any("Network quality is unknown" in text for text in announcements(demo))
+    assert any("frame rate is unavailable" in text for text in announcements(demo))
     assert not list((demo.root / "sessions").glob("*/packet.json"))
     await speak(demo, "start capture")
     state = demo.capture_backend._sessions["user"]
@@ -311,35 +283,23 @@ async def test_quality_disabled_hides_setup_and_leaves_capture_available(demo):
     await speak(demo, "stop capture")
 
 
-def test_setup_reports_latest_received_fps_resolution_and_fresh_grade():
+def test_setup_reports_latest_received_fps_and_resolution():
     scene = Scene()
-    monitor = QualityFeedback("user", "session", Mock(), QualityConfig(), 2, clock=lambda: scene.now)
+    monitor = QualityFeedback("user", Mock(), QualityConfig(), 2, clock=lambda: scene.now)
     text = preflight.check_setup(monitor)
-    assert "Network quality is unknown" in text
     assert "frame rate is unavailable" in text and "resolution is unavailable" in text
-    monitor.preview.status_received(status(quality="poor"))
-    for i in range(10):
+    monitor.frame(frame(0))
+    text = preflight.check_setup(monitor)
+    assert "1280 by 720" in text and "frame rate is unavailable" in text
+    for i in range(1, 11):
         scene.now = i / 20
         monitor.frame(frame(i, width=640, height=360))
     text = preflight.check_setup(monitor)
     assert "Received video is 20.0 frames per second." in text
     assert "640 by 360" in text and "resolution is low" in text
-    assert "Network quality is poor" in text
-    assert monitor.state is None
+    assert monitor.task is None
     scene.now = 5
     text = preflight.check_setup(monitor)
-    assert "Network quality is unknown" in text
-    assert "frame rate is unavailable" in text and "resolution is unavailable" in text
-
-
-def test_setup_on_demand_does_not_report_old_live_video():
-    monitor = QualityFeedback("user", "session", Mock(), QualityConfig(), 2)
-    monitor.preview.status_received(status())
-    monitor.frame(frame(1))
-    assert "1280 by 720" in preflight.check_setup(monitor)
-    monitor.preview.status_received(status(video_expected=False))
-    text = preflight.check_setup(monitor)
-    assert "Network quality is good" in text
     assert "frame rate is unavailable" in text and "resolution is unavailable" in text
 
 
@@ -349,8 +309,7 @@ async def test_initial_alert_waits_for_start_acknowledgement(demo, monkeypatch):
     install_quality(demo)
     await demo.capture.receive(joined(_PID))
     monitor = demo.capture._connections[_PID].quality
-    data = status(participant_id=monitor.pid, participant_session_id=monitor.session_id, quality="poor")
-    await demo.capture.on_media_status(data)
+    await demo.capture.on_quality_frame(frame(1, width=320, height=240, pid=monitor.pid))
     async with _pipeline(monkeypatch) as (voice, _, tts, endpoint, _gate):
         warning = asyncio.Event()
 
@@ -372,7 +331,7 @@ async def test_initial_alert_waits_for_start_acknowledgement(demo, monkeypatch):
         assert not alert.urgent
         assert tts.calls == ["Capture started."]
         endpoint.release.set()
-        await wait_for(lambda: any("network connection is poor" in text for text in tts.calls))
+        await wait_for(lambda: any("image resolution is low" in text for text in tts.calls))
         assert demo.capture_backend.is_capturing(_PID)
         await speak(demo, "stop capture", pid=_PID)
 
@@ -409,7 +368,7 @@ async def test_queued_capture_and_setup_reply_in_input_order(demo, monkeypatch, 
     assert len(packets) == 2
     assert all(json.loads(path.read_text())["status"] == "complete" for path in packets)
     assert not demo.capture_backend.is_capturing("user")
-    replies = ["setup" if text.startswith("Network quality") else text for text in announcements(demo)]
+    replies = ["setup" if "frame rate is unavailable" in text else text for text in announcements(demo)]
     pair = ["Capture started.", "Capture stopped."]
     assert replies == pair + (["setup"] if earlier_setup else []) + pair + ["setup", "setup"]
 
@@ -420,7 +379,7 @@ async def test_pending_media_alerts_replace_repeats_without_erasing_other_condit
     from test_voice_playback_state import _PID, _pipeline
 
     now = [0.0]
-    conditions = {"poor_network"}
+    conditions = {"low_resolution"}
     ticks, resume = asyncio.Queue(), asyncio.Queue()
 
     async def sleep(_seconds):
@@ -441,7 +400,7 @@ async def test_pending_media_alerts_replace_repeats_without_erasing_other_condit
                 await voice.withdraw_updates(participant_id, source=source)
 
         monitor = QualityFeedback(
-            _PID, "session", SimpleNamespace(capture_quality=AsyncMock()), QualityConfig(), 2,
+            _PID, SimpleNamespace(capture_quality=AsyncMock()), QualityConfig(), 2,
             clock=lambda: now[0], sleep=sleep,
         )
         monitor.start(SimpleNamespace(publish=publish))
@@ -461,17 +420,17 @@ async def test_pending_media_alerts_replace_repeats_without_erasing_other_condit
             await worker.queue_frame(stopped)
             await wait_for(lambda: bool(tts.calls) and not voice._floor)
             spoken = " ".join(tts.calls)
-            assert spoken.count("The network connection is poor.") == 1
+            assert spoken.count("The image resolution is low or has dropped.") == 1
             assert spoken.count("The video frame rate has dropped.") == int(staggered)
             assert spoken.count("Unrelated notice.") == 1
             # Replacing unheard copies must not disable reminders once heard.
             now[0] = 30
             resume.put_nowait(True)
             await ticks.get()
-            await wait_for(lambda: " ".join(tts.calls).count("The network connection is poor.") == 2)
+            await wait_for(lambda: " ".join(tts.calls).count("The image resolution is low or has dropped.") == 2)
             await wait_for(lambda: not voice._floor)
             spoken = " ".join(tts.calls)
-            assert spoken.count("The network connection is poor.") == 2
+            assert spoken.count("The image resolution is low or has dropped.") == 2
             assert spoken.count("The video frame rate has dropped.") == 2 * int(staggered)
         finally:
             await monitor.stop()

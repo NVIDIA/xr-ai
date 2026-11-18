@@ -163,12 +163,10 @@ class _Capture:
         query_images: MultiImageQueryTool,
         capture_fps: float,
         caption_interval_s: float,
-        on_sample: Callable[[str, Any], None] | None = None,
     ) -> None:
         self._sessions_dir = sessions_dir
         self._sessions_dir.mkdir(parents=True, exist_ok=True)
         self._current_frame = current_frame
-        self.on_sample = on_sample
         self._images = images
         self._query_images = query_images
         self._capture_period_s = 1.0 / capture_fps
@@ -337,8 +335,6 @@ class _Capture:
             except asyncio.CancelledError:
                 raise
             except FrameUnavailable as exc:
-                if self.on_sample is not None:
-                    self.on_sample(state.participant_id, None)
                 await self._error(state, "frame_unavailable", str(exc))
             except Exception as exc:
                 logger.opt(exception=True).warning("frame capture failed pid={!r}", state.participant_id)
@@ -388,8 +384,6 @@ class _Capture:
                 frame_entry,
             )
             state.frame_ready.set()
-        if self.on_sample is not None:
-            self.on_sample(state.participant_id, frame)
 
     async def _caption_loop(self, state: _Session) -> None:
         await state.frame_ready.wait()
