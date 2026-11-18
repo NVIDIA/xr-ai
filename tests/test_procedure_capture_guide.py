@@ -576,6 +576,7 @@ async def test_app_drains_voice_transcripts_and_recordings_before_endpoint_close
     capture_endpoint = SimpleNamespace(
         on_participant=lambda cb: callbacks.update(participant=cb),
         on_frame=lambda cb: callbacks.update(frame=cb),
+        on_audio=lambda cb: callbacks.update(audio=cb),
         run=receive_forever,
         wait_until_running=receiving.wait,
         send_return_data=AsyncMock(side_effect=send),
@@ -655,8 +656,8 @@ async def test_app_drains_voice_transcripts_and_recordings_before_endpoint_close
         event = joined()
         await callbacks["participant"](event)
         await callbacks["frame"](FrameSignal(
-            slot=0, seq=1, pts_us=time.time_ns() // 1000, width=320, height=240,
-            fmt=PixelFormat.RGB24, data_sz=320 * 240 * 3, participant_id="user", track_id="camera",
+            slot=0, seq=1, pts_us=time.time_ns() // 1000, width=1280, height=720,
+            fmt=PixelFormat.RGB24, data_sz=1280 * 720 * 3, participant_id="user", track_id="camera",
         ))
         # End the voice run while the participant is still connected.
         # VoiceAgent's real finally path closes only its own transport.
@@ -667,7 +668,17 @@ async def test_app_drains_voice_transcripts_and_recordings_before_endpoint_close
             while spoken.await_count < 1:
                 await asyncio.sleep(0.001)
         async with asyncio.timeout(1):
-            while sum("image resolution is low" in text for _, _, text in warnings) < 2:
+            while True:
+                logs = list((demo.root / "app-sessions/sessions").glob("*/quality.jsonl"))
+                if logs and "monitor_started" in logs[0].read_text():
+                    break
+                await asyncio.sleep(0.001)
+        await callbacks["frame"](FrameSignal(
+            slot=0, seq=2, pts_us=time.time_ns() // 1000, width=320, height=240,
+            fmt=PixelFormat.RGB24, data_sz=320 * 240 * 3, participant_id="user", track_id="camera",
+        ))
+        async with asyncio.timeout(1):
+            while sum("image resolution has dropped" in text for _, _, text in warnings) < 2:
                 await asyncio.sleep(0.001)
         assert all(pid == "user" and source.startswith("capture-quality:") for pid, source, _ in warnings)
         assert any((pid, source) in withdrawals for pid, source, _ in warnings)
@@ -710,7 +721,7 @@ async def test_app_drains_voice_transcripts_and_recordings_before_endpoint_close
     if stop_command:
         for pid, source in {(pid, source) for pid, source, _ in warnings}:
             assert (pid, source) in withdrawals
-        resolution_source = next(source for _, source, text in warnings if "image resolution is low" in text)
+        resolution_source = next(source for _, source, text in warnings if "image resolution has dropped" in text)
         assert withdrawals.count(("user", resolution_source)) >= 2  # Replacement and stop cleanup.
     assert receiver_cancelled.is_set()
     await asyncio.wait_for(asyncio.gather(*consumers), 2)

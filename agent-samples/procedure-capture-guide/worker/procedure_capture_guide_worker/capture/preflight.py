@@ -16,6 +16,7 @@ def check_setup(quality: QualityFeedback) -> str:
     else:
         width, height = resolution
         parts.append(messages["resolution"].format(width=width, height=height))
-        if min(width, height) < quality.config.min_short_edge:
-            parts.append(_MESSAGES["conditions"]["low_resolution"])
+    _, audio = quality.audio.evaluate()
+    snr = audio["audio_snr_db"]
+    parts.append(messages["audio_snr"].format(snr_db=snr) if snr is not None else messages["audio_unavailable"])
     return " ".join(parts)

@@ -4905,3 +4905,45 @@ def test_device_io_hub_transport_subscribes_to_video_frames():
         assert transport._ep._default_filter & Subscribe.DATA
     finally:
         transport.shutdown()
+
+
+@pytest.mark.parametrize("packet_ms", [10, 2000])
+async def test_audio_power_observer_reuses_vad_and_preserves_window_timestamps(monkeypatch, packet_ms):
+    from xr_ai_vad import detector
+
+    calls, windows = [], []
+
+    class Silero:
+        def __call__(self, tensor, sample_rate):
+            calls.append(True)
+            return 0.9 if tensor.abs().max().item() > 0.01 else 0.0
+
+        def reset_states(self):
+            pass
+
+    monkeypatch.setattr(detector, "load_silero_vad", lambda **kwargs: Silero())
+    proc = VadSttProcessor(
+        stt=_FakeStt(text="check setup"), vad_cfg=VadConfig(on_audio_window=windows.append, stop_probe_after_s=0),
+    )
+    pcm = np.concatenate([
+        np.full(40 * 512, 32, np.int16),
+        np.full(32 * 512, 3277, np.int16),
+        np.full(26 * 512, 32, np.int16),
+    ]).tobytes()
+    chunk_bytes = 16000 * packet_ms // 1000 * 2
+    frames = []
+    for offset in range(0, len(pcm), chunk_bytes):
+        frame = InputAudioRawFrame(audio=pcm[offset:offset + chunk_bytes], sample_rate=16000, num_channels=1)
+        frame.transport_source = "alice"
+        frame.pts = 1_000_000_000 + offset // 2 * 1_000_000_000 // 16000
+        frames.append(frame)
+    sink = await _run_chain(proc, sends=frames)
+    assert len(windows) == len(calls) == 98
+    assert all(w.participant_id == "alice" and w.duration_s == 0.032 for w in windows)
+    assert [w.timestamp_us for w in windows] == [1_000_000 + i * 32_000 for i in range(98)]
+    assert sum(w.speech for w in windows) == 32
+    assert windows[0].power == pytest.approx((32 / 32768) ** 2)
+    assert windows[40].power == pytest.approx((3277 / 32768) ** 2)
+    transcripts = [f for f in sink.frames if isinstance(f, TranscriptionFrame)]
+    assert len(transcripts) == 1 and transcripts[0].text == "check setup"
+    assert transcripts[0].pts == windows[44].timestamp_us * 1000

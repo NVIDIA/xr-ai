@@ -58,6 +58,10 @@ class VadDetector:
     completes). It is awaited on the feeding task before processing further
     windows or finalizing that utterance. Callback exceptions are logged and
     isolated so detection can continue.
+
+    ``on_window`` optionally observes each classified window as int16 PCM,
+    sample rate and speech flag. It is synchronous and must not block; failures
+    are isolated from utterance detection. No additional inference is performed.
     """
 
     def __init__(
@@ -68,7 +72,9 @@ class VadDetector:
         silence_duration:  float = 0.8,
         min_speech:        float = 0.15,
         silero_threshold:  float = 0.5,
+        on_window: Optional[Callable[[bytes, int, bool], None]] = None,
     ) -> None:
+        self._on_window         = on_window
         self._on_utterance      = on_utterance
         self._on_speech_start   = on_speech_start
         self._silence_duration  = silence_duration
@@ -137,6 +143,11 @@ class VadDetector:
         chunk_s = n_samples / sample_rate
 
         is_speech = self._classify(pcm_int16, sample_rate)
+        if self._on_window is not None:
+            try:
+                self._on_window(pcm_int16, sample_rate, is_speech)
+            except Exception:  # noqa: BLE001 — optional diagnostics cannot stop transcription.
+                log.exception("VAD window observer failed")
 
         if is_speech:
             if not self._speaking:

@@ -24,6 +24,8 @@ from xr_ai_interaction import ResponseOutputs
 from xr_ai_runtime import AgentRuntime
 from xr_ai_voice import VOICE_OUTPUT_TOPIC
 
+from .audio_quality import AudioQuality
+
 _MESSAGES = yaml.safe_load((Path(__file__).resolve().parents[3] / "yaml/capture-messages.yaml").read_text())
 
 
@@ -34,15 +36,21 @@ class QualityConfig(BaseModel):
     stall_s: float = Field(default=3, gt=0)
     repeat_interval_s: float = Field(default=10, gt=0)
     poll_interval_s: float = Field(default=1, gt=0)
-    min_short_edge: int = Field(default=480, gt=0, strict=True)
-    drop_ratio: float = Field(default=0.5, gt=0, lt=1)
+    frame_rate_drop_ratio: float = Field(default=0.5, gt=0, lt=1)
+    resolution_drop_ratio: float = Field(default=0.5, gt=0, lt=1)
+    audio_snr_drop_ratio: float = Field(default=0.5, gt=0, lt=1)
+    audio_noise_window_s: float = Field(default=5, ge=1, le=30)
+    audio_min_noise_s: float = Field(default=0.5, gt=0, le=1)
+    audio_min_speech_s: float = Field(default=0.3, gt=0, le=1)
+    audio_warning_speech_s: float = Field(default=3, gt=0, le=30)
+    audio_max_age_s: float = Field(default=15, gt=0, le=60)
 
 
 class QualityState:
     """Measure one incoming video stream with local monotonic receipt times."""
 
-    def __init__(self, config: QualityConfig, capture_fps: float, *, clock: Callable[[], float] = time.monotonic):
-        self.config, self.capture_fps, self.clock = config, capture_fps, clock
+    def __init__(self, config: QualityConfig, *, clock: Callable[[], float] = time.monotonic):
+        self.config, self.clock = config, clock
         self.frames: deque[float] = deque(maxlen=4096)
         self.track_id: str | None = None
         self.started = clock()
@@ -55,6 +63,9 @@ class QualityState:
     def reset_baseline(self) -> None:
         self.baseline_fps = None
         self.baseline_pixels = None
+        if self.last_frame is not None and self.clock() - self.last_frame < self.config.stall_s:
+            width, height = self.resolution
+            self.baseline_pixels = width * height
         self.baseline_rates: deque[float] = deque(maxlen=3)
 
     def frame(self, frame: FrameSignal) -> None:
@@ -100,14 +111,14 @@ class QualityState:
                     self.baseline_rates.append(fps)
                     if len(self.baseline_rates) == 3 and min(self.baseline_rates) >= 0.8 * max(self.baseline_rates):
                         self.baseline_fps = sum(self.baseline_rates) / 3
-                if fps < self.capture_fps or (self.baseline_fps is not None and fps < self.baseline_fps * c.drop_ratio):
+                if self.baseline_fps is not None and fps <= self.baseline_fps * c.frame_rate_drop_ratio:
                     conditions.add("low_frame_rate")
             if now - self.last_frame < c.stall_s:
                 width, height = self.resolution
                 pixels = width * height
                 if self.baseline_pixels is None:
                     self.baseline_pixels = pixels
-                if min(width, height) < c.min_short_edge or pixels < self.baseline_pixels * c.drop_ratio:
+                if pixels <= self.baseline_pixels * c.resolution_drop_ratio:
                     conditions.add("low_resolution")
         self.metrics = {"received_fps": fps, "resolution": self.setup_video(now)[1], "baseline_fps": self.baseline_fps}
         return conditions
@@ -121,15 +132,18 @@ class QualityFeedback:
         pid,
         backend,
         config: QualityConfig,
-        capture_fps: float,
         *,
         clock=time.monotonic,
         sleep=asyncio.sleep,
+        audio_silence_s=0.8,
     ):
         self.pid, self.backend = pid, backend
         self.clock, self.sleep = clock, sleep
-        self.config, self.capture_fps = config, capture_fps
-        self.state = QualityState(config, capture_fps, clock=clock)
+        self.config = config
+        self.state = QualityState(config, clock=clock)
+        self.audio = AudioQuality(config, clock=clock, silence_s=audio_silence_s)
+        self.audio_track = None
+        self.audio_track_started_us = 0
         self.task: asyncio.Task | None = None
 
     def frame(self, frame: FrameSignal) -> None:
@@ -139,6 +153,8 @@ class QualityFeedback:
         if self.task is not None and not self.task.done():
             raise RuntimeError("previous capture quality task must be drained before restart")
         self.state.reset_baseline()
+        self.audio.current = None
+        self.audio.bad_speech_s = 0.0
         self.task = asyncio.create_task(self._run(publisher), name=f"capture-quality:{self.pid}")
 
     def invalidate(self):
@@ -164,6 +180,10 @@ class QualityFeedback:
             while True:
                 now = self.clock()
                 conditions = self.state.evaluate()
+                audio_low, audio_metrics = self.audio.evaluate()
+                self.state.metrics.update(audio_metrics)
+                if audio_low:
+                    conditions.add("low_audio_snr")
                 if conditions != previous:
                     for batch in list(batches):
                         if not batch <= conditions:
@@ -184,7 +204,17 @@ class QualityFeedback:
                         publisher, VOICE_OUTPUT_TOPIC, source=f"{source}:{','.join(due)}",
                     )
                     batches[frozenset(due)] = outputs
-                    text = " ".join(_MESSAGES["conditions"][name] for name in due)
+                    ratios = {
+                        "low_frame_rate": self.config.frame_rate_drop_ratio,
+                        "low_resolution": self.config.resolution_drop_ratio,
+                        "low_audio_snr": self.config.audio_snr_drop_ratio,
+                    }
+                    text = " ".join(
+                        _MESSAGES["conditions"][name].format(
+                            drop_percent=100 * (1 - ratios[name]),
+                            snr_drop_db=audio_metrics["audio_snr_drop_db"],
+                        ) for name in due
+                    )
                     await outputs.update(self.pid, text)
                     schedule.sent(due, self.clock())
                     await self._record("warning_submitted", conditions=due, text=text)

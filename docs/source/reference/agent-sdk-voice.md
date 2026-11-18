@@ -65,6 +65,14 @@ their own configuration. Other `VadConfig` fields apply only to batch STT.
 Speaker ASR checks inactivity at model-chunk boundaries, so the threshold is
 not an exact end-to-end latency target. Changes apply to newly opened sessions.
 
+For optional received-audio diagnostics, `VadConfig.on_audio_window` accepts a
+synchronous callback receiving {py:class}`~xr_ai_voice.VoiceAudioWindow`: participant,
+presentation timestamp, duration, mean-square power and the existing Silero speech
+decision. It performs no extra inference and is available only with batch STT.
+Callbacks must not block. Observer failures are isolated from transcription.
+Observations precede voice-gate filtering; applications should associate them with
+accepted input before acting on speech measurements.
+
 For the startup probe contract, refer to {py:class}`~xr_ai_voice.VoiceAgent`.
 For deployment order and model availability requirements, refer to
 {ref}`consumer-model-readiness`.

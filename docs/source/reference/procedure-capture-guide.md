@@ -139,9 +139,9 @@ through `out_dir` in `yaml/media_capture.yaml`.
 ## Optional setup check and recording alerts
 
 Before **start capture**, optionally say **check setup**. The worker reports the
-latest received video frame rate and image resolution as soon as earlier commands
+latest received video frame rate, image resolution and estimated audio SNR as soon as earlier commands
 are processed. For example, "Received video is 30.0 frames per second. Image
-resolution is 1280 by 720 pixels."
+resolution is 1280 by 720 pixels. Estimated audio signal-to-noise ratio is 20 decibels."
 
 Measurements use the existing `FrameSignal` callbacks: local arrival times give
 frame rate, and the latest frame supplies dimensions. Setup does not wait for a
@@ -155,13 +155,56 @@ While capture is active, a separate monitor speaks these conditions:
 
 | Condition | Default detection |
 | --- | --- |
-| Low frame rate | After a full 5-second observation window, received FPS is below `capture_fps` (2 by default) or below 50% of a stable initial rate; an observed stream delivering no frames for 3 seconds also triggers this warning |
-| Low resolution | A recent frame has a short edge below 480 pixels or pixel count below 50% of the initial resolution; portrait rotation alone is not a drop |
+| Low frame rate | Received FPS is at or below 50% of a stable initial rate, measured over a 5-second window; an observed stream delivering no frames for 3 seconds also triggers this warning |
+| Low resolution | A recent frame has a pixel count at or below 50% of the initial resolution; portrait rotation alone is not a drop |
+
+There is no absolute minimum FPS or image dimension. A stable low-rate or
+low-resolution stream does not trigger a drop warning. The initial FPS baseline
+is the mean of three stable window estimates; resolution uses the first recent
+frame evaluated for the capture. Warnings say the frame rate or resolution pixel
+count has dropped by at least 50 percent (following the corresponding threshold if changed).
 
 No frame-rate failure is inferred before the first frame arrives. Once a stream
 has been observed, stopping it intentionally also produces a frame-rate warning
 while recording. These checks measure video delivery; they do not diagnose a
-network condition or assess audio.
+network condition.
+
+Audio SNR uses the existing batch-STT Silero VAD windows, without additional
+inference or a LiveKit status message. The worker keeps bounded power summaries,
+not raw audio. An accepted **check setup** utterance establishes the audio
+baseline from speech power and preceding non-speech power. A brief quiet pause
+before the command helps supply the noise reference. Setup replies immediately;
+insufficient speech, missing noise, or a zero noise floor produces an unavailable
+result instead of a numeric estimate. Speaker-ASR deployments do not provide
+these VAD observations and therefore report audio SNR as unavailable.
+
+During capture, accepted speech is compared against that setup baseline using a
+fresh noise estimate. The default warning needs at least 3 seconds of accepted
+speech at or below half the baseline signal-to-noise power ratio. A 50% drop in
+this **linear ratio** is about 3 decibels, not half the baseline dB reading.
+For example, a 20 dB baseline triggers at approximately 17 dB. The warning says
+"Your audio signal-to-noise ratio has dropped by at least 50 percent since setup,
+a decrease of 3 decibels. Move the microphone closer or reduce background noise."
+The decibel decrease reflects the measured drop, rounded to a whole number.
+
+Each threshold is independently configurable in `yaml/capture-agent-config.yaml`:
+
+```yaml
+quality:
+  frame_rate_drop_ratio: 0.5
+  resolution_drop_ratio: 0.5
+  audio_snr_drop_ratio: 0.5
+  repeat_interval_s: 10
+```
+
+These ratios specify the fraction remaining relative to the baseline: `0.25`
+requires a 75% decrease, while `0.75` requires a 25% decrease. Video baselines
+reset at capture start; the audio baseline persists from setup until a new setup
+command, microphone change or participant reconnect. Without a valid setup audio
+baseline there are no SNR warnings. Silence and unaccepted speech do not activate
+an audio warning; measurements older than `audio_max_age_s` withdraw it. The
+estimate describes received audio after any microphone processing, not calibrated
+acoustic SNR or guaranteed transcription quality.
 
 Conditions are evaluated once per second by default. Notifications never stop,
 pause, or restart recording, change camera mode, or alter captioning. They wait

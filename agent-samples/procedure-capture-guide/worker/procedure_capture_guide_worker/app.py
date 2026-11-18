@@ -75,9 +75,10 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
         # repeated captures on the same participant connection.
         capture = runtime.register("capture", CaptureAgent(
             capture_backend, runtime=runtime, quality_config=config.capture.quality,
-            capture_fps=config.capture.capture_fps,
+            audio_silence_s=config.silence_duration,
         ))
         endpoint.on_frame(capture.on_quality_frame)
+        endpoint.on_audio(capture.on_quality_audio)
         endpoint.on_participant(capture.receive)
         voice_options["participant_joined_topic"] = CAPTURE_JOINED_TOPIC
     else:
@@ -111,6 +112,9 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
             # Wait for the final utterance before interpreting capture commands;
             # a partial "stop" must not interrupt narration or acknowledgements.
             stop_probe_after_s=0,
+            on_audio_window=(
+                capture.on_audio_window if capture is not None and config.capture.quality.enabled else None
+            ),
         ),
         voice_gate=load_voice_gate_config(config.voice_gate_yaml),
         probes=probes,

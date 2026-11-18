@@ -16,5 +16,12 @@ quality:
   poll_interval_s: 1     # Conditions due on the same tick share one announcement.
   window_s: 5
   stall_s: 3
-  min_short_edge: 480
-  drop_ratio: 0.5
+  # Remaining fraction of each initial value; 0.5 means a drop of at least 50%.
+  frame_rate_drop_ratio: 0.5
+  resolution_drop_ratio: 0.5
+  audio_snr_drop_ratio: 0.5  # Linear signal/noise power ratio, not the dB number.
+  audio_noise_window_s: 5
+  audio_min_noise_s: 0.5
+  audio_min_speech_s: 0.3
+  audio_warning_speech_s: 3
+  audio_max_age_s: 15

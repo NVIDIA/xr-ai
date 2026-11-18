@@ -57,13 +57,14 @@ class CaptureAgent(Agent):
     def __init__(
         self, capture_backend: _Capture, *, runtime: AgentRuntime,
         quality_config: QualityConfig | None = None,
-        capture_fps: float = 2.0,
+        audio_silence_s: float = 0.8,
     ) -> None:
         super().__init__()
         self._capture_backend = capture_backend
         # Background alerts own source scopes; input contexts retain the command source.
         self._runtime = runtime
-        self._quality_config, self._capture_fps = quality_config, capture_fps
+        self._quality_config = quality_config
+        self._audio_silence_s = audio_silence_s
         # Recording ownership applied to the backend by queued actions. Keep this
         # separate from connection.recording: newer input may already be accepted.
         self._sessions: dict[str, _Recording] = {}
@@ -126,7 +127,7 @@ class CaptureAgent(Agent):
                 if self._quality_config is not None and self._quality_config.enabled:
                     self._connections[pid].quality = QualityFeedback(
                         pid, self._capture_backend,
-                        self._quality_config, self._capture_fps,
+                        self._quality_config, audio_silence_s=self._audio_silence_s,
                     )
             elif not event.joined and duplicate:
                 connection.cancelled.set()
@@ -190,11 +191,16 @@ class CaptureAgent(Agent):
         command = _COMMAND.fullmatch(transcript.text)
         recording = connection.recording
         quality = connection.quality
+        if quality is not None and recording is not None and command is None:
+            quality.audio.accept(transcript.timestamp_us)
         if quality is not None and recording is None and _SETUP_COMMAND.fullmatch(transcript.text):
+            quality.audio.accept(transcript.timestamp_us, setup=True)
+            report = check_setup(quality)
+
             async def preflight() -> None:
                 if self._closed or connection.cancelled.is_set() or self._capture_backend.is_capturing(pid):
                     return
-                await self._say(pid, connection, ctx, check_setup(quality))
+                await self._say(pid, connection, ctx, report)
 
             self._enqueue(pid, preflight)
             return
@@ -249,6 +255,25 @@ class CaptureAgent(Agent):
 
             self._enqueue(pid, narrate)
         # Return promptly; this owner drains per-participant writes and boundaries.
+
+    def on_audio_window(self, window) -> None:
+        connection = self._connections.get(window.participant_id)
+        if (not self._closed and connection is not None and connection.quality is not None
+                and not connection.cancelled.is_set()
+                and window.timestamp_us >= max(connection.joined_at_us, connection.quality.audio_track_started_us)):
+            connection.quality.audio.observe(window)
+
+    async def on_quality_audio(self, chunk) -> None:
+        connection = self._connections.get(chunk.participant_id)
+        if (self._closed or connection is None or connection.quality is None or connection.cancelled.is_set()
+                or chunk.pts_us < max(connection.joined_at_us, connection.quality.audio_track_started_us)):
+            return
+        quality = connection.quality
+        track = (chunk.track_id, chunk.sample_rate, chunk.channels)
+        if quality.audio_track != track:
+            quality.audio.reset()
+            quality.audio_track = track
+            quality.audio_track_started_us = chunk.pts_us
 
     async def on_quality_frame(self, frame) -> None:
         connection = self._connections.get(frame.participant_id)
