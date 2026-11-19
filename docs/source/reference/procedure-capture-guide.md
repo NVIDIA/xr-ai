@@ -46,14 +46,13 @@ reconnecting. The worker logs each finalized packet's path and status.
 
 Use live video or on-demand image capture. Speak commands directly, without a
 wake phrase. After **start capture**, the worker says "Capture started."
-and stays silent during narration. After **stop capture**, it says
+and speaks media-quality notifications during recording when needed. After **stop capture**, it says
 "Capture stopped." The evidence packet, transcript, and summary then finish
 saving silently; processing errors are logged. Disconnecting finalizes the packet
 without announcements.
 
-On connection, capture mode says: "Say start capture to start the recording and
-demonstrate your procedure. To finish recording, say stop capture." This welcome
-is only sent on connection. Other speech while idle does not trigger a reply,
+On connection, capture mode offers **check setup**, **start capture**, and
+**stop capture**. This welcome is only sent on connection. Other speech while idle does not trigger a reply,
 and the welcome is not repeated after "Capture stopped."
 
 To stop the sample, press Ctrl+C. The shared model servers remain running.
@@ -137,6 +136,99 @@ continuous camera recording. In capture mode, `--output-root` can be combined wi
 changes only the procedure-packet destination; configure session recording output
 through `out_dir` in `yaml/media_capture.yaml`.
 
+## Optional setup check and recording alerts
+
+Before **start capture**, optionally say **check setup**. The worker reports the
+latest received video frame rate, image resolution and estimated audio SNR as soon as earlier commands
+are processed. For example, "Received video is 30.0 frames per second. Image
+resolution is 1280 by 720 pixels. Estimated audio signal-to-noise ratio is 20 decibels."
+
+Measurements use the existing `FrameSignal` callbacks: local arrival times give
+frame rate, and the latest frame supplies dimensions. Setup does not wait for a
+new sampling period, request snapshots, or create a recording. One recent frame
+is enough for resolution; frame rate requires at least two. When frames have not
+arrived for `quality.stall_s`, both setup measurements are reported as unavailable.
+On-demand snapshots are not a continuous video stream and do not supply these
+measurements. Enable live video to use the checks.
+
+While capture is active, a separate monitor speaks these conditions:
+
+| Condition | Default detection |
+| --- | --- |
+| Low frame rate | Received FPS is at or below 50% of a stable initial rate, measured over a 5-second window; an observed stream delivering no frames for 3 seconds also triggers this warning |
+| Low resolution | A recent frame has a pixel count at or below 50% of the initial resolution; portrait rotation alone is not a drop |
+
+There is no absolute minimum FPS or image dimension. A stable low-rate or
+low-resolution stream does not trigger a drop warning. The initial FPS baseline
+is the mean of three stable window estimates; resolution uses the first recent
+frame evaluated for the capture. Warnings say the frame rate or resolution pixel
+count has dropped by at least 50 percent (following the corresponding threshold if changed).
+
+No frame-rate failure is inferred before the first frame arrives. Once a stream
+has been observed, stopping it intentionally also produces a frame-rate warning
+while recording. These checks measure video delivery; they do not diagnose a
+network condition.
+
+Audio SNR uses the existing batch-STT Silero VAD windows, without additional
+inference or a LiveKit status message. The worker keeps bounded power summaries,
+not raw audio. Estimates finalize at the voice pipeline's actual utterance boundary,
+including its length limit, and use the resulting transcript timestamp for matching.
+Monitoring does not change narration timestamps. An accepted **check setup** utterance establishes the audio
+baseline from speech power and preceding non-speech power. A brief quiet pause
+before the command helps supply the noise reference. Setup replies immediately;
+insufficient speech, missing noise, or a zero noise floor produces an unavailable
+result instead of a numeric estimate. Speaker-ASR deployments do not provide
+these VAD observations and therefore report audio SNR as unavailable.
+
+During capture, accepted speech is compared against that setup baseline using a
+fresh noise estimate. The default warning needs at least 3 seconds of accepted
+speech at or below half the baseline signal-to-noise power ratio. A 50% drop in
+this **linear ratio** is about 3 decibels, not half the baseline dB reading.
+For example, a 20 dB baseline triggers at approximately 17 dB. The warning says
+"Your audio signal-to-noise ratio has dropped by at least 50 percent since setup,
+a decrease of 3 decibels. Move the microphone closer or reduce background noise."
+The decibel decrease reflects the measured drop, rounded to a whole number.
+
+Each threshold is independently configurable in `yaml/capture-agent-config.yaml`:
+
+```yaml
+quality:
+  frame_rate_drop_ratio: 0.5
+  resolution_drop_ratio: 0.5
+  audio_snr_drop_ratio: 0.5
+  repeat_interval_s: 10
+```
+
+These ratios specify the fraction remaining relative to the baseline: `0.25`
+requires a 75% decrease, while `0.75` requires a 25% decrease. Video baselines
+reset at capture start; the audio baseline persists from setup until a new setup
+command, microphone change or participant reconnect. Without a valid setup audio
+baseline there are no SNR warnings. Silence and unaccepted speech do not activate
+an audio warning; measurements older than `audio_max_age_s` withdraw it. The
+estimate describes received audio after any microphone processing, not calibrated
+acoustic SNR or guaranteed transcription quality.
+
+Conditions are evaluated once per second by default. Notifications never stop,
+pause, or restart recording, change camera mode, or alter captioning. They wait
+for ongoing speech, including the capture acknowledgement. Repeats replace an
+unheard copy of the same warning batch; unrelated pending notices remain queued.
+Recovery withdraws pending warnings about recovered conditions. Spoken feedback
+uses the existing TTS and return-audio path.
+
+`quality.repeat_interval_s` in `yaml/capture-agent-config.yaml` sets the minimum
+interval between submissions for each condition independently, defaulting to
+10 seconds:
+
+- Resolution drops at 10 seconds: alerts at 10, 20, 30 seconds while it stays low.
+- Frame rate drops at 15 seconds: alerts at 15, 25, 35 seconds independently.
+- Both appear at 10 seconds: one combined announcement, repeated at 20 seconds.
+
+Detection windows and TTS playback add their normal latency. `quality.enabled:
+false` disables the setup command and monitoring; recording remains available.
+Disconnect and shutdown drain the monitor. A new recording gets fresh warning
+clocks and baselines. `quality.jsonl` records condition changes and submitted
+alerts separately from narration. Wording lives in `yaml/capture-messages.yaml`.
+
 ## Recording boundaries
 
 - After connecting, the worker waits for **start capture** to open a packet.
@@ -177,6 +269,7 @@ progress indicators.
 | `artifacts/sessions/<session-id>/captions.jsonl` | Timestamped captions, activities, phases, and visible changes |
 | `artifacts/sessions/<session-id>/transcript.jsonl` | Final user transcripts inside the task recording boundary |
 | `artifacts/sessions/<session-id>/summary.md` | Human-readable activity and phase summary, plus a combined timeline of narration (**Heard**) and captions (**Saw**) in time order |
+| `artifacts/sessions/<session-id>/quality.jsonl` | Media monitor conditions, metrics, and audio-notification submissions |
 | `artifacts/sessions/<session-id>/errors.jsonl` | Frame, caption, or persistence errors, when present |
 
 ### Evidence-packet contract
@@ -886,7 +979,7 @@ cannot cancel its own response.
 | Configuration | Settings |
 |---|---|
 | `yaml/worker.yaml` | Shared frame and speech detection settings; capability configuration paths |
-| `yaml/capture-agent-config.yaml` | Task output directory, sampling rate, and caption interval |
+| `yaml/capture-agent-config.yaml` | Task output directory, sampling rate, caption interval, and media-alert policy |
 | `yaml/guide-agent-config.yaml` | Visual verification timeout |
 | `yaml/models.json` | Shared batch STT, LLM, VLM, and TTS services and endpoints |
 | `yaml/media_capture.yaml` | Opt-in session recording output, profile, and participant lifetime |

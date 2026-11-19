@@ -34,6 +34,8 @@ is rendered. `ResponseOutput.kind` is required:
   has no `request_id`. The consumer renders updates when the participant is not
   being spoken to and may combine several into one. `urgent=True` marks an
   update that cuts current output and plays next; only updates can be urgent.
+- `update` with `replace_pending=True` revises this producer's queued nonurgent
+  notices only if they still exist. It does not replay a notice already heard.
 - `withdraw` carries no content. It asks the consumer to drop the updates the
   producer queued for the participant that have not started playing, for
   example when a notice describes a state that has since changed. Output that is
@@ -55,6 +57,7 @@ outputs = ResponseOutputs(ctx, VOICE_OUTPUT_TOPIC)
 
 await outputs.update(participant_id, "The timer is done.")
 await outputs.update(participant_id, "The oven is too hot.", urgent=True)
+await outputs.replace_pending(participant_id, "The remaining check is still running.")
 await outputs.withdraw(participant_id)
 
 async with outputs.reply(participant_id, request_id=query_id) as reply:

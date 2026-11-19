@@ -207,6 +207,7 @@ class _Capture:
                 state.status = "incomplete"
                 return
             await self._write(state, _atomic_text, state.directory / "transcript.jsonl", "")
+            await self._write(state, _atomic_text, state.directory / "quality.jsonl", "")
             async with state.lock:
                 await self._write_views(state)
             if self._stopped or (cancelled is not None and cancelled.is_set()):
@@ -259,6 +260,16 @@ class _Capture:
                 raise
             state.transcript_count += 1
             state.timeline.append((timestamp_us, "Heard", text.strip()))
+
+    async def capture_quality(self, participant_id: str, event: dict[str, Any]) -> None:
+        """Retain diagnostic events in the active packet, never as narration."""
+        state = self._sessions.get(participant_id)
+        if state is None:
+            return
+        async with state.lock:
+            if state.active:
+                await self._write(state, _append_jsonl, state.directory / "quality.jsonl",
+                                  {"timestamp_us": _now_us(), **event})
 
     async def finish_capture(
         self, participant_id: str, *, stop_command: dict[str, Any] | None = None,
@@ -511,6 +522,7 @@ class _Capture:
                 "transcript": "transcript.jsonl",
                 "captions": "captions.jsonl",
                 "summary": "summary.md",
+                "quality": "quality.jsonl",
             },
             "counts": {
                 "frames": state.frame_count,

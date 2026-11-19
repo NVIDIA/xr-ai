@@ -22,7 +22,10 @@ from __future__ import annotations
 
 import asyncio
 import time
-from dataclasses import dataclass
+
+import numpy as np
+from collections import deque
+from dataclasses import dataclass, field
 from typing import Awaitable, Callable
 
 import nemo_relay
@@ -55,6 +58,32 @@ _PARTIAL_PROBE_FINISH_GRACE_S = 0.15
 
 
 @dataclass(frozen=True)
+class VoiceAudioWindow:
+    """One existing VAD window, for optional application audio diagnostics."""
+
+    participant_id: str
+    """Participant owning this received audio."""
+    timestamp_us: int
+    """Unix microseconds at the window start, derived from PCM presentation time."""
+    duration_s: float
+    """Duration of the classified PCM window."""
+    power: float
+    """Mean squared PCM amplitude normalized to digital full scale."""
+    speech: bool
+    """Whether Silero classified the window as speech."""
+
+
+@dataclass(frozen=True)
+class VoiceAudioUtterance:
+    """VAD finalization, emitted after its windows and before transcription."""
+
+    participant_id: str
+    """Participant owning the completed utterance."""
+    timestamp_us: int
+    """Speech-onset Unix microseconds, identical to the resulting transcript."""
+
+
+@dataclass(frozen=True)
 class VadConfig:
     """Utterance endpointing and Silero-VAD tuning for :class:`VoiceAgent`.
 
@@ -84,6 +113,21 @@ class VadConfig:
 
     stop_probe_after_s: float = 0.25
     """Cadence for bounded early wake and STOP transcription probes."""
+
+    on_audio_window: Callable[[VoiceAudioWindow], None] | None = field(default=None, kw_only=True)
+    """Optional synchronous observer of batch-STT VAD windows; must not block.
+
+    Reuses existing detection, before voice-gate filtering. Applications must
+    associate diagnostics with accepted input before acting on them. Speaker
+    ASR does not produce these observations.
+    """
+
+    on_audio_utterance: Callable[[VoiceAudioUtterance], None] | None = field(default=None, kw_only=True)
+    """Optional synchronous batch-STT finalization observer; must not block.
+
+    Runs before STT, including at the VAD length limit. Like window diagnostics,
+    this precedes voice-gate filtering; it does not imply accepted user input.
+    """
 
 
 class VadSttProcessor(FrameProcessor):
@@ -136,6 +180,9 @@ class VadSttProcessor(FrameProcessor):
         # transcript to when the participant started speaking rather than to when
         # STT finished, which can be seconds later.
         self._last_frame_pts: dict[str, int] = {}
+        # Pending PCM spans retain each packet's presentation time, including gaps.
+        # Diagnostics never supply the transcript clock.
+        self._audio_spans: dict[str, deque] = {}
         self._utterance_pts:  dict[str, int] = {}
 
     # ── pipecat frame entrypoint ──────────────────────────────────────────────
@@ -208,6 +255,13 @@ class VadSttProcessor(FrameProcessor):
             await self.push_frame(f)
 
         async def on_utterance(audio_bytes: bytes, sample_rate: int) -> None:
+            onset_pts = self._utterance_pts.pop(pid, None)
+            callback = self._vad_cfg.on_audio_utterance
+            if callback is not None and onset_pts is not None:
+                try:
+                    callback(VoiceAudioUtterance(pid, onset_pts // 1000))
+                except Exception:  # noqa: BLE001 — optional diagnostics cannot stop transcription.
+                    logger.exception("VAD utterance observer failed pid={!r}", pid)
             self._probe_buffer.pop(pid, None)
             self._probe_sr.pop(pid, None)
             await self._finish_probe_for_utterance(pid)
@@ -220,7 +274,6 @@ class VadSttProcessor(FrameProcessor):
             f = UserStoppedSpeakingFrame()
             f.transport_source = pid
             await self.push_frame(f)
-            onset_pts = self._utterance_pts.pop(pid, None)
             try:
                 text = await self._transcribe(
                     audio_bytes,
@@ -254,7 +307,28 @@ class VadSttProcessor(FrameProcessor):
                 )
             await self.push_frame(tf)
 
+        def observe(pcm: bytes, sample_rate: int, speech: bool) -> None:
+            spans = self._audio_spans[pid]
+            stamp, _, offset = spans[0]
+            pts = None if stamp is None else stamp + offset * 1_000_000_000 // sample_rate
+            remaining = len(pcm) // 2
+            while remaining:
+                stamp, count, offset = spans.popleft()
+                used = min(remaining, count - offset)
+                remaining -= used
+                if offset + used < count:
+                    spans.appendleft((stamp, count, offset + used))
+            if pts is not None:
+                samples = np.frombuffer(pcm, dtype="<i2").astype(np.float64) / 32768.0
+                self._vad_cfg.on_audio_window(VoiceAudioWindow(
+                    participant_id=pid, timestamp_us=pts // 1000,
+                    duration_s=len(samples) / sample_rate,
+                    power=float(np.mean(samples * samples)), speech=speech,
+                ))
+
+        observer = {"on_window": observe} if self._vad_cfg.on_audio_window is not None else {}
         det = VadDetector(
+            **observer,
             on_utterance      = on_utterance,
             on_speech_start   = on_speech_start,
             silence_duration  = self._vad_cfg.silence_duration,
@@ -283,6 +357,8 @@ class VadSttProcessor(FrameProcessor):
         # pts of the chunk that triggered it.
         if frame.pts is not None:
             self._last_frame_pts[pid] = frame.pts
+        if self._vad_cfg.on_audio_window is not None and frame.audio:
+            self._audio_spans.setdefault(pid, deque()).append((frame.pts, len(frame.audio) // 2, 0))
 
         await det.feed(frame.audio, frame.sample_rate)
 
@@ -426,6 +502,7 @@ class VadSttProcessor(FrameProcessor):
         self._probe_buffer.pop(pid, None)
         self._probe_sr.pop(pid, None)
         self._last_frame_pts.pop(pid, None)
+        self._audio_spans.pop(pid, None)
         self._utterance_pts.pop(pid, None)
         if self._current_pid == pid:
             self._current_pid = None
