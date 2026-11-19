@@ -200,13 +200,16 @@ class QualityFeedback:
                 if conditions != previous:
                     for batch in list(batches):
                         if not batch <= conditions:
-                            outputs = batches.pop(batch)
+                            # Retain ownership across publication so cancellation can still withdraw it.
+                            outputs = batches[batch]
                             remaining = batch.intersection(conditions)
                             if remaining:
                                 await outputs.replace_pending(self.pid, warning(remaining))
-                                batches[frozenset(remaining)] = outputs
                             else:
                                 await outputs.withdraw(self.pid)
+                            del batches[batch]
+                            if remaining:
+                                batches[frozenset(remaining)] = outputs
                     await self._record("conditions_changed", conditions=sorted(conditions), metrics=self.state.metrics)
                     previous = set(conditions)
                 due = schedule.due(conditions, now)

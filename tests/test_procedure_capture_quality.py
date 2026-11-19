@@ -534,3 +534,73 @@ async def test_recovery_does_not_replay_an_already_heard_combined_warning(monkey
             assert "resolution" not in " ".join(tts.calls[len(calls):])
         finally:
             await monitor.stop()
+
+
+@pytest.mark.parametrize("partial_recovery", [False, True])
+@pytest.mark.parametrize("applied", [False, True])
+async def test_stop_during_warning_recovery_withdraws_the_owned_source(monkeypatch, partial_recovery, applied):
+    from pipecat.frames.frames import UserStartedSpeakingFrame, UserStoppedSpeakingFrame
+    from test_voice_playback_state import _PID, _pipeline
+
+    conditions = {"low_resolution", "low_frame_rate"}
+    ticks, resume = asyncio.Queue(), asyncio.Queue()
+    publishing = asyncio.Event()
+    block_recovery = False
+    cleanup_sources = []
+
+    async def sleep(_):
+        ticks.put_nowait(True)
+        await resume.get()
+
+    async with _pipeline(monkeypatch) as (voice, worker, tts, endpoint, _gate):
+        endpoint.release.set()
+        started = UserStartedSpeakingFrame()
+        started.transport_source = _PID
+        await worker.queue_frame(started)
+        await wait_for(lambda: _PID in voice._user_speaking)
+
+        async def publish(_topic, message, *, participant_id, source):
+            nonlocal block_recovery
+            recovering = block_recovery and (message.replace_pending or message.kind == "withdraw")
+            if recovering:
+                block_recovery = False
+                publishing.set()
+                if not applied:
+                    await asyncio.Event().wait()
+            if message.replace_pending:
+                await voice.replace_pending_update(participant_id, message.text, source=source)
+            elif message.kind == "update":
+                await voice.enqueue_update(participant_id, message.text, source=source)
+            else:
+                if not recovering:
+                    cleanup_sources.append(source)
+                await voice.withdraw_updates(participant_id, source=source)
+            if recovering:
+                await asyncio.Event().wait()
+
+        monitor = QualityFeedback(_PID, SimpleNamespace(capture_quality=AsyncMock()), QualityConfig(),
+                                  clock=lambda: 0, sleep=sleep)
+        monitor.state.evaluate = lambda: set(conditions)
+        monitor.start(SimpleNamespace(publish=publish))
+        try:
+            await asyncio.wait_for(ticks.get(), 2)
+            assert len(voice._pending_updates[_PID]) == 1
+            source = voice._pending_updates[_PID][0].source
+            await voice.enqueue_update(_PID, "Unrelated notice.", source="other-producer")
+            conditions.clear()
+            if partial_recovery:
+                conditions.add("low_frame_rate")
+            block_recovery = True
+            resume.put_nowait(True)
+            await asyncio.wait_for(publishing.wait(), 2)
+            await asyncio.wait_for(monitor.stop(), 2)
+            assert cleanup_sources == [source]
+            assert [update.source for update in voice._pending_updates[_PID]] == ["other-producer"]
+            stopped = UserStoppedSpeakingFrame()
+            stopped.transport_source = _PID
+            await worker.queue_frame(stopped)
+            await wait_for(lambda: bool(tts.calls) and not voice._floor)
+            assert " ".join(tts.calls) == "Unrelated notice."
+            assert monitor.task is None
+        finally:
+            await monitor.stop()
