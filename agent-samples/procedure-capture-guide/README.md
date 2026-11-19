@@ -139,3 +139,7 @@ for recording boundaries, output files, prerequisites, and limitations.
 Refer to the generated
 [configuration reference](https://nvidia.github.io/xr-ai/latest/reference/configuration.html)
 for every checked-in field.
+
+Speech benchmark inputs live in [`evaluation/speech/`](evaluation/speech/). See
+[Measure sample speech performance](https://nvidia.github.io/xr-ai/latest/guides/evaluating-sample-models.html)
+for the shared runner.

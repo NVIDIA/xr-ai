@@ -8,6 +8,9 @@
 Cross-package coverage for SDKs, services, samples, documentation invariants,
 and multi-client and multi-agent routing.
 
+For fixed-input native sample/model comparisons, refer to
+[Measure sample speech performance](https://nvidia.github.io/xr-ai/latest/guides/evaluating-sample-models.html).
+
 ```bash
 cd tests
 uv --config-file ../uv.toml sync

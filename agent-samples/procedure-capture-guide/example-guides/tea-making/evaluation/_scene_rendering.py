@@ -23,6 +23,23 @@ def load_scenes(manifest_path: Path, manifest: dict) -> dict:
 
 
 def render_scene(scene: dict) -> Image.Image:
+    fields = {
+        None: {"rectangle", "text"},
+        "packet": {"kind", "color", "covered", "blend"},
+        "kettle": {"kind", "readings"},
+        "cup": {"kind", "state"},
+    }
+    kind = scene.get("kind")
+    if not isinstance(kind, (str, type(None))) or kind not in fields:
+        raise ValueError(f"unknown scene kind: {kind}")
+    if scene.keys() - fields[kind]:
+        raise ValueError(f"unsupported scene keys: {scene}")
+    if kind == "kettle":
+        readings = scene.get("readings")
+        if not isinstance(readings, list) or any(
+            not isinstance(reading, dict) or set(reading) != {"label", "value"} for reading in readings
+        ):
+            raise ValueError("kettle readings must be a list of mappings with label and value")
     if "kind" not in scene:
         image = Image.new("RGB", (640, 480), "white")
         draw = ImageDraw.Draw(image)

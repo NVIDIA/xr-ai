@@ -102,3 +102,7 @@ stop them with `uv run --project model-servers tea_making_sample_model_servers -
 Refer to the [sample reference](https://nvidia.github.io/xr-ai/latest/reference/tea-making-sample.html)
 for architecture, configuration, output contracts, safety, foreground-routing
 behavior, evaluation, and adaptation guidance.
+
+Speech benchmark inputs live in [`eval/speech/`](eval/speech/). See
+[Measure sample speech performance](https://nvidia.github.io/xr-ai/latest/guides/evaluating-sample-models.html)
+for the shared runner.

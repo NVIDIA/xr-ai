@@ -40,6 +40,7 @@ dependencies = [
     # Measures which SDK and service code the suite exercises; see [tool.coverage].
     "coverage>=7.10",
     "numpy>=1.24",
+    "scipy>=1.11",
     # Direct test deps used across CPU native vision/service tests and GPU coverage.
     "audioop-lts; python_version >= '3.13'",
     # Local-first model resolution tests run the real Hub cache lookup.

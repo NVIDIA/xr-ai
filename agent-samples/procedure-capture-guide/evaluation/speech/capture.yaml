@@ -1,0 +1,32 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+duration_s: 300
+worker:
+  package: procedure_capture_guide_worker
+  config: ../../yaml/worker.yaml
+  launch:
+    mode: capture
+events:
+- at_s: 0
+  say: Start capture.
+  scene:
+    rectangle: blue
+- at_s: 25
+  say: I am showing a blue rectangle. This is the first step.
+- at_s: 55
+  say: Now the rectangle is red. This is the second step.
+  scene:
+    rectangle: red
+- at_s: 85
+  say: The demonstration is complete.
+- at_s: 110
+  say: Stop capture.
+- at_s: 155
+  say: Start capture.
+  scene:
+    text: CEDAR TASK TWO
+- at_s: 180
+  say: The second demonstration shows a card that says Cedar task two.
+- at_s: 230
+  say: Stop capture.
