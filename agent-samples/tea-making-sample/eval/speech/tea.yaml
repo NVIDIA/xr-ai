@@ -1,0 +1,44 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+duration_s: 300
+worker:
+  package: tea_making_worker
+  config: ../../yaml/tea_making_worker.yaml
+events:
+- at_s: 0
+  say: Start talking to me.
+  scene:
+    image: tea_package
+  handler: false
+- at_s: 12
+  say: Start talking to me.
+  handler: false
+- at_s: 25
+  say: Start tea guidance.
+- at_s: 60
+  say: What tea do you see and how long should I steep it?
+- at_s: 90
+  say: What is the current step?
+- at_s: 115
+  say: Next.
+  scene:
+    kind: kettle
+    readings:
+    - label: CURRENT
+      value: 20 C
+- at_s: 150
+  say: What is the target water temperature?
+- at_s: 175
+  say: Next.
+  scene:
+    kind: kettle
+    readings:
+    - label: CURRENT
+      value: 100 C
+- at_s: 210
+  say: Is the water hot enough?
+- at_s: 240
+  say: What should I do now?
+- at_s: 280
+  say: Stop tea guidance.

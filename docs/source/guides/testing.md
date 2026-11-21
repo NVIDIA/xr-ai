@@ -37,6 +37,10 @@ camera device is needed for these tests.
 
 ## Run the suite
 
+For live-model and hardware comparisons through native sample workers, refer to
+{doc}`evaluating-sample-models`. That runner exercises fixed replay inputs through live
+model services.
+
 From the repository root:
 
 ```bash

@@ -1,0 +1,40 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+duration_s: 300
+worker:
+  package: lab_instrument_monitoring_worker
+  config: ../../yaml/lab_instrument_monitoring_worker.yaml
+events:
+- at_s: 0
+  say: Start talking to me
+  handler: false
+  scene:
+    image: lab_before
+- at_s: 12
+  say: Start talking to me
+  handler: false
+- at_s: 25
+  say: Can you read what is on the instrument?
+- at_s: 50
+  say: Describe my surroundings right now.
+- at_s: 75
+  say: Continuously monitor the lab instrument readings.
+- at_s: 100
+  say: Are you monitoring the instrument readings?
+- at_s: 125
+  say: Please tell me the meter reading.
+- at_s: 150
+  scene:
+    image: lab_after
+- at_s: 175
+  say: Can you read what is on the instrument?
+- at_s: 200
+  say: Are you monitoring the instrument readings?
+- at_s: 225
+  say: Stop monitoring the lab instruments.
+- at_s: 250
+  say: What is the capital of Iceland?
+- at_s: 280
+  say: Stop talking to me
+  handler: false

@@ -1,0 +1,42 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+duration_s: 300
+worker:
+  package: conversation_example_worker
+  config: ../../yaml/conversation_example_worker.yaml
+events:
+- at_s: 0
+  say: Start talking to me
+  handler: false
+- at_s: 12
+  say: Start talking to me
+  handler: false
+- at_s: 25
+  say: Remember that my project is called Cedar and my favorite color is blue.
+- at_s: 50
+  say: What is my project called?
+- at_s: 75
+  say: What color is the rectangle in my camera?
+  scene:
+    rectangle: blue
+- at_s: 100
+  say: Start taking notes.
+- at_s: 125
+  say: Buy two lemons and one loaf of bread.
+- at_s: 150
+  say: Finish taking notes.
+- at_s: 175
+  say: What did I put in my notes?
+- at_s: 200
+  say: Let me know when the rectangle turns red.
+- at_s: 220
+  say: What is seven times eight?
+- at_s: 235
+  scene:
+    rectangle: red
+- at_s: 255
+  say: What is my favorite color?
+- at_s: 280
+  say: Stop talking to me.
+  handler: false

@@ -96,3 +96,7 @@ Refer to the
 [sample reference](https://nvidia.github.io/xr-ai/latest/reference/lab-instrument-monitoring.html)
 for architecture, privacy and output contracts, marker setup, configuration,
 and evaluation instructions.
+
+Speech benchmark inputs live in [`eval/speech/`](eval/speech/). See
+[Measure sample speech performance](https://nvidia.github.io/xr-ai/latest/guides/evaluating-sample-models.html)
+for the shared runner and required services.
