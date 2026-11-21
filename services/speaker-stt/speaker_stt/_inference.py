@@ -239,6 +239,8 @@ class _Session:
             if finished:
                 completed.append((speaker, stream))
                 stream.asr.recent.clear()
+                if stream.duration < self.selection.cfg.max_utterance_s:
+                    stream.asr.previous_hypotheses = None
                 del streams[speaker]
         return texts, completed
 
@@ -252,6 +254,9 @@ class _Session:
         for speaker, quiet in list(self._truncated_episodes.items()):
             quiet = 0.0 if speaker in active else quiet + seconds
             if quiet >= cfg.silence_duration:
+                state = self._speaker_states.get(speaker)
+                if state is not None:
+                    state.previous_hypotheses = None
                 del self._truncated_episodes[speaker]
             else:
                 self._truncated_episodes[speaker] = quiet
@@ -532,6 +537,9 @@ class _Session:
                     # A finished utterance's words cannot lead into the next
                     # one, including after the stop phrase releases its speaker.
                     self._asr.recent.clear()
+                    if not truncated:
+                        # A new utterance keeps acoustic context, not the previous word predictor.
+                        self._asr.previous_hypotheses = None
                     self._reset_asr()
                 if self.selection.cfg.diagnostics:
                     events.extend(self._diagnostic_events(active, completed, owner_before, chunk_pts))

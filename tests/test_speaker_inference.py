@@ -128,7 +128,7 @@ def test_diagnostics_isolate_speaker_history_and_share_encoding(_streaming_model
     owner_call, other_call = calls[count:]
     assert owner_call["cache_last_channel"] is not other_call["cache_last_channel"]
     assert owner_call["previous_hypotheses"] is not other_call["previous_hypotheses"]
-    assert owner_call["previous_hypotheses"][0].y_sequence == []
+    assert owner_call["previous_hypotheses"] is None
     assert other_call["previous_hypotheses"][0].y_sequence == []
     assert all(target.all() and interference.all() for target, interference in masks[-2:])
     feed([], "what is that?")
@@ -169,7 +169,10 @@ def test_all_eight_continuations_stay_bounded_across_utterance_boundary(_streami
     assert len(models.encodes) == (2 if finish == "truncation" else 18)
     assert len(session._speaker_states) == 8
     assert len(session._history) <= models.history_hops
-    assert all(state.previous_hypotheses[0].y_sequence == [] for state in session._speaker_states.values())
+    if finish == "silence":
+        assert all(state.previous_hypotheses is None for state in session._speaker_states.values())
+    else:
+        assert all(state.previous_hypotheses[0].y_sequence == [] for state in session._speaker_states.values())
     assert session.selection.owner is None
     assert not any(e["kind"] in {"enrolled", "transcript"} for e in events)
     assert len([e for e in events if e["kind"] == "diagnostic" and e["text"]]) == 8
@@ -502,12 +505,14 @@ def test_owner_decoder_history_and_finalization_are_independent_of_diagnostics(
 
         def model_decode(**kwargs):
             previous = kwargs["previous_hypotheses"]
-            count = previous[0].dec_state.count if previous else 0
-            assert int(kwargs["cache_last_channel_len"][0]) == count
+            count = int(kwargs["cache_last_channel_len"][0])
+            assert not previous or previous[0].dec_state.count == count
             assert not previous or previous[0].y_sequence == []
             assert kwargs["previous_pred_out"] is None
             final = kwargs["keep_all_outputs"]
             if selected == 7:
+                if not final:
+                    assert (previous is None) == (count == 0 or (finish == "silence" and count == 4))
                 owner_calls.append((count + 1, final))
             channel, time, length = models.asr.encoder.get_initial_cache_state(batch_size=1)
             length[0] = count + 1
@@ -565,17 +570,18 @@ def test_new_candidate_cannot_enroll_from_its_pre_release_diagnostic_history(_st
     count = len(calls)
     events = session._feed(bytes(5120))
     assert 1 in session._candidate_streams and not session._diagnostic_streams
+    assert session._speaker_states[1].previous_hypotheses[0].dec_state["text"] == cfg.start_phrase
     assert all(not call["previous_hypotheses"] or call["previous_hypotheses"][0].y_sequence == []
                for call in calls[count:])
     activity[:] = []
     events += session._feed(bytes(5120))
     events += session._feed(bytes(5120))
     assert session.selection.owner is None
-    assert session._speaker_states[1].previous_hypotheses[0].dec_state["text"] == cfg.start_phrase
+    assert session._speaker_states[1].previous_hypotheses is None
     assert not any(e["kind"] == "enrolled" for e in events)
 
 
-def test_repeated_turns_keep_native_continuation_and_bounded_output_history(_streaming_models):
+def test_repeated_turns_keep_acoustic_continuation_and_bounded_output_history(_streaming_models):
     from speaker_stt._inference import _Session
 
     models, activity, _calls, _masks, _allocations, text = _streaming_models
@@ -591,7 +597,7 @@ def test_repeated_turns_keep_native_continuation_and_bounded_output_history(_str
         events = session._feed(bytes(5120))
         assert [e["text"] for e in events if e["kind"] == "one_shot"] == [expected]
         assert session._speaker_states[3] is state
-        assert state.previous_hypotheses[0].y_sequence == []
+        assert state.previous_hypotheses is None
         assert len(state.tokens) == len(expected)
         assert not state.pending
         assert len(session._history) <= models.history_hops
@@ -605,9 +611,14 @@ def test_next_turn_does_not_inherit_late_finalized_tokens(_streaming_models, mon
 
     models, activity, _calls, _masks, _allocations, _text = _streaming_models
 
+    real_step = 0
+
     def decode(**kwargs):
+        nonlocal real_step
         previous = kwargs["previous_hypotheses"]
-        step = previous[0].dec_state + 1 if previous else 1
+        if not kwargs["keep_all_outputs"]:
+            real_step += 1
+        step = previous[0].dec_state + 1 if kwargs["keep_all_outputs"] and previous else real_step
         # The previous utterance's last word is emitted during the next
         # utterance's first frame; virtual quiet must not consume its new word.
         value = "alpha" if step == 1 else ""
@@ -640,9 +651,14 @@ def test_finalized_candidate_reconciliation_remains_required_during_silence(
 
     models, activity, _calls, _masks, _allocations, _text = _streaming_models
 
+    real_step = 0
+
     def decode(**kwargs):
+        nonlocal real_step
         previous = kwargs["previous_hypotheses"]
-        step = previous[0].dec_state + 1 if previous else 1
+        if not kwargs["keep_all_outputs"]:
+            real_step += 1
+        step = previous[0].dec_state + 1 if kwargs["keep_all_outputs"] and previous else real_step
         value = "alpha" if step == 1 else ""
         if step == 3:
             value = " beta" if kwargs["keep_all_outputs"] else real
@@ -709,9 +725,12 @@ def test_finished_utterance_words_do_not_lead_into_the_next(_streaming_models, m
     # the window that leads into the second.
     words = {1: "one", 2: " two", 4: "three"}
 
+    step = 0
+
     def decode(**kwargs):
-        previous = kwargs["previous_hypotheses"]
-        step = previous[0].dec_state + 1 if previous else 1
+        nonlocal step
+        if not kwargs["keep_all_outputs"]:
+            step += 1
         value = "" if kwargs["keep_all_outputs"] else words.get(step, "")
         hyp = Hypothesis(y_sequence=torch.tensor([ord(c) for c in value]), dec_state=step)
         return None, [hyp], *models.asr.encoder.get_initial_cache_state(batch_size=1), [hyp]
@@ -750,9 +769,12 @@ def test_released_speaker_does_not_carry_its_last_word_into_reenrollment(_stream
     # The stop phrase's last word is decoded in the quiet step that ends it.
     words = {1: "hey agent, let's stop", 2: " talking", 3: "hey agent, let's start talking"}
 
+    step = 0
+
     def decode(**kwargs):
-        previous = kwargs["previous_hypotheses"]
-        step = previous[0].dec_state + 1 if previous else 1
+        nonlocal step
+        if not kwargs["keep_all_outputs"]:
+            step += 1
         value = "" if kwargs["keep_all_outputs"] else words.get(step, "")
         hyp = Hypothesis(y_sequence=torch.tensor([ord(c) for c in value]), dec_state=step)
         return None, [hyp], *models.asr.encoder.get_initial_cache_state(batch_size=1), [hyp]
@@ -765,3 +787,112 @@ def test_released_speaker_does_not_carry_its_last_word_into_reenrollment(_stream
         activity[:] = speakers
         events.extend(session._feed(bytes(5120)))
     assert [e["kind"] for e in events if e["kind"] in {"released", "enrolled"}] == ["released", "enrolled"]
+
+
+@pytest.mark.parametrize("diagnostics", [False, True])
+def test_new_owner_utterance_resets_word_predictor_and_preserves_acoustic_cache(
+    _streaming_models, monkeypatch, diagnostics,
+):
+    import torch
+    from nemo.collections.asr.parts.utils.rnnt_utils import Hypothesis
+    from speaker_stt._inference import _Session
+
+    models, activity, _calls, _masks, _allocations, _text = _streaming_models
+    phrase = ["Start capture"]
+    calls = []
+
+    def decode(**kwargs):
+        previous = kwargs["previous_hypotheses"]
+        cache_length = int(kwargs["cache_last_channel_len"][0])
+        if not kwargs["keep_all_outputs"]:
+            calls.append((phrase[0], previous, cache_length))
+        value = phrase[0] if previous is None and not kwargs["keep_all_outputs"] else ""
+        channel, time, length = models.asr.encoder.get_initial_cache_state(batch_size=1)
+        length[0] = cache_length + 1
+        hyp = Hypothesis(y_sequence=torch.tensor([ord(c) for c in value]), dec_state=phrase[0])
+        return None, [hyp], channel, time, length, [hyp]
+
+    monkeypatch.setattr(models.asr, "conformer_stream_step", decode)
+    session = _Session(
+        models, _SpeakerConfig(mode="always_on", silence_duration=0.16, diagnostics=diagnostics), audio_origin_us=0,
+    )
+    session.selection.owner = 3
+    events = []
+    for text in ["Start capture", "Stop capture"]:
+        phrase[0] = text
+        activity[:] = [3, 5]
+        events.extend(session._feed(bytes(5120)))
+        activity[:] = []
+        events.extend(session._feed(bytes(5120)))
+    assert [e["text"] for e in events if e["kind"] == "transcript"] == ["Start capture", "Stop capture"]
+    second = next(call for call in calls if call[0] == "Stop capture")
+    assert second[1] is None
+    assert second[2] > 0
+    assert session.selection.owner == 3
+    assert [e["text"] for e in events if e["kind"] == "diagnostic" and e["speaker_id"] == 5 and e["text"]] == (
+        ["Start capture", "Stop capture"] if diagnostics else []
+    )
+
+
+@pytest.mark.parametrize("mode", ["conversation", "always_on"])
+def test_candidate_finish_resets_word_predictor_before_next_utterance(_streaming_models, monkeypatch, mode):
+    import torch
+    from nemo.collections.asr.parts.utils.rnnt_utils import Hypothesis
+    from speaker_stt._inference import _Session
+
+    models, activity, _calls, _masks, _allocations, _text = _streaming_models
+    cfg = _SpeakerConfig(mode=mode, silence_duration=0.16)
+    phrase = [cfg.start_phrase if mode == "conversation" else "First command"]
+    decoded = []
+
+    def decode(**kwargs):
+        previous = kwargs["previous_hypotheses"]
+        count = int(kwargs["cache_last_channel_len"][0])
+        if not kwargs["keep_all_outputs"]:
+            decoded.append((phrase[0], previous, count))
+        text = phrase[0] if previous is None and not kwargs["keep_all_outputs"] else ""
+        channel, time, length = models.asr.encoder.get_initial_cache_state(batch_size=1)
+        length[0] = count + 1
+        hyp = Hypothesis(y_sequence=torch.tensor([ord(c) for c in text]), dec_state=phrase[0])
+        return None, [hyp], channel, time, length, [hyp]
+
+    monkeypatch.setattr(models.asr, "conformer_stream_step", decode)
+    session = _Session(models, cfg, audio_origin_us=0)
+    events = []
+    for text in [phrase[0], "Next command"]:
+        phrase[0] = text
+        activity[:] = [3]
+        events.extend(session._feed(bytes(5120)))
+        activity[:] = []
+        events.extend(session._feed(bytes(5120)))
+    second = next(call for call in decoded if call[0] == "Next command")
+    assert second[1] is None and second[2] > 0
+    if mode == "conversation":
+        assert {"kind": "enrolled"} in events
+        assert [e["text"] for e in events if e["kind"] == "transcript"] == ["Next command"]
+        assert session.selection.owner == 3
+    else:
+        assert [e["text"] for e in events if e["kind"] == "one_shot"] == ["First command", "Next command"]
+
+
+def test_candidate_natural_silence_after_forced_cut_resets_predictor(_streaming_models):
+    from speaker_stt._inference import _Session
+
+    models, activity, calls, _masks, _allocations, text = _streaming_models
+    cfg = _SpeakerConfig(mode="always_on", silence_duration=0.16, max_utterance_s=0.48)
+    session = _Session(models, cfg, audio_origin_us=0)
+    activity[:] = [3]
+    text[0] = "long utterance"
+    for _ in range(5):
+        session._feed(bytes(5120))
+    state = session._speaker_states[3]
+    assert 3 in session._truncated_episodes
+    assert calls[3]["previous_hypotheses"] is not None
+    activity[:] = []
+    session._feed(bytes(5120))
+    assert 3 not in session._truncated_episodes
+    activity[:] = [3]
+    text[0] = "next command"
+    session._feed(bytes(5120))
+    assert calls[-1]["previous_hypotheses"] is None
+    assert session._speaker_states[3] is state
