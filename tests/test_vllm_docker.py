@@ -6,15 +6,21 @@
 from __future__ import annotations
 
 import json
+import os
+import socket
 import subprocess
+import tempfile
 import threading
 import time
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 import xr_ai_vllm
-from xr_ai_vllm import _docker
+from xr_ai_launcher import CUDA_MPS_ENV_KEYS
+from xr_ai_launcher import _mps as mps_control
+from xr_ai_vllm import _docker, _mps
 from xr_ai_vllm._docker import (
     _CONFIG_LABEL,
     _already_logged_in,
@@ -155,6 +161,20 @@ class TestBuildRunArgv:
         argv = build_run_argv(**self._base_kwargs(tmp_path))
         assert argv[0] == "docker"
         assert argv[1] == "run"
+
+    def test_non_mps_contract_has_no_user_or_socket_setup(self, tmp_path):
+        with patch.object(_docker, "launch_fingerprint", wraps=_docker.launch_fingerprint) as fingerprint:
+            argv = build_run_argv(**self._base_kwargs(tmp_path))
+        payload = fingerprint.call_args.args[0]
+        assert "--user" not in argv and "mps" not in payload
+        assert not argv[-1].startswith("mkdir")
+        assert not any(key in payload["env_vars"] for key in (*CUDA_MPS_ENV_KEYS, "HOME", "HF_MODULES_CACHE"))
+        volumes = [argv[i + 1] for i, arg in enumerate(argv) if arg == "-v"]
+        assert volumes == [f"{tmp_path / 'models'}:{tmp_path / 'models'}"]
+        assert set(payload) == {
+            "image", "port", "model_cache", "cuda_visible_devices", "env_vars",
+            "extra_pip", "vllm_argv", "hf_token_digest",
+        }
 
     def test_labels_new_container_only_under_test_session(self, monkeypatch, tmp_path):
         monkeypatch.delenv(_docker.TEST_SESSION_ENV, raising=False)
@@ -2111,3 +2131,151 @@ class TestPipEviction:
             ("stop", "xr-ai-nim-cosmos3-reasoner"),
             ("rm", "xr-ai-nim-cosmos3-reasoner"),
         ]
+
+
+class TestMpsDocker:
+    _base_kwargs = TestBuildRunArgv._base_kwargs
+
+    @pytest.fixture
+    def controller(self, monkeypatch):
+        # Short paths avoid the AF_UNIX limit that pytest temp paths can exceed.
+        with tempfile.TemporaryDirectory(prefix="xr-mps-") as directory:
+            pipe = Path(directory)
+            with socket.socket(socket.AF_UNIX) as control:
+                control.bind(str(pipe / "control"))
+                monkeypatch.setenv("CUDA_MPS_PIPE_DIRECTORY", str(pipe))
+                with patch.object(mps_control.subprocess, "run") as command:
+                    command.return_value = subprocess.CompletedProcess([], 0, "", "")
+                    yield pipe, command
+
+    def test_shares_controller_as_host_user(self, controller, monkeypatch, tmp_path):
+        pipe, command = controller
+        monkeypatch.setenv("CUDA_MPS_ACTIVE_THREAD_PERCENTAGE", "75")
+        monkeypatch.setenv("CUDA_MPS_CLIENT_PRIORITY", "1")
+        argv = build_run_argv(**self._base_kwargs(tmp_path))
+        assert argv[argv.index("--user") + 1] == f"{os.getuid()}:{os.getgid()}"
+        assert f"{pipe}:{pipe}" in argv
+        assert f"CUDA_MPS_PIPE_DIRECTORY={pipe}" in argv
+        assert "CUDA_MPS_ACTIVE_THREAD_PERCENTAGE=75" in argv
+        assert "CUDA_MPS_CLIENT_PRIORITY=1" in argv
+        assert argv[-1].startswith('mkdir -p "$HOME" || exit 1\n')
+        assert f"HOME=/tmp/xr-ai-mps-{os.getuid()}" in argv
+        assert command.call_args.kwargs["input"] == "get_server_list\n"
+        assert command.call_args.kwargs["env"]["CUDA_MPS_PIPE_DIRECTORY"] == str(pipe)
+
+    def test_extra_pip_requires_prebuilt_mps_image(self, controller, tmp_path):
+        _, command = controller
+        kwargs = self._base_kwargs(tmp_path)
+        kwargs["extra_pip"] = ["model-addon"]
+        with pytest.raises(ValueError, match="extra_pip is not supported"):
+            build_run_argv(**kwargs)
+        command.assert_not_called()
+
+    def test_read_only_cache_is_advisory_and_not_fingerprinted(self, controller, monkeypatch, tmp_path, caplog):
+        kwargs = self._base_kwargs(tmp_path)
+        cache = kwargs["model_cache"]
+        (cache / "hub").mkdir(parents=True)
+        (cache / "xet").mkdir()
+        monkeypatch.setattr(_mps.os, "access", lambda *_: False)
+        first = build_run_argv(**kwargs)
+        assert "cannot write model cache" in caplog.text
+        assert str(cache / "hub") in caplog.text and str(cache / "xet") in caplog.text
+        assert "advisory" in caplog.text
+        monkeypatch.setattr(_mps.os, "access", lambda *_: True)
+        second = build_run_argv(**kwargs)
+        assert _fingerprint_from_argv(first) == _fingerprint_from_argv(second)
+
+    def test_mps_checks_xet_without_repair(self, controller, tmp_path):
+        argv = build_run_argv(**self._base_kwargs(tmp_path))
+        assert "CUDA MPS requires hf-xet in the image" in argv[-1]
+        assert "pip install" not in argv[-1]
+
+    def test_extra_env_cap_overrides_inherited_cap(self, controller, monkeypatch, tmp_path):
+        monkeypatch.setenv("CUDA_MPS_ACTIVE_THREAD_PERCENTAGE", "75")
+        kwargs = self._base_kwargs(tmp_path)
+        first = build_run_argv(**kwargs)
+        kwargs["extra_env"] = {"CUDA_MPS_ACTIVE_THREAD_PERCENTAGE": "50"}
+        second = build_run_argv(**kwargs)
+        assert "CUDA_MPS_ACTIVE_THREAD_PERCENTAGE=50" in second
+        assert "CUDA_MPS_ACTIVE_THREAD_PERCENTAGE=75" not in second
+        assert _fingerprint_from_argv(first) != _fingerprint_from_argv(second)
+
+    def test_container_environment_does_not_change_host_control_command(self, controller, monkeypatch, tmp_path):
+        _, command = controller
+        monkeypatch.setenv("LD_LIBRARY_PATH", "/host/lib")
+        kwargs = self._base_kwargs(tmp_path)
+        kwargs["extra_env"] = {"LD_LIBRARY_PATH": "/container/lib"}
+        argv = build_run_argv(**kwargs)
+        assert "LD_LIBRARY_PATH=/container/lib" in argv
+        assert command.call_args.kwargs["env"]["LD_LIBRARY_PATH"] == "/host/lib"
+
+    @pytest.mark.parametrize("value", ["0", "101", "1.5", "invalid"])
+    def test_invalid_thread_cap(self, controller, tmp_path, value):
+        kwargs = self._base_kwargs(tmp_path)
+        kwargs["extra_env"] = {"CUDA_MPS_ACTIVE_THREAD_PERCENTAGE": value}
+        with pytest.raises(ValueError, match="ACTIVE_THREAD_PERCENTAGE"):
+            build_run_argv(**kwargs)
+
+    def test_invalid_priority(self, controller, tmp_path):
+        kwargs = self._base_kwargs(tmp_path)
+        kwargs["extra_env"] = {"CUDA_MPS_CLIENT_PRIORITY": "2"}
+        with pytest.raises(ValueError, match="CLIENT_PRIORITY"):
+            build_run_argv(**kwargs)
+
+    def test_foreign_controller_is_rejected(self, controller, monkeypatch, tmp_path):
+        monkeypatch.setattr(_mps.os, "getuid", lambda: (controller[0] / "control").stat().st_uid + 1)
+        with pytest.raises(RuntimeError, match="belong to the launching user"):
+            build_run_argv(**self._base_kwargs(tmp_path))
+
+    def test_missing_controller(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("CUDA_MPS_PIPE_DIRECTORY", str(tmp_path))
+        with pytest.raises(RuntimeError, match="Start a CUDA MPS controller"):
+            build_run_argv(**self._base_kwargs(tmp_path))
+
+    def test_cap_only_environment_keeps_normal_launch(self, monkeypatch, tmp_path):
+        baseline = build_run_argv(**self._base_kwargs(tmp_path))
+        monkeypatch.setenv("CUDA_MPS_ACTIVE_THREAD_PERCENTAGE", "75")
+        monkeypatch.setenv("CUDA_MPS_CLIENT_PRIORITY", "1")
+        assert build_run_argv(**self._base_kwargs(tmp_path)) == baseline
+
+    def test_empty_pipe_override_disables_inherited_mps(self, controller, monkeypatch, tmp_path):
+        _, command = controller
+        kwargs = self._base_kwargs(tmp_path)
+        kwargs["extra_env"] = {"CUDA_MPS_PIPE_DIRECTORY": ""}
+        disabled = build_run_argv(**kwargs)
+        command.assert_not_called()
+        with monkeypatch.context() as clean:
+            for key in CUDA_MPS_ENV_KEYS:
+                clean.delenv(key, raising=False)
+            assert disabled == build_run_argv(**self._base_kwargs(tmp_path))
+
+    def test_stale_controller_is_not_silently_ignored(self, controller, tmp_path):
+        _, command = controller
+        command.return_value = subprocess.CompletedProcess([], 1, "", "not responding")
+        with pytest.raises(RuntimeError, match="Cannot contact CUDA MPS controller"):
+            build_run_argv(**self._base_kwargs(tmp_path))
+
+    @pytest.mark.parametrize("error", [FileNotFoundError(), subprocess.TimeoutExpired("mps", 5)])
+    def test_control_command_failure(self, controller, tmp_path, error):
+        _, command = controller
+        command.side_effect = error
+        with pytest.raises(RuntimeError, match="nvidia-cuda-mps-control failed"):
+            build_run_argv(**self._base_kwargs(tmp_path))
+
+    @pytest.mark.parametrize("field", ["st_dev", "st_ino", "st_ctime_ns"])
+    def test_changed_controller_invalidates_reuse(self, controller, monkeypatch, tmp_path, field):
+        pipe, _ = controller
+        first = build_run_argv(**self._base_kwargs(tmp_path))
+        original = Path.stat
+
+        def changed(path, *args, **kwargs):
+            value = original(path, *args, **kwargs)
+            if path == pipe / "control":
+                fields = {name: getattr(value, name) for name in dir(value) if name.startswith("st_")}
+                fields[field] += 1
+                return SimpleNamespace(**fields)
+            return value
+
+        monkeypatch.setattr(Path, "stat", changed)
+        second = build_run_argv(**self._base_kwargs(tmp_path))
+        assert _fingerprint_from_argv(first) != _fingerprint_from_argv(second)

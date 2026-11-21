@@ -124,6 +124,91 @@ def _load_main_module():
     return module
 
 
+@pytest.mark.parametrize("existing", [None, {"enabled": False}, {"enabled": True, "controller": [1, 2, 3]}])
+def test_explicit_mps_reuse_requires_matching_health_identity(monkeypatch, existing):
+    module = _load_main_module()
+    desired = {"enabled": True, "controller": [4, 5, 6]}
+    body = {"status": "ok", "service": module._SERVICE}
+    if existing is not None:
+        body["mps"] = existing
+    monkeypatch.setattr(
+        module.urllib.request, "urlopen",
+        lambda *_a, **_k: _health_response(json.dumps(body).encode()),
+    )
+    with pytest.raises(RuntimeError, match="MPS configuration changed"):
+        module._health_url_ok("http://127.0.0.1:8105/health", mps=desired)
+    body["mps"] = desired
+    assert module._health_url_ok("http://127.0.0.1:8105/health", mps=desired)
+
+
+def test_mps_health_reports_the_configured_identity(monkeypatch, tmp_path):
+    module = _load_main_module()
+    identity = {"enabled": True, "controller": [1, 2, 3], "active_thread_percentage": 25}
+    cfg = {"voice": "bill_boerst", "_mps_identity": identity}
+    app, backend = module._build_app(cfg, tmp_path)
+    cfg["_mps_identity"] = {"enabled": False}
+    backend._model = SimpleNamespace(sample_rate=24000)
+    health = next(route.endpoint for route in app.routes if route.path == "/health")
+    assert health()["mps"] == identity
+
+
+@pytest.mark.parametrize("explicit_off", [True, False])
+@pytest.mark.parametrize("existing", [None, {"enabled": True, "active_thread_percentage": 25}])
+def test_wrapper_refuses_unknown_or_changed_effective_mps(monkeypatch, tmp_path, explicit_off, existing):
+    module = _load_main_module()
+    config = tmp_path / "pocket.yaml"
+    config.write_text("mps: {enabled: false}\n" if explicit_off else "{}\n")
+    body = {"service": module._SERVICE}
+    if existing is not None:
+        body["mps"] = existing
+    monkeypatch.setattr(
+        module.urllib.request, "urlopen",
+        lambda *_a, **_k: _health_response(json.dumps(body).encode()),
+    )
+    monkeypatch.setattr(module, "setup_logging", lambda *_a: None)
+    monkeypatch.setattr(module.os, "execvpe", lambda *_a: pytest.fail("must not replace an existing server"))
+    monkeypatch.setattr(module.sys, "argv", ["pocket_tts_server", "--config", str(config)])
+    with pytest.raises(SystemExit, match="\\[pocket_tts_server\\].*MPS configuration changed"):
+        module.run()
+
+
+def test_wrapper_checks_inherited_mps_without_an_explicit_mapping(monkeypatch):
+    module = _load_main_module()
+    identity = {"enabled": True, "active_thread_percentage": 25, "controller": [1, 2, 3]}
+    monkeypatch.setattr(module, "cuda_mps_identity", lambda: identity)
+    monkeypatch.setattr(module, "setup_logging", lambda *_a: None)
+    monkeypatch.setattr(module.sys, "argv", ["pocket_tts_server"])
+    monkeypatch.setenv(module._READY_PROCESS_MAY_EXIT_ENV, "1")
+    health = Mock(return_value=True)
+    monkeypatch.setattr(module, "_health_url_ok", health)
+    module.run()
+    assert health.call_args.kwargs == {"mps": identity}
+
+
+def test_wrapper_applies_mps_before_reusing_server(monkeypatch, tmp_path):
+    module = _load_main_module()
+    config = tmp_path / "tts.yaml"
+    config.write_text("mps: {enabled: true, active_thread_percentage: 25, client_priority: 1}\n")
+    calls = []
+    identity = {"enabled": True, "controller": [1, 2, 3]}
+
+    def configure(settings):
+        calls.append(settings)
+        return identity
+
+    def reuse(_url, *, mps):
+        assert calls == [{"enabled": True, "active_thread_percentage": 25, "client_priority": 1}]
+        assert mps == identity
+        return True
+
+    monkeypatch.setattr(module, "configure_cuda_mps", configure)
+    monkeypatch.setattr(module, "_health_url_ok", reuse)
+    monkeypatch.setattr(module, "setup_logging", lambda *_a: None)
+    monkeypatch.setenv(module._READY_PROCESS_MAY_EXIT_ENV, "1")
+    monkeypatch.setattr(module.sys, "argv", ["pocket_tts_server", "--config", str(config)])
+    module.run()
+
+
 class _FakeTensor:
     def __init__(self, values) -> None:
         self._values = np.asarray(values)
@@ -500,6 +585,7 @@ async def test_http_contract_and_error_mapping(monkeypatch, tmp_path) -> None:
     assert routes["/health"].endpoint() == {
         "status": "ok",
         "service": "pocket_tts_server",
+        "mps": {"enabled": False},
     }
     monkeypatch.setattr(
         module.urllib.request,
@@ -776,7 +862,7 @@ async def test_reuses_healthy_persistent_server(tmp_path, monkeypatch) -> None:
         module.urllib.request,
         "urlopen",
         lambda *_args, **_kwargs: _health_response(
-            b'{"status":"ok","service":"pocket_tts_server"}'
+            b'{"status":"ok","service":"pocket_tts_server","mps":{"enabled":false}}'
         ),
     )
     monkeypatch.setattr(module, "_monitor_reused_server", monitor)
@@ -860,7 +946,7 @@ async def test_health_probe_handles_unavailable_server(monkeypatch, error) -> No
 async def test_reuse_monitor_rejects_foreign_health_responses(monkeypatch) -> None:
     module = _load_main_module()
     responses = [
-        b'{"status":"ok","service":"pocket_tts_server"}',
+        b'{"status":"ok","service":"pocket_tts_server","mps":{"enabled":false}}',
         b'{"status":"ok","service":"foreign_server"}',
         b'{"status":"ok"}',
         b"not JSON",
@@ -925,7 +1011,7 @@ async def test_execs_managed_server_in_place(tmp_path, monkeypatch) -> None:
     ready_file = tmp_path / "ready"
     execvpe = Mock()
     monkeypatch.setattr(module, "setup_logging", lambda *_args: None)
-    monkeypatch.setattr(module, "_health_url_ok", lambda _url: False)
+    monkeypatch.setattr(module, "_health_url_ok", lambda _url, **_kw: False)
     monkeypatch.setattr(module, "_port_open", lambda _host, _port: False)
     monkeypatch.setattr(module, "_ensure_owned_process_group", lambda: 8105)
     monkeypatch.setattr(module.os, "execvpe", execvpe)
@@ -954,7 +1040,7 @@ async def test_reuse_exits_when_launcher_allows_ready_exit(
     module = _load_main_module()
     ready_file = tmp_path / "ready"
     monkeypatch.setattr(module, "setup_logging", lambda *_args: None)
-    monkeypatch.setattr(module, "_health_url_ok", lambda _url: True)
+    monkeypatch.setattr(module, "_health_url_ok", lambda _url, **_kw: True)
     monkeypatch.setattr(
         module,
         "_monitor_reused_server",
@@ -1010,7 +1096,7 @@ async def test_probes_configured_non_loopback_host(
     module.run()
 
     expected_health_url = "http://192.0.2.10:8123/health"
-    health.assert_called_once_with(expected_health_url)
+    health.assert_called_once_with(expected_health_url, mps={"enabled": False})
     port_open.assert_called_once_with("192.0.2.10", 8123)
     assert execvpe.call_args.args[1][-2:] == ["--config", str(config_path)]
     assert execvpe.call_args.args[2][module._PROCESS_GROUP_ENV] == "8123"
@@ -1156,7 +1242,7 @@ async def test_omits_group_marker_when_ownership_is_unverified(
     execvpe = Mock()
     monkeypatch.setenv(module._PROCESS_GROUP_ENV, "4321")
     monkeypatch.setattr(module, "setup_logging", lambda *_args: None)
-    monkeypatch.setattr(module, "_health_url_ok", lambda _url: False)
+    monkeypatch.setattr(module, "_health_url_ok", lambda _url, **_kw: False)
     monkeypatch.setattr(module, "_port_open", lambda _host, _port: False)
     monkeypatch.setattr(module, "_ensure_owned_process_group", lambda: None)
     monkeypatch.setattr(module.os, "execvpe", execvpe)

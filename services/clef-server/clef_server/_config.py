@@ -28,6 +28,7 @@ class ServerConfig:
     dtype: str
     max_length: int
     max_body_bytes: int
+    mps: dict | None = None
 
 
 def identity(config: ServerConfig) -> dict[str, str]:
@@ -43,6 +44,8 @@ def identity(config: ServerConfig) -> dict[str, str]:
         "max_length": config.max_length,
         "max_body_bytes": config.max_body_bytes,
     }
+    if config.mps is not None:
+        configuration["mps"] = config.mps
     encoded = json.dumps(
         configuration,
         sort_keys=True,
@@ -66,6 +69,9 @@ def load_config(path: Path) -> ServerConfig:
     if not isinstance(raw, dict):
         raise ValueError("config must contain a YAML mapping")
 
+    if "mps" in raw and not isinstance(raw["mps"], dict):
+        raise ValueError("mps must be a mapping")
+
     base = path.resolve().parent
 
     def resolve_path(value: str) -> Path:
@@ -76,6 +82,7 @@ def load_config(path: Path) -> ServerConfig:
     revision = _string(raw, "model_revision", DEFAULT_REVISION)
 
     return ServerConfig(
+        mps=raw.get("mps"),
         model_name=model_name,
         model_revision=revision,
         model_cache=resolve_path(_string(raw, "model_cache", "../../models")),

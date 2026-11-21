@@ -13,6 +13,8 @@ Accepts ``--config <path>.yaml`` (auto-passed by xr-ai-launcher).
 
 Config keys
 -----------
+    mps:          dict  Optional enabled, active_thread_percentage and client_priority.
+                        Refer to xr_ai_launcher.configure_cuda_mps.
     model:                   str    HuggingFace model ID.
     host:                    str    Bind address (default: "0.0.0.0").
     port:                    int    HTTP port (default: 8109).

@@ -33,9 +33,17 @@ import pytest
 from _helpers_docker_cleanup import (
     scoped_gpu_test_containers,
 )
+from xr_ai_launcher import CUDA_MPS_ENV_KEYS
 from xr_ai_vllm._docker import TEST_SESSION_ENV
 from xr_ai_hub          import ProcessorEndpoint
 from device_io_hub.ipc     import ConnectorEndpoint, HubEndpoint
+
+
+@pytest.fixture(autouse=True)
+def _without_host_mps(monkeypatch):
+    """Tests must not join or probe an operator's ambient MPS controller."""
+    for key in CUDA_MPS_ENV_KEYS:
+        monkeypatch.delenv(key, raising=False)
 
 
 def pytest_configure(config):
@@ -294,7 +302,14 @@ def _streaming_models(monkeypatch):
             conformer_stream_step=decode,
             tokenizer=SimpleNamespace(ids_to_text=lambda ids: "".join(chr(i) for i in ids)),
         ),
-        diar=SimpleNamespace(sortformer_modules=SimpleNamespace(init_streaming_state=lambda **kwargs: object())),
+        diar=SimpleNamespace(
+            sortformer_modules=SimpleNamespace(
+                spkcache_len=264,
+                fifo_len=264,
+                chunk_len=2,
+                init_streaming_state=lambda **kwargs: object(),
+            )
+        ),
         encodes=encodes,
     )
     return models, activity, asr_calls, masks, cache_allocations, text

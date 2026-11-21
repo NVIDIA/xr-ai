@@ -144,6 +144,108 @@ launch plans or migration machinery for old running servers. Existing service
 ownership checks still refuse to stop unknown listeners. Refer to
 {doc}`/components/ai-services` for runtime persistence and cleanup details.
 
+## Share a GPU with streaming speech using CUDA MPS
+
+On Linux, vLLM Docker services, speaker ASR, and Pocket TTS can join an
+operator-managed CUDA Multi-Process Service (MPS) controller. Configure compute
+shares per service in the same hardware-profile YAML used for model selection,
+GPU placement, memory budgets, and concurrency. This includes Clef and batch
+STT. Every CUDA service inherits the controller environment, including services
+without an explicit mapping; configure each participating service deliberately.
+
+This configuration fragment illustrates the optional mapping for a Docker-backed
+model service. Choose the cap and priority from measurements of the complete
+workload on the target hardware. MPS limits compute, not memory allocation.
+
+```{literalinclude} /_snippets/cuda-mps-config.yaml
+:language: yaml
+:lines: 4-
+```
+
+Refer to the generated {doc}`/reference/configuration` for service defaults and
+sample profiles.
+
+Stop the selected servers before enabling MPS: existing CUDA contexts cannot
+acquire its settings. In `model-servers/yaml/<profile>.yaml`, enable `mps` for
+each participating service and set its compute share and priority. A service
+using vLLM also requires `vllm_backend: docker`. Shared service YAML under
+`services/` accepts the same settings for individual launches. The sample
+launcher replaces a service's whole `mps` mapping with its profile override.
+No bundled profile enables MPS by default.
+
+Start a private controller with a short local socket path and a 100% compute
+limit, so clients can select different limits. Its visible GPUs must include
+the devices assigned to participating services; this Spark example uses GPU 0:
+
+```bash
+export CUDA_MPS_PIPE_DIRECTORY="$(mktemp -d /tmp/xr-mps.XXXXXX)"
+export CUDA_MPS_LOG_DIRECTORY="$CUDA_MPS_PIPE_DIRECTORY/logs"
+mkdir -p "$CUDA_MPS_LOG_DIRECTORY"
+CUDA_VISIBLE_DEVICES=0 CUDA_MPS_ACTIVE_THREAD_PERCENTAGE=100 \
+  CUDA_MPS_CLIENT_PRIORITY=0 nvidia-cuda-mps-control -d
+```
+
+From the selected sample directory, use its normal model-server command with
+the edited profile. For the legacy Simple VLM example:
+
+```bash
+uv run --project model-servers simple_vlm_example_model_servers --gpu-profile spark
+```
+
+The controller path stays in the deployment environment; every child service
+inherits the same path. Each service applies its own YAML compute settings
+before CUDA initialization. Enabled mappings override inherited cap and
+priority values, using 100 and 0 respectively when omitted. Missing or
+unreachable controllers, invalid settings, and unsupported vLLM backends fail
+startup. Logs report the effective requested settings and controller identity.
+
+Omitting `mps` preserves inherited settings. Set `mps: {enabled: false}` to clear
+inherited MPS settings for that service. Disabled mappings accept no additional
+settings. Explicit MPS settings and controller identity participate in speaker
+ASR and vLLM Docker reuse checks. Pocket TTS always reports and compares its
+effective MPS state, including inherited settings; restart older services
+whose health response lacks that state. Clef and batch STT require stopping
+before changing MPS settings, since their reuse checks do not track the full
+effective MPS state.
+
+For advanced direct Docker-wrapper launches, a nonempty
+`CUDA_MPS_PIPE_DIRECTORY` in the environment or `serve(extra_env=...)` also opts
+in. Cap or priority variables alone do not. An empty pipe-directory override in
+`extra_env` disables inherited MPS for that Docker launch. The Docker backend
+mounts the controller directory and runs as the launching user's UID and GID
+with writable home and module caches. Neither the service wrappers nor the
+sample launcher start, reconfigure, or stop the controller.
+
+Prepare the image with its model dependencies installed. `extra_pip` is
+unsupported with MPS. On a cache miss, the image must already have compatible
+`hf-xet`, or set `HF_HUB_DISABLE_XET=1` to use HTTPS downloads; automatic
+`hf-xet` repair is disabled under MPS. Create the host model cache directory as
+the launching user before Docker creates its bind mount. Downloads need write
+access there. A cache created by root-run containers may need its owner to
+correct permissions or ownership with `chown`. The launcher only warns about
+inaccessible cache directories; cached weights can still load. That check is
+advisory: nested paths or concurrent writers can change permissions, and a
+container-side permission error remains authoritative.
+
+After CUDA initialization, verify that the speech PIDs and the container's host
+PIDs appear in the controller's client list:
+
+```bash
+printf 'get_device_client_list\n' | nvidia-cuda-mps-control
+```
+
+Environment values alone do not prove participation. Dynamic MPS limits do not
+reserve dedicated SMs or isolate memory bandwidth; priority is a scheduling
+hint. Refer to [NVIDIA's MPS environment
+documentation](https://docs.nvidia.com/deploy/mps/appendix-environment-variables.html).
+
+Stop the agent and the servers you launched, using their configured ports,
+before quitting their private controller. Only then run:
+
+```bash
+printf 'quit\n' | nvidia-cuda-mps-control
+```
+
 ## Developer sample API
 
 Model-server samples call the public
