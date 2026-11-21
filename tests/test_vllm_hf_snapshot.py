@@ -13,7 +13,7 @@ from unittest.mock import Mock, call
 import huggingface_hub
 import pytest
 from _helpers_hf import COMMIT, block_network, cache_file, use_hub_cache
-from xr_ai_vllm import _docker, _hf_snapshot
+from xr_ai_vllm import _docker, _hf_snapshot, _mps
 from xr_ai_vllm._docker import build_run_argv
 
 _REPO = "org/model"
@@ -89,7 +89,8 @@ case "$3" in
     echo "download $4 $5" >> "$CALLS"
     echo "$DOWNLOADED" ;;
   *)
-    echo "xet" >> "$CALLS" ;;
+    echo "xet" >> "$CALLS"
+    exit "${XET_STATUS:-0}" ;;
 esac
 """
 
@@ -139,6 +140,30 @@ class TestContainerCommand:
         served = vllm_args.read_text().splitlines() if vllm_args.exists() else None
         steps = calls.read_text().splitlines() if calls.exists() else []
         return result, steps, served
+
+    @pytest.mark.parametrize("disable_xet", [False, True])
+    def test_mps_missing_xet_never_attempts_image_repair(self, tmp_path, monkeypatch, disable_xet):
+        def mps_options(env, **_kwargs):
+            env["HOME"] = str(tmp_path / "home")
+            return [], {"user": "1000:1000"}
+
+        monkeypatch.setattr(_mps, "docker_options", mps_options)
+        monkeypatch.setenv("HF_HUB_DISABLE_XET", "1" if disable_xet else "0")
+        command = self._command(tmp_path, [])
+        assert "pip install" not in command
+        result, steps, served = self._run(
+            tmp_path, command, HOME=str(tmp_path / "home"),
+            LOCAL_STATUS=str(_hf_snapshot.CACHE_MISS),
+            DOWNLOADED="/cache/downloaded", XET_STATUS="7",
+        )
+        if disable_xet:
+            assert result.returncode == 0
+            assert steps == [f"local {_REPO} ", f"download {_REPO} "]
+            assert served is not None
+        else:
+            assert result.returncode == 1 and served is None
+            assert steps == [f"local {_REPO} ", "xet"]
+            assert "CUDA MPS requires hf-xet in the image" in result.stderr
 
     @pytest.mark.parametrize("cached,status", [(True, 0), (False, _hf_snapshot.CACHE_MISS), (False, 1)])
     @pytest.mark.parametrize("name_args", [[], ["--served-model-name", "served"]])

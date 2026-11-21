@@ -31,9 +31,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from xr_ai_launcher import has_ownership_marker, pid_on_port_checked
+from xr_ai_launcher import CUDA_MPS_ENV_KEYS, has_ownership_marker, pid_on_port_checked
 
-from . import _diagnostics, _hf_snapshot, _lifecycle
+from . import _diagnostics, _hf_snapshot, _lifecycle, _mps
 
 log = logging.getLogger(__name__)
 
@@ -133,8 +133,14 @@ def build_run_argv(
     for key in _HF_DOWNLOAD_ENV_KEYS[1:]:
         if key in os.environ:
             env_vars[key] = os.environ[key]
+    for key in CUDA_MPS_ENV_KEYS:
+        if key in os.environ:
+            env_vars[key] = os.environ[key]
     if extra_env:
         env_vars.update(extra_env)
+    mps_argv, mps_identity = _mps.docker_options(
+        env_vars, model_cache=model_cache, extra_pip=extra_pip,
+    )
 
     argv: list[str] = ["docker", "run"]
     argv += ["--name", container_name]
@@ -156,6 +162,8 @@ def build_run_argv(
         "extra_pip": extra_pip or [],
         "vllm_argv": vllm_argv,
     }
+    if mps_identity:
+        payload["mps"] = mps_identity
     # The name-only -e resolves the token into the container's creation-time
     # env, so a rotated token must change the contract; the key is omitted
     # entirely when unset to keep tokenless fingerprints stable.
@@ -168,6 +176,8 @@ def build_run_argv(
     # small for the KV cache shards.  --ipc host gives them the host's larger
     # shared memory namespace.
     argv += ["--ipc", "host"]
+    # MPS requires the host user credentials and the shared controller socket.
+    argv += mps_argv
 
     # Request GPUs via the nvidia runtime, not the legacy `--gpus` hook.
     # Under nvidia-container-toolkit `mode = "auto"`, `--gpus` is rejected
@@ -223,11 +233,13 @@ def build_run_argv(
 
     download: list[str] = []
     if not xet_disabled:
-        # Images vary in their Hub/Xet stack. Repair a missing or incompatible
-        # hf-xet wheel, then re-check the complete Hub integration so an
-        # incapable Hub or install failure stops startup instead of falling
-        # back to HTTPS.
-        download.extend([f"( {xet_check} || {xet_install} )", xet_check])
+        # MPS uses a prebuilt image; other launches can repair hf-xet before
+        # downloading. A failed check must not silently fall back to HTTPS.
+        if mps_identity:
+            message = "CUDA MPS requires hf-xet in the image, or HF_HUB_DISABLE_XET=1"
+            download.append(f"( {xet_check} || {{ echo {shlex.quote(message)} >&2; exit 1; }} )")
+        else:
+            download.extend([f"( {xet_check} || {xet_install} )", xet_check])
     download.append(f'model_path="$({snapshot("download")})"')
     # A cache hit skips every Hub request. A miss downloads before vLLM starts
     # CUDA; any other resolver failure, including a miss under
@@ -255,7 +267,9 @@ def build_run_argv(
     commands.append(
         f'{shlex.join(vllm_argv[:2])} "$model_path" {shlex.join(serve_args)}'
     )
-    argv += ["-c", f"{resolve}\n{' && '.join(commands)}"]
+    # A numeric UID may not have a home directory in the image.
+    setup = 'mkdir -p "$HOME" || exit 1\n' if mps_identity else ""
+    argv += ["-c", f"{setup}{resolve}\n{' && '.join(commands)}"]
     return argv
 
 

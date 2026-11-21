@@ -33,9 +33,11 @@ dependencies = [
     "hf-xet>=1.1.2,<2.0.0",
     "pyyaml>=6.0",
     "xr-ai-logging",
+    "xr-ai-launcher",
 ]
 
 [tool.uv.sources]
+xr-ai-launcher = { path = "../../utils/xr-ai-launcher", editable = true }
 # PyPI has the `lightning` umbrella package quarantined as of 2026-04-30,
 # blocking NeMo's [asr]/[tts] extras.  `pytorch-lightning` (a sibling
 # package, unaffected) is built from the same Lightning AI mono-repo

@@ -44,6 +44,7 @@ from ._credentials import (
 )
 from ._gpu import detect_gpu_config
 from ._models import ModelDeployment, load_deployment_profile, load_model_deployment
+from ._mps import CUDA_MPS_ENV_KEYS, configure_cuda_mps, cuda_mps_identity
 from ._ownership import has_ownership_marker, pid_on_port_checked
 from ._processes import ManagedProcess
 from ._stack import Parallel, Process, run_stack
@@ -52,7 +53,7 @@ __all__ = [
     "XR_RUNTIME_VAR", "load_cloudxr_env",
     "NATIVE_DEVICE_PROFILES", "is_native_profile", "read_device_profile",
     "ensure_credentials", "load_credentials", "require_credentials", "warn_if_missing",
-    "read_config_scalar",
+    "read_config_scalar", "CUDA_MPS_ENV_KEYS", "configure_cuda_mps", "cuda_mps_identity",
     "GPUInventoryError", "detect_gpu_config",
     "ModelDeployment", "load_deployment_profile", "load_model_deployment",
     "has_ownership_marker", "pid_on_port_checked",
