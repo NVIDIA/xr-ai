@@ -34,7 +34,7 @@ _SAMPLES = {
 }
 
 
-@pytest.mark.parametrize("hardware", ["dual_48G_ada", "96G_blackwell", "spark"])
+@pytest.mark.parametrize("hardware", ["dual_48G_ada", "96G_blackwell", "128G_spark"])
 @pytest.mark.parametrize("sample, services", _SAMPLES.items())
 def test_sample_stack_matches_required_worker_speech(sample, services, hardware, tmp_path):
     base = _ROOT / "agent-samples" / sample

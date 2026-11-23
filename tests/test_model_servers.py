@@ -166,7 +166,7 @@ def test_nano_standalone_applies_spark_sequence_default(
     [
         ("96G_blackwell", 10, "0.35", False),
         ("dual_48G_ada", 8, "0.78", False),
-        ("spark", 12, "0.25", True),
+        ("128G_spark", 12, "0.25", True),
     ],
 )
 def test_omni_profiles_forward_admission_and_explicit_kv_cache(
@@ -269,7 +269,7 @@ def test_embedding_only_forwards_configured_attention_backend(
         assert args[args.index("--attention-backend") + 1] == attention_backend
 
 
-@pytest.mark.parametrize("profile", ["spark", "96G_blackwell", "dual_48G_ada", "standalone"])
+@pytest.mark.parametrize("profile", ["128G_spark", "96G_blackwell", "dual_48G_ada", "standalone"])
 def test_embedding_profiles_launch_nemotron3_with_existing_endpoint(
     monkeypatch: pytest.MonkeyPatch, profile: str,
 ) -> None:
@@ -297,17 +297,17 @@ def test_embedding_profiles_launch_nemotron3_with_existing_endpoint(
 
     assert captured["model"] == "nvidia/Nemotron-3-Embed-1B-BF16"
     assert captured["port"] == 8109
-    assert captured["spark_uma"] is (profile == "spark")
+    assert captured["spark_uma"] is (profile == "128G_spark")
     args = captured["extra_serve_args"]
     assert args[args.index("--served-model-name") + 1] == "embed"
-    if profile == "spark":
+    if profile == "128G_spark":
         assert args[args.index("--attention-backend") + 1] == "TRITON_ATTN"
     else:
         assert "--attention-backend" not in args
 
 
 def test_embedding_profiles_retain_fractional_memory_budget() -> None:
-    for profile in ("spark", "96G_blackwell", "dual_48G_ada"):
+    for profile in ("128G_spark", "96G_blackwell", "dual_48G_ada"):
         config_path = profile_config("embedding_server", profile)
         config = yaml.safe_load(config_path.read_text())
         assert config["gpu_memory_utilization"] == 0.08
@@ -327,7 +327,7 @@ _SAMPLES = {
 
 
 @pytest.mark.parametrize("sample,services", _SAMPLES.items())
-@pytest.mark.parametrize("profile", ["spark", "dual_48G_ada", "96G_blackwell"])
+@pytest.mark.parametrize("profile", ["128G_spark", "dual_48G_ada", "96G_blackwell"])
 def test_sample_launch_and_stop_use_only_required_servers(monkeypatch, tmp_path, sample, services, profile):
     base = _REPO_ROOT / "agent-samples" / sample / "model-servers"
     spec = importlib.util.spec_from_file_location("sample_models", base / "main.py")
@@ -361,7 +361,7 @@ def test_sample_launch_and_stop_use_only_required_servers(monkeypatch, tmp_path,
 
 def test_start_materializes_configs_through_readiness_and_does_not_stop(monkeypatch):
     base = _REPO_ROOT / "agent-samples/simple-vlm-example/model-servers"
-    monkeypatch.setattr(_stack, "detect_gpu_config", lambda: "spark")
+    monkeypatch.setattr(_stack, "detect_gpu_config", lambda: "128G_spark")
     credentials = []
     monkeypatch.setattr(_stack, "require_credentials", lambda name: credentials.append(name))
     monkeypatch.setattr(_stack, "stop_persistent_servers", lambda *_a: pytest.fail("start must not sweep servers"))
@@ -383,7 +383,7 @@ def test_stop_failure_is_reported(monkeypatch):
     base = _REPO_ROOT / "agent-samples/simple-vlm-example/model-servers"
     monkeypatch.setattr(_stack, "stop_persistent_servers", lambda *_a: False)
     with pytest.raises(RuntimeError, match="could not be stopped"):
-        run_model_stack(base, _SAMPLES["simple-vlm-example"], stop=True, gpu_profile="spark")
+        run_model_stack(base, _SAMPLES["simple-vlm-example"], stop=True, gpu_profile="128G_spark")
 
 
 @pytest.mark.parametrize("sample, services", _SAMPLES.items())
@@ -435,7 +435,7 @@ def test_failed_readiness_retains_private_merged_configs_without_credentials(mon
         raise SystemExit(1)
     monkeypatch.setattr(_stack, "run_stack", fail)
     with pytest.raises(SystemExit, match="1"):
-        run_model_stack(base, _SAMPLES["simple-vlm-example"], gpu_profile="spark")
+        run_model_stack(base, _SAMPLES["simple-vlm-example"], gpu_profile="128G_spark")
     assert captured
     for path in captured:
         assert path.is_file()

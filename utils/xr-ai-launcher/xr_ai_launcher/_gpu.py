@@ -54,11 +54,18 @@ def detect_gpu_config() -> str:
     if len(devices) == 1:
         gpu = devices[0]
         if gpu.compute_capability >= 10.0:
-            if _SPARK_NAME.search(gpu.name) or (
+            if _SPARK_NAME.search(gpu.name):
+                config = (
+                    "128G_spark"
+                    if gpu.total_memory_gib is None
+                    or gpu.total_memory_gib >= _SPARK_MIN_GIB
+                    else ""
+                )
+            elif (
                 gpu.total_memory_gib is not None
                 and gpu.total_memory_gib >= _SPARK_MIN_GIB
             ):
-                config = "spark"
+                config = "128G_spark"
             elif (
                 gpu.total_memory_gib is not None
                 and gpu.total_memory_gib >= _BLACKWELL_96_MIN_GIB

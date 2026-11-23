@@ -22,6 +22,15 @@ before updating the checkout. Start the updated services before restarting
 workers; launchers can reuse a running service whose identity matches even when
 its application code predates the update.
 
+### DGX Spark profile name
+
+The bundled DGX Spark model-server profile is now `128G_spark` (previously
+`spark`) to identify its 128 GB unified-memory requirement. Replace explicit
+`--gpu-profile spark` arguments with `--gpu-profile 128G_spark` and update
+references to `model-servers/yaml/spark.yaml` to
+`model-servers/yaml/128G_spark.yaml`. Automatic GPU detection selects the new
+name. The bundled profile does not support 64 GB configurations.
+
 ### Simple VLM example deprecation
 
 The {doc}`simple-vlm-example` sample is deprecated. Existing demo and launch

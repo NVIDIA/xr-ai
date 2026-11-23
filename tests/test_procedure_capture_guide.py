@@ -136,7 +136,7 @@ def test_capture_config_rejects_invalid_intervals(tmp_path, name, value):
         load_config(config_path)
 
 
-@pytest.mark.parametrize("gpu_profile", ["spark", "dual_48G_ada", "96G_blackwell"])
+@pytest.mark.parametrize("gpu_profile", ["128G_spark", "dual_48G_ada", "96G_blackwell"])
 def test_documented_model_deployment_matches_worker(gpu_profile, monkeypatch):
     from xr_ai_model_server_stack import _stack
     from xr_ai_voicegate import load_voice_gate_config

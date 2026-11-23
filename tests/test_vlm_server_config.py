@@ -20,7 +20,7 @@ _LOCAL_VLM_CONFIGS = (
     _SERVER_YAML,
     profile_config("vlm_server", "96G_blackwell"),
     profile_config("vlm_server", "dual_48G_ada"),
-    profile_config("vlm_server", "spark"),
+    profile_config("vlm_server", "128G_spark"),
 )
 
 
@@ -190,7 +190,7 @@ def test_default_cosmos3_service_uses_reasoner_only_path(monkeypatch, tmp_path) 
     [
         ("96G_blackwell", "0.23", False),
         ("dual_48G_ada", "0.47", False),
-        ("spark", "0.2", True),
+        ("128G_spark", "0.2", True),
     ],
 )
 def test_hardware_profiles_forward_admission_and_explicit_kv_cache(
@@ -249,7 +249,7 @@ def test_hardware_profiles_pin_reasoner_cache_with_admission_limits() -> None:
         (profile_config("vlm_server", "dual_48G_ada")).read_text()
     )
     spark = yaml.safe_load(
-        (profile_config("vlm_server", "spark")).read_text()
+        (profile_config("vlm_server", "128G_spark")).read_text()
     )
 
     for config, expected_utilization in (
