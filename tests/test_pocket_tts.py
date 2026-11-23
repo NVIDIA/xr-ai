@@ -38,7 +38,7 @@ _REFERENCE_CONFIG = _PROJECT / "pocket_tts_server.yaml"
 _DEFAULT_PORT = 8105
 _PROFILE_CONFIGS = (
     _REFERENCE_CONFIG,
-    profile_config("pocket_tts_server", "spark"),
+    profile_config("pocket_tts_server", "128G_spark"),
     profile_config("pocket_tts_server", "96G_blackwell"),
     profile_config("pocket_tts_server", "dual_48G_ada"),
 )

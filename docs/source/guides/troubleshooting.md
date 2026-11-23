@@ -73,7 +73,7 @@ headers.
 sudo apt install python3-dev
 ```
 
-This applies to the `agent-samples/<sample>/model-servers/yaml/spark.yaml` profile.
+This applies to the `agent-samples/<sample>/model-servers/yaml/128G_spark.yaml` profile.
 
 ### DGX Spark — CUDA allocation fails during a vLLM cold start
 
@@ -113,7 +113,7 @@ model being too large for the configured profile.
 **Fix:** every Docker-backed vLLM service resolves its Hugging Face snapshot
 before vLLM initializes CUDA. A missing snapshot is downloaded and synced at
 that point, so transfer, reconstruction, and dirty writeback allocations do not
-overlap the CUDA context allocation. The bundled `spark` profile also enables
+overlap the CUDA context allocation. The bundled `128G_spark` profile also enables
 `spark_uma` for each of these services: if the driver allocation still fails,
 the wrapper waits for reclamation and restarts the stopped container once. Only the wrapper that launched the current
 container attempt may restart it; another wrapper that adopts the running
@@ -160,7 +160,7 @@ automatically sized KV cache. The behavior is tracked in [vLLM issue
 The model-server launcher starts these services sequentially, so concurrent
 startup is not required to trigger the page-cache accounting error.
 
-**Fix:** the bundled `spark`, `dual_48G_ada`, and `96G_blackwell` profiles set
+**Fix:** the bundled `128G_spark`, `dual_48G_ada`, and `96G_blackwell` profiles set
 `kv_cache_memory_bytes` explicitly for both Nemotron Omni and Cosmos instead
 of using the fractional profiler to size their caches. Keep the fixed
 allocations when copying or modifying a profile. The values are 2 GiB for

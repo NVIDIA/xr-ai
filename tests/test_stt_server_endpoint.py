@@ -24,7 +24,7 @@ _WAV = ("file", ("audio.wav", b"RIFF....WAVE", "audio/wav"))
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _STT_CONFIGS = (
     "services/stt-server/stt_server.yaml",
-    profile_config("stt_server", "spark"),
+    profile_config("stt_server", "128G_spark"),
     profile_config("stt_server", "96G_blackwell"),
     profile_config("stt_server", "dual_48G_ada"),
 )

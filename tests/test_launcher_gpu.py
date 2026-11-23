@@ -87,7 +87,7 @@ def test_unparseable_inventory_is_rejected() -> None:
 def test_failed_process_inventory_does_not_block_supported_topology() -> None:
     error = subprocess.CalledProcessError(1, "nvidia-smi", stderr="not supported")
     with _mock_smi([_row(0, "NVIDIA GB10", 10.0, 131072)], process_error=error):
-        assert detect_gpu_config() == "spark"
+        assert detect_gpu_config() == "128G_spark"
 
 
 def test_failed_process_inventory_is_context_not_a_replacement_error() -> None:
@@ -134,7 +134,7 @@ def test_not_supported_memory_fields_are_nullable(sentinel: str) -> None:
         0, "NVIDIA GB10", 12.1, sentinel, free_mib=sentinel, used_mib=sentinel,
     )]):
         inventory = query_gpu_inventory()
-        assert detect_gpu_config() == "spark"
+        assert detect_gpu_config() == "128G_spark"
 
     assert inventory[0].total_memory_gib is None
     assert inventory[0].free_memory_gib is None
@@ -175,7 +175,7 @@ def test_spark_name_matches_when_memory_fields_are_unavailable() -> None:
         assert inventory[0].total_memory_gib is None
         assert inventory[0].free_memory_gib is None
         assert inventory[0].used_memory_gib is None
-        assert detect_gpu_config() == "spark"
+        assert detect_gpu_config() == "128G_spark"
 
 
 def test_capacity_match_rejects_unavailable_total_memory_cleanly() -> None:
@@ -195,9 +195,18 @@ def test_small_blackwell_does_not_match_96_gib_config() -> None:
 @pytest.mark.parametrize("name", ["NVIDIA GB10", "NVIDIA B10"])
 def test_spark_name_matches_spark_config(name: str) -> None:
     with _mock_smi([_row(0, name, 10.0, 131072)]):
-        assert detect_gpu_config() == "spark"
+        assert detect_gpu_config() == "128G_spark"
 
 
 def test_large_unnamed_blackwell_matches_spark_by_capacity() -> None:
     with _mock_smi([_row(0, "NVIDIA Future Blackwell", 12.0, 131072)]):
-        assert detect_gpu_config() == "spark"
+        assert detect_gpu_config() == "128G_spark"
+
+
+@pytest.mark.parametrize("name", ["NVIDIA GB10", "NVIDIA B10"])
+@pytest.mark.parametrize("total_mib", [65536, 98304])
+def test_spark_rejects_insufficient_reported_capacity(name: str, total_mib: int) -> None:
+    with _mock_smi([_row(0, name, 12.1, total_mib)]), pytest.raises(
+        GPUInventoryError, match="no existing.*GPU 0",
+    ):
+        detect_gpu_config()

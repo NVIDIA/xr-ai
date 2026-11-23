@@ -14,7 +14,9 @@ inference is local or hosted.
 ## Hardware
 
 The bundled GPU profiles target two 48 GB NVIDIA Ada GPUs, a single NVIDIA RTX PRO
-6000 Blackwell workstation GPU, or an NVIDIA DGX Spark. Each topology has enough
+6000 Blackwell workstation GPU, or an NVIDIA DGX Spark with 128 GB of unified
+memory. The bundled `128G_spark` profile requires the 128 GB model; 64 GB
+configurations are not supported by this profile. Each topology has enough
 GPU-visible memory to run the full model stack locally. These profiles are turnkey
 presets, not a hardware allowlist: you can run on other compatible NVIDIA GPUs by
 tuning the per-server GPU-memory split. Refer to [Running on other
@@ -149,7 +151,7 @@ runtime, refer to {doc}`/guides/troubleshooting`.
 
 Install before `uv sync` for these targets:
 
-- **DGX Spark** (`agent-samples/<sample>/model-servers/yaml/spark.yaml`): `sudo apt install python3-dev`
+- **DGX Spark** (`agent-samples/<sample>/model-servers/yaml/128G_spark.yaml`): `sudo apt install python3-dev`
 
 All GPU profiles default to `vllm_backend: docker`, so the vLLM container ships
 nvcc + FlashInfer. If you switch a profile to `vllm_backend: pip`, refer to the

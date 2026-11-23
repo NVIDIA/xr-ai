@@ -59,7 +59,7 @@ servers, and return to the same terminal. Models stay warm across agent
 restarts. Compatible independently deployed endpoints can also serve the
 sample; refer to {doc}`/guides/deploying-with-nim`.
 
-GPU profiles are auto-detected (`dual_48G_ada`, `spark`, `96G_blackwell`). Use
+GPU profiles are auto-detected (`dual_48G_ada`, `128G_spark`, `96G_blackwell`). Use
 `--gpu-profile NAME` to select an explicitly tuned sample profile. Unsupported
 hardware or failed GPU inventory stops startup; refer to
 {doc}`requirements` for custom profiles. First launch downloads missing weights
