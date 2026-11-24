@@ -3,14 +3,15 @@
 
 # Selected by models_config in ../conversation_example_worker.yaml.
 # Server defaults < portable gemma4.yaml < the server overrides below.
-# E2B/Nano was measured at about 20 GiB for the full local stack.
+# Official QAT E2B + BF16 Nano: about 18.1 GiB warm, 18.7 GiB sampled peak
+# for all four services on one RTX 6000 Ada (two concurrent text/image requests).
 # Leave headroom for startup and the agent; this is a check, not a reservation.
-min_free_memory_gib: 22
+min_free_memory_gib: 21
 servers:
   speaker-stt: {}
   tts: {}
   gemma4:
-    model: google/gemma-4-E2B-it
+    model: google/gemma-4-E2B-it-qat-w4a16-ct
   d3:
     model: vllm-sr/d3-nano
 

@@ -29,7 +29,12 @@ To use Gemma 4 for conversation, reasoning, and visual understanding, select:
 models_config: model_profiles/gemma4-e2b-d3-nano.yaml
 ```
 
-The new profile defaults to `google/gemma-4-E2B-it` and `vllm-sr/d3-nano`.
+The profile uses Google’s official `google/gemma-4-E2B-it-qat-w4a16-ct`
+checkpoint and `vllm-sr/d3-nano`. Gemma uses quantization-aware-trained INT4
+linear weights with 16-bit activations, loaded through vLLM’s automatic
+compressed-tensors detection. Embeddings and the vision/audio towers retain
+higher precision; this does not reduce the entire GPU allocation by four.
+D3 remains BF16.
 One Gemma server handles both the `llm` and `vlm` roles on port 8108;
 reasoning is enabled through the model's chat-template switch. D3 serves the
 existing `systemone` decision adapter on port 8120, including image decisions
@@ -65,7 +70,8 @@ uv run conversation_example
 For Gemma, the launcher bypasses named GPU-profile detection. It selects the
 visible BF16-capable GPU (SM80+) with the most free VRAM that meets
 `min_free_memory_gib` in the model profile, and places all four services on it.
-E2B/Nano requires 22 GiB free, based on a roughly 20 GiB full-stack measurement.
+E2B/Nano requires 21 GiB free, leaving headroom above the measured 18.7 GiB
+startup/inference peak on RTX 6000 Ada.
 Memory on multiple GPUs is not combined. This startup check does not reserve
 memory.
 
@@ -94,10 +100,28 @@ overrides. Relative cache paths resolve against the file that declares them.
 The launcher pins services by GPU UUID and adjusts vLLM’s fractional startup
 admission check to the explicit KV-cache allocation; the free-memory estimate
 covers the complete stack. Keep `tensor_parallel_size: 1` and use the environment
-to restrict placement rather than per-service GPU overrides. E2B/Nano has live
-inference coverage on RTX 6000 Ada with the engines on separate GPUs. The new
-single-GPU placement path has automated coverage and still needs live
-qualification on the target GPU.
+to restrict placement rather than per-service GPU overrides.
+
+The official QAT checkpoint was tested with vLLM 0.33.0 on one RTX 6000 Ada,
+with Gemma, D3 Nano, speaker STT, and TTS on that GPU. Concurrent text and image
+requests, reasoning output, text streaming, and D3 image routing passed. After
+those requests, GPU memory use was approximately:
+
+| Component | GPU memory |
+|---|---|
+| Gemma E2B QAT engine | 8.69 GiB |
+| D3 Nano BF16 engine | 4.96 GiB |
+| Speaker STT | 3.39 GiB |
+| Pocket TTS | 0.99 GiB |
+| Selected GPU total, including overhead | 18.07 GiB |
+
+One-second sampling observed a peak of 18.73 GiB during startup and the smoke
+requests. Gemma’s loaded weights used 7.44 GiB versus 9.18 GiB for the previous
+BF16 checkpoint; its warmed engine used 8.69 GiB versus 10.56 GiB previously.
+The earlier BF16 stack placed its engines on separate GPUs, so the full-stack
+comparison is approximate. Measurements exclude the agent/hub and do not qualify
+long contexts or sustained audio workloads. Blackwell and Spark have not received
+live qualification with this checkpoint.
 
 ### Use a dedicated vision server
 

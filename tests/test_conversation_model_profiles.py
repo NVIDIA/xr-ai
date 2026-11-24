@@ -52,7 +52,7 @@ def test_small_profile_shares_one_gemma_server_and_selects_checkpoints(stack):
     configs = stack._configs(_BASE, profile)
     models = load_models_config(profile)
     assert set(configs) == {"speaker-stt", "tts", "gemma4", "d3"}
-    assert configs["gemma4"]["model"] == "google/gemma-4-E2B-it"
+    assert configs["gemma4"]["model"] == "google/gemma-4-E2B-it-qat-w4a16-ct"
     assert configs["d3"]["model"] == "vllm-sr/d3-nano"
     assert models.llm("llm").endpoint == models.vlm("vlm").endpoint
     assert models.llm("llm").adapter.thinking.default is True
@@ -82,7 +82,7 @@ def test_worker_and_launcher_resolve_same_profile(sample, stack):
     config = worker.load_config(sample / "yaml/conversation_example_worker.yaml")
     assert config.models_config == sample / "yaml/model_profiles/gemma4-e2b-d3-nano.yaml"
     configs = stack._configs(sample / "model-servers", config.models_config)
-    assert configs["gemma4"]["model"] == "google/gemma-4-E2B-it"
+    assert configs["gemma4"]["model"] == "google/gemma-4-E2B-it-qat-w4a16-ct"
     assert configs["d3"]["model"] == "vllm-sr/d3-nano"
     (sample / "yaml/conversation_example_worker.yaml").write_text("{}\n")
     default = worker.load_config(sample / "yaml/conversation_example_worker.yaml")

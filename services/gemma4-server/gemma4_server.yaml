@@ -2,8 +2,10 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Text, reasoning, and images share one model instance.
+# Official Google QAT: INT4 linear weights with BF16 activations; vLLM
+# detects compressed-tensors quantization from the checkpoint configuration.
 # Run through Docker; no host vLLM or Transformers installation is required.
-model: google/gemma-4-E2B-it
+model: google/gemma-4-E2B-it-qat-w4a16-ct
 # Stable API alias: changing checkpoints does not change client configuration.
 served_model_name: gemma4
 host: 127.0.0.1

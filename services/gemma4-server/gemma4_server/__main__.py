@@ -51,7 +51,7 @@ def run() -> None:
         image=cfg.get("vllm_image", "vllm/vllm-openai:v0.33.0"),
         container_name="xr-ai-vllm-gemma4-server",
         log_prefix="gemma4_server",
-        model=cfg.get("model", "google/gemma-4-E2B-it"),
+        model=cfg.get("model", "google/gemma-4-E2B-it-qat-w4a16-ct"),
         extra_serve_args=_serve_args(cfg),
         host=cfg.get("host", "127.0.0.1"),
         port=int(cfg.get("port", 8108)),
