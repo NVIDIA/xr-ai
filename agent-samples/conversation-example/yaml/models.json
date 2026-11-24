@@ -1,8 +1,14 @@
 {
   "models": {
     "vlm": {
-      "adapter": {"preset": "cosmos3_nano_reasoner"},
-      "endpoint": {"base_url": "http://localhost:8100"}
+      "category": "vlm",
+      "adapter": {
+        "kind": "openai_compat",
+        "model_name": "llm",
+        "thinking": {"control": "chat_template", "default": false},
+        "capabilities": {"streaming": true, "vision": true, "video": true, "reasoning": true}
+      },
+      "endpoint": {"base_url": "http://localhost:8108"}
     },
     "llm": {
       "adapter": {

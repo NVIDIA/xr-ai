@@ -68,7 +68,7 @@ class VisualAlertAgent(RoutableAgent):
     A request is first compiled with the participant's recent exchanges and saved context into a
     standalone condition, so an alert can refer to something said or noted earlier. The watch then
     checks paced frames: each passes a cheap Clef relevance screen before the costly confirmation,
-    which races a direct Clef image decision against a Cosmos observation judged by Clef.
+    which races a direct Clef image decision against a VLM observation judged by Clef.
 
     Only an explicit new alert replaces a job. Rerouting does not cancel it.
     Participant departure and worker shutdown cancel and drain owned work.
@@ -96,7 +96,7 @@ class VisualAlertAgent(RoutableAgent):
         :param context: Participant context read, never written, when compiling.
         :param check_interval_secs: Minimum time between screening checks of consecutive frames.
         :param confirm_interval_secs: Minimum time between checks of a frame the screen passed,
-            which run Cosmos, so repeated near-misses are paced more slowly.
+            which run the VLM, so repeated near-misses are paced more slowly.
         :param sleep: Pacing delay; tests replace it.
         """
 
@@ -202,7 +202,7 @@ class VisualAlertAgent(RoutableAgent):
         while True:
             started = time.monotonic()
             image = await self._current_image(participant_id)
-            # Only a frame that may show the subject pays for Cosmos and the condition checks.
+            # Only a frame that may show the subject pays for the VLM and the condition checks.
             screened = await self._checks.screen(participant_id, job.alert, image)
             if screened and (trigger := await self._checks.confirm(participant_id, job.alert, image)):
                 return trigger
@@ -213,7 +213,7 @@ class VisualAlertAgent(RoutableAgent):
         return self._images.resolve(frame.image)
 
     async def _pace(self, started: float, *, screened: bool) -> None:
-        """Wait out the rest of the interval; a screened frame ran Cosmos, so it waits longer."""
+        """Wait out the rest of the interval; a screened frame ran the VLM, so it waits longer."""
 
         interval = self._confirm_interval_secs if screened else self._check_interval_secs
         await self._sleep(max(0.0, interval - (time.monotonic() - started)))

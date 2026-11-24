@@ -65,9 +65,12 @@ def _load_system_prompt(data: dict[str, Any], config_path: Path | None) -> str:
 
 
 def load_config(path: Path | None) -> WorkerConfig:
-    """Load worker YAML and resolve the sample's fixed model configuration."""
+    """Load worker YAML and resolve the selected model profile."""
 
     data = _read_config(path)
+    models_config = data.get("models_config", "models.json")
+    if not isinstance(models_config, str) or not models_config.strip():
+        raise ValueError("models_config must be a non-empty path")
     idle_timeout = data.get("idle_timeout_secs")
     acknowledgment_delay = data.get("acknowledgment_delay_secs")
     acknowledgment_delay_secs = float(acknowledgment_delay) if acknowledgment_delay is not None else None
@@ -90,7 +93,7 @@ def load_config(path: Path | None) -> WorkerConfig:
     if context_budget_bytes < 2 or routing_history_budget_bytes <= 0:
         raise ValueError("context_budget_bytes and routing_history_budget_bytes must be positive")
     return WorkerConfig(
-        models_config=_resolve(path, "models.json"),
+        models_config=_resolve(path, models_config),
         voice_gate_yaml=_resolve(
             path,
             str(data.get("voice_gate_yaml", "voice_gate.yaml")),

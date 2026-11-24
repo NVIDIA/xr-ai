@@ -21,6 +21,8 @@ not add vendor SDKs or hand-written HTTP clients.
 | Server | Command | Port | Model | Backend |
 |---|---|---|---|---|
 | `services/vlm-server/` | `vlm_server` | 8100 | Cosmos3 Nano Reasoner | vLLM (pip or docker) |
+| `services/gemma4-server/` | `gemma4_server` | 8108 | Gemma 4 E2B by default; configurable checkpoint | vLLM 0.33 Docker |
+| `services/d3-server/` | `d3_server` | 8120 | D3 Nano by default; configurable checkpoint | vLLM 0.33 Docker SystemOne |
 | `services/stt-server/` | `stt_server` | 8103 | parakeet-tdt-0.6b-v3 | NeMo ASR in-process |
 | `services/speaker-stt/` | `speaker_stt` | 8102 | Nemotron 3 Diarization + Multitalker Parakeet | NeMo streaming ASR |
 | `services/magpie-tts/` | `magpie_tts_server` | 8104 | magpie_tts_multilingual_357m | NeMo TTS in-process |

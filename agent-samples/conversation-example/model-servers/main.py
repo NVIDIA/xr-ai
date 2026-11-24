@@ -11,7 +11,7 @@ from pathlib import Path
 from xr_ai_model_server_stack import run_model_stack
 
 _BASE = Path(__file__).resolve().parent
-_SERVICES = ("speaker-stt", "tts", "omni", "vlm", "clef")
+_SERVICES = ("speaker-stt", "tts", "omni", "clef")
 
 
 def run() -> None:
@@ -28,8 +28,11 @@ def run() -> None:
     )
     args = parser.parse_args()
     try:
-        run_model_stack(_BASE, _SERVICES, stop=args.stop, gpu_profile=args.gpu_profile)
-    except (ValueError, RuntimeError) as exc:
+        from _profile_stack import _run_selected_profile
+
+        if not _run_selected_profile(_BASE, stop=args.stop, gpu_profile=args.gpu_profile):
+            run_model_stack(_BASE, _SERVICES, stop=args.stop, gpu_profile=args.gpu_profile)
+    except (OSError, KeyError, ValueError, RuntimeError) as exc:
         parser.error(str(exc))
 
 

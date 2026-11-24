@@ -18,8 +18,8 @@ Responses stream to Pocket TTS and the `vlm.response` data topic.
 
 The sample launches DeviceIOHub and its worker. It can also launch opt-in
 session recording. It reuses the shared speaker-conditioned multi-talker STT
-service, Nemotron-3 Nano Omni for conversation, Clef for routing, Cosmos3 Nano
-Reasoner for visual questions, and Pocket TTS from the sample's local model
+service, one Nemotron-3 Nano Omni instance for both conversation and visual
+questions, Clef for routing, and Pocket TTS from the sample's local model
 stack. Before reporting ready, the worker checks the configured LLM, router,
 and VLM health endpoints; readiness does not send an inference request.
 
@@ -33,6 +33,7 @@ files before starting the sample:
 | `yaml/conversation_example_worker.yaml` | Frame freshness, VAD sensitivity, idle timeout, optional route-aware acknowledgment delay, conversation-context and routing-history budgets, alert check intervals, or prompt override |
 | `yaml/voice_gate.yaml` | Conversation controls, optional wake phrases, listening chime, and follow-up window |
 | `yaml/models.json` | Reused model adapters, Clef router endpoint, and conversation generation defaults |
+| `yaml/model_profiles/gemma4-*.yaml` | Gemma 4 and D3 model IDs, shared vision/conversation endpoint, and router adapter |
 | `yaml/device_io_hub.yaml` | Room, ports, web client, and network behavior |
 | `yaml/media_capture.yaml` | Opt-in session recording output, NVENC, audio, captions, and retention |
 | `worker/conversation_example_worker/prompts/` | Separate conversation, current-view, alert, and note-taking instructions |
@@ -43,6 +44,17 @@ long a second utterance can omit “Hey Assistant”:
 ```yaml
 followup_grace_s: 10.0
 ```
+
+To select Gemma 4 E2B for conversation and vision with D3 Nano routing, set
+this in `yaml/conversation_example_worker.yaml`:
+
+```yaml
+models_config: model_profiles/gemma4-e2b-d3-nano.yaml
+```
+
+Both launchers read that selection. Profiles also cover E4B and D3 Mini or
+Flash. Refer to the [model profile guide](https://nvidia.github.io/xr-ai/latest/reference/conversation-example.html#model-profiles)
+for switching and runtime requirements.
 
 Restart the sample after an edit. If you change a local model server rather
 than only its sample endpoint, stop and restart that stack separately. Refer to

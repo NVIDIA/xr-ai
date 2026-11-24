@@ -35,7 +35,7 @@ def test_config_catalog_covers_every_top_level_sample() -> None:
         )
         expected.update(
             path.relative_to(_ROOT)
-            for path in (sample_dir / "model-servers/yaml").glob("*.yaml")
+            for path in (sample_dir / "model-servers/yaml").rglob("*.yaml")
         )
         for capability_project in sample_dir.glob("*/pyproject.toml"):
             expected.update(

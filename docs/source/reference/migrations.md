@@ -22,6 +22,16 @@ before updating the checkout. Start the updated services before restarting
 workers; launchers can reuse a running service whose identity matches even when
 its application code predates the update.
 
+### Conversation uses one Omni instance for language and vision
+
+The conversation example's standard local model stack no longer starts
+Cosmos. Its separate `llm` and `vlm` entries both use Omni on port 8108 with
+the served alias `llm`; visual observations disable reasoning independently
+of conversation. Stop the previous model stack with its old checkout before
+updating so its Cosmos process on port 8100 is also stopped. Restart the
+updated stack and worker together. For a dedicated Cosmos endpoint, refer to
+{doc}`conversation-example` for the explicit service and VLM-entry settings.
+
 ### Simple VLM example deprecation
 
 The {doc}`simple-vlm-example` sample is deprecated. Existing demo and launch
