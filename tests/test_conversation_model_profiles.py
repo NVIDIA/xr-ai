@@ -14,6 +14,7 @@ from pathlib import Path
 import httpx
 import pytest
 import yaml
+from xr_ai_gpu import GPUDevice
 from xr_ai_models import ChatMessage, DecisionQuestion, load_models_config, make_decision, make_llm, make_vlm
 
 _ROOT = Path(__file__).resolve().parents[1]
@@ -30,27 +31,37 @@ def _module(name, path):
     return module
 
 
+def _gpu(index=0, *, free=24.0, total=24.0, capability=8.9):
+    return GPUDevice(index=index, uuid=f"GPU-test-{index}", pci_bus_id=f"0000:0{index}:00.0",
+                     name="test GPU", compute_capability=capability,
+                     total_memory_gib=total, free_memory_gib=free, used_memory_gib=None)
+
+
 @pytest.fixture
-def stack():
-    return _module("_test_conversation_profile_stack", _BASE / "_profile_stack.py")
+def stack(monkeypatch):
+    module = _module("_test_conversation_profile_stack", _BASE / "_profile_stack.py")
+    monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
+    monkeypatch.setattr(module, "query_gpu_inventory", lambda: (_gpu(),))
+    monkeypatch.setattr(module, "pid_on_port_checked", lambda _port: (None, True, False))
+    return module
 
 
-@pytest.mark.parametrize("gemma", ["e2b", "e4b"])
-@pytest.mark.parametrize("d3", ["nano", "mini", "flash"])
-@pytest.mark.parametrize("gpu", ["dual_48G_ada", "96G_blackwell", "spark"])
-def test_profiles_share_one_gemma_server_and_select_checkpoints(stack, gemma, d3, gpu):
-    profile = _PROFILES / f"gemma4-{gemma}-d3-{d3}.yaml"
-    configs = stack._configs(_BASE, profile, gpu)
+def test_small_profile_shares_one_gemma_server_and_selects_checkpoints(stack):
+    assert [p.name for p in _PROFILES.glob("*.yaml")] == ["gemma4-e2b-d3-nano.yaml"]
+    profile = _PROFILES / "gemma4-e2b-d3-nano.yaml"
+    configs = stack._configs(_BASE, profile)
     models = load_models_config(profile)
     assert set(configs) == {"speaker-stt", "tts", "gemma4", "d3"}
-    assert configs["gemma4"]["model"] == f"google/gemma-4-{gemma.upper()}-it"
-    assert configs["d3"]["model"] == f"vllm-sr/d3-{d3}"
+    assert configs["gemma4"]["model"] == "google/gemma-4-E2B-it"
+    assert configs["d3"]["model"] == "vllm-sr/d3-nano"
     assert models.llm("llm").endpoint == models.vlm("vlm").endpoint
     assert models.llm("llm").adapter.thinking.default is True
     assert models.vlm("vlm").adapter.capabilities["vision"] is True
     assert models.decision("router").kind == "systemone"
     assert all(Path(cfg["model_cache"]) == (_ROOT / "models").resolve() for cfg in configs.values())
-    assert configs["d3"]["cuda_visible_devices"] == ("1" if gpu == "dual_48G_ada" else "0")
+    assert configs["gemma4"]["kv_cache_memory_bytes"] == 512 * 1024**2
+    assert configs["d3"]["kv_cache_memory_bytes"] == 128 * 1024**2
+    assert all("cuda_visible_devices" not in cfg for cfg in configs.values())
 
 
 @pytest.fixture
@@ -70,7 +81,7 @@ def test_worker_and_launcher_resolve_same_profile(sample, stack):
     worker = _module("_test_conversation_worker_config", _SAMPLE / "worker/conversation_example_worker/config.py")
     config = worker.load_config(sample / "yaml/conversation_example_worker.yaml")
     assert config.models_config == sample / "yaml/model_profiles/gemma4-e2b-d3-nano.yaml"
-    configs = stack._configs(sample / "model-servers", config.models_config, "spark")
+    configs = stack._configs(sample / "model-servers", config.models_config)
     assert configs["gemma4"]["model"] == "google/gemma-4-E2B-it"
     assert configs["d3"]["model"] == "vllm-sr/d3-nano"
     (sample / "yaml/conversation_example_worker.yaml").write_text("{}\n")
@@ -94,7 +105,8 @@ def test_invalid_selection_is_rejected_by_worker_and_launcher(sample, stack, sel
 def test_selected_profile_launch_and_scoped_stop(sample, stack, monkeypatch, tmp_path, stop):
     logfile = tmp_path / "orchestrator.log"
     monkeypatch.setattr(stack, "setup_logging", lambda *_a, **_kw: logfile)
-    monkeypatch.setattr(stack, "detect_gpu_config", lambda: pytest.fail("GPU detection must not run"))
+    if stop:
+        monkeypatch.setattr(stack, "query_gpu_inventory", lambda: pytest.fail("stop must not query GPUs"))
     credentials = []
     monkeypatch.setattr(stack, "require_credentials", credentials.append)
     stopped = []
@@ -107,12 +119,13 @@ def test_selected_profile_launch_and_scoped_stop(sample, stack, monkeypatch, tmp
             config = yaml.safe_load(Path(process.config).read_text())
             assert Path(process.config).stat().st_mode & 0o777 == 0o600
             assert process.launch_mode == "persist" and process.port == config["port"]
+            assert config["cuda_visible_devices"] == "GPU-test-0"
             assert Path(process.project).is_dir()
             launched.append((process.name, process.config, config))
 
     monkeypatch.setattr(stack, "run_stack", run)
     assert stack._run_selected_profile(sample / "model-servers", stop=stop,
-                                       gpu_profile=None if stop else "spark")
+                                       gpu_profile=None)
     if stop:
         assert stopped == [("speaker-stt", 8102), ("tts", 8105), ("gemma4", 8108), ("d3", 8120)]
         assert credentials == [] and launched == []
@@ -123,18 +136,18 @@ def test_selected_profile_launch_and_scoped_stop(sample, stack, monkeypatch, tmp
         assert launched[-1][2]["model"] == "vllm-sr/d3-nano"
 
 
-def test_profile_overrides_hardware_and_resolves_cache_at_source(sample, stack):
+def test_profile_overrides_portable_defaults_and_resolves_cache_at_source(sample, stack):
     profile = sample / "yaml/model_profiles/gemma4-e2b-d3-nano.yaml"
     raw = yaml.safe_load(profile.read_text())
-    raw["servers"]["gemma4"].update(model="google/gemma-4-31B-it", model_cache="weights", max_num_seqs=2)
+    raw["servers"]["gemma4"].update(model="google/gemma-4-31B-it", model_cache="weights", max_num_seqs=1)
     profile.write_text(yaml.safe_dump(raw))
-    configs = stack._configs(sample / "model-servers", profile, "spark")
+    configs = stack._configs(sample / "model-servers", profile)
     assert configs["gemma4"]["model"] == "google/gemma-4-31B-it"
-    assert configs["gemma4"]["max_num_seqs"] == 2
+    assert configs["gemma4"]["max_num_seqs"] == 1
     assert Path(configs["gemma4"]["model_cache"]) == profile.parent / "weights"
 
 
-@pytest.mark.parametrize("error", ["missing", "port", "alias", "collision", "gpu"])
+@pytest.mark.parametrize("error", ["missing", "port", "alias", "collision"])
 def test_invalid_profile_rejected_before_launch(sample, stack, error):
     profile = sample / "yaml/model_profiles/gemma4-e2b-d3-nano.yaml"
     raw = yaml.safe_load(profile.read_text())
@@ -148,7 +161,7 @@ def test_invalid_profile_rejected_before_launch(sample, stack, error):
         raw["servers"]["d3"]["port"] = 8108
     profile.write_text(yaml.safe_dump(raw))
     with pytest.raises(ValueError):
-        stack._configs(sample / "model-servers", profile, "unknown" if error == "gpu" else "spark")
+        stack._configs(sample / "model-servers", profile)
 
 
 def test_failed_start_retains_private_configs_and_redacts_credentials(sample, stack, monkeypatch, tmp_path):
@@ -166,7 +179,7 @@ def test_failed_start_retains_private_configs_and_redacts_credentials(sample, st
 
     monkeypatch.setattr(stack, "run_stack", fail)
     with pytest.raises(RuntimeError, match="readiness failed"):
-        stack._run_selected_profile(sample / "model-servers", stop=False, gpu_profile="spark")
+        stack._run_selected_profile(sample / "model-servers", stop=False, gpu_profile=None)
     assert len(paths) == 4 and all(path.exists() for path in paths)
     for path in paths:
         assert path.stat().st_mode & 0o777 == 0o600
@@ -274,3 +287,73 @@ async def test_standard_omni_stack_shares_endpoint_with_separate_text_and_vision
     assert vision["chat_template_kwargs"] == {"enable_thinking": False}
     assert vision["messages"][-1]["content"][0]["type"] == "image_url"
     assert conversation["messages"][-1]["content"] == "Explain this"
+
+
+@pytest.mark.parametrize("visible,expected", [(None, 1), ("0", 0), ("GPU-test-0", 0), ("1,0", 1)])
+def test_free_memory_selection_respects_visible_devices(stack, monkeypatch, visible, expected):
+    monkeypatch.setattr(stack, "query_gpu_inventory", lambda: (_gpu(0, free=23), _gpu(1, free=30, total=48)))
+    if visible is not None:
+        monkeypatch.setenv("CUDA_VISIBLE_DEVICES", visible)
+    assert stack._select_gpu(22).index == expected
+
+
+@pytest.mark.parametrize("devices", [
+    (_gpu(0, free=16), _gpu(1, free=16)),
+    (_gpu(free=None),),
+    (_gpu(capability=7.5),),
+    (),
+])
+def test_gpu_selection_requires_capacity_on_one_bf16_gpu(stack, monkeypatch, devices):
+    monkeypatch.setattr(stack, "query_gpu_inventory", lambda: devices)
+    with pytest.raises(RuntimeError, match="one BF16-capable GPU"):
+        stack._select_gpu(22)
+
+
+@pytest.mark.parametrize("visible", ["", "-1", "9", "GPU-missing"])
+def test_invalid_gpu_visibility_is_rejected(stack, monkeypatch, visible):
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", visible)
+    with pytest.raises(ValueError, match="CUDA_VISIBLE_DEVICES"):
+        stack._select_gpu(22)
+
+
+def test_large_gpu_uses_fixed_cache_admission_with_shared_placement(stack):
+    configs = stack._configs(_BASE, _PROFILES / "gemma4-e2b-d3-nano.yaml")
+    stack._place_on_gpu(configs, _gpu(free=23, total=96))
+    assert all(cfg["cuda_visible_devices"] == "GPU-test-0" for cfg in configs.values())
+    for name in ("gemma4", "d3"):
+        cfg = configs[name]
+        assert cfg["gpu_memory_utilization"] * 96 * 1024**3 == pytest.approx(cfg["kv_cache_memory_bytes"])
+
+
+@pytest.mark.parametrize("value", [None, True, "22", 0, -1, float("inf"), float("nan")])
+def test_invalid_memory_requirement_is_rejected(stack, tmp_path, value):
+    profile = tmp_path / "profile.yaml"
+    profile.write_text(yaml.safe_dump({"min_free_memory_gib": value}))
+    with pytest.raises(ValueError, match="finite positive"):
+        stack._required_free_memory(profile)
+
+
+@pytest.mark.parametrize("checked,listening", [(False, False), (True, True)])
+def test_occupied_or_uninspectable_port_blocks_launch_before_gpu_selection(sample, stack, monkeypatch,
+                                                                          checked, listening):
+    monkeypatch.setattr(stack, "pid_on_port_checked", lambda _port: (None, checked, listening))
+    monkeypatch.setattr(stack, "query_gpu_inventory", lambda: pytest.fail("ports must be checked first"))
+    with pytest.raises(RuntimeError, match="port"):
+        stack._run_selected_profile(sample / "model-servers", stop=False, gpu_profile=None)
+
+
+def test_named_gpu_override_is_rejected_only_for_gemma(sample, stack):
+    with pytest.raises(ValueError, match="--gpu-profile applies to the Omni stack"):
+        stack._run_selected_profile(sample / "model-servers", stop=False, gpu_profile="spark")
+    (sample / "yaml/conversation_example_worker.yaml").write_text("{}\n")
+    assert stack._run_selected_profile(sample / "model-servers", stop=False, gpu_profile="spark") is False
+
+
+@pytest.mark.parametrize("override", [{"cuda_visible_devices": "1"}, {"tensor_parallel_size": 2}])
+def test_portable_profile_rejects_per_service_placement(sample, stack, override):
+    profile = sample / "yaml/model_profiles/gemma4-e2b-d3-nano.yaml"
+    raw = yaml.safe_load(profile.read_text())
+    raw["servers"]["gemma4"].update(override)
+    profile.write_text(yaml.safe_dump(raw))
+    with pytest.raises(ValueError):
+        stack._configs(sample / "model-servers", profile)

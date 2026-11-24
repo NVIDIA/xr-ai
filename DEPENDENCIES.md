@@ -687,6 +687,7 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
   - `hatchling`
 - Runtime dependencies:
   - `pyyaml>=6.0`
+  - `xr-ai-gpu` → [`xr-ai-gpu`](utils/xr-ai-gpu/) (local, editable)
   - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
   - `xr-ai-models` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)

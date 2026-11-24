@@ -11,6 +11,7 @@ version = "0.1.0"
 requires-python = ">=3.11,<3.15"
 dependencies = [
     "pyyaml>=6.0",
+    "xr-ai-gpu",
     "xr-ai-launcher",
     "xr-ai-logging",
     "xr-ai-models",
@@ -19,6 +20,7 @@ dependencies = [
 ]
 
 [tool.uv.sources]
+xr-ai-gpu = { path = "../../../utils/xr-ai-gpu", editable = true }
 xr-ai-model-server-stack = { path = "../../../utils/xr-ai-model-server-stack", editable = true }
 xr-ai-launcher = { path = "../../../utils/xr-ai-launcher", editable = true }
 xr-ai-logging = { path = "../../../utils/xr-ai-logging", editable = true }

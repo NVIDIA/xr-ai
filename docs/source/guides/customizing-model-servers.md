@@ -86,7 +86,9 @@ The first command downloads any missing weights, waits for healthy servers,
 and returns. Configure `HF_TOKEN` first; refer to
 {doc}`/getting_started/credentials`. Automatic GPU detection selects a bundled
 profile. To choose a reviewed profile explicitly, add
-`--gpu-profile dual_48G_ada` to the model command.
+`--gpu-profile dual_48G_ada` to the model command. The conversation sample’s
+optional Gemma stack instead selects one GPU by free memory using a portable
+configuration; refer to {doc}`/reference/conversation-example`.
 
 Stopping or restarting the agent leaves models warm. Stop its model stack
 when finished:
@@ -104,7 +106,9 @@ command. Each launcher has only `--stop` and `--gpu-profile`, besides help.
 
 If a later model fails to start, or startup is cancelled, servers that had
 signaled readiness when cleanup began stay running. Fix the failure and rerun
-the same model command to reuse them. If the fix changes a server that already
+the same model command to reuse them. For the conversation Gemma stack, stop
+the partially started stack first so its free-memory placement can run again.
+If the fix changes a server that already
 started, run the model command with `--stop` first so the new settings take
 effect. You can also use `--stop` to clear retained servers. Unfinished Docker
 backend launches are stopped through their managed wrappers. Persistent

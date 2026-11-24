@@ -2,24 +2,17 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Selected by models_config in ../conversation_example_worker.yaml.
-# Server defaults < GPU profile < the server overrides below.
-# Copy this profile to use other Gemma 4 or D3 checkpoints: edit only model IDs.
+# Server defaults < portable gemma4.yaml < the server overrides below.
+# E2B/Nano was measured at about 20 GiB for the full local stack.
+# Leave headroom for startup and the agent; this is a check, not a reservation.
+min_free_memory_gib: 22
 servers:
   speaker-stt: {}
   tts: {}
   gemma4:
     model: google/gemma-4-E2B-it
-    # One local user, at most two active sequences. The total context limit
-    # leaves room for the existing 4,608-token reasoning/output allowance.
-    max_model_len: 16384
-    max_num_seqs: 2
-    kv_cache_memory_bytes: 536870912  # 512 MiB; overrides automatic GPU-fraction sizing
   d3:
     model: vllm-sr/d3-nano
-    # Routing uses short, bounded inputs. Extra requests wait in the scheduler.
-    max_model_len: 4096
-    max_num_seqs: 2
-    kv_cache_memory_bytes: 134217728  # 128 MiB; avoids reserving spare VRAM
 
 models:
   llm:

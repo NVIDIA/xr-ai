@@ -24,7 +24,8 @@ def run() -> None:
     parser.add_argument(
         "--gpu-profile",
         metavar="NAME",
-        help="Select a startup hardware profile; with --stop, apply its port overrides without GPU detection.",
+        help=("Select an Omni hardware profile; with --stop, honor its port overrides. "
+              "Gemma instead selects a GPU by free memory."),
     )
     args = parser.parse_args()
     try:

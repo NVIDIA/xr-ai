@@ -20,11 +20,13 @@ for the shared worker/server selection and Docker requirements.
 ## Configure
 
 `yaml/<gpu-profile>.yaml` contains sample-specific placement and workload budgets
-for the original stack; `yaml/gemma4/<gpu-profile>.yaml` owns Gemma 4/D3 placement.
+for the original Omni stack; `yaml/gemma4.yaml` holds portable Gemma 4/D3 settings.
 For example, edit `cuda_visible_devices` for a server in `yaml/dual_48G_ada.yaml`
 to change its GPU placement. Service defaults live in each server's project under
 `services/`. Use `--gpu-profile NAME` for an explicit profile on both start and
-stop.
+stop for Omni. Gemma uses one portable configuration and selects one GPU by
+free memory. Refer to the model profile guide above for placement and restart
+requirements.
 
 Refer to the
 [configuration reference](https://nvidia.github.io/xr-ai/latest/reference/configuration.html)

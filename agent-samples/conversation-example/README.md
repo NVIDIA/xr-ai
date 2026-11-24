@@ -33,7 +33,7 @@ files before starting the sample:
 | `yaml/conversation_example_worker.yaml` | Frame freshness, VAD sensitivity, idle timeout, optional route-aware acknowledgment delay, conversation-context and routing-history budgets, alert check intervals, or prompt override |
 | `yaml/voice_gate.yaml` | Conversation controls, optional wake phrases, listening chime, and follow-up window |
 | `yaml/models.json` | Reused model adapters, Clef router endpoint, and conversation generation defaults |
-| `yaml/model_profiles/gemma4-*.yaml` | Gemma 4 and D3 model IDs, shared vision/conversation endpoint, and router adapter |
+| `yaml/model_profiles/gemma4-e2b-d3-nano.yaml` | Gemma 4 and D3 model IDs, shared vision/conversation endpoint, and router adapter |
 | `yaml/device_io_hub.yaml` | Room, ports, web client, and network behavior |
 | `yaml/media_capture.yaml` | Opt-in session recording output, NVENC, audio, captions, and retention |
 | `worker/conversation_example_worker/prompts/` | Separate conversation, current-view, alert, and note-taking instructions |
@@ -52,8 +52,8 @@ this in `yaml/conversation_example_worker.yaml`:
 models_config: model_profiles/gemma4-e2b-d3-nano.yaml
 ```
 
-Both launchers read that selection. Profiles also cover E4B and D3 Mini or
-Flash. Refer to the [model profile guide](https://nvidia.github.io/xr-ai/latest/reference/conversation-example.html#model-profiles)
+Both launchers read that selection. E2B with D3 Nano is the bundled Gemma
+configuration. Refer to the [model profile guide](https://nvidia.github.io/xr-ai/latest/reference/conversation-example.html#model-profiles)
 for switching and runtime requirements.
 
 Restart the sample after an edit. If you change a local model server rather

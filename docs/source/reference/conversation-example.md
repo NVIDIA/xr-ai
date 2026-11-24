@@ -34,27 +34,19 @@ One Gemma server handles both the `llm` and `vlm` roles on port 8108;
 reasoning is enabled through the model's chat-template switch. D3 serves the
 existing `systemone` decision adapter on port 8120, including image decisions
 for alerts. Speaker-conditioned STT and Pocket TTS remain part of this stack.
-The launcher does not start Omni, Cosmos, or Clef with these profiles.
+The launcher does not start Omni, Cosmos, or Clef with this profile.
 
-| Gemma 4 | D3 Nano | D3 Mini | D3 Flash |
-|---|---|---|---|
-| E2B | `gemma4-e2b-d3-nano.yaml` | `gemma4-e2b-d3-mini.yaml` | `gemma4-e2b-d3-flash.yaml` |
-| E4B | `gemma4-e4b-d3-nano.yaml` | `gemma4-e4b-d3-mini.yaml` | `gemma4-e4b-d3-flash.yaml` |
-
-The E2B/Nano profile targets one local user with up to two active sequences
-per server. It caps Gemma's KV cache at 512 MiB with a 16,384-token total
+The portable Gemma configuration targets one local user with up to two active
+sequences per server. It caps Gemma's KV cache at 512 MiB with a 16,384-token total
 context, and D3's at 128 MiB with a 4,096-token input limit. Extra concurrent
 requests queue. Gemma's context includes the existing 4,608-token output
 allowance. These are explicit cache allocations, separate from model weights,
-vision buffers, and CUDA runtime memory. Other model profiles retain their
-hardware-profile budgets; larger checkpoints need their own sizing.
+vision buffers, and CUDA runtime memory.
 
-All six profiles live under `yaml/model_profiles/`. To select another Gemma 4
-or D3 checkpoint, copy one profile and edit `servers.gemma4.model` or
-`servers.d3.model`. The stable served aliases `gemma4` and `d3` let client
-settings stay consistent when checkpoints change. If ports or served aliases
-are customized, update the corresponding `models` endpoints and adapter names
-in the same file; the launcher rejects mismatches.
+The bundled Gemma profile is `yaml/model_profiles/gemma4-e2b-d3-nano.yaml`.
+It keeps checkpoint IDs and the client adapter settings together. If ports or
+served aliases are customized, update the corresponding `models` endpoints
+and adapter names in the same file; the launcher rejects mismatches.
 
 Stop the current agent and its model stack **before** changing `models_config`.
 From `agent-samples/conversation-example/`:
@@ -70,10 +62,20 @@ uv run --project model-servers conversation_example_model_servers
 uv run conversation_example
 ```
 
-Use the same `--gpu-profile NAME` on start and stop when overriding hardware
-selection. Stop reads the selected model profile without detecting GPUs or
-requiring download credentials. It uses service default ports when no explicit
-GPU profile is supplied. Downloaded weights remain cached.
+For Gemma, the launcher bypasses named GPU-profile detection. It selects the
+visible BF16-capable GPU (SM80+) with the most free VRAM that meets
+`min_free_memory_gib` in the model profile, and places all four services on it.
+E2B/Nano requires 22 GiB free, based on a roughly 20 GiB full-stack measurement.
+Memory on multiple GPUs is not combined. This startup check does not reserve
+memory.
+
+Use `CUDA_VISIBLE_DEVICES=1` or full GPU UUIDs to restrict Gemma selection.
+`--gpu-profile NAME` remains available for the standard Omni stack only; use
+the same override on start and stop for Omni. Gemma requires its configured
+ports to be free before launch: stop the models before relaunching or changing
+placement. If the models are already warm, start the agent directly.
+Stop reads the selected model profile without detecting GPUs or requiring
+download credentials. Downloaded weights remain cached.
 
 The new wrappers under `services/gemma4-server/` and `services/d3-server/` run
 `vllm/vllm-openai:v0.33.0` through the shared Docker launcher. D3's native
@@ -87,13 +89,15 @@ The wrappers install no host vLLM dependency and do not change the repository
 dependency qualification cutoff.
 
 Server settings compose in this order: service-owned YAML defaults,
-`model-servers/yaml/gemma4/<gpu-profile>.yaml`, then the selected profile's
-`servers` overrides. Relative cache paths resolve against the file that
-declares them. The bundled GPU profiles cover `dual_48G_ada`, `96G_blackwell`,
-and `spark`. Their budgets are starting settings; qualify memory, latency, and
-the sample's routing and alert evaluations on the target hardware, especially
-for larger Gemma or D3 checkpoints. Model selection alone does not establish
-capacity or behavioral accuracy.
+`model-servers/yaml/gemma4.yaml`, then the selected profile’s `servers`
+overrides. Relative cache paths resolve against the file that declares them.
+The launcher pins services by GPU UUID and adjusts vLLM’s fractional startup
+admission check to the explicit KV-cache allocation; the free-memory estimate
+covers the complete stack. Keep `tensor_parallel_size: 1` and use the environment
+to restrict placement rather than per-service GPU overrides. E2B/Nano has live
+inference coverage on RTX 6000 Ada with the engines on separate GPUs. The new
+single-GPU placement path has automated coverage and still needs live
+qualification on the target GPU.
 
 ### Use a dedicated vision server
 
