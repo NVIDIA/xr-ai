@@ -16,6 +16,148 @@ For a new application, start with this sample in place of deprecated
 {doc}`simple-vlm-example`. Refer to the {doc}`quickstart
 </getting_started/quickstart>` for run commands and client setup.
 
+## Model profiles
+
+The worker and model-server launcher both read `models_config` in
+`agent-samples/conversation-example/yaml/conversation_example_worker.yaml`.
+The path is relative to that worker YAML. Omitting it selects the original
+`models.json` stack with one shared Omni instance and Clef.
+
+To use Gemma 4 for conversation, reasoning, and visual understanding, select:
+
+```yaml
+models_config: model_profiles/gemma4-e2b-d3-nano.yaml
+```
+
+The profile uses Google’s official `google/gemma-4-E2B-it-qat-w4a16-ct`
+checkpoint and `vllm-sr/d3-nano`. Gemma uses quantization-aware-trained INT4
+linear weights with 16-bit activations, loaded through vLLM’s automatic
+compressed-tensors detection. Embeddings and the vision/audio towers retain
+higher precision; this does not reduce the entire GPU allocation by four.
+D3 remains BF16.
+One Gemma server handles both the `llm` and `vlm` roles on port 8108;
+reasoning is enabled through the model's chat-template switch. D3 serves the
+existing `systemone` decision adapter on port 8120, including image decisions
+for alerts. Speaker-conditioned STT and Pocket TTS remain part of this stack.
+The launcher does not start Omni, Cosmos, or Clef with this profile.
+
+The portable Gemma configuration targets one local user with up to two active
+sequences per server. It caps Gemma's KV cache at 512 MiB with a 16,384-token total
+context, and D3's at 128 MiB with a 4,096-token input limit. Extra concurrent
+requests queue. Gemma's context includes the existing 4,608-token output
+allowance. These are explicit cache allocations, separate from model weights,
+vision buffers, and CUDA runtime memory.
+
+The bundled Gemma profile is `yaml/model_profiles/gemma4-e2b-d3-nano.yaml`.
+It keeps checkpoint IDs and the client adapter settings together. If ports or
+served aliases are customized, update the corresponding `models` endpoints
+and adapter names in the same file; the launcher rejects mismatches.
+
+Stop the current agent and its model stack **before** changing `models_config`.
+From `agent-samples/conversation-example/`:
+
+```bash
+uv run --project model-servers conversation_example_model_servers --stop
+```
+
+Edit `models_config`, then start the new endpoints and agent:
+
+```bash
+uv run --project model-servers conversation_example_model_servers
+uv run conversation_example
+```
+
+For Gemma, the launcher bypasses named GPU-profile detection. It selects the
+visible BF16-capable GPU (SM80+) with the most free VRAM that meets
+`min_free_memory_gib` in the model profile, and places all four services on it.
+E2B/Nano requires 21 GiB free, leaving headroom above the measured 18.7 GiB
+startup/inference peak on RTX 6000 Ada.
+Memory on multiple GPUs is not combined. This startup check does not reserve
+memory.
+
+Use `CUDA_VISIBLE_DEVICES=1` or full GPU UUIDs to restrict Gemma selection.
+`--gpu-profile NAME` remains available for the standard Omni stack only; use
+the same override on start and stop for Omni. Gemma requires its configured
+ports to be free before launch: stop the models before relaunching or changing
+placement. If the models are already warm, start the agent directly.
+Stop reads the selected model profile without detecting GPUs or requiring
+download credentials. Downloaded weights remain cached.
+
+The new wrappers under `services/gemma4-server/` and `services/d3-server/` run
+`vllm/vllm-openai:v0.33.0` through the shared Docker launcher. D3's native
+SystemOne support requires vLLM 0.33 or newer; the older NGC image used by
+other services is insufficient. Refer to the upstream
+[D3 recipe](https://recipes.vllm.ai/vllm-sr/d3-nano) and
+[Gemma 4 recipe](https://docs.vllm.ai/projects/recipes/en/stable/Google/Gemma4.html).
+Docker, NVIDIA Container Toolkit, and a CUDA 13-compatible driver are required.
+Set `HF_TOKEN` and accept Google's Gemma model access terms before downloading.
+The wrappers install no host vLLM dependency and do not change the repository
+dependency qualification cutoff.
+
+Server settings compose in this order: service-owned YAML defaults,
+`model-servers/yaml/gemma4.yaml`, then the selected profile’s `servers`
+overrides. Relative cache paths resolve against the file that declares them.
+The launcher pins services by GPU UUID and adjusts vLLM’s fractional startup
+admission check to the explicit KV-cache allocation; the free-memory estimate
+covers the complete stack. Keep `tensor_parallel_size: 1` and use the environment
+to restrict placement rather than per-service GPU overrides.
+
+The official QAT checkpoint was tested with vLLM 0.33.0 on one RTX 6000 Ada,
+with Gemma, D3 Nano, speaker STT, and TTS on that GPU. Concurrent text and image
+requests, reasoning output, text streaming, and D3 image routing passed. After
+those requests, GPU memory use was approximately:
+
+| Component | GPU memory |
+|---|---|
+| Gemma E2B QAT engine | 8.69 GiB |
+| D3 Nano BF16 engine | 4.96 GiB |
+| Speaker STT | 3.39 GiB |
+| Pocket TTS | 0.99 GiB |
+| Selected GPU total, including overhead | 18.07 GiB |
+
+One-second sampling observed a peak of 18.73 GiB during startup and the smoke
+requests. Gemma’s loaded weights used 7.44 GiB versus 9.18 GiB for the previous
+BF16 checkpoint; its warmed engine used 8.69 GiB versus 10.56 GiB previously.
+The earlier BF16 stack placed its engines on separate GPUs, so the full-stack
+comparison is approximate. Measurements exclude the agent/hub and do not qualify
+long contexts or sustained audio workloads. Blackwell and Spark have not received
+live qualification with this checkpoint.
+
+### Use a dedicated vision server
+
+The standard `models.json` keeps independent `llm` and `vlm` entries, even
+though both use Omni on port 8108 with the served model name `llm`. They have
+separate generation settings and share one model instance and scheduler.
+
+To use Cosmos for vision with the standard Omni/Clef stack, stop the agent
+and model stack first, then:
+
+1. Add `"vlm"` to `_SERVICES` in `model-servers/main.py`.
+2. Add a `vlm` mapping to each `model-servers/yaml/<gpu-profile>.yaml` that
+   will be used. Select GPU placement and memory budgets alongside Omni's.
+   For example, the dual-Ada layout can place Cosmos on GPU 0:
+
+   ```yaml
+   vlm:
+     cuda_visible_devices: '0'
+     gpu_memory_utilization: 0.47
+     kv_cache_memory_bytes: 1610612736
+   ```
+
+3. Replace only the `vlm` entry in `yaml/models.json` with:
+
+   ```json
+   "vlm": {
+     "adapter": {"preset": "cosmos3_nano_reasoner"},
+     "endpoint": {"base_url": "http://localhost:8100"}
+   }
+   ```
+
+The Cosmos preset selects its served alias `vlm` and adapter behavior as well
+as changing the endpoint. Keep the LLM entry pointing to Omni. Restart the
+model stack and agent after the edits. There is no automatic fallback between
+these explicitly configured vision endpoints.
+
 ## Runtime boundary
 
 The worker composes `xr_ai_routing.AgentRouter` and
@@ -49,13 +191,14 @@ clears the sample's notes, alerts, conversation context, and frame resources.
 The orchestrator starts DeviceIOHub and the worker. Passing `--session-recording` also
 starts passive session capture; capture is disabled by default. The
 `yaml/models.json` profile configures client adapters and endpoints for
-Nemotron-3 Nano Omni (answering), Cosmos3 Nano Reasoner (VLM), Pocket TTS, and
+Nemotron-3 Nano Omni (both answering and vision), Pocket TTS, and
 the sample's pinned Clef decision endpoint. `yaml/voice_gate.yaml` requires the
 speaker-conditioned multi-talker STT service at `127.0.0.1:8102`; the local
 model-server stack configures that service's models and GPU placement. The LLM adapter
 enables Omni reasoning with a 4096-token soft reasoning hint and a 4608-token
-total output limit. Start those endpoints together with
-the sample's local model-server stack. The worker checks LLM, Clef, and VLM
+total output limit. The separate VLM entry uses the same endpoint and served
+model alias with reasoning disabled for direct visual observations. Start
+those endpoints together with the sample's local model-server stack. The worker checks LLM, Clef, and VLM
 health and waits for the required speaker STT service before opening the voice
 session; readiness does not send an inference request through the VLM.
 
@@ -65,7 +208,7 @@ and cleanup. It publishes accepted speech and typed text as a participant-scoped
 query topic. Clef routes among general conversation, direct visual observation,
 visual alert controls, and foreground note-taking. General conversation answers
 text questions and recall. Direct observation sends one fresh image and the
-current question to Cosmos, without dialogue history.
+current question to the configured VLM, without dialogue history.
 
 An alert starts only when the participant explicitly asks to be notified when a
 specific visible condition occurs, stated directly (“Alert me when the left
@@ -91,17 +234,17 @@ change ordinary conversation or visual-question generation settings.
 Each job then checks frames in a paced loop. A cheap Clef image call screens every
 frame for whether the relevance subject may be visible, and a frame it rejects
 costs nothing more. Only a screened frame runs the two condition checks in
-parallel: a direct Clef image decision and a Cosmos observation that Clef judges
+parallel: a direct Clef image decision and a VLM observation that Clef judges
 as text. The first yes owns the triggering frame; the other check is cancelled,
 and its cleanup finishes before only one complete “Alert” voice update is
-published as urgent. The agent then asks Cosmos for a short
+published as urgent. The agent then asks the VLM for a short
 description of relevant evidence from that same frame and publishes it as one
 non-urgent update once the model has finished, then stops. The description does
 not cut the announcement.
 
 Checks are paced: the next frame waits at least `alert_check_interval_secs`
 (default 1) after a screen, and `alert_confirm_interval_secs` (default 3) after a
-screened frame, which ran Cosmos. A failure in one condition check leaves the
+screened frame, which ran the VLM. A failure in one condition check leaves the
 other available; if both fail, or the screen or frame capture fails, the job
 retires with a concise failure message. Only an explicit new alert request
 replaces an existing job. “Cancel the visual alert” cancels it. Cancelling or
@@ -111,7 +254,7 @@ questions and fragments are not alert controls. Each participant owns an
 independent job; departure and worker shutdown cancel its work and wait for that
 cleanup to finish, even if they are cancelled themselves while waiting.
 
-The backup judge sees Cosmos's text description rather than the image, so it
+The backup judge sees the VLM's text description rather than the image, so it
 can miss evidence or repeat a description error. Neither path guarantees visual
 recognition accuracy. A single still image cannot establish motion, a change
 over time, or a previous state; conditions requiring that evidence do not
@@ -142,16 +285,16 @@ save only after storing it; it does not generate general replies that could
 claim an unsaved note was recorded.
 
 Direct visual requests must identify their target in the current question,
-because dialogue history is not sent to Cosmos. Admission does not establish
+because dialogue history is not sent to the VLM. Admission does not establish
 that a camera frame will be available. The
 `CurrentFrameTool` uses
 the hub's fresh frame when DeviceIOHub is already observing video for that
 participant. When video is off, the same tool asks StreamKit to capture one
 image and return it through a targeted LiveKit byte stream. The fallback is
 invisible to the agent: it receives the same opaque image-reference shape and
-passes it to the configured visual model. Direct visual answers use Cosmos;
-alerts screen each frame with Clef, run direct Clef decisions and a concurrent
-Cosmos-observation-to-Clef-text path only on screened frames, and add one Cosmos
+passes it to the configured visual model. Direct visual answers use the
+configured VLM; alerts screen each frame with Clef, run direct Clef decisions and a concurrent
+VLM-observation-to-Clef-text path only on screened frames, and add one VLM
 description only after a match.
 Camera bytes remain on the hub path, image locations are redacted from VLM
 telemetry, and the sample has no MCP path.
@@ -358,7 +501,7 @@ to use wake-addressed turns without a persistent conversation. Refer to
 from the shell's current directory.
 
 The `acknowledgment_delay_secs` setting enables route-aware intention
-acknowledgments when set to a positive number; the sample YAML sets it to 1.0,
+acknowledgments when set to a positive number; the sample YAML sets it to 2.5,
 and it is disabled when omitted.
 The delay is measured from accepted destination execution until its first
 nonblank answer text is ready for emission, excluding routing, admission, and

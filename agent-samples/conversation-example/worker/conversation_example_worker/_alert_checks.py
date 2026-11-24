@@ -5,7 +5,7 @@
 
 A frame first passes a cheap Clef relevance screen. Only a relevant frame is
 confirmed, by two checks raced on that frame: a direct Clef image decision, and
-a Cosmos observation judged by Clef. The first check to confirm wins.
+a VLM observation judged by Clef. The first check to confirm wins.
 """
 
 from __future__ import annotations
@@ -129,7 +129,7 @@ class AlertChecks:
         return Trigger(image, observation, "cosmos-clef", answer.confidence) if answer.choice == "yes" else None
 
     async def _observe(self, participant_id: str, alert: CompiledAlert, image: ImageInput) -> str:
-        """Ask Cosmos what ``image`` shows about the condition."""
+        """Ask the configured VLM what ``image`` shows about the condition."""
 
         with nemo_relay.scope.scope(
             "conversation-example.alert-observation",
@@ -145,7 +145,7 @@ class AlertChecks:
                 "conversation-example.alert-observation-result", handle=handle, data={"available": bool(text)}
             )
         if not text:
-            raise RuntimeError("Cosmos returned no observation of the alert frame")
+            raise RuntimeError("The visual model returned no observation of the alert frame")
         return text
 
 

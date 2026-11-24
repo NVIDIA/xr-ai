@@ -30,7 +30,7 @@ _NO_VISUAL_EVIDENCE = "I couldn't inspect the current view right now. Please try
 
 
 class VisualObservationAgent(RoutableAgent):
-    """Answer visible-fact questions by sending the current image directly to Cosmos."""
+    """Answer visible-fact questions by sending the current image directly to the configured VLM."""
 
     def __init__(
         self,

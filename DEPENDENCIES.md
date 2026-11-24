@@ -377,6 +377,19 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Commands:
   - `cloudxr_runtime` → `cloudxr_runtime.__main__:run`
 
+#### `d3-server` — [`services/d3-server/`](services/d3-server/)
+
+- Python: `>=3.11,<3.15`
+- Build dependencies:
+  - `hatchling`
+- Runtime dependencies:
+  - `pyyaml>=6.0`
+  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
+  - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
+- Optional dependency groups: none
+- Commands:
+  - `d3_server` → `d3_server.__main__:run`
+
 #### `device-io-hub` — [`services/device-io-hub/`](services/device-io-hub/)
 
 - Python: `>=3.11,<3.15`
@@ -428,6 +441,19 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Optional dependency groups: none
 - Commands:
   - `embedding_server` → `embedding_server.__main__:run`
+
+#### `gemma4-server` — [`services/gemma4-server/`](services/gemma4-server/)
+
+- Python: `>=3.11,<3.15`
+- Build dependencies:
+  - `hatchling`
+- Runtime dependencies:
+  - `pyyaml>=6.0`
+  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
+  - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
+- Optional dependency groups: none
+- Commands:
+  - `gemma4_server` → `gemma4_server.__main__:run`
 
 #### `magpie-tts-server` — [`services/magpie-tts/`](services/magpie-tts/)
 
@@ -660,7 +686,13 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `pyyaml>=6.0`
+  - `xr-ai-gpu` → [`xr-ai-gpu`](utils/xr-ai-gpu/) (local, editable)
+  - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
+  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
+  - `xr-ai-models` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
   - `xr-ai-model-server-stack` → [`xr-ai-model-server-stack`](utils/xr-ai-model-server-stack/) (local, editable)
+  - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
 - Optional dependency groups: none
 - Commands:
   - `conversation_example_model_servers` → `main:run`

@@ -1,0 +1,27 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Text, reasoning, and images share one model instance.
+# Official Google QAT: INT4 linear weights with BF16 activations; vLLM
+# detects compressed-tensors quantization from the checkpoint configuration.
+# Run through Docker; no host vLLM or Transformers installation is required.
+model: google/gemma-4-E2B-it-qat-w4a16-ct
+# Stable API alias: changing checkpoints does not change client configuration.
+served_model_name: gemma4
+host: 127.0.0.1
+port: 8108
+model_cache: ../../models
+# Optional: CUDA_VISIBLE_DEVICES for this server, e.g. "0" or "0,1".
+# cuda_visible_devices: "0"
+vllm_image: vllm/vllm-openai:v0.33.0
+# Optional: explicitly enable DGX Spark unified-memory startup safeguards.
+# spark_uma: true
+tensor_parallel_size: 1
+max_model_len: 32768
+max_num_seqs: 8
+gpu_memory_utilization: 0.5
+# Optional fixed KV-cache allocation; utilization still controls admission.
+# kv_cache_memory_bytes: 2147483648
+enforce_eager: false
+# The sample sends one current frame per request; unused audio stays disabled.
+max_images_per_prompt: 1

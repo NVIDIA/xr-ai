@@ -317,7 +317,7 @@ def test_embedding_profiles_retain_fractional_memory_budget() -> None:
 
 
 _SAMPLES = {
-    "conversation-example": ("speaker-stt", "tts", "omni", "vlm", "clef"),
+    "conversation-example": ("speaker-stt", "tts", "omni", "clef"),
     "procedure-capture-guide": ("stt", "tts", "omni", "vlm"),
     "simple-vlm-example": ("speaker-stt", "tts", "vlm"),
     "lab-instrument-monitoring": ("speaker-stt", "tts", "omni", "vlm"),
@@ -530,7 +530,7 @@ def _repository_yaml_paths(root: Path) -> list[Path]:
     return sorted(paths)
 
 
-def test_all_shipped_vllm_images_track_dispatcher_default() -> None:
+def test_shipped_vllm_images_use_qualified_service_runtimes() -> None:
     configured_images: dict[Path, str] = {}
     for path in _repository_yaml_paths(_REPO_ROOT):
         config = yaml.safe_load(path.read_text())
@@ -538,7 +538,15 @@ def test_all_shipped_vllm_images_track_dispatcher_default() -> None:
             configured_images[path] = config["vllm_image"]
 
     assert configured_images
-    assert set(configured_images.values()) == {_nano.DEFAULT_IMAGE}
+    # D3 needs native SystemOne support from vLLM 0.33. Gemma shares that
+    # isolated runtime; existing services retain their qualified NGC image.
+    overrides = {
+        _REPO_ROOT / "services/gemma4-server/gemma4_server.yaml": "vllm/vllm-openai:v0.33.0",
+        _REPO_ROOT / "services/d3-server/d3_server.yaml": "vllm/vllm-openai:v0.33.0",
+    }
+    assert overrides.keys() <= configured_images.keys()
+    for path, image in configured_images.items():
+        assert image == overrides.get(path, _nano.DEFAULT_IMAGE), path
 
 
 def test_workflow_vllm_images_track_dispatcher_default() -> None:

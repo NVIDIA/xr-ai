@@ -1,0 +1,17 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Portable single-GPU settings. Checkpoint IDs and the estimated free-memory
+# requirement live in yaml/model_profiles/gemma4-e2b-d3-nano.yaml.
+# The launcher selects one visible GPU by free memory and pins all services to it.
+speaker-stt: {}
+tts: {}
+gemma4:
+  max_model_len: 16384
+  max_num_seqs: 2
+  kv_cache_memory_bytes: 536870912  # 512 MiB
+# Routing uses bounded inputs and shares the GPU with the answering model.
+d3:
+  max_model_len: 4096
+  max_num_seqs: 2
+  kv_cache_memory_bytes: 134217728  # 128 MiB

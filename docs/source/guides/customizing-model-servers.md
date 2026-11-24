@@ -41,18 +41,23 @@ unchanged or obtain permission from their operator to replace them.
 
 | Sample | Servers |
 |---|---|
-| Conversation example | Speaker ASR, Pocket TTS, Nemotron Omni, Cosmos VLM, Clef router |
+| Conversation example | Speaker ASR, Pocket TTS, shared Omni LLM/VLM, Clef; or Gemma 4 and D3 through a model profile |
 | Simple VLM (legacy) | speaker ASR, Pocket TTS, Cosmos VLM |
 | Lab instrument monitoring | Speaker ASR, TTS, Nemotron Omni, Cosmos VLM |
 | Tea making | Speaker ASR, TTS, Nemotron Omni, Nemotron embedding |
 | XR render demo | Speaker ASR, TTS, Nemotron Omni, Cosmos VLM |
 | Procedure capture and guide | Batch STT, Pocket TTS, Nemotron Omni, Cosmos VLM |
 
-The conversation example uses Omni for language and Clef for turn routing.
+The conversation example shares one Omni instance for language and vision,
+with separate client role entries, and uses Clef for turn routing.
 Tea making uses Omni for both language and vision; its RAG service needs
 embeddings. XR rendering uses one Omni server for its LLM roles and does not
 need embeddings. Hubs, workers, RAG, scene, and rendering processes remain in
 the agent launcher; the model launcher brings up inference servers only.
+
+Conversation can select Gemma 4 for both language and vision with D3 routing
+through one `models_config` setting shared by the worker and model launcher.
+Refer to {doc}`/reference/conversation-example` for model profiles and switching.
 
 The conversation example, Simple VLM, lab monitoring, tea making, and XR render
 workers require speaker ASR on port 8102. They do not contain a batch-STT model
@@ -81,7 +86,9 @@ The first command downloads any missing weights, waits for healthy servers,
 and returns. Configure `HF_TOKEN` first; refer to
 {doc}`/getting_started/credentials`. Automatic GPU detection selects a bundled
 profile. To choose a reviewed profile explicitly, add
-`--gpu-profile dual_48G_ada` to the model command.
+`--gpu-profile dual_48G_ada` to the model command. The conversation sample’s
+optional Gemma stack instead selects one GPU by free memory using a portable
+configuration; refer to {doc}`/reference/conversation-example`.
 
 Stopping or restarting the agent leaves models warm. Stop its model stack
 when finished:
@@ -99,7 +106,9 @@ command. Each launcher has only `--stop` and `--gpu-profile`, besides help.
 
 If a later model fails to start, or startup is cancelled, servers that had
 signaled readiness when cleanup began stay running. Fix the failure and rerun
-the same model command to reuse them. If the fix changes a server that already
+the same model command to reuse them. For the conversation Gemma stack, stop
+the partially started stack first so its free-memory placement can run again.
+If the fix changes a server that already
 started, run the model command with `--stop` first so the new settings take
 effect. You can also use `--stop` to clear retained servers. Unfinished Docker
 backend launches are stopped through their managed wrappers. Persistent
