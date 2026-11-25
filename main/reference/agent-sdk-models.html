@@ -678,7 +678,7 @@ refer to <a class="reference internal" href="../components/launcher-and-process-
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">nemotron_omni</span></code></p></td>
 <td><p>Nemotron Omni</p></td>
-<td><p>Tool calls, image and video, <code class="docutils literal notranslate"><span class="pre">reasoning_content</span></code> normalization; thinking disabled unless requested</p></td>
+<td><p>Tool calls, forced tool calls and JSON Schema output, image and video, <code class="docutils literal notranslate"><span class="pre">reasoning_content</span></code> normalization; thinking disabled unless requested</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">nemotron_embedding</span></code></p></td>
 <td><p>Embedding server</p></td>
@@ -771,6 +771,73 @@ boolean is still accepted: with <code class="docutils literal notranslate"><span
 <code class="docutils literal notranslate"><span class="pre">thinking.default</span></code>, overriding the preset’s, and a call can override it. With
 another control it is sent unchanged. A profile that sets both keys to
 different values is rejected.</p>
+</section>
+<section id="structured-output-and-forced-tool-calls">
+<span id="agent-sdk-models-structured-output"></span><h2>Structured output and forced tool calls<a class="headerlink" href="#structured-output-and-forced-tool-calls" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">LLMService.chat</span></code>, <code class="docutils literal notranslate"><span class="pre">stream</span></code> and <code class="docutils literal notranslate"><span class="pre">stream_events</span></code> accept two constraints:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">response_schema</span></code>, a JSON Schema mapping (for example a Pydantic model’s
+<code class="docutils literal notranslate"><span class="pre">model_json_schema()</span></code>), limits the response text to one JSON value matching
+it. It is sent as the OpenAI-compatible <code class="docutils literal notranslate"><span class="pre">response_format</span></code> of type
+<code class="docutils literal notranslate"><span class="pre">json_schema</span></code>. It cannot be combined with tools.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">tool_choice</span></code> is <code class="docutils literal notranslate"><span class="pre">&quot;auto&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;none&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;required&quot;</span></code> (some tool must be called)
+or the name of one supplied tool (that tool must be called).</p></li>
+</ul>
+<p>Use <code class="docutils literal notranslate"><span class="pre">chat</span></code> or <code class="docutils literal notranslate"><span class="pre">stream_events</span></code> for forced tool calls. The text-only <code class="docutils literal notranslate"><span class="pre">stream</span></code>
+method rejects a forced choice instead of silently discarding the tool call.
+For a named streamed choice, the completed batch must contain exactly one call
+to that tool before any tool call is emitted. Truncated batches are rejected.</p>
+<p><code class="docutils literal notranslate"><span class="pre">VLMService.ask_image</span></code>, <code class="docutils literal notranslate"><span class="pre">ask_images</span></code>, <code class="docutils literal notranslate"><span class="pre">ask_video</span></code>, <code class="docutils literal notranslate"><span class="pre">stream</span></code> and
+<code class="docutils literal notranslate"><span class="pre">stream_images</span></code> accept <code class="docutils literal notranslate"><span class="pre">response_schema</span></code>; vision methods take no tools or
+<code class="docutils literal notranslate"><span class="pre">tool_choice</span></code>. <code class="docutils literal notranslate"><span class="pre">OpenAICompatVLM</span></code> builds its requests with the same LLM client,
+so the image or video parts and question are sent unchanged, and the default
+precedence, validation and capability rules below apply to them as well. A
+VLM’s capabilities are those of its chat endpoint.
+The text-only eval below does not qualify image or video requests. Before
+enabling <code class="docutils literal notranslate"><span class="pre">json_schema</span></code> for a VLM deployment, exercise its actual image and video
+methods with representative media and schemas, including streaming image
+requests, and validate every response against its schema.</p>
+<p>The client serializes these constraints as request fields. Callers own their
+messages, including format instructions required by their model; the client
+never inserts the schema into a prompt or chooses a reasoning policy.
+Reasoning controls and optional token budgets work independently of output
+constraints. Budget enforcement depends on the server and does not guarantee a
+complete answer.</p>
+<p>Request construction applies deployment <code class="docutils literal notranslate"><span class="pre">adapter.default_extras</span></code> first, then
+explicit call arguments. Omitted optional values retain their configured
+defaults. The client owns the model, messages and streaming mode. Validation
+checks the resulting request, including constraints supplied by deployment
+defaults, before sending it. A request cannot combine JSON Schema output with
+tools, name an absent tool, or use an undeclared constraint.</p>
+<p>A forced tool call requests a call, not strict argument validation. Servers may
+constrain only the call’s structure. Callers validate every response and handle
+refusals, truncation and inference failures. A response cut off at <code class="docutils literal notranslate"><span class="pre">max_tokens</span></code>
+is not a complete value; neither constrained decoding nor a reasoning budget
+prevents that failure. Native tools validate arguments before execution.</p>
+<section id="endpoint-support-and-evaluation">
+<h3>Endpoint support and evaluation<a class="headerlink" href="#endpoint-support-and-evaluation" title="Link to this heading">#</a></h3>
+<p>Support depends on the model and server deployment. The adapter’s
+<code class="docutils literal notranslate"><span class="pre">capabilities.json_schema</span></code> and <code class="docutils literal notranslate"><span class="pre">capabilities.tool_choice</span></code> declare which request
+features the endpoint supports, not that every generation will succeed.
+<code class="docutils literal notranslate"><span class="pre">nemotron_omni</span></code> declares both for its vLLM endpoint. A refused or truncated
+generation remains a per-request outcome; it does not disable the feature.</p>
+<p>Use the eval in
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/tree/main/agent-sdk/xr-ai-models/eval"><code class="docutils literal notranslate"><span class="pre">agent-sdk/xr-ai-models/eval</span></code></a>
+to measure schema validity, tool-call presence, correctness, and latency on
+the intended deployment. The text-only eval does not establish image and video
+behavior or support on an external NIM endpoint. Check the target server’s
+supported request features and exercise the modes the application uses.
+Other presets declare neither capability by default; an endpoint profile can
+declare its supported features through the existing configuration:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">adapter</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">preset</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nemotron3_nano</span>
+<span class="w">  </span><span class="nt">capabilities</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">json_schema</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">    </span><span class="nt">tool_choice</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</pre></div>
+</div>
+<p>An undeclared constraint raises <code class="docutils literal notranslate"><span class="pre">ValueError</span></code> before transport. <code class="docutils literal notranslate"><span class="pre">&quot;auto&quot;</span></code> and
+<code class="docutils literal notranslate"><span class="pre">&quot;none&quot;</span></code> need no forced-call capability.</p>
 <p><a id="protocols"></a></p>
 <p id="agent-sdk-models-protocols"><code class="docutils literal notranslate"><span class="pre">ChatResponse.reasoning</span></code> is the canonical post-normalization field. Model
 adapters absorb whether the provider calls it <code class="docutils literal notranslate"><span class="pre">reasoning</span></code> or
@@ -779,6 +846,7 @@ Relay lineage, but callers cannot replace the profile’s <code class="docutils 
 <p>Single-image <code class="docutils literal notranslate"><span class="pre">ask_image()</span></code> and <code class="docutils literal notranslate"><span class="pre">stream()</span></code> calls are wrappers over the ordered
 multi-image methods. All images are placed in one user message in caller order.</p>
 <p id="remote-and-hosted-nim-endpoints"><a id="remote--hosted-nim-endpoints"></a></p>
+</section>
 </section>
 <section id="hosted-endpoints">
 <span id="remote-hosted-nim-endpoints"></span><h2>Hosted endpoints<a class="headerlink" href="#hosted-endpoints" title="Link to this heading">#</a></h2>
@@ -901,6 +969,10 @@ repository root:</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#request-failures">Request failures</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#built-in-adapters">Built-in adapters</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reasoning-control">Reasoning control</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#structured-output-and-forced-tool-calls">Structured output and forced tool calls</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#endpoint-support-and-evaluation">Endpoint support and evaluation</a></li>
+</ul>
+</li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hosted-endpoints">Hosted endpoints</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#id1">Deployment profiles</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#riva-speech-over-grpc">Riva speech over gRPC</a></li>

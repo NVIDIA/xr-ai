@@ -486,6 +486,17 @@ below. Refer to <a class="reference internal" href="migration-history.html"><spa
 before updating the checkout. Start the updated services before restarting
 workers; launchers can reuse a running service whose identity matches even when
 its application code predates the update.</p>
+<section id="llm-request-defaults">
+<h3>LLM request defaults<a class="headerlink" href="#llm-request-defaults" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">OpenAICompatLLM</span></code> now applies <code class="docutils literal notranslate"><span class="pre">adapter.default_extras</span></code> only when a call omits
+an optional value. Explicit <code class="docutils literal notranslate"><span class="pre">max_tokens</span></code>, <code class="docutils literal notranslate"><span class="pre">temperature</span></code>, tools and output
+constraints override the corresponding defaults. The selected model, caller
+messages and method’s streaming mode cannot be replaced by extras. If a
+profile previously relied on extras overriding those values, move that choice
+into the call instead. Constraints supplied through extras are validated
+against endpoint capabilities before transport. <code class="docutils literal notranslate"><span class="pre">OpenAICompatVLM</span></code> wraps the
+same client, so VLM profile extras follow the same rules.</p>
+</section>
 <section id="simple-vlm-example-deprecation">
 <h3>Simple VLM example deprecation<a class="headerlink" href="#simple-vlm-example-deprecation" title="Link to this heading">#</a></h3>
 <p>The <a class="reference internal" href="simple-vlm-example.html"><span class="doc">Simple VLM example</span></a> sample is deprecated. Existing demo and launch
@@ -996,6 +1007,7 @@ and <a class="reference internal" href="agent-sdk-conversation.html"><span class
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#changes-since-v0-3-0-beta">Changes since v0.3.0-beta</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#llm-request-defaults">LLM request defaults</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#simple-vlm-example-deprecation">Simple VLM example deprecation</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#vllm-0-31-security-update">vLLM 0.31 security update</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#interaction-messages-move-to-xr-ai-interaction">Interaction messages move to xr-ai-interaction</a></li>

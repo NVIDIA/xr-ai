@@ -135,7 +135,7 @@ refer to {ref}`consumer-model-readiness`.
 | `cosmos3_nano_reasoner` | Cosmos3 Nano VLM | Image; video requires `max_videos_per_prompt >= 1`; no reasoning switch |
 | `cosmos_vlm` | Cosmos-Reason1 compatibility | Image; video requires `max_videos_per_prompt >= 1`; thinking disabled by default |
 | `nemotron3_nano` | Nemotron 3 Nano LLM | Normalizes the `reasoning` field; thinking disabled unless requested |
-| `nemotron_omni` | Nemotron Omni | Tool calls, image and video, `reasoning_content` normalization; thinking disabled unless requested |
+| `nemotron_omni` | Nemotron Omni | Tool calls, forced tool calls and JSON Schema output, image and video, `reasoning_content` normalization; thinking disabled unless requested |
 | `nemotron_embedding` | Embedding server | OpenAI-compatible dense vectors |
 | `nemotron_ocr` | Hugging Face OCR server or OCR NIM 2.0 | Multilingual text, confidence, normalized polygons; `/v1/ocr` |
 | `parakeet_stt` | STT server | OpenAI-compatible transcription |
@@ -195,6 +195,82 @@ boolean is still accepted: with `control: chat_template` or unset it becomes
 `thinking.default`, overriding the preset's, and a call can override it. With
 another control it is sent unchanged. A profile that sets both keys to
 different values is rejected.
+
+(agent-sdk-models-structured-output)=
+## Structured output and forced tool calls
+
+`LLMService.chat`, `stream` and `stream_events` accept two constraints:
+
+- `response_schema`, a JSON Schema mapping (for example a Pydantic model's
+  `model_json_schema()`), limits the response text to one JSON value matching
+  it. It is sent as the OpenAI-compatible `response_format` of type
+  `json_schema`. It cannot be combined with tools.
+- `tool_choice` is `"auto"`, `"none"`, `"required"` (some tool must be called)
+  or the name of one supplied tool (that tool must be called).
+
+Use `chat` or `stream_events` for forced tool calls. The text-only `stream`
+method rejects a forced choice instead of silently discarding the tool call.
+For a named streamed choice, the completed batch must contain exactly one call
+to that tool before any tool call is emitted. Truncated batches are rejected.
+
+`VLMService.ask_image`, `ask_images`, `ask_video`, `stream` and
+`stream_images` accept `response_schema`; vision methods take no tools or
+`tool_choice`. `OpenAICompatVLM` builds its requests with the same LLM client,
+so the image or video parts and question are sent unchanged, and the default
+precedence, validation and capability rules below apply to them as well. A
+VLM's capabilities are those of its chat endpoint.
+The text-only eval below does not qualify image or video requests. Before
+enabling `json_schema` for a VLM deployment, exercise its actual image and video
+methods with representative media and schemas, including streaming image
+requests, and validate every response against its schema.
+
+The client serializes these constraints as request fields. Callers own their
+messages, including format instructions required by their model; the client
+never inserts the schema into a prompt or chooses a reasoning policy.
+Reasoning controls and optional token budgets work independently of output
+constraints. Budget enforcement depends on the server and does not guarantee a
+complete answer.
+
+Request construction applies deployment `adapter.default_extras` first, then
+explicit call arguments. Omitted optional values retain their configured
+defaults. The client owns the model, messages and streaming mode. Validation
+checks the resulting request, including constraints supplied by deployment
+defaults, before sending it. A request cannot combine JSON Schema output with
+tools, name an absent tool, or use an undeclared constraint.
+
+A forced tool call requests a call, not strict argument validation. Servers may
+constrain only the call's structure. Callers validate every response and handle
+refusals, truncation and inference failures. A response cut off at `max_tokens`
+is not a complete value; neither constrained decoding nor a reasoning budget
+prevents that failure. Native tools validate arguments before execution.
+
+### Endpoint support and evaluation
+
+Support depends on the model and server deployment. The adapter's
+`capabilities.json_schema` and `capabilities.tool_choice` declare which request
+features the endpoint supports, not that every generation will succeed.
+`nemotron_omni` declares both for its vLLM endpoint. A refused or truncated
+generation remains a per-request outcome; it does not disable the feature.
+
+Use the eval in
+[`agent-sdk/xr-ai-models/eval`](https://github.com/NVIDIA/xr-ai/tree/main/agent-sdk/xr-ai-models/eval)
+to measure schema validity, tool-call presence, correctness, and latency on
+the intended deployment. The text-only eval does not establish image and video
+behavior or support on an external NIM endpoint. Check the target server's
+supported request features and exercise the modes the application uses.
+Other presets declare neither capability by default; an endpoint profile can
+declare its supported features through the existing configuration:
+
+```yaml
+adapter:
+  preset: nemotron3_nano
+  capabilities:
+    json_schema: true
+    tool_choice: true
+```
+
+An undeclared constraint raises `ValueError` before transport. `"auto"` and
+`"none"` need no forced-call capability.
 
 <a id="protocols"></a>
 (agent-sdk-models-protocols)=
