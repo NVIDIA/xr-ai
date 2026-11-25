@@ -46,6 +46,7 @@ def test_routable_agent_is_the_only_destination_protocol_export() -> None:
         "AgentRouter",
         "AgentTurn",
         "DestinationResult",
+        "ParticipantAgentFactory",
         "RoutableAgent",
         "RoutingAid",
         "RoutingTurnContext",
