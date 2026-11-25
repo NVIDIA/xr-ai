@@ -163,10 +163,12 @@ class _Capture:
         query_images: MultiImageQueryTool,
         capture_fps: float,
         caption_interval_s: float,
+        on_sample: Callable[[str, Any], None] | None = None,
     ) -> None:
         self._sessions_dir = sessions_dir
         self._sessions_dir.mkdir(parents=True, exist_ok=True)
         self._current_frame = current_frame
+        self.on_sample = on_sample
         self._images = images
         self._query_images = query_images
         self._capture_period_s = 1.0 / capture_fps
@@ -207,6 +209,7 @@ class _Capture:
                 state.status = "incomplete"
                 return
             await self._write(state, _atomic_text, state.directory / "transcript.jsonl", "")
+            await self._write(state, _atomic_text, state.directory / "quality.jsonl", "")
             async with state.lock:
                 await self._write_views(state)
             if self._stopped or (cancelled is not None and cancelled.is_set()):
@@ -259,6 +262,16 @@ class _Capture:
                 raise
             state.transcript_count += 1
             state.timeline.append((timestamp_us, "Heard", text.strip()))
+
+    async def capture_quality(self, participant_id: str, event: dict[str, Any]) -> None:
+        """Retain diagnostic events in the active packet, never as narration."""
+        state = self._sessions.get(participant_id)
+        if state is None:
+            return
+        async with state.lock:
+            if state.active:
+                await self._write(state, _append_jsonl, state.directory / "quality.jsonl",
+                                  {"timestamp_us": _now_us(), **event})
 
     async def finish_capture(
         self, participant_id: str, *, stop_command: dict[str, Any] | None = None,
@@ -324,6 +337,8 @@ class _Capture:
             except asyncio.CancelledError:
                 raise
             except FrameUnavailable as exc:
+                if self.on_sample is not None:
+                    self.on_sample(state.participant_id, None)
                 await self._error(state, "frame_unavailable", str(exc))
             except Exception as exc:
                 logger.opt(exception=True).warning("frame capture failed pid={!r}", state.participant_id)
@@ -373,6 +388,8 @@ class _Capture:
                 frame_entry,
             )
             state.frame_ready.set()
+        if self.on_sample is not None:
+            self.on_sample(state.participant_id, frame)
 
     async def _caption_loop(self, state: _Session) -> None:
         await state.frame_ready.wait()
@@ -511,6 +528,7 @@ class _Capture:
                 "transcript": "transcript.jsonl",
                 "captions": "captions.jsonl",
                 "summary": "summary.md",
+                "quality": "quality.jsonl",
             },
             "counts": {
                 "frames": state.frame_count,

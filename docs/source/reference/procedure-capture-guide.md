@@ -46,10 +46,61 @@ reconnecting. The worker logs each finalized packet's path and status.
 
 Use live video or on-demand image capture. Speak commands directly, without a
 wake phrase. After **start capture**, the worker says "Capture started."
-and stays silent during narration. After **stop capture**, it says
+and otherwise stays silent during narration, except for capture-quality warnings
+described below. After **stop capture**, it says
 "Capture stopped." The evidence packet, transcript, and summary then finish
 saving silently; processing errors are logged. Disconnecting finalizes the packet
 without announcements.
+
+### Capture-quality feedback
+
+Capture mode monitors incoming media independently of snapshot sampling and
+captioning. The web client reports camera intent and network statistics over the
+existing data channel. No LLM decides when to warn, and quality changes never
+start or stop capture, enable a camera, or change the saved media settings.
+
+| Condition | Default detection |
+|---|---|
+| Poor connection | Client reports poor/lost quality for 5 seconds |
+| Live video stalled | No new matching-track frame for 3 seconds while streaming is explicitly active |
+| Slow incoming video | Five-second received FPS stays below half the initial stable baseline, or below capture's target FPS, for 5 seconds |
+| Low resolution | Short edge below 480 pixels, or pixel count below half the initial baseline, for 5 seconds |
+| On-demand images unavailable | At least two failed requests, persisting for 5 seconds |
+
+These are configurable initial thresholds, not guarantees of visual accuracy.
+Camera mode/track changes reset the baseline; rotation alone does not count as
+a resolution drop. Off and on-demand modes have no continuous-FPS/stall rule.
+Missing telemetry is unknown: older/non-web clients without this protocol do
+not receive these automatic warnings. The existing capture error log still
+records frame-request failures.
+
+Ordinary warnings wait for a narration gap. A sustained live-video stall uses
+an urgent announcement. One prioritized warning is submitted at a time, with a
+30-second cooldown for a new condition and 60-second reminders. A newly detected
+live-video stall replaces a lesser warning immediately. Unheard warnings
+expire after 15 seconds and are withdrawn on recovery, stop, or disconnect.
+Healthy measurements must persist for 10 seconds to clear a condition; missing
+or disabled measurements invalidate its warnings immediately. Start/stop commands
+retain their existing meaning, and recording continues during warnings.
+
+The browser preloads a connection-loss message on Connect. If an active capture's
+connection remains lost for two seconds, it can play locally without a model
+server or network connection. Intentional Disconnect stays quiet. The warning
+means to pause the demonstration; it does not claim the server is still saving.
+Browser audio restrictions can prevent playback, in which case a text warning
+is shown. A resumed connection does not automatically restart a finalized capture.
+
+Configure `quality` in `yaml/capture-agent-config.yaml`; `quality.enabled: false`
+disables monitoring. This is separate from guide flows and session recording.
+`quality.jsonl` retains condition changes, supporting receiver/sender/saved-frame
+measurements, effective policy, and warning submissions/withdrawals. Submission
+is not proof the user heard audio. It is diagnostic evidence, not narration or
+an instruction to discard the corresponding frames.
+
+Warnings use the existing speech output and microphone echo-cancellation paths.
+The microphone is never muted and transcript intervals are not deleted to hide
+speaker echo. Check phone-speaker echo on the target device before relying on
+warning-free narration; use headphones if speaker playback is transcribed.
 
 On connection, capture mode says: "Say start capture to start the recording and
 demonstrate your procedure. To finish recording, say stop capture." This welcome
@@ -175,6 +226,7 @@ progress indicators.
 | `artifacts/sessions/<session-id>/packet.json` | Recording status, participant, timestamps, counts, and activity hierarchy |
 | `artifacts/sessions/<session-id>/frames/` | JPEG samples targeting 2 fps and timestamped `index.jsonl` |
 | `artifacts/sessions/<session-id>/captions.jsonl` | Timestamped captions, activities, phases, and visible changes |
+| `artifacts/sessions/<session-id>/quality.jsonl` | Capture quality events and warning submission/withdrawal diagnostics |
 | `artifacts/sessions/<session-id>/transcript.jsonl` | Final user transcripts inside the task recording boundary |
 | `artifacts/sessions/<session-id>/summary.md` | Human-readable activity and phase summary, plus a combined timeline of narration (**Heard**) and captions (**Saw**) in time order |
 | `artifacts/sessions/<session-id>/errors.jsonl` | Frame, caption, or persistence errors, when present |
@@ -886,7 +938,7 @@ cannot cancel its own response.
 | Configuration | Settings |
 |---|---|
 | `yaml/worker.yaml` | Shared frame and speech detection settings; capability configuration paths |
-| `yaml/capture-agent-config.yaml` | Task output directory, sampling rate, and caption interval |
+| `yaml/capture-agent-config.yaml` | Task output directory, sampling/caption intervals, and quality-warning policy |
 | `yaml/guide-agent-config.yaml` | Visual verification timeout |
 | `yaml/models.json` | Shared batch STT, LLM, VLM, and TTS services and endpoints |
 | `yaml/media_capture.yaml` | Opt-in session recording output, profile, and participant lifetime |

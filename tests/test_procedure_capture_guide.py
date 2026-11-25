@@ -578,6 +578,9 @@ async def test_app_drains_voice_transcripts_and_recordings_before_endpoint_close
         assert voice_closed
         capture_closed = True
 
+    capture_endpoint.on_frame = lambda callback: callbacks.update(frame=callback)
+    capture_endpoint.on_data = lambda callback: callbacks.update(data=callback)
+    capture_endpoint.send_return_data = AsyncMock()
     capture_endpoint.close = close_capture
     monkeypatch.setattr(app, "ProcessorEndpoint", lambda **kwargs: capture_endpoint)
     monkeypatch.setattr(app, "ImageRegistry", lambda: demo.capture_backend._images)
