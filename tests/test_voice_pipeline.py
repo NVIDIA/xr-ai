@@ -563,6 +563,32 @@ class _StagedVad:
 
 
 @pytest.mark.asyncio
+async def test_vad_stt_partial_probe_runs_on_its_own_relay_scope_stack(monkeypatch):
+    """Child tasks share their creator's Relay scope stack, so the probe's
+    ``voice.stt`` scope would overlap the final transcription's and close out
+    of order, failing the utterance."""
+    _StagedVad.instances.clear()
+    stt = _StagedStt(texts=["something"])
+    monkeypatch.setattr("xr_ai_voice._processors.vad_stt.VadDetector", _StagedVad)
+    proc = VadSttProcessor(stt=stt, vad_cfg=VadConfig(stop_probe_after_s=0.01))
+    probe_stacks = []
+    transcribe = proc._transcribe  # noqa: SLF001
+
+    async def record_stack(*args, **kwargs):
+        probe_stacks.append(nemo_relay.get_scope_stack())
+        return await transcribe(*args, **kwargs)
+
+    monkeypatch.setattr(proc, "_transcribe", record_stack)
+    frame = InputAudioRawFrame(audio=b"\x00\x00" * 320, sample_rate=16000, num_channels=1)
+    frame.transport_source = "web-client"
+    with nemo_relay.scope.scope("caller", nemo_relay.ScopeType.Agent):
+        caller_stack = nemo_relay.get_scope_stack()
+        await proc._handle_audio(frame)  # noqa: SLF001
+        await asyncio.wait_for(proc._probe_task["web-client"], timeout=2)  # noqa: SLF001
+    assert probe_stacks and probe_stacks[0] is not caller_stack
+
+
+@pytest.mark.asyncio
 async def test_vad_stt_stop_probe_schedules_on_speech_start(monkeypatch):
     """On the first ``on_speech_start`` after silence, the processor
     schedules a one-shot probe task. Waiting longer than
