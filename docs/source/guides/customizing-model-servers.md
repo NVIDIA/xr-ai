@@ -256,6 +256,7 @@ HTTP errors (including 401 and 404), transport failures, and invalid metadata
 abort startup; fix the endpoint or its access settings before retrying. A
 successful response with no matching backing `root` permits indexing without
 persistent caching, so documents are re-embedded on every startup. `cache_key`
-does not override missing metadata. Refer to {ref}`embedding-service-identity-migration`
+does not override missing metadata. Refer to
+{ref}`v030-to-v040-embedding-service-identity-migration`
 for the identity contract and {doc}`deploying-with-nim` for native Riva speech
 and NIM configuration.
