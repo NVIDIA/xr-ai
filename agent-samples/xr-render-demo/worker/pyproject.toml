@@ -19,7 +19,7 @@ dependencies = [
     "xr-ai-voicegate",
     "xr-ai-logging",
     "xr-render-scene",
-    "pydantic>=2.12",
+    "pydantic>=2.14.4",
     "pyyaml>=6.0",
 ]
 

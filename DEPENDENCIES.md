@@ -121,7 +121,7 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
   - `hatchling`
 - Runtime dependencies:
   - `nemo-relay>=0.10.0,<0.11`
-  - `pydantic>=2.10`
+  - `pydantic>=2.14.4`
   - `xr-ai-models` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
   - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
   - `xr-ai-interaction` → [`xr-ai-interaction`](agent-sdk/xr-ai-interaction/) (local, editable)
@@ -146,7 +146,7 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
-  - `pydantic>=2.10`
+  - `pydantic>=2.14.4`
 - Optional dependency groups: none
 - Commands: none
 
@@ -188,7 +188,7 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
   - `hatchling`
 - Runtime dependencies:
   - `nemo-relay>=0.10.0,<0.11`
-  - `pydantic>=2.10`
+  - `pydantic>=2.14.4`
   - `xr-ai-tools` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
 - Optional dependency groups: none
 - Commands: none
@@ -200,7 +200,7 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
   - `hatchling`
 - Runtime dependencies:
   - `nemo-relay>=0.10.0,<0.11`
-  - `pydantic>=2.10`
+  - `pydantic>=2.14.4`
 - Optional dependency groups:
   - `capture`:
     - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
@@ -233,7 +233,7 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Runtime dependencies:
   - `multidict>=6.9.1`
   - `nemo-relay>=0.10.0,<0.11`
-  - `pydantic>=2.10`
+  - `pydantic>=2.14.4`
   - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
   - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
   - `xr-ai-interaction` → [`xr-ai-interaction`](agent-sdk/xr-ai-interaction/) (local, editable)
@@ -255,7 +255,7 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
-  - `pydantic>=2.10`
+  - `pydantic>=2.14.4`
   - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
 - Optional dependency groups: none
 - Commands: none
@@ -729,7 +729,7 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
   - `xr-ai-web-events` → [`xr-ai-web-events`](agent-sdk/xr-ai-web-events/) (local, editable)
   - `xr-ai-voicegate` → [`xr-ai-voicegate`](utils/xr-ai-voicegate/) (local, editable)
   - `loguru>=0.7`
-  - `pydantic>=2.12`
+  - `pydantic>=2.14.4`
   - `pyyaml>=6.0`
 - Optional dependency groups: none
 - Commands:
@@ -775,7 +775,7 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
   - `xr-ai-voicegate` → [`xr-ai-voicegate`](utils/xr-ai-voicegate/) (local, editable)
   - `loguru>=0.7`
   - `pyyaml>=6.0`
-  - `pydantic>=2.0,<3.0`
+  - `pydantic>=2.14.4,<3.0`
 - Optional dependency groups: none
 - Commands:
   - `procedure_capture_guide_worker` → `procedure_capture_guide_worker.__main__:run`
@@ -864,7 +864,7 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
   - `xr-ai-web-events` → [`xr-ai-web-events`](agent-sdk/xr-ai-web-events/) (local, editable)
   - `xr-ai-voicegate` → [`xr-ai-voicegate`](utils/xr-ai-voicegate/) (local, editable)
   - `loguru>=0.7`
-  - `pydantic>=2.12`
+  - `pydantic>=2.14.4`
   - `pyyaml>=6.0`
 - Optional dependency groups: none
 - Commands:
@@ -948,7 +948,7 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
   - `xr-ai-voicegate` → [`xr-ai-voicegate`](utils/xr-ai-voicegate/) (local, editable)
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
   - `xr-render-scene` → [`xr-render-scene`](agent-samples/xr-render-demo/scene/) (local, editable)
-  - `pydantic>=2.12`
+  - `pydantic>=2.14.4`
   - `pyyaml>=6.0`
 - Optional dependency groups: none
 - Commands:
@@ -1006,6 +1006,9 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Runtime dependencies: none
 - Optional dependency groups:
   - `repository`:
+    - `conversation-example` → [`conversation-example`](agent-samples/conversation-example/) (local, editable)
+    - `conversation-example-model-servers` → [`conversation-example-model-servers`](agent-samples/conversation-example/model-servers/) (local, editable)
+    - `conversation-example-worker` → [`conversation-example-worker`](agent-samples/conversation-example/worker/) (local, editable)
     - `lab-instrument-monitoring` → [`lab-instrument-monitoring`](agent-samples/lab-instrument-monitoring/) (local, editable)
     - `lab-instrument-monitoring-model-servers` → [`lab-instrument-monitoring-model-servers`](agent-samples/lab-instrument-monitoring/model-servers/) (local, editable)
     - `lab-instrument-monitoring-worker` → [`lab-instrument-monitoring-worker`](agent-samples/lab-instrument-monitoring/worker/) (local, editable)

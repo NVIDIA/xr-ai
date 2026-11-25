@@ -45,9 +45,16 @@ qualified lock; the reciprocal-license table records exact resolved versions.
 | `text-unidecode` | 1.3    | Artistic-1.0-Perl (elected) | https://github.com/kmike/text-unidecode |
 | `tqdm`         | 4.70.1   | MPL-2.0 AND MIT | https://github.com/tqdm/tqdm |
 | `opencv-python-headless` | 5.0.0.93 | Apache-2.0 and MIT packaging terms (wheel includes other licenses) | https://github.com/opencv/opencv-python |
-| `pydantic`     | >=2.10   | MIT           | https://github.com/pydantic/pydantic |
+| `pydantic`     | >=2.14.4   | MIT           | https://github.com/pydantic/pydantic |
 | `python-multipart` | >=0.0.9 | Apache-2.0 | https://github.com/Kludex/python-multipart |
 | `websockets`   | 12.0     | BSD-3-Clause  | https://github.com/python-websockets/websockets |
+
+### Validation, DNS, and telemetry security releases
+
+The targeted security refresh qualifies Pydantic 2.14.4 and pydantic-core
+2.50.5 (MIT), dnspython 2.9.2 (ISC), OpenTelemetry API and SDK 1.45.2,
+and semantic conventions 0.66b2 (Apache-2.0). Unmodified license texts and
+SHA-256 artifact provenance are bundled under `third_party_licenses/`.
 
 ### Nemotron OCR v2
 
@@ -311,6 +318,13 @@ The wrapper files are licensed under
 The JAR contains compiled Gradle Wrapper classes and its own license text in
 `META-INF/LICENSE`; the Apache-2.0 text is also bundled in [`LICENSE`](LICENSE).
 
+The Android build uses Kotlin Gradle plugin 2.4.21 (Apache-2.0), Commons IO
+2.14.0 (Apache-2.0), and Protobuf Java 3.25.9 (BSD-3-Clause). Their upstream
+license and attribution texts are preserved under `third_party_licenses/`,
+including the Kotlin plugin's bundled third-party notices. Commons IO and
+Protobuf Java are build/test tooling dependencies; the APK uses the separately
+resolved Protobuf Java Lite artifact.
+
 Building the Android sample with the Android Gradle Plugin (declared in
 `client-samples/android/gradle/libs.versions.toml`) places dual-licensed
 artifacts on the build classpath, including the following, for which `xr-ai`
@@ -430,6 +444,19 @@ refer to the component disclosures above for applicable license elections.
 | `nccl-extensions-0.1.0` | [`LICENSE.txt`](third_party_licenses/nccl-extensions-0.1.0/LICENSE.txt) |
 | `oss-harmony-0.0.11` | [`LICENSE`](third_party_licenses/oss-harmony-0.0.11/LICENSE) |
 | `protobuf-7.36.2` | [`LICENSE`](third_party_licenses/protobuf-7.36.2/LICENSE) |
+
+| `pydantic-2.14.4` | [`LICENSE`](third_party_licenses/pydantic-2.14.4/LICENSE) |
+| `pydantic-core-2.50.5` | [`LICENSE`](third_party_licenses/pydantic-core-2.50.5/LICENSE) |
+| `dnspython-2.9.2` | [`LICENSE`](third_party_licenses/dnspython-2.9.2/LICENSE) |
+| `opentelemetry-api-1.45.2` | [`LICENSE`](third_party_licenses/opentelemetry-api-1.45.2/LICENSE) |
+| `opentelemetry-sdk-1.45.2` | [`LICENSE`](third_party_licenses/opentelemetry-sdk-1.45.2/LICENSE) |
+| `opentelemetry-semantic-conventions-0.66b2` | [`LICENSE`](third_party_licenses/opentelemetry-semantic-conventions-0.66b2/LICENSE) |
+| `commons-io-2.14.0` | [`META-INF/LICENSE.txt`](third_party_licenses/commons-io-2.14.0/META-INF/LICENSE.txt) |
+| `protobuf-java-3.25.9` | [`LICENSE`](third_party_licenses/protobuf-java-3.25.9/LICENSE) |
+| `kotlin-gradle-plugin-2.4.21` | [`LICENSE`](third_party_licenses/kotlin-gradle-plugin-2.4.21/LICENSE) |
+| `kotlin-gradle-plugin-2.4.21` | [`META-INF/LICENSE`](third_party_licenses/kotlin-gradle-plugin-2.4.21/META-INF/LICENSE) |
+| `kotlin-gradle-plugin-2.4.21` | [`META-INF/LICENSE.txt`](third_party_licenses/kotlin-gradle-plugin-2.4.21/META-INF/LICENSE.txt) |
+| `kotlin-gradle-plugin-2.4.21` | [`driver/package/LICENSE`](third_party_licenses/kotlin-gradle-plugin-2.4.21/driver/package/LICENSE) |
 
 ## Updating this file
 

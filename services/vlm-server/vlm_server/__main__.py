@@ -43,7 +43,7 @@ Config keys
                                     at startup.
     vllm_backend:            str    "pip" (default) or "docker".
     vllm_image:              str    NGC image when vllm_backend=docker
-                                    (default: nvcr.io/nvidia/vllm:26.10.pre1-py3).
+                                    (default: nvcr.io/nvidia/vllm:26.11-py3).
     spark_uma:               bool   Enable DGX Spark cold-start safeguards
                                     (docker backend only; default: false).
 """
@@ -165,7 +165,7 @@ def run() -> None:
 
     # NGC 26.09 measurements showed lengthy FA2 PTX compilation on x86 SM12
     # and lower cold image latency with Triton on ARM GB10. Retain this
-    # conservative default pending qualification of NGC 26.10 preview.
+    # conservative default pending qualification of NGC 26.11.
     use_sm12_triton = (
         model == _COSMOS3_NANO_MODEL and backend == "docker"
         and image == DEFAULT_IMAGE and gpu_compute_major() == 12

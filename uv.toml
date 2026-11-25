@@ -4,6 +4,18 @@
 # Advance only as part of a repository-wide dependency qualification change.
 exclude-newer = "2026-10-22T21:39:43Z"
 
+# CVE-2026-128089 and CVE-2026-126360: constrain transitive dependencies
+# wherever they occur in repository-managed environments.
+constraint-dependencies = ["dnspython>=2.9.2", "opentelemetry-api>=1.45.2"]
+
 # Pipecat 1.14 permits the Pillow 13 security release in voice environments.
 [exclude-newer-package]
 pipecat-ai = "2026-10-24T01:24:20.438725Z"
+
+# Targeted security releases; retain the repository-wide qualification cutoff.
+pydantic = "2026-11-19T12:57:39.767682Z"
+pydantic-core = "2026-11-19T12:56:38.067791Z"
+dnspython = "2026-11-03T23:56:53.601170Z"
+opentelemetry-api = "2026-10-29T17:29:37.888137Z"
+opentelemetry-sdk = "2026-10-29T17:29:54.685750Z"
+opentelemetry-semantic-conventions = "2026-10-29T17:29:55.682731Z"

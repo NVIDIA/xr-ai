@@ -17,6 +17,15 @@ If upgrading from an older release, first apply
 {doc}`migration-history/v0.3.0-beta-to-v0.4.0-beta`. Refer to
 {doc}`migration-history` for earlier guides and apply them in release order.
 
+### NVIDIA vLLM container
+
+Docker-mode model services now default to `nvcr.io/nvidia/vllm:26.11-py3`
+(CUDA 13.5, NVIDIA vLLM 0.33.0). Stop the running model stack before updating
+and restart it to use the new image. Verify host driver compatibility and
+qualify your GPU and model workload. Explicit `vllm_image` overrides remain
+in effect. Pip-mode environments retain their existing qualified versions.
+Refer to {doc}`/components/ai-services` for image metadata and configuration.
+
 ### LLM request defaults
 
 `OpenAICompatLLM` now applies `adapter.default_extras` only when a call omits
