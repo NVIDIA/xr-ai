@@ -4,4 +4,4 @@
 interface:
   display_name: "Maintain XR-AI Pull Requests"
   short_description: "Keep human-directed XR-AI PRs reviewable"
-  default_prompt: "Use $gh-develop-xr-ai to implement this human-directed XR-AI change and keep its pull request clean and ready."
+  default_prompt: "Use $gh-develop-xr-ai to implement this human-directed XR-AI change and keep its pull request aligned and reviewable without changing its review state."
