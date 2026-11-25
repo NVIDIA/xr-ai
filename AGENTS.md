@@ -169,6 +169,33 @@ unless the user identifies the work as downstream-only.
   Refer to [Factual accuracy](docs/source/guides/documentation-style.md#factual-accuracy)
   for conditions and failure paths to cover.
 
+## Agent-assisted pull request hygiene
+
+- The human directing the work owns the pull request's goal, scope, design
+  choices, and tradeoffs. An agent may investigate and propose options, but it
+  must return choices that materially affect those decisions to the human.
+- Keep each pull request to one coherent outcome, with the implementation,
+  tests, and documentation needed for that outcome. Annotate a large pull
+  request and explain why it cannot be split. For a series, confirm the scope
+  with the human and describe the current change and planned follow-ups.
+- Keep the pull request description synchronized with the diff: state the
+  problem, solution and important design decisions, related issues, scope and
+  follow-ups, and validation.
+- A coding agent may apply nits and straightforward fixes within the confirmed
+  design. Feedback that changes architecture, behavior, scope, or tradeoffs
+  returns to the human for a decision. Issue creation requires explicit human
+  confirmation.
+- Before requesting review, inspect the complete merge-base diff once for
+  unnecessary churn, failure modes, and mismatches between code, tests,
+  documentation, and the description.
+- Never mark a pull request ready or request reviewers unless the human asks.
+  First rebase it onto the latest target branch, satisfy the
+  repository's author-facing review requirements, and wait for required CI to
+  pass. Follow the repository's existing policy for any exception.
+
+The optional authoring mechanics are in
+[`gh-develop-xr-ai`](skills/gh-develop-xr-ai/SKILL.md).
+
 ## Comments and documentation
 
 Comments explain a non-obvious invariant or failure mode. Do not narrate the
