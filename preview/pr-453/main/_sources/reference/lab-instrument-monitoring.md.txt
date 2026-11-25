@@ -90,7 +90,7 @@ For a `current_view` selection, `ForegroundAgent` uses the same direct path as
 query. The tool is a direct return, so the completed visual answer does not
 incur a second language model call. A dedicated current-view system prompt applies visible-evidence,
 plain-speech, and response-length rules directly to the streaming VLM output.
-The default voice gate accepts `agent` and `hey agent`, plays a listening chime,
+The default voice gate accepts `assistant` and `hey assistant`, plays a listening chime,
 and allows a five-second follow-up. `VoiceAgent` mirrors spoken text to the
 client's `agent.response` topic so the same output can be rendered as captions.
 `InstrumentAlertAgent` publishes instrument events as unprompted updates through
@@ -327,9 +327,9 @@ delivery is bounded and best effort; overflow drops the oldest pending
 transcript, and shutdown discards pending items. Speech rejected by a wake
 phrase during an active conversation is still persisted.
 
-After connecting, say `Hey agent, let's start talking`, then speak without a
-wake phrase until `Hey agent, let's stop talking`. Set
-`conversation.require_wake_phrase: true` to require `agent` or `hey agent` inside
+After connecting, say `Start talking to me`, then speak without a
+wake phrase until `Stop talking to me`. Set
+`conversation.require_wake_phrase: true` to require `assistant` or `hey assistant` inside
 the open conversation, with the optional chime and five-second bare-wake
 follow-up window. Set `mode: hybrid` to additionally accept wake-addressed
 one-off questions while the conversation is closed. Accepted speech reaches

@@ -129,8 +129,8 @@ restart `xr_render_demo` to apply a change.
 | `yaml/openxr_service.yaml` | OpenXR endpoint, CloudXR environment, and eval-only simulated pose |
 | `scene/scene_service.yaml` | LOVR binary and app, scene endpoint, and CloudXR environment |
 
-After connecting, say `Hey agent, let's start talking`, then speak without a
-wake phrase until `Hey agent, let's stop talking`. Refer to
+After connecting, say `Start talking to me`, then speak without a
+wake phrase until `Stop talking to me`. Refer to
 {ref}`voice-conversation-controls` for configurable phrases and wake gating.
 
 `NV_DEVICE_PROFILE` in the environment overrides

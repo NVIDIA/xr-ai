@@ -488,7 +488,7 @@ uv<span class="w"> </span>run<span class="w"> </span>tea_making_sample
 </div>
 <p>Open the authenticated web-client URL printed by DeviceIOHub, accept the
 development certificate, allow camera and microphone access, and connect.
-Conversation mode is the default. Say “Hey agent, let’s start talking” once,
+Conversation mode is the default. Say “Start talking to me” once,
 then try:</p>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Help me make tea.
 What is the current step?
@@ -502,8 +502,8 @@ IPv4 interfaces instead of loopback. Refer to the generated
 <a class="reference internal" href="command-line.html"><span class="doc">command-line</span></a> reference for all launcher options.</p>
 <p>Speech uses the reused TTS endpoint in <code class="docutils literal notranslate"><span class="pre">yaml/models.local.json</span></code>. Voice-gate
 behavior comes from <code class="docutils literal notranslate"><span class="pre">voice_gate_yaml</span></code> in <code class="docutils literal notranslate"><span class="pre">yaml/tea_making_worker.yaml</span></code>.
-The default requires <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">start</span> <span class="pre">talking</span></code> after connecting,
-then accepts speech without a wake phrase until <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">stop</span> <span class="pre">talking</span></code>.
+The default requires <code class="docutils literal notranslate"><span class="pre">Start</span> <span class="pre">talking</span> <span class="pre">to</span> <span class="pre">me</span></code> after connecting,
+then accepts speech without a wake phrase until <code class="docutils literal notranslate"><span class="pre">Stop</span> <span class="pre">talking</span> <span class="pre">to</span> <span class="pre">me</span></code>.
 Set <code class="docutils literal notranslate"><span class="pre">mode:</span> <span class="pre">hybrid</span></code> to also accept wake-addressed one-off questions before a
 conversation starts, or <code class="docutils literal notranslate"><span class="pre">mode:</span> <span class="pre">always_on</span></code> for immediate, ungated speech dispatch.
 The advanced <code class="docutils literal notranslate"><span class="pre">conversation.require_wake_phrase:</span> <span class="pre">true</span></code> policy applies only inside an open

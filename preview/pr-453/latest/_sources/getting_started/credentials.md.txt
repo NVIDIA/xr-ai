@@ -129,6 +129,23 @@ an actionable notice and continues **without prompting**.
 `require_credentials(...)` runs the same steps but exits non-zero when the
 token is absent. Local model-stack launchers require `HF_TOKEN`.
 
+`require_credentials("HF_TOKEN")` also asks the Hub whether the resolved token
+is valid and exits with an explanatory error if the Hub answers HTTP 401. An
+invalid token otherwise fails silently: downloads proceed unauthenticated and
+only the Hub warns about it. Because the environment takes priority, a stale
+exported `HF_TOKEN` shadows a valid saved token. The saved
+`~/.config/xr-ai/credentials.json` token in turn outranks the
+`huggingface-cli login` token, so a stale entry there also needs updating or
+removing; unsetting `HF_TOKEN` alone is not enough. The error only calls a
+lower-priority token valid if the Hub confirmed it; if that check fails too, it
+says the token's validity is unknown.
+
+If the Hub is unreachable (timeout, network error) or answers anything other
+than 401 or success, validation is inconclusive and startup continues. The check
+is also skipped when `HF_HUB_OFFLINE=1` is set. That is the standard
+[Hugging Face setting](https://huggingface.co/docs/huggingface_hub/package_reference/environment_variables#hfhuboffline)
+for making no Hub requests, so cached-model launches stay fully offline.
+
 ## Managing saved tokens
 
 ```bash

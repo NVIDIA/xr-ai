@@ -54,7 +54,7 @@ uv run tea_making_sample
 
 Open the authenticated web-client URL printed by DeviceIOHub, accept the
 development certificate, allow camera and microphone access, and connect.
-Conversation mode is the default. Say “Hey agent, let's start talking” once,
+Conversation mode is the default. Say “Start talking to me” once,
 then try:
 
 ```text
@@ -71,8 +71,8 @@ IPv4 interfaces instead of loopback. Refer to the generated
 
 Speech uses the reused TTS endpoint in `yaml/models.local.json`. Voice-gate
 behavior comes from `voice_gate_yaml` in `yaml/tea_making_worker.yaml`.
-The default requires `Hey agent, let's start talking` after connecting,
-then accepts speech without a wake phrase until `Hey agent, let's stop talking`.
+The default requires `Start talking to me` after connecting,
+then accepts speech without a wake phrase until `Stop talking to me`.
 Set `mode: hybrid` to also accept wake-addressed one-off questions before a
 conversation starts, or `mode: always_on` for immediate, ungated speech dispatch.
 The advanced `conversation.require_wake_phrase: true` policy applies only inside an open

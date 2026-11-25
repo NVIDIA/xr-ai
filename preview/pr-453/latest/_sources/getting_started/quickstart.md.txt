@@ -41,7 +41,7 @@ root; keep running that procedure's commands from the selected sample directory.
 
 Each interactive procedure includes one concrete spoken request that exercises
 the sample's main path. In the shipped voice-gated samples, first say
-“Hey agent, let's start talking” and wait for “I'm listening to you now.”
+“Start talking to me” and wait for “I'm listening to you now.”
 Then speak questions without a wake phrase. After the first interaction succeeds,
 you can ask “What can you do?” to explore further. Typed requests bypass the
 voice gate. Treat the reply as a conversational introduction rather than an
@@ -98,7 +98,7 @@ Open the authenticated web-client URL printed by DeviceIOHub and select
 **Connect**. Choose **Live video** or **On-demand images** under **Camera Mode**,
 then select **Start Microphone** and grant camera and microphone access when
 prompted. After the agent reports ready, say
-“Hey agent, let's start talking,” then ask “What is in front of me?” while
+“Start talking to me,” then ask “What is in front of me?” while
 pointing the camera at an object. Typed questions also work without opening a
 voice conversation. Refer to {doc}`clients` for other client platforms.
 
@@ -187,7 +187,7 @@ microphone access.
 
 ### Step 3 — Meet the agent
 
-First say “Hey agent, let's start talking” and wait for
+First say “Start talking to me” and wait for
 “I'm listening to you now.”
 
 Try this first spoken interaction:
@@ -260,7 +260,7 @@ recipes.
 ### Try the lab agent
 
 Point the camera at instruments carrying the configured markers. Say
-“Hey agent, let's start talking” and wait for “I'm listening to you now.”
+“Start talking to me” and wait for “I'm listening to you now.”
 Then try this spoken interaction:
 
 ```text
@@ -301,8 +301,8 @@ uv run main.py
 
 Open the DeviceIOHub connection page at `https://localhost:8080`, accept the
 development certificate on first use, allow camera and microphone access, and
-connect. Say “Hey agent, let's start talking” to open the conversation, then
-speak naturally; say “Hey agent, let's stop talking” to close it.
+connect. Say “Start talking to me” to open the conversation, then
+speak naturally; say “Stop talking to me” to close it.
 The Tea sample uses this `conversation` workflow. Set `mode: hybrid` with a wake
 phrase to also ask addressed one-off questions while closed, or `always_on`
 for an explicitly ungated microphone.
@@ -324,7 +324,7 @@ and adaptation recipes.
 Try this first spoken interaction:
 
 ```text
-You: Hey Agent, help me make tea.
+You: Hey Assistant, help me make tea.
 Agent: [Starts the tea guide and presents the first step.]
 ```
 
@@ -414,7 +414,7 @@ Microphone**. In the **XR Stream** section, follow the **accept the CloudXR
 cert** link to accept the second development certificate, return to the client,
 and click **Launch XR**.
 
-After saying “Hey agent, let's start talking,” ordinary finalized speech is
+After saying “Start talking to me,” ordinary finalized speech is
 dispatched without a wake phrase; stop commands interrupt the response without
 closing the conversation. Try this first spoken interaction:
 

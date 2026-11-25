@@ -281,17 +281,18 @@
 <div class="version-switcher">
   <label for="version-select" class="version-switcher__label">Version</label>
   <select id="version-select" class="version-switcher__select">
-    <option value="0" >v0.3.0-beta</option>
-    <option value="1" >v0.2.0-beta.2</option>
-    <option value="2" >v0.1.0-beta</option>
-    <option value="3" selected>main (development)</option>
+    <option value="0" >v0.4.0-beta</option>
+    <option value="1" >v0.3.0-beta</option>
+    <option value="2" >v0.2.0-beta.2</option>
+    <option value="3" >v0.1.0-beta</option>
+    <option value="4" selected>main (development)</option>
   </select>
 </div>
 <script>
   (function () {
     // Navigate by index into a build-time list, never by reading the URL back
     // out of the DOM, so page text can never become a navigation target.
-    var urls = ["../../v0.3.0-beta/reference/xr-render-demo.html", "../../v0.2.0-beta.2/reference/xr-render-demo.html", "../../v0.1.0-beta/reference/xr-render-demo.html", "xr-render-demo.html"];
+    var urls = ["../../v0.4.0-beta/reference/xr-render-demo.html", "../../v0.3.0-beta/reference/xr-render-demo.html", "../../v0.2.0-beta.2/reference/xr-render-demo.html", "../../v0.1.0-beta/reference/xr-render-demo.html", "xr-render-demo.html"];
     var select = document.getElementById("version-select");
     select.addEventListener("change", function () {
       var url = urls[select.selectedIndex];
@@ -674,8 +675,8 @@ restart <code class="docutils literal notranslate"><span class="pre">xr_render_d
 </tbody>
 </table>
 </div>
-<p>After connecting, say <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">start</span> <span class="pre">talking</span></code>, then speak without a
-wake phrase until <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">stop</span> <span class="pre">talking</span></code>. Refer to
+<p>After connecting, say <code class="docutils literal notranslate"><span class="pre">Start</span> <span class="pre">talking</span> <span class="pre">to</span> <span class="pre">me</span></code>, then speak without a
+wake phrase until <code class="docutils literal notranslate"><span class="pre">Stop</span> <span class="pre">talking</span> <span class="pre">to</span> <span class="pre">me</span></code>. Refer to
 <a class="reference internal" href="agent-sdk-voice.html#voice-conversation-controls"><span class="std std-ref">Conversation controls</span></a> for configurable phrases and wake gating.</p>
 <p><code class="docutils literal notranslate"><span class="pre">NV_DEVICE_PROFILE</span></code> in the environment overrides
 <code class="docutils literal notranslate"><span class="pre">cloudxr_env.NV_DEVICE_PROFILE</span></code> in <code class="docutils literal notranslate"><span class="pre">cloudxr_runtime.yaml</span></code>. <code class="docutils literal notranslate"><span class="pre">LOVR_BIN</span></code> similarly

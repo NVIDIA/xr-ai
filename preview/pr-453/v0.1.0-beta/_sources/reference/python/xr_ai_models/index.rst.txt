@@ -29,6 +29,7 @@ Attributes
 
    xr_ai_models.ContentPart
    xr_ai_models.ImageInput
+   xr_ai_models.ToolChoice
    xr_ai_models.VideoInput
    xr_ai_models.Category
    xr_ai_models.KIND_OPENAI_COMPAT
@@ -161,6 +162,31 @@ Package Contents
 
 
       Whether the endpoint can return model reasoning.
+
+
+
+   .. py:attribute:: json_schema
+      :type:  bool
+      :value: False
+
+
+      Whether the endpoint constrains responses to a JSON Schema.
+
+      Declares support for the request, not a guarantee that every generation
+      completes successfully. Requests with ``response_schema`` are rejected
+      when the endpoint does not declare this feature.
+
+
+
+   .. py:attribute:: tool_choice
+      :type:  bool
+      :value: False
+
+
+      Whether the endpoint can force a tool call with ``tool_choice``.
+
+      Declares support for the request, not a guarantee against refusal or token
+      truncation. Requests that force a call are rejected without this feature.
 
 
 
@@ -531,6 +557,22 @@ Package Contents
    in the model's own dialect, and models without a switch ignore it.
    ``thinking_budget`` caps reasoning tokens on servers that enforce it.
 
+   ``response_schema`` requests that the endpoint constrain response text to
+   one JSON value matching the schema. The service sends the schema as a
+   request field; callers own the messages, including any format instructions
+   their model needs. ``tool_choice`` selects whether and which tool must be
+   called (see :data:`ToolChoice`). Undeclared constraints raise
+   :class:`ValueError` before sending. ``response_schema`` cannot be combined
+   with tools. Forced calls do not guarantee schema-valid arguments.
+
+   Constraint support depends on the model and server configuration. Callers
+   validate results and handle truncation, refusal, and inference failures;
+   neither a token budget nor constrained decoding guarantees completion.
+   Reasoning controls are independent of output constraints.
+
+   Forced tool choices require ``chat`` or ``stream_events``. The text-only
+   ``stream`` method rejects them because it cannot yield tool calls.
+
 
    .. py:attribute:: capabilities
       :type:  Capabilities
@@ -539,7 +581,7 @@ Package Contents
 
 
 
-   .. py:method:: chat(messages: Sequence[ChatMessage], *, tools: Sequence[ToolDef] | None = None, max_tokens: int | None = None, temperature: float | None = None, enable_thinking: bool | None = None, thinking_budget: int | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> ChatResponse
+   .. py:method:: chat(messages: Sequence[ChatMessage], *, tools: Sequence[ToolDef] | None = None, tool_choice: ToolChoice | None = None, response_schema: Mapping[str, Any] | None = None, max_tokens: int | None = None, temperature: float | None = None, enable_thinking: bool | None = None, thinking_budget: int | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> ChatResponse
       :async:
 
 
@@ -547,13 +589,13 @@ Package Contents
 
 
 
-   .. py:method:: stream(messages: Sequence[ChatMessage], *, tools: Sequence[ToolDef] | None = None, max_tokens: int | None = None, temperature: float | None = None, enable_thinking: bool | None = None, thinking_budget: int | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> AsyncIterator[str]
+   .. py:method:: stream(messages: Sequence[ChatMessage], *, tools: Sequence[ToolDef] | None = None, tool_choice: ToolChoice | None = None, response_schema: Mapping[str, Any] | None = None, max_tokens: int | None = None, temperature: float | None = None, enable_thinking: bool | None = None, thinking_budget: int | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> AsyncIterator[str]
 
       Stream user-visible response text for a sequence of chat messages.
 
 
 
-   .. py:method:: stream_events(messages: Sequence[ChatMessage], *, tools: Sequence[ToolDef] | None = None, max_tokens: int | None = None, temperature: float | None = None, enable_thinking: bool | None = None, thinking_budget: int | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> AsyncIterator[ChatStreamEvent]
+   .. py:method:: stream_events(messages: Sequence[ChatMessage], *, tools: Sequence[ToolDef] | None = None, tool_choice: ToolChoice | None = None, response_schema: Mapping[str, Any] | None = None, max_tokens: int | None = None, temperature: float | None = None, enable_thinking: bool | None = None, thinking_budget: int | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> AsyncIterator[ChatStreamEvent]
 
       Stream text, reasoning, complete tool calls, and finish events.
 
@@ -721,6 +763,14 @@ Package Contents
 
 
 
+.. py:data:: ToolChoice
+
+   ``"auto"``, ``"required"``, ``"none"``, or the name of one supplied tool.
+
+   ``"required"`` forces some tool call and a name forces that tool. Forcing
+   needs :attr:`Capabilities.tool_choice`; ``"auto"`` and ``"none"`` do not.
+
+
 .. py:class:: ToolDef
 
    A function tool definition exposed to a chat model.
@@ -816,6 +866,14 @@ Package Contents
 
    Structural interface for visual chat-completion services.
 
+   ``response_schema`` requests that the endpoint constrain response text to
+   one JSON value matching the schema, with the same request field and
+   validation as :class:`LLMService`. Callers own the question and system
+   prompt, including any format instructions their model needs. Support is
+   the chat endpoint's :attr:`Capabilities.json_schema`; undeclared support
+   raises :class:`ValueError` before sending. Callers validate results and
+   handle truncation, refusal, and inference failures.
+
 
    .. py:attribute:: capabilities
       :type:  Capabilities
@@ -824,7 +882,7 @@ Package Contents
 
 
 
-   .. py:method:: ask_image(image: ImageInput, question: str, *, system_prompt: str = '', max_tokens: int | None = None, temperature: float | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> ChatResponse
+   .. py:method:: ask_image(image: ImageInput, question: str, *, system_prompt: str = '', response_schema: Mapping[str, Any] | None = None, max_tokens: int | None = None, temperature: float | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> ChatResponse
       :async:
 
 
@@ -832,7 +890,7 @@ Package Contents
 
 
 
-   .. py:method:: ask_images(images: Sequence[ImageInput], question: str, *, system_prompt: str = '', max_tokens: int | None = None, temperature: float | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> ChatResponse
+   .. py:method:: ask_images(images: Sequence[ImageInput], question: str, *, system_prompt: str = '', response_schema: Mapping[str, Any] | None = None, max_tokens: int | None = None, temperature: float | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> ChatResponse
       :async:
 
 
@@ -840,7 +898,7 @@ Package Contents
 
 
 
-   .. py:method:: ask_video(video: VideoInput, question: str, *, system_prompt: str = '', max_tokens: int | None = None, temperature: float | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> ChatResponse
+   .. py:method:: ask_video(video: VideoInput, question: str, *, system_prompt: str = '', response_schema: Mapping[str, Any] | None = None, max_tokens: int | None = None, temperature: float | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> ChatResponse
       :async:
 
 
@@ -848,13 +906,13 @@ Package Contents
 
 
 
-   .. py:method:: stream(image: ImageInput, question: str, *, system_prompt: str = '', max_tokens: int | None = None, temperature: float | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> AsyncIterator[str]
+   .. py:method:: stream(image: ImageInput, question: str, *, system_prompt: str = '', response_schema: Mapping[str, Any] | None = None, max_tokens: int | None = None, temperature: float | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> AsyncIterator[str]
 
       Stream response text for a question about an image.
 
 
 
-   .. py:method:: stream_images(images: Sequence[ImageInput], question: str, *, system_prompt: str = '', max_tokens: int | None = None, temperature: float | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> AsyncIterator[str]
+   .. py:method:: stream_images(images: Sequence[ImageInput], question: str, *, system_prompt: str = '', response_schema: Mapping[str, Any] | None = None, max_tokens: int | None = None, temperature: float | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> AsyncIterator[str]
 
       Stream response text for a question about multiple images.
 
@@ -883,6 +941,8 @@ Package Contents
    Used directly for plain LLMs (Nemotron3-Nano, Nemotron-Omni) and indirectly via :class:`OpenAICompatVLM` for VLMs.
    The API key is read once from ``api_key_env`` during construction. An
    injected HTTP client remains owned by the caller and is not closed here.
+   ``default_extras`` fills omitted request fields; explicit call arguments
+   win. The model, messages, and streaming mode belong to the client.
 
 
    .. py:attribute:: health_url
@@ -897,7 +957,7 @@ Package Contents
 
 
 
-   .. py:method:: chat(messages: Sequence[xr_ai_models.ChatMessage], *, tools: Sequence[xr_ai_models.ToolDef] | None = None, max_tokens: int | None = None, temperature: float | None = None, enable_thinking: bool | None = None, thinking_budget: int | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> xr_ai_models.ChatResponse
+   .. py:method:: chat(messages: Sequence[xr_ai_models.ChatMessage], *, tools: Sequence[xr_ai_models.ToolDef] | None = None, tool_choice: xr_ai_models.ToolChoice | None = None, response_schema: Mapping[str, Any] | None = None, max_tokens: int | None = None, temperature: float | None = None, enable_thinking: bool | None = None, thinking_budget: int | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> xr_ai_models.ChatResponse
       :async:
 
 
@@ -909,18 +969,19 @@ Package Contents
 
 
 
-   .. py:method:: stream(messages: Sequence[xr_ai_models.ChatMessage], *, tools: Sequence[xr_ai_models.ToolDef] | None = None, max_tokens: int | None = None, temperature: float | None = None, enable_thinking: bool | None = None, thinking_budget: int | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> AsyncIterator[str]
+   .. py:method:: stream(messages: Sequence[xr_ai_models.ChatMessage], *, tools: Sequence[xr_ai_models.ToolDef] | None = None, tool_choice: xr_ai_models.ToolChoice | None = None, response_schema: Mapping[str, Any] | None = None, max_tokens: int | None = None, temperature: float | None = None, enable_thinking: bool | None = None, thinking_budget: int | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> AsyncIterator[str]
       :async:
 
 
       Stream user-visible text deltas from a chat completion.
 
       Malformed server-sent event lines and deltas without content are
-      skipped. Tool-call and reasoning deltas are not yielded.
+      skipped. Tool-call and reasoning deltas are not yielded. Forced tool
+      choices require :meth:`stream_events`, which exposes tool calls.
 
 
 
-   .. py:method:: stream_events(messages: Sequence[xr_ai_models.ChatMessage], *, tools: Sequence[xr_ai_models.ToolDef] | None = None, max_tokens: int | None = None, temperature: float | None = None, enable_thinking: bool | None = None, thinking_budget: int | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> AsyncIterator[xr_ai_models.ChatStreamEvent]
+   .. py:method:: stream_events(messages: Sequence[xr_ai_models.ChatMessage], *, tools: Sequence[xr_ai_models.ToolDef] | None = None, tool_choice: xr_ai_models.ToolChoice | None = None, response_schema: Mapping[str, Any] | None = None, max_tokens: int | None = None, temperature: float | None = None, enable_thinking: bool | None = None, thinking_budget: int | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> AsyncIterator[xr_ai_models.ChatStreamEvent]
       :async:
 
 
@@ -1087,7 +1148,9 @@ Package Contents
 
    Image and video paths or bytes are converted to ``data:`` URLs before
    submission. An injected HTTP client remains owned by the caller and is not
-   closed here.
+   closed here. Requests are built and validated by the wrapped
+   :class:`OpenAICompatLLM`, so ``response_schema`` and ``default_extras``
+   follow the same rules and are checked against the same capabilities.
 
 
    .. py:property:: capabilities
@@ -1106,7 +1169,7 @@ Package Contents
 
 
 
-   .. py:method:: ask_image(image: xr_ai_models.ImageInput, question: str, *, system_prompt: str = '', max_tokens: int | None = None, temperature: float | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> xr_ai_models.ChatResponse
+   .. py:method:: ask_image(image: xr_ai_models.ImageInput, question: str, *, system_prompt: str = '', response_schema: Mapping[str, Any] | None = None, max_tokens: int | None = None, temperature: float | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> xr_ai_models.ChatResponse
       :async:
 
 
@@ -1114,7 +1177,7 @@ Package Contents
 
 
 
-   .. py:method:: ask_images(images: Sequence[xr_ai_models.ImageInput], question: str, *, system_prompt: str = '', max_tokens: int | None = None, temperature: float | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> xr_ai_models.ChatResponse
+   .. py:method:: ask_images(images: Sequence[xr_ai_models.ImageInput], question: str, *, system_prompt: str = '', response_schema: Mapping[str, Any] | None = None, max_tokens: int | None = None, temperature: float | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> xr_ai_models.ChatResponse
       :async:
 
 
@@ -1124,7 +1187,7 @@ Package Contents
 
 
 
-   .. py:method:: ask_video(video: xr_ai_models.VideoInput, question: str, *, system_prompt: str = '', max_tokens: int | None = None, temperature: float | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> xr_ai_models.ChatResponse
+   .. py:method:: ask_video(video: xr_ai_models.VideoInput, question: str, *, system_prompt: str = '', response_schema: Mapping[str, Any] | None = None, max_tokens: int | None = None, temperature: float | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> xr_ai_models.ChatResponse
       :async:
 
 
@@ -1135,7 +1198,7 @@ Package Contents
 
 
 
-   .. py:method:: stream(image: xr_ai_models.ImageInput, question: str, *, system_prompt: str = '', max_tokens: int | None = None, temperature: float | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> AsyncIterator[str]
+   .. py:method:: stream(image: xr_ai_models.ImageInput, question: str, *, system_prompt: str = '', response_schema: Mapping[str, Any] | None = None, max_tokens: int | None = None, temperature: float | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> AsyncIterator[str]
       :async:
 
 
@@ -1143,7 +1206,7 @@ Package Contents
 
 
 
-   .. py:method:: stream_images(images: Sequence[xr_ai_models.ImageInput], question: str, *, system_prompt: str = '', max_tokens: int | None = None, temperature: float | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> AsyncIterator[str]
+   .. py:method:: stream_images(images: Sequence[xr_ai_models.ImageInput], question: str, *, system_prompt: str = '', response_schema: Mapping[str, Any] | None = None, max_tokens: int | None = None, temperature: float | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> AsyncIterator[str]
       :async:
 
 

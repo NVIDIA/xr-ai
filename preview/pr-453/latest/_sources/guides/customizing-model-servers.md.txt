@@ -27,8 +27,9 @@ launcher. Server identities are shared across samples, but reuse checks differ:
 - **vLLM Docker:** reuse requires the expected container name and a matching
   launch-configuration fingerprint. On the selected ports, startup can evict
   other xr-ai containers and listeners, or recreate a changed container.
-- **Pocket TTS:** reuses a listener whose `/health` endpoint is healthy,
-  without checking ownership or a launch-configuration fingerprint.
+- **Pocket TTS:** reuses a listener whose `/health` endpoint returns HTTP 200
+  and identifies Pocket TTS, without checking ownership or a
+  launch-configuration fingerprint.
 - **Speaker ASR:** requires an owned listener and matching service fingerprint.
   An unmanaged listener or configuration mismatch stops startup; it does not
   evict or recreate the existing service.

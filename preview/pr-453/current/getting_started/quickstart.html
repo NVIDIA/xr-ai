@@ -483,7 +483,7 @@ printed on startup. Each procedure below starts with a <code class="docutils lit
 root; keep running that procedure’s commands from the selected sample directory.</p>
 <p>Each interactive procedure includes one concrete spoken request that exercises
 the sample’s main path. In the shipped voice-gated samples, first say
-“Hey agent, let’s start talking” and wait for “I’m listening to you now.”
+“Start talking to me” and wait for “I’m listening to you now.”
 Then speak questions without a wake phrase. After the first interaction succeeds,
 you can ask “What can you do?” to explore further. Typed requests bypass the
 voice gate. Treat the reply as a conversational introduction rather than an
@@ -531,7 +531,7 @@ uv<span class="w"> </span>run<span class="w"> </span>conversation_example
 <strong>Connect</strong>. Choose <strong>Live video</strong> or <strong>On-demand images</strong> under <strong>Camera Mode</strong>,
 then select <strong>Start Microphone</strong> and grant camera and microphone access when
 prompted. After the agent reports ready, say
-“Hey agent, let’s start talking,” then ask “What is in front of me?” while
+“Start talking to me,” then ask “What is in front of me?” while
 pointing the camera at an object. Typed questions also work without opening a
 voice conversation. Refer to <a class="reference internal" href="clients.html"><span class="doc">Connecting clients</span></a> for other client platforms.</p>
 <p>Press Ctrl+C to stop the sample. Its local model services remain running;
@@ -607,7 +607,7 @@ microphone access.</p>
 </section>
 <section id="step-3-meet-the-agent">
 <h3>Step 3 — Meet the agent<a class="headerlink" href="#step-3-meet-the-agent" title="Link to this heading">#</a></h3>
-<p>First say “Hey agent, let’s start talking” and wait for
+<p>First say “Start talking to me” and wait for
 “I’m listening to you now.”</p>
 <p>Try this first spoken interaction:</p>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>You: What am I looking at?
@@ -667,7 +667,7 @@ recipes.</p>
 <section id="try-the-lab-agent">
 <h3>Try the lab agent<a class="headerlink" href="#try-the-lab-agent" title="Link to this heading">#</a></h3>
 <p>Point the camera at instruments carrying the configured markers. Say
-“Hey agent, let’s start talking” and wait for “I’m listening to you now.”
+“Start talking to me” and wait for “I’m listening to you now.”
 Then try this spoken interaction:</p>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>You: Read the instruments.
 Agent: [Reports the visible marker-associated readings or their availability.]
@@ -700,8 +700,8 @@ uv<span class="w"> </span>run<span class="w"> </span>tea_making_sample
 </div>
 <p>Open the DeviceIOHub connection page at <code class="docutils literal notranslate"><span class="pre">https://localhost:8080</span></code>, accept the
 development certificate on first use, allow camera and microphone access, and
-connect. Say “Hey agent, let’s start talking” to open the conversation, then
-speak naturally; say “Hey agent, let’s stop talking” to close it.
+connect. Say “Start talking to me” to open the conversation, then
+speak naturally; say “Stop talking to me” to close it.
 The Tea sample uses this <code class="docutils literal notranslate"><span class="pre">conversation</span></code> workflow. Set <code class="docutils literal notranslate"><span class="pre">mode:</span> <span class="pre">hybrid</span></code> with a wake
 phrase to also ask addressed one-off questions while closed, or <code class="docutils literal notranslate"><span class="pre">always_on</span></code>
 for an explicitly ungated microphone.</p>
@@ -718,7 +718,7 @@ and adaptation recipes.</p>
 <section id="try-the-tea-agent">
 <h3>Try the tea agent<a class="headerlink" href="#try-the-tea-agent" title="Link to this heading">#</a></h3>
 <p>Try this first spoken interaction:</p>
-<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>You: Hey Agent, help me make tea.
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>You: Hey Assistant, help me make tea.
 Agent: [Starts the tea guide and presents the first step.]
 </pre></div>
 </div>
@@ -798,7 +798,7 @@ click <strong>Connect</strong>. Wait for the agent status to report ready, then 
 Microphone</strong>. In the <strong>XR Stream</strong> section, follow the <strong>accept the CloudXR
 cert</strong> link to accept the second development certificate, return to the client,
 and click <strong>Launch XR</strong>.</p>
-<p>After saying “Hey agent, let’s start talking,” ordinary finalized speech is
+<p>After saying “Start talking to me,” ordinary finalized speech is
 dispatched without a wake phrase; stop commands interrupt the response without
 closing the conversation. Try this first spoken interaction:</p>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>You: Make the sphere red.

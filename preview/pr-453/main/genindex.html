@@ -274,17 +274,18 @@
 <div class="version-switcher">
   <label for="version-select" class="version-switcher__label">Version</label>
   <select id="version-select" class="version-switcher__select">
-    <option value="0" >v0.3.0-beta</option>
-    <option value="1" >v0.2.0-beta.2</option>
-    <option value="2" >v0.1.0-beta</option>
-    <option value="3" selected>main (development)</option>
+    <option value="0" >v0.4.0-beta</option>
+    <option value="1" >v0.3.0-beta</option>
+    <option value="2" >v0.2.0-beta.2</option>
+    <option value="3" >v0.1.0-beta</option>
+    <option value="4" selected>main (development)</option>
   </select>
 </div>
 <script>
   (function () {
     // Navigate by index into a build-time list, never by reading the URL back
     // out of the DOM, so page text can never become a navigation target.
-    var urls = ["../v0.3.0-beta/index.html", "../v0.2.0-beta.2/index.html", "../v0.1.0-beta/index.html", "genindex.html"];
+    var urls = ["../v0.4.0-beta/index.html", "../v0.3.0-beta/index.html", "../v0.2.0-beta.2/index.html", "../v0.1.0-beta/index.html", "genindex.html"];
     var select = document.getElementById("version-select");
     select.addEventListener("change", function () {
       var url = urls[select.selectedIndex];
@@ -1272,6 +1273,10 @@
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.ParticipantEvent.joined">joined (xr_ai_hub.ParticipantEvent attribute)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.Capabilities.json_schema">json_schema (xr_ai_models.Capabilities attribute)</a>
 </li>
   </ul></td>
 </tr></table>
@@ -2352,6 +2357,8 @@
         <li><a href="reference/python/xr_ai_tools/tool_calling/index.html#xr_ai_tools.tool_calling.ToolLoopResult.tool_calls">(xr_ai_tools.tool_calling.ToolLoopResult attribute)</a>
 </li>
       </ul></li>
+      <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.Capabilities.tool_choice">tool_choice (xr_ai_models.Capabilities attribute)</a>
+</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/python/xr_ai_tools/tool_calling/index.html#xr_ai_tools.tool_calling.tool_definitions">tool_definitions() (in module xr_ai_tools.tool_calling)</a>
@@ -2361,6 +2368,8 @@
       <li><a href="reference/python/xr_ai_tools/tool_calling/index.html#xr_ai_tools.tool_calling.ToolCallRecord">ToolCallRecord (class in xr_ai_tools.tool_calling)</a>
 </li>
       <li><a href="reference/python/xr_ai_tools/tool_calling/index.html#xr_ai_tools.tool_calling.ToolCallResult">ToolCallResult (class in xr_ai_tools.tool_calling)</a>
+</li>
+      <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.ToolChoice">ToolChoice (in module xr_ai_models)</a>
 </li>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.ToolDef">ToolDef (class in xr_ai_models)</a>
 </li>
