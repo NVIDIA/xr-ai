@@ -1,6 +1,6 @@
 version = 1
 revision = 3
-requires-python = ">=3.11, <3.14"
+requires-python = ">=3.11.4, <3.14"
 resolution-markers = [
     "python_full_version >= '3.13' and platform_machine == 's390x' and sys_platform == 'darwin' and extra != 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm'",
     "python_full_version == '3.12.*' and platform_machine == 's390x' and sys_platform == 'darwin' and extra != 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm'",
@@ -357,15 +357,6 @@ wheels = [
 ]
 
 [[package]]
-name = "beartype"
-version = "0.23.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/79/34/c0cfdaee9c796c8381439fed0fcab62810753b8b0adb1ec88fa7f41eaa5d/beartype-0.23.1.tar.gz", hash = "sha256:8b805f246b32931c74f2b321ea0939fe5bb2ff43c12a3eff19cc4c854b832e1d", size = 1993714, upload-time = "2026-10-11T05:36:55.251Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/1c/cb/2f6aa982e2860c1156830db3da7f823b71784ed7d533ca289ea9b6c6347a/beartype-0.23.1-py3-none-any.whl", hash = "sha256:4461b4dc57e3fdd6c8a8464b22cf118002eea107c33e9fef651c69068ab3cce3", size = 1582101, upload-time = "2026-10-11T05:36:52.431Z" },
-]
-
-[[package]]
 name = "blake3"
 version = "1.0.11"
 source = { registry = "https://pypi.org/simple" }
@@ -674,8 +665,8 @@ name = "cloudxr-runtime"
 version = "0.1.0"
 source = { editable = "../services/cloudxr-runtime" }
 dependencies = [
-    { name = "isaacteleop", extra = ["cloudxr"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
     { name = "pyyaml" },
+    { name = "websockets", version = "15.0.1", source = { registry = "https://pypi.org/simple" } },
     { name = "xr-ai-gpu" },
     { name = "xr-ai-launcher" },
     { name = "xr-ai-logging" },
@@ -683,8 +674,8 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "isaacteleop", extras = ["cloudxr"], specifier = ">=1.3.131" },
     { name = "pyyaml" },
+    { name = "websockets", specifier = ">=14.0" },
     { name = "xr-ai-gpu", editable = "../utils/xr-ai-gpu" },
     { name = "xr-ai-launcher", editable = "../utils/xr-ai-launcher" },
     { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
@@ -820,6 +811,69 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/71/31/c5b7771ba6982f319ec90c0cf5c425b36891adfeee2d9f667f90b2d0c166/contourpy-1.4.0-cp313-cp313-win32.whl", hash = "sha256:510f7d93d94cf6ebf4e2cd0640bea16ab8affac7547230175b6745b596ce0599", size = 347438, upload-time = "2026-09-11T19:03:29.829Z" },
     { url = "https://files.pythonhosted.org/packages/68/c1/a59df0754bf83a6f3e153cc19d550a5b01f607e389b1c4d57f436f9139e0/contourpy-1.4.0-cp313-cp313-win_amd64.whl", hash = "sha256:6507a016976a75a15aee47809a34605de6244ccc056e6164bf9fb14b27eecad4", size = 234084, upload-time = "2026-09-11T19:03:31.657Z" },
     { url = "https://files.pythonhosted.org/packages/41/48/97224f5decb1efa5a610f912195deb45321f73ec9b9dac485cd6fe2d5a6a/contourpy-1.4.0-cp313-cp313-win_arm64.whl", hash = "sha256:423bd5f4b3f11d54a8c597234e513382e3454bb106b8ec7ae32ba4ed63f8d99b", size = 559559, upload-time = "2026-09-11T19:03:33.528Z" },
+]
+
+[[package]]
+name = "conversation-example"
+version = "0.1.0"
+source = { editable = "../agent-samples/conversation-example" }
+dependencies = [
+    { name = "xr-ai-launcher" },
+    { name = "xr-ai-logging" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "xr-ai-launcher", editable = "../utils/xr-ai-launcher" },
+    { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
+]
+
+[[package]]
+name = "conversation-example-model-servers"
+version = "0.1.0"
+source = { editable = "../agent-samples/conversation-example/model-servers" }
+dependencies = [
+    { name = "xr-ai-model-server-stack" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "xr-ai-model-server-stack", editable = "../utils/xr-ai-model-server-stack" }]
+
+[[package]]
+name = "conversation-example-worker"
+version = "0.1.0"
+source = { editable = "../agent-samples/conversation-example/worker" }
+dependencies = [
+    { name = "loguru" },
+    { name = "nemo-relay" },
+    { name = "pyyaml" },
+    { name = "xr-ai-agent-runtime" },
+    { name = "xr-ai-conversation" },
+    { name = "xr-ai-hub-client" },
+    { name = "xr-ai-interaction" },
+    { name = "xr-ai-logging" },
+    { name = "xr-ai-models", extra = ["riva"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
+    { name = "xr-ai-routing", extra = ["runtime"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
+    { name = "xr-ai-tools", extra = ["frames", "vision"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
+    { name = "xr-ai-voice" },
+    { name = "xr-ai-voicegate" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "loguru", specifier = ">=0.7" },
+    { name = "nemo-relay", specifier = ">=0.10.0,<0.11" },
+    { name = "pyyaml", specifier = ">=6.0" },
+    { name = "xr-ai-agent-runtime", editable = "../agent-sdk/xr-ai-runtime" },
+    { name = "xr-ai-conversation", editable = "../agent-sdk/xr-ai-conversation" },
+    { name = "xr-ai-hub-client", editable = "../agent-sdk/xr-ai-hub" },
+    { name = "xr-ai-interaction", editable = "../agent-sdk/xr-ai-interaction" },
+    { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
+    { name = "xr-ai-models", extras = ["riva"], editable = "../agent-sdk/xr-ai-models" },
+    { name = "xr-ai-routing", extras = ["runtime"], editable = "../agent-sdk/xr-ai-routing" },
+    { name = "xr-ai-tools", extras = ["frames", "vision"], editable = "../agent-sdk/xr-ai-tools" },
+    { name = "xr-ai-voice", editable = "../agent-sdk/xr-ai-voice" },
+    { name = "xr-ai-voicegate", editable = "../utils/xr-ai-voicegate" },
 ]
 
 [[package]]
@@ -1072,27 +1126,6 @@ nvrtc = [
 ]
 nvtx = [
     { name = "nvidia-nvtx", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (platform_machine == 'aarch64' and sys_platform == 'linux' and extra == 'extra-25-xr-ai-dependency-manifest-vllm') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-25-xr-ai-dependency-manifest-vllm') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra == 'extra-25-xr-ai-dependency-manifest-vllm') or (sys_platform != 'linux' and sys_platform != 'win32' and extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm') or (sys_platform == 'linux' and extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm') or (sys_platform == 'win32' and extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
-]
-
-[[package]]
-name = "cupy-cuda12x"
-version = "14.2.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "cuda-pathfinder" },
-    { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
-    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
-]
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/00/98/ac56fb7a285e264a0f29ea71d64b5c2eacd23c1f4ed9b4a8f99b16db3881/cupy_cuda12x-14.2.0-cp311-cp311-manylinux2014_aarch64.whl", hash = "sha256:1c775069f0af34662a8d4ae90848e29afcaf4ba63762d556ff22b6011683e571", size = 148189237, upload-time = "2026-08-20T02:39:47.011Z" },
-    { url = "https://files.pythonhosted.org/packages/d3/49/a83b7664151a7bdfb5d7ca7f29cef4eb5574a4cb8e1f9dfbae7fea372e4f/cupy_cuda12x-14.2.0-cp311-cp311-manylinux2014_x86_64.whl", hash = "sha256:5fe2366cc5c61a7ee4a527ce1e8951cb89092d0fb0b5830623cf114d1942c585", size = 136632369, upload-time = "2026-08-20T02:39:51.562Z" },
-    { url = "https://files.pythonhosted.org/packages/a0/d0/a3f4c7b7c4d642c7c8cf8ae6128ccd70cb05592f35b89d76281456e3de00/cupy_cuda12x-14.2.0-cp311-cp311-win_amd64.whl", hash = "sha256:eceffbf02a5833c8ba1c94615da07c374284db76a60f8c8b217b0d9d2667162a", size = 98876640, upload-time = "2026-08-20T02:39:55.735Z" },
-    { url = "https://files.pythonhosted.org/packages/d3/8c/5fe3f6719c2d4560c79c62ef6d9b7d6c34d145879ddc0c1a41f8153ad0a6/cupy_cuda12x-14.2.0-cp312-cp312-manylinux2014_aarch64.whl", hash = "sha256:b74340aa7271f0f081f77e2e5107bac75af19b86df29213db7ada90e14428efe", size = 147490427, upload-time = "2026-08-20T02:40:00.196Z" },
-    { url = "https://files.pythonhosted.org/packages/7c/5b/65124de2dbaf2e85109f611a41947e39acd6dd938751c04b4c4d7bf6fc82/cupy_cuda12x-14.2.0-cp312-cp312-manylinux2014_x86_64.whl", hash = "sha256:f82141761f2c81905d49387464ae29438887956d99063381c93a1d5d1b7d32e8", size = 136111459, upload-time = "2026-08-20T02:40:04.909Z" },
-    { url = "https://files.pythonhosted.org/packages/e9/18/ddea819204701024bef7fa748730702245d803847c841b737723b94fd091/cupy_cuda12x-14.2.0-cp312-cp312-win_amd64.whl", hash = "sha256:c9571d3b5f2e65758137e210f7fb3c3b34767f0af6b6ca04035a244b6141ee12", size = 98780018, upload-time = "2026-08-20T02:40:09.465Z" },
-    { url = "https://files.pythonhosted.org/packages/7a/4f/dce7be227a845943d14baef3b58be49c74a465e5d9251f38840b5b1fd89a/cupy_cuda12x-14.2.0-cp313-cp313-manylinux2014_aarch64.whl", hash = "sha256:cfe673f73599ee0b9c2c9de5c0bb2395d98c9238c24deafa2ddcc69cacbd6af6", size = 147070561, upload-time = "2026-08-20T02:40:14.556Z" },
-    { url = "https://files.pythonhosted.org/packages/c9/02/520f7b9f92114b4df7d88aa77c36db0d556caf76a362537687e3a2e42833/cupy_cuda12x-14.2.0-cp313-cp313-manylinux2014_x86_64.whl", hash = "sha256:efc1da23505e88d9834a3ddd3c00352c34e58e301f512d9dd593cc4bfbbdf7dc", size = 135714387, upload-time = "2026-08-20T02:40:19.077Z" },
-    { url = "https://files.pythonhosted.org/packages/29/94/2dfb330afc6756ab9a8d16e955c0458e82e769930eab01e6c491e411363d/cupy_cuda12x-14.2.0-cp313-cp313-win_amd64.whl", hash = "sha256:dcea9f2b1887ac631a9275a61577e09d1eea26bf5f95491501c3b7528cebc592", size = 98760068, upload-time = "2026-08-20T02:40:23.43Z" },
 ]
 
 [[package]]
@@ -2273,14 +2306,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/8d/11/a53c3dc549134148837380e90bb5f10980b42686fb330d76fec07c2ff570/isaacteleop-1.5.175-cp313-cp313-manylinux_2_35_x86_64.whl", hash = "sha256:3d420b661dbdddacf7354e42011aaa840ab5a4abb6d3aeab2ea40b1776a7d017", size = 31886561, upload-time = "2026-10-14T04:30:17.248Z" },
 ]
 
-[package.optional-dependencies]
-cloudxr = [
-    { name = "cryptography" },
-    { name = "cupy-cuda12x", marker = "sys_platform == 'linux'" },
-    { name = "pillow", marker = "sys_platform == 'linux'" },
-    { name = "websockets", version = "15.0.1", source = { registry = "https://pypi.org/simple" } },
-]
-
 [[package]]
 name = "janome"
 version = "0.5.0"
@@ -2404,10 +2429,10 @@ name = "jsonschema"
 version = "4.26.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "attrs" },
-    { name = "jsonschema-specifications" },
-    { name = "referencing" },
-    { name = "rpds-py" },
+    { name = "attrs", marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository' or extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
+    { name = "jsonschema-specifications", marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository' or extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
+    { name = "referencing", marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository' or extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
+    { name = "rpds-py", marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository' or extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/b3/fc/e067678238fa451312d4c62bf6e6cf5ec56375422aee02f9cb5f909b3047/jsonschema-4.26.0.tar.gz", hash = "sha256:0c26707e2efad8aa1bfc5b7ce170f3fccc2e4918ff85989ba9ffa9facb2be326", size = 366583, upload-time = "2026-01-07T13:41:07.246Z" }
 wheels = [
@@ -2419,7 +2444,7 @@ name = "jsonschema-specifications"
 version = "2025.9.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "referencing" },
+    { name = "referencing", marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository' or extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/19/74/a633ee74eb36c44aa6d1095e7cc5569bebf04342ee146178e2d36600708b/jsonschema_specifications-2025.9.1.tar.gz", hash = "sha256:b540987f239e745613c7a9176f3edb72b832a4ac465cf02712288397832b5e8d", size = 32855, upload-time = "2025-09-08T01:34:59.186Z" }
 wheels = [
@@ -4987,10 +5012,9 @@ wheels = [
 
 [[package]]
 name = "pocket-tts"
-version = "3.0.2"
+version = "3.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "beartype" },
     { name = "einops" },
     { name = "fastapi" },
     { name = "huggingface-hub" },
@@ -5008,9 +5032,9 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "uvicorn" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/da/5f/e29d4dda83c2c5f3d6918eece33d4d86d475256507598591a3ce9b8b616b/pocket_tts-3.0.2.tar.gz", hash = "sha256:480f5eba8dcd44deb721630a24139897e11923415581e52b27de4a6b296b853d", size = 761225, upload-time = "2026-08-25T14:35:54.299Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/b4/4d/2c97117deb4ce79adeaffa0d1aaf6d31dfd902b539fb48b211998fbb8eb5/pocket_tts-3.1.0.tar.gz", hash = "sha256:7991e312a36a5150da639d5cb1eda8ed3a5faf915dc725a51044564478c32580", size = 779123, upload-time = "2026-09-03T16:00:52.147Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/94/13/c3e2fffd23e37ef68270013e7993620720ebd8c14e79cdb155bde8314116/pocket_tts-3.0.2-py3-none-any.whl", hash = "sha256:f14174195a16dc775f17b11fa1dd67b160567ef5a54872d5570164ea19550f37", size = 74607, upload-time = "2026-08-25T14:35:53.026Z" },
+    { url = "https://files.pythonhosted.org/packages/d0/52/83feb14ac0f70a433a4f360087c96536f60393764325a4fa17dae1c22fc7/pocket_tts-3.1.0-py3-none-any.whl", hash = "sha256:956d111e04387af6018b5cdcc44947ee576479b9c2772e574204867ec5de59c0", size = 77912, upload-time = "2026-09-03T16:00:50.553Z" },
 ]
 
 [[package]]
@@ -5036,7 +5060,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.111" },
     { name = "hf-xet", specifier = ">=1.1.2,<2.0.0" },
     { name = "huggingface-hub", specifier = ">=0.32.0" },
-    { name = "pocket-tts", specifier = "==3.0.2" },
+    { name = "pocket-tts", specifier = "==3.1.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "torch", specifier = ">=2.5.0" },
     { name = "urllib3", specifier = ">=2.8.0" },
@@ -5906,9 +5930,9 @@ name = "referencing"
 version = "0.37.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "attrs" },
-    { name = "rpds-py" },
-    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+    { name = "attrs", marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository' or extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
+    { name = "rpds-py", marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository' or extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
+    { name = "typing-extensions", marker = "(python_full_version < '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (python_full_version < '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-vllm') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/22/f5/df4e9027acead3ecc63e50fe1e36aca1523e1719559c499951bb4b53188f/referencing-0.37.0.tar.gz", hash = "sha256:44aefc3142c5b842538163acb373e24cce6632bd54bdb01b21ad5863489f50d8", size = 78036, upload-time = "2025-10-13T15:30:48.871Z" }
 wheels = [
@@ -7989,6 +8013,9 @@ source = { virtual = "." }
 repository = [
     { name = "clef-server" },
     { name = "cloudxr-runtime" },
+    { name = "conversation-example" },
+    { name = "conversation-example-model-servers" },
+    { name = "conversation-example-worker" },
     { name = "device-io-hub" },
     { name = "lab-instrument-monitoring" },
     { name = "lab-instrument-monitoring-model-servers" },
@@ -8042,6 +8069,9 @@ vllm = [
 requires-dist = [
     { name = "clef-server", marker = "extra == 'repository'", editable = "../services/clef-server" },
     { name = "cloudxr-runtime", marker = "extra == 'repository'", editable = "../services/cloudxr-runtime" },
+    { name = "conversation-example", marker = "extra == 'repository'", editable = "../agent-samples/conversation-example" },
+    { name = "conversation-example-model-servers", marker = "extra == 'repository'", editable = "../agent-samples/conversation-example/model-servers" },
+    { name = "conversation-example-worker", marker = "extra == 'repository'", editable = "../agent-samples/conversation-example/worker" },
     { name = "device-io-hub", marker = "extra == 'repository'", editable = "../services/device-io-hub" },
     { name = "embedding-server", marker = "extra == 'vllm'", editable = "../services/embedding-server" },
     { name = "lab-instrument-monitoring", marker = "extra == 'repository'", editable = "../agent-samples/lab-instrument-monitoring" },
@@ -8192,6 +8222,9 @@ requires-dist = [
 ]
 provides-extras = ["riva", "speaker"]
 
+[package.metadata.requires-dev]
+eval = [{ name = "jsonschema", specifier = ">=4.23" }]
+
 [[package]]
 name = "xr-ai-routing"
 version = "0.1.0"
@@ -8225,6 +8258,7 @@ dependencies = [
     { name = "coverage" },
     { name = "device-io-hub" },
     { name = "huggingface-hub" },
+    { name = "jsonschema" },
     { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
     { name = "pillow" },
@@ -8261,6 +8295,7 @@ requires-dist = [
     { name = "coverage", specifier = ">=7.10" },
     { name = "device-io-hub", editable = "../services/device-io-hub" },
     { name = "huggingface-hub", specifier = ">=0.32.0" },
+    { name = "jsonschema", specifier = ">=4.23" },
     { name = "numpy", specifier = ">=1.24" },
     { name = "pillow", specifier = ">=13.0.0" },
     { name = "pytest", specifier = ">=8.0" },
@@ -8414,7 +8449,7 @@ requires-dist = [
     { name = "nltk", specifier = "!=3.10.1" },
     { name = "numpy", specifier = ">=1.24" },
     { name = "pillow", specifier = ">=13.0.0" },
-    { name = "pipecat-ai", specifier = ">=1.14.0" },
+    { name = "pipecat-ai", specifier = ">=1.14.0,<2" },
     { name = "pydantic", specifier = ">=2.10" },
     { name = "scipy", specifier = ">=1.11" },
     { name = "xr-ai-agent-runtime", editable = "../agent-sdk/xr-ai-runtime" },

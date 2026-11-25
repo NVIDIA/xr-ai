@@ -77,12 +77,21 @@ def common_python_range(ranges: Sequence[str]) -> str:
     """Return the contiguous run of CPython minors every range in *ranges* accepts."""
 
     specifiers = [SpecifierSet(item) for item in ranges]
-    minors = [minor for minor in _PYTHON_MINORS if all(Version(f"3.{minor}") in specifier for specifier in specifiers)]
+    minimum = max(
+        (Version(bound.version) for specifier in specifiers for bound in specifier if bound.operator == ">="),
+        default=Version(f"3.{_PYTHON_MINORS.start}"),
+    )
+    # A patch-level floor excludes earlier patches, not the whole Python minor.
+    minors = [
+        minor for minor in _PYTHON_MINORS
+        if Version(f"3.{minor + 1}") > minimum
+        and all(max(Version(f"3.{minor}"), minimum) in specifier for specifier in specifiers)
+    ]
     if not minors:
         raise ValueError(f"projects share no supported Python version: {sorted(set(ranges))}")
     if minors != list(range(minors[0], minors[-1] + 1)):
         raise ValueError(f"projects share a non-contiguous set of Python versions: {minors}")
-    return f">=3.{minors[0]},<3.{minors[-1] + 1}"
+    return f">={max(Version(f'3.{minors[0]}'), minimum)},<3.{minors[-1] + 1}"
 
 
 def manifest_toml(projects: Sequence[Project]) -> str:
