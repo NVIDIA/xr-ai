@@ -8449,7 +8449,7 @@ requires-dist = [
     { name = "nltk", specifier = "!=3.10.1" },
     { name = "numpy", specifier = ">=1.24" },
     { name = "pillow", specifier = ">=13.0.0" },
-    { name = "pipecat-ai", specifier = ">=1.14.0" },
+    { name = "pipecat-ai", specifier = ">=1.14.0,<2" },
     { name = "pydantic", specifier = ">=2.10" },
     { name = "scipy", specifier = ">=1.11" },
     { name = "xr-ai-agent-runtime", editable = "../agent-sdk/xr-ai-runtime" },
