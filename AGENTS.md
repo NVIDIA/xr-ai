@@ -175,9 +175,9 @@ unless the user identifies the work as downstream-only.
   choices, and tradeoffs. An agent may investigate and propose options, but it
   must return choices that materially affect those decisions to the human.
 - Keep each pull request to one coherent outcome, with the implementation,
-  tests, and documentation needed for that outcome. A large or multi-PR change
-  requires a human-confirmed boundary and an accurate description of the
-  current change and planned follow-ups.
+  tests, and documentation needed for that outcome. Annotate a large pull
+  request and explain why it cannot be split. For a series, confirm the scope
+  with the human and describe the current change and planned follow-ups.
 - Keep the pull request description synchronized with the diff: state the
   problem, solution and important design decisions, related issues, scope and
   follow-ups, and validation.
@@ -189,11 +189,9 @@ unless the user identifies the work as downstream-only.
   unnecessary churn, failure modes, and mismatches between code, tests,
   documentation, and the description.
 - Never mark a pull request ready or request reviewers unless the human asks.
-  By default, first rebase it onto the latest target branch, satisfy the
+  First rebase it onto the latest target branch, satisfy the
   repository's author-facing review requirements, and wait for required CI to
-  pass. A human may explicitly override a gate for one action or pull request;
-  treat an override as persistent only when the human says so and records it in
-  the appropriate maintained instruction or configuration.
+  pass. Follow the repository's existing policy for any exception.
 
 The optional authoring mechanics are in
 [`gh-develop-xr-ai`](skills/gh-develop-xr-ai/SKILL.md).

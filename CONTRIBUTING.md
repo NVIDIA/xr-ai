@@ -69,12 +69,12 @@ Language-specific toolchains are pinned in each client project:
   Explain deliberate exclusions and tradeoffs.
 - Link the issue related to the current change. Link planned follow-up issues
   separately when they exist.
-- Use `Large PR: yes` only when maintainers agree the coherent change cannot be
-  split into independently useful pull requests; explain that decision and map
-  the major change groups to the goal.
+- Mark a large pull request with `Large PR: yes`. Explain why the change
+  cannot be split into independently useful pull requests and map the major
+  change groups to the goal.
 - Review the complete diff before requesting review and remove unrelated churn.
 - Rebase onto the latest target branch and ensure required CI is green before
-  requesting review, unless maintainers explicitly agree to an exception.
+  requesting review. Follow the repository's existing policy for any exception.
 - Keep commits focused and sign them with `git commit -s`.
 
 ## Developer Certificate of Origin

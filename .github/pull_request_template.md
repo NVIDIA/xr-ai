@@ -27,10 +27,10 @@ State deliberate exclusions, constraints, and tradeoffs so they are not
 mistaken for omissions. For a multi-PR change, explain this PR's place in the
 series and link the confirmed issues for remaining work. Write "None" when this
 PR is self-contained and has no planned follow-up. Leave `Large PR: no` for a
-normal PR. Use `Large PR: yes` only after the author and maintainers agree the
-coherent change cannot be split; then explain why and map its major change
-groups to the goal. Document any explicit maintainer override to the normal
-review-readiness gates.
+normal PR. For a large PR, use `Large PR: yes`, explain why the change cannot
+be split into independently useful pull requests, and map its major change
+groups to the goal. Document any exception permitted by current repository
+review policy.
 -->
 
 ## Validation

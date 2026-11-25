@@ -45,9 +45,9 @@ focused tests, dependency metadata, migration notes, and user-facing
 documentation that must land with it; omit unrelated cleanup and redesigns.
 
 If the work may need a large PR or a sequence, show the proposed boundary and
-follow-ups. The human decides after enough design clarification. Use the
-standalone `Large PR: yes` marker only after that decision, and explain why the
-coherent change cannot be split, its major change groups, risks, and validation.
+follow-ups so the human can decide the scope. Use the template's
+`Large PR: yes` marker for a large PR. Explain why the change cannot be split
+and describe its major change groups, risks, and validation for reviewers.
 
 Never create a tracking issue from an agent plan or review comment. Draft the
 proposed issue and obtain explicit human confirmation before opening it, then
@@ -90,22 +90,17 @@ Before sending a PR for review:
    SHA. A pending, cancelled, or failing required check blocks review.
 3. Read the current `gh-review-xr-ai` scope and description gates and satisfy
    the author-facing requirements, including an accurate description, coherent
-   scope, related issue links when they exist, and the required `Large PR: yes`
-   annotation and rationale when applicable. Do not import reviewer-only
-   posting behavior.
+   scope, related issue links when they exist, and the large-PR annotation and
+   rationale when applicable. Do not import reviewer-only posting behavior.
 4. Refresh the base, PR head, and checks once more. If the PR head differs from
    the proposed SHA, stop and revalidate the new head before changing review
    state. If the base advanced, repeat the rebase and CI cycle. When the head
    matches and its required checks pass, perform only the requested review
    actions for the reviewers the human named.
 
-If a gate cannot be met, report the exact state and consequence. The human may
-explicitly override it. Apply an ambiguous override only to the current action
-or PR after clarifying its scope; never silently generalize it. Treat an
-override as persistent only when the human explicitly requests a durable policy
-and records it in the appropriate maintained repository instruction or
-configuration. Document a PR-specific override in the description so reviewers
-can evaluate it. Never describe pending or failed CI as green.
+If a gate cannot be met, report the exact state and consequence. Follow the
+repository's existing policy for any exception and document it in the PR
+description. Never describe pending or failed CI as green.
 
 ## Address feedback as the authoring agent
 
