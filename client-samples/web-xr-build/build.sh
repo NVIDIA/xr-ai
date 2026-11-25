@@ -6,7 +6,7 @@
 # XR render demo page loads both same-origin (works on headsets / offline LANs).
 # Output files are gitignored — run this once on the host that serves the demo.
 #
-#   cloudxr-sdk.esm.mjs    — webpack-bundled from @nvidia/cloudxr (NGC tarball)
+#   cloudxr-sdk.esm.mjs    — webpack-bundled from npm's @nvidia/cloudxr
 #   livekit-client.esm.mjs — copied from npm's prebuilt ESM
 
 set -Eeuo pipefail
@@ -14,74 +14,27 @@ set -Eeuo pipefail
 cd "$(dirname "$0")"
 
 VERSION="$(tr -d '[:space:]' < .sdk-version)"
+PACKAGE_VERSION="$(node -p "require('./package.json').dependencies['@nvidia/cloudxr']")"
 LIVEKIT_VERSION="$(node -p "require('./package.json').dependencies['livekit-client']")"
-SDK_FILE="nvidia-cloudxr-${VERSION}.tgz"
-SDK_CACHE="${SDK_FILE}"
-LOCAL_TARBALL="sdk.tgz"
 VENDOR_DIR="../web-xr/vendor"
 OUT_CLOUDXR="${VENDOR_DIR}/cloudxr-sdk.esm.mjs"
 OUT_LIVEKIT="${VENDOR_DIR}/livekit-client.esm.mjs"
 VERSION_MARKER="${VENDOR_DIR}/.cloudxr-sdk-version"
 LIVEKIT_VERSION_MARKER="${VENDOR_DIR}/.livekit-client-version"
 
-mkdir -p "${VENDOR_DIR}"
+if [[ "${PACKAGE_VERSION}" != "${VERSION}" ]]; then
+    echo "error: @nvidia/cloudxr must be pinned to .sdk-version (${VERSION}) in package.json" >&2
+    exit 1
+fi
 
+mkdir -p "${VENDOR_DIR}"
 echo "CloudXR SDK version: ${VERSION}"
 
-# ── 1. Obtain the versioned SDK tarball ──────────────────────────────────────
-# Download (or copy) into a sibling .partial file first and rename only on
-# success — otherwise an interrupted curl/wget / failed cp leaves a truncated
-# cache entry that future runs happily reuse, producing a corrupt bundle whose
-# root cause looks like "npm install crashed in @nvidia/cloudxr".
-#
-# We don't pin a checksum here because the SDK tarball is fetched live from
-# NGC and only the .sdk-version pin is committed; the npm install + webpack
-# build will fail loudly on a corrupt tarball, so this only protects against
-# the silent "previous run was interrupted" failure mode.
-if [[ -f "${SDK_CACHE}" ]]; then
-    echo "Using existing ${SDK_CACHE}"
-else
-    PARTIAL="${SDK_CACHE}.partial"
-    rm -f "${PARTIAL}"
-    # Public NGC resource API; no NGC CLI required.
-    NGC_URL="https://api.ngc.nvidia.com/v2/resources/org/nvidia/cloudxr-js/${VERSION}/files?redirect=true&path=${SDK_FILE}"
-    echo "Downloading from public NGC:"
-    echo "  ${NGC_URL}"
-    if command -v wget >/dev/null 2>&1; then
-        wget --content-disposition --output-document "${PARTIAL}" "${NGC_URL}"
-    elif command -v curl >/dev/null 2>&1; then
-        curl -fL --output "${PARTIAL}" "${NGC_URL}"
-    else
-        echo "error: need wget or curl to download the SDK" >&2
-        exit 1
-    fi
-    mv "${PARTIAL}" "${SDK_CACHE}"
-fi
-
-# package.json uses the stable sdk.tgz path. Replace it atomically from the
-# versioned cache, and invalidate npm's file-dependency state whenever the
-# generated bundles were built from a different CloudXR release.
-BUILT_VERSION=""
-if [[ -f "${VERSION_MARKER}" ]]; then
-    BUILT_VERSION="$(tr -d '[:space:]' < "${VERSION_MARKER}")"
-fi
-if [[ "${BUILT_VERSION}" != "${VERSION}" ]]; then
-    rm -rf node_modules/@nvidia/cloudxr
-    rm -f package-lock.json
-fi
-if [[ ! -f "${LOCAL_TARBALL}" ]] || ! cmp -s "${SDK_CACHE}" "${LOCAL_TARBALL}"; then
-    cp "${SDK_CACHE}" "${LOCAL_TARBALL}.partial"
-    mv "${LOCAL_TARBALL}.partial" "${LOCAL_TARBALL}"
-fi
-
-# ── 2. Install deps ──────────────────────────────────────────────────────────
+# ── 1. Install deps ──────────────────────────────────────────────────────────
 echo "Running npm install…"
-# --legacy-peer-deps: @nvidia/cloudxr declares peerDependencies on gl-matrix
-# and long. We satisfy them in our own dependencies list, but newer npm will
-# still raise ERESOLVE when the peer's own tarball appears twice in the tree.
-npm install --no-audit --no-fund --legacy-peer-deps
+npm install --no-audit --no-fund
 
-# ── 3. Bundle CloudXR to ESM ─────────────────────────────────────────────────
+# ── 2. Bundle CloudXR to ESM ─────────────────────────────────────────────────
 echo "Bundling CloudXR…"
 npm run build
 
@@ -90,7 +43,7 @@ if [[ ! -f "${OUT_CLOUDXR}" ]]; then
     exit 1
 fi
 
-# ── 4. Copy the prebuilt livekit-client ESM ──────────────────────────────────
+# ── 3. Copy the prebuilt livekit-client ESM ──────────────────────────────────
 LIVEKIT_SRC="node_modules/livekit-client/dist/livekit-client.esm.mjs"
 if [[ ! -f "${LIVEKIT_SRC}" ]]; then
     echo "error: ${LIVEKIT_SRC} not found after npm install" >&2

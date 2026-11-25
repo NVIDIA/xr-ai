@@ -292,6 +292,13 @@ The [copied agreement with artifact provenance](third_party_licenses/nvidia-clou
 records the applicable terms. The permissive license elections elsewhere in
 this file do not apply to this proprietary SDK.
 
+The Web-XR build obtains the separate CloudXR.js client as the exact
+`@nvidia/cloudxr` 6.2.0 package from the public npm registry. Its artifact
+integrity is recorded in `dependency-manifest/web-xr-build/package-lock.json`;
+the artifact is unchanged from the previously used NGC client tarball. This
+package also carries the NVIDIA CloudXR software license agreement, not an
+open-source license. The generated browser bundle remains gitignored.
+
 ### `text-unidecode` license election
 
 `text-unidecode` 1.3 is available under the Artistic License or GPLv2+. XR AI

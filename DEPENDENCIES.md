@@ -364,7 +364,7 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 
 #### `cloudxr-runtime` — [`services/cloudxr-runtime/`](services/cloudxr-runtime/)
 
-- Python: `>=3.11,<3.14`
+- Python: `>=3.11.4,<3.14`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:

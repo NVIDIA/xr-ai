@@ -80,7 +80,10 @@ dynamically.
   profile; the hub handles agent media via LiveKit. They share no ports.
 - WebRTC profiles (`auto-webrtc` and `quest3`) start a WSS proxy on port 48322
   for signaling. Native profiles use a direct native transport and do not need
-  the proxy.
+  the proxy. To change the proxy port, set `PROXY_PORT` in the process
+  environment, `cloudxr_env`, or the configured env file; the env file wins,
+  followed by the process environment and then `cloudxr_env`. The value must
+  be an integer from 1 to 65535. Configure Web-XR clients to use that same port.
 - After CloudXR is ready, activate its environment to run an OpenXR app against
   it. Run this in a separate terminal each time you start a new shell against a
   running stack:

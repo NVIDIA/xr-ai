@@ -277,12 +277,12 @@ cd client-samples/web-xr-build
 ./build.sh
 ```
 
-The idempotent script reads the CloudXR version from `.sdk-version`, reuses a
-matching versioned tarball when present, and otherwise downloads the public
-NGC tarball. It installs npm dependencies, writes
+The script installs the exact `@nvidia/cloudxr` version pinned in `package.json`
+from the public npm registry, checks it matches `.sdk-version`, and writes
 both ESM bundles to `../web-xr/vendor/`, and records the SDK version beside
 them. The orchestrator automatically rebuilds missing or stale bundles.
-To bump CloudXR, edit `.sdk-version` and re-run the script. To bump LiveKit,
+To bump CloudXR, update the exact version in `package.json` and `.sdk-version`
+together and re-run the script. To bump LiveKit,
 edit `package.json`, remove `node_modules`, and re-run the script.
 
 ## Android

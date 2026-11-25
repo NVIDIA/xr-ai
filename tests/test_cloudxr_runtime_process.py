@@ -8,6 +8,7 @@ import asyncio
 import errno
 import hashlib
 import io
+import json
 import os
 import ssl
 import subprocess
@@ -132,8 +133,11 @@ def test_sdk_pins_cover_every_supported_architecture():
 
 
 def test_web_client_sdk_matches_the_runtime_version():
-    version_file = Path(__file__).resolve().parents[1] / "client-samples" / "web-xr-build" / ".sdk-version"
+    build_dir = Path(__file__).resolve().parents[1] / "client-samples" / "web-xr-build"
+    version_file = build_dir / ".sdk-version"
     assert version_file.read_text().strip() == _sdk.SDK_VERSION
+    package = json.loads((build_dir / "package.json").read_text())
+    assert package["dependencies"]["@nvidia/cloudxr"] == _sdk.SDK_VERSION
 
 
 def test_published_env_has_derived_paths_and_respects_overrides(tmp_path, monkeypatch):
@@ -259,6 +263,64 @@ def test_wss_proxy_refuses_half_a_certificate_pair(tmp_path):
 
     with pytest.raises(RuntimeError, match="missing server.key"):
         _wss.ensure_certificate(tmp_path)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("source", ["default", "process", "yaml", "env_file"])
+async def test_wss_port_uses_the_prepared_environment(tmp_path, monkeypatch, source):
+    from cloudxr_runtime import __main__ as main
+
+    monkeypatch.delenv("PROXY_PORT", raising=False)
+    cfg = {"cloudxr_install_dir": str(tmp_path)}
+    expected = 48322
+    if source == "process":
+        monkeypatch.setenv("PROXY_PORT", "48444")
+        expected = 48444
+    elif source == "yaml":
+        cfg["cloudxr_env"] = {"PROXY_PORT": 48445}
+        expected = 48445
+    elif source == "env_file":
+        monkeypatch.setenv("PROXY_PORT", "48444")
+        cfg["cloudxr_env"] = {"PROXY_PORT": 48445}
+        env_file = tmp_path / "cloudxr.env"
+        env_file.write_text("PROXY_PORT=48446\n")
+        cfg["cloudxr_env_config"] = str(env_file)
+        expected = 48446
+    monkeypatch.setattr(main, "ensure_sdk", lambda *_: _sdk.SDK(tmp_path))
+    monkeypatch.setattr(main, "check_eula", lambda *_a, **_k: None)
+    monkeypatch.setattr(main, "prepare_run_dir", lambda *_: None)
+    main._prepare(cfg)
+
+    context = SimpleNamespace(load_cert_chain=lambda **_: None)
+    monkeypatch.setattr(_wss, "ensure_certificate", lambda _: (tmp_path / "cert", tmp_path / "key"))
+    monkeypatch.setattr(_wss.ssl, "SSLContext", lambda *_: context)
+    ports = []
+    stop = asyncio.get_running_loop().create_future()
+
+    class Server:
+        async def __aenter__(self):
+            stop.set_result(None)
+
+        async def __aexit__(self, *_):
+            return False
+
+    def serve(*_a, **kwargs):
+        ports.append(kwargs["port"])
+        return Server()
+
+    monkeypatch.setattr(_wss, "ws_serve", serve)
+    await _wss.run(tmp_path, stop)
+    assert ports == [expected]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("value", ["", "not-a-port", "1.5", "0", "-1", "65536"])
+async def test_invalid_proxy_port_fails_before_certificate_or_bind(tmp_path, monkeypatch, value):
+    monkeypatch.setenv("PROXY_PORT", value)
+    monkeypatch.setattr(_wss, "ensure_certificate", lambda *_: pytest.fail("created certificate"))
+    monkeypatch.setattr(_wss, "ws_serve", lambda *_a, **_k: pytest.fail("bound invalid port"))
+    with pytest.raises(RuntimeError, match="PROXY_PORT must be an integer from 1 to 65535"):
+        await _wss.run(tmp_path, asyncio.get_running_loop().create_future())
 
 
 @pytest.mark.parametrize("signals,join_result,stop_result", [(0, 0, 0), (2, 0, 0), (2, -6, -6)])

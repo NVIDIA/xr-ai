@@ -316,7 +316,10 @@ def test_xr_render_rebuilds_stale_web_xr_vendor_bundle(
     assert calls == []
 
 
-def test_web_xr_build_replaces_stale_sdk_tarball(tmp_path: Path) -> None:
+@pytest.mark.parametrize("matching_version", [False, True])
+def test_web_xr_build_installs_the_exact_npm_sdk_without_tarballs(
+    tmp_path: Path, matching_version: bool,
+) -> None:
     build_dir = tmp_path / "web-xr-build"
     vendor_dir = tmp_path / "web-xr" / "vendor"
     fake_bin = tmp_path / "bin"
@@ -330,14 +333,14 @@ def test_web_xr_build_replaces_stale_sdk_tarball(tmp_path: Path) -> None:
     build_script.chmod(0o755)
     (build_dir / ".sdk-version").write_text("6.2.0\n")
     (build_dir / "package.json").write_text(
-        '{"dependencies":{"livekit-client":"^2.21.0"}}\n'
+        '{"dependencies":{"@nvidia/cloudxr":"'
+        + ("6.2.0" if matching_version else "6.1.0")
+        + '","livekit-client":"^2.21.0"}}\n'
     )
-    (build_dir / "nvidia-cloudxr-6.2.0.tgz").write_bytes(b"cloudxr-6.2")
-    (build_dir / "sdk.tgz").write_bytes(b"cloudxr-6.1")
     stale_package = build_dir / "node_modules" / "@nvidia" / "cloudxr"
     stale_package.mkdir(parents=True)
     (stale_package / "stale").write_text("6.1")
-    (build_dir / "package-lock.json").write_text("stale")
+    (build_dir / "package-lock.json").write_text("existing npm lock")
     (vendor_dir / "cloudxr-sdk.esm.mjs").write_text("cloudxr-6.1")
     (vendor_dir / "livekit-client.esm.mjs").write_text("livekit")
     (vendor_dir / ".cloudxr-sdk-version").write_text("6.1.0\n")
@@ -346,7 +349,10 @@ def test_web_xr_build_replaces_stale_sdk_tarball(tmp_path: Path) -> None:
         "#!/bin/sh\n"
         "set -eu\n"
         "if [ \"$1\" = install ]; then\n"
-        "  test ! -e node_modules/@nvidia/cloudxr\n"
+        "  test -e node_modules/@nvidia/cloudxr/stale\n"
+        "  test -e package-lock.json\n"
+        "  test ! -e sdk.tgz\n"
+        "  printf installed > installed\n"
         "  mkdir -p node_modules/livekit-client/dist\n"
         "  printf livekit > node_modules/livekit-client/dist/livekit-client.esm.mjs\n"
         "elif [ \"$1\" = run ]; then\n"
@@ -357,10 +363,17 @@ def test_web_xr_build_replaces_stale_sdk_tarball(tmp_path: Path) -> None:
     fake_npm.chmod(0o755)
     env = {**os.environ, "PATH": f"{fake_bin}:{os.environ['PATH']}"}
 
-    subprocess.run([str(build_script)], cwd=build_dir, env=env, check=True)
-
-    assert (build_dir / "sdk.tgz").read_bytes() == b"cloudxr-6.2"
-    assert not (build_dir / "package-lock.json").exists()
+    result = subprocess.run([str(build_script)], cwd=build_dir, env=env, capture_output=True, text=True)
+    if not matching_version:
+        assert result.returncode != 0
+        assert "must be pinned to .sdk-version" in result.stderr
+        assert not (build_dir / "installed").exists()
+        assert (vendor_dir / ".cloudxr-sdk-version").read_text().strip() == "6.1.0"
+        return
+    assert result.returncode == 0, result.stderr
+    assert (build_dir / "installed").read_text() == "installed"
+    assert not (build_dir / "sdk.tgz").exists()
+    assert (build_dir / "package-lock.json").read_text() == "existing npm lock"
     assert (vendor_dir / ".cloudxr-sdk-version").read_text().strip() == "6.2.0"
     assert (vendor_dir / ".livekit-client-version").read_text().strip() == "^2.21.0"
     assert (vendor_dir / "cloudxr-sdk.esm.mjs").read_text() == "cloudxr-6.2"

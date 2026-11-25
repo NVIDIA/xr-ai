@@ -19,6 +19,7 @@ import asyncio
 import errno
 import functools
 import logging
+import os
 import shutil
 import ssl
 import subprocess
@@ -165,10 +166,18 @@ async def run(
     cert_dir: Path,
     stop: asyncio.Future[None],
     *,
-    port: int = PROXY_PORT,
+    port: int | None = None,
     backend_uri: str = BACKEND_URI,
 ) -> None:
     """Serve the proxy on *port*, forwarding to *backend_uri*, until *stop* completes."""
+    if port is None:
+        configured = os.environ.get("PROXY_PORT", str(PROXY_PORT))
+        try:
+            port = int(configured)
+        except ValueError as exc:
+            raise RuntimeError("PROXY_PORT must be an integer from 1 to 65535") from exc
+        if not 1 <= port <= 65535:
+            raise RuntimeError("PROXY_PORT must be an integer from 1 to 65535")
     # websockets logs every handshake at INFO; keep only its problems.
     logging.getLogger("websockets").setLevel(logging.WARNING)
     cert, key = ensure_certificate(cert_dir)

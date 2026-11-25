@@ -3,10 +3,11 @@
 
 """Shared hardware queries preserve deadlines and caller failure policy."""
 import subprocess
+from importlib import import_module
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from test_cloudxr_runtime_process import _import_cloudxr_runtime
 from xr_ai_gpu import (
     GPUInventoryError,
     query_gpu_inventory,
@@ -14,6 +15,14 @@ from xr_ai_gpu import (
     query_gpu_processes,
 )
 from xr_ai_launcher import detect_gpu_config
+
+
+@pytest.fixture
+def cloudxr_runtime(monkeypatch):
+    monkeypatch.syspath_prepend(
+        str(Path(__file__).resolve().parents[1] / "services" / "cloudxr-runtime")
+    )
+    return import_module("cloudxr_runtime.__main__")
 
 
 @pytest.mark.parametrize("query", [query_gpu_inventory, query_gpu_pci_bus_ids, query_gpu_processes])
@@ -53,8 +62,8 @@ def test_launcher_inventory_and_diagnostic_query_keep_no_deadline():
     assert all("timeout" not in call.kwargs for call in command.call_args_list)
 
 
-def test_cloudxr_uses_shared_pci_query_with_existing_deadline(monkeypatch):
-    module = _import_cloudxr_runtime(monkeypatch)
+def test_cloudxr_uses_shared_pci_query_with_existing_deadline(monkeypatch, cloudxr_runtime):
+    module = cloudxr_runtime
     monkeypatch.setattr(module.shutil, "which", lambda _: "/usr/bin/nvidia-smi")
     with patch("xr_ai_gpu._query.subprocess.check_output", return_value="1, 00000000:2a:00.0") as command:
         assert module._xr_gpu_env(1) == {
@@ -65,16 +74,16 @@ def test_cloudxr_uses_shared_pci_query_with_existing_deadline(monkeypatch):
 
 
 @pytest.mark.parametrize("result", ["", "malformed", "0, invalid-bus", "2, 00000000:02:00.0"])
-def test_cloudxr_skips_pinning_for_unusable_inventory(monkeypatch, result):
-    module = _import_cloudxr_runtime(monkeypatch)
+def test_cloudxr_skips_pinning_for_unusable_inventory(monkeypatch, result, cloudxr_runtime):
+    module = cloudxr_runtime
     monkeypatch.setattr(module.shutil, "which", lambda _: "/usr/bin/nvidia-smi")
     with patch("xr_ai_gpu._query.subprocess.check_output", return_value=result):
         assert module._xr_gpu_env(0) is None
 
 
 @pytest.mark.parametrize("error", [PermissionError(), subprocess.TimeoutExpired("nvidia-smi", 5)])
-def test_cloudxr_continues_without_pinning_on_driver_failure(monkeypatch, error):
-    module = _import_cloudxr_runtime(monkeypatch)
+def test_cloudxr_continues_without_pinning_on_driver_failure(monkeypatch, error, cloudxr_runtime):
+    module = cloudxr_runtime
     monkeypatch.setattr(module.shutil, "which", lambda _: "/usr/bin/nvidia-smi")
     with patch("xr_ai_gpu._query.subprocess.check_output", side_effect=error):
         assert module._xr_gpu_env(0) is None
