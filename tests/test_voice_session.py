@@ -5,8 +5,13 @@
 from __future__ import annotations
 
 import asyncio
+import os
+import signal
+import sys
 
 import pytest
+from pipecat.pipeline.pipeline import Pipeline
+from pipecat.pipeline.worker import PipelineWorker
 from xr_ai_voice import VadConfig
 from xr_ai_voice import _session as session_module
 from xr_ai_voice._session import _VoiceSession as VoiceSession
@@ -146,7 +151,7 @@ async def test_voice_session_owns_readiness_ready_file_and_cleanup(
         "_build_voice_pipeline",
         lambda **_kwargs: (object(), _Worker()),
     )
-    monkeypatch.setattr(session_module, "PipelineRunner", _Runner)
+    monkeypatch.setattr(session_module, "PipelineRunner", lambda **_kwargs: _Runner())
 
     stt = _Service()
     tts = _Service()
@@ -205,7 +210,7 @@ async def test_voice_session_reannounces_current_status(monkeypatch) -> None:
         "_build_voice_pipeline",
         lambda **_kwargs: (object(), worker),
     )
-    monkeypatch.setattr(session_module, "PipelineRunner", _Runner)
+    monkeypatch.setattr(session_module, "PipelineRunner", lambda **_kwargs: _Runner())
     monkeypatch.setattr(session_module, "_STATUS_REANNOUNCE_INTERVAL_S", 0.01)
 
     service = _Service()
@@ -245,7 +250,7 @@ async def test_voice_session_allows_early_clean_pipeline_exit(monkeypatch) -> No
         "_build_voice_pipeline",
         lambda **_kwargs: (object(), worker),
     )
-    monkeypatch.setattr(session_module, "PipelineRunner", _Runner)
+    monkeypatch.setattr(session_module, "PipelineRunner", lambda **_kwargs: _Runner())
 
     service = _Service()
     transport = _Transport()
@@ -275,7 +280,7 @@ async def test_voice_session_propagates_pipeline_runner_error(monkeypatch) -> No
         "_build_voice_pipeline",
         lambda **_kwargs: (object(), worker),
     )
-    monkeypatch.setattr(session_module, "PipelineRunner", _Runner)
+    monkeypatch.setattr(session_module, "PipelineRunner", lambda **_kwargs: _Runner())
 
     service = _Service()
     session = VoiceSession(
@@ -314,7 +319,7 @@ async def test_voice_session_cancels_pipeline_when_ready_file_touch_fails(
         "_build_voice_pipeline",
         lambda **_kwargs: (object(), worker),
     )
-    monkeypatch.setattr(session_module, "PipelineRunner", _Runner)
+    monkeypatch.setattr(session_module, "PipelineRunner", lambda **_kwargs: _Runner())
 
     service = _Service()
     transport = _Transport()
@@ -417,3 +422,164 @@ async def test_voice_session_starts_without_checking_model_health() -> None:
     ) as session:
         assert session.transport is transport
     assert transport.shutdown_called
+
+
+def _stoppable_pipeline(monkeypatch):
+    stopped = asyncio.Event()
+    task = _PipelineTask(on_cancel=stopped.set)
+
+    class _Runner:
+        async def run(self, _worker) -> None:
+            await stopped.wait()
+
+    monkeypatch.setattr(
+        session_module, "_build_voice_pipeline", lambda **_kwargs: (object(), task)
+    )
+    monkeypatch.setattr(session_module, "PipelineRunner", lambda **_kwargs: _Runner())
+    return task
+
+
+def _session(**kwargs) -> VoiceSession:
+    transport = _Transport()
+    transport.started.set()
+    return VoiceSession(
+        stt=_Service(),  # type: ignore[arg-type]
+        tts=_Service(),  # type: ignore[arg-type]
+        vad=VadConfig(),
+        voice_gate=VoiceGateConfig(),
+        transport=transport,  # type: ignore[arg-type]
+        **kwargs,
+    )
+
+
+def _record_signal_handlers(monkeypatch) -> list[tuple[str, object]]:
+    loop = asyncio.get_running_loop()
+    calls: list[tuple[str, object]] = []
+    monkeypatch.setattr(
+        loop, "add_signal_handler", lambda sig, *_a: calls.append(("add", sig))
+    )
+    monkeypatch.setattr(
+        loop, "remove_signal_handler", lambda sig: calls.append(("remove", sig))
+    )
+    return calls
+
+
+async def test_voice_session_installs_signal_handlers_by_default(monkeypatch) -> None:
+    task = _stoppable_pipeline(monkeypatch)
+    calls = _record_signal_handlers(monkeypatch)
+    async with _session() as session:
+        run_task = asyncio.create_task(session.run(_ignore_query))
+        while session._request_stop is None:
+            await asyncio.sleep(0)
+        session.request_stop()
+        await run_task
+    assert {s for kind, s in calls if kind == "add"} == {
+        session_module.signal.SIGINT,
+        session_module.signal.SIGTERM,
+    }
+    assert task.cancel_calls == 1
+
+
+async def test_voice_session_leaves_signal_handlers_alone_when_disabled(
+    monkeypatch,
+) -> None:
+    task = _stoppable_pipeline(monkeypatch)
+    calls = _record_signal_handlers(monkeypatch)
+    async with _session(install_signal_handlers=False) as session:
+        run_task = asyncio.create_task(session.run(_ignore_query))
+        while session._request_stop is None:
+            await asyncio.sleep(0)
+        session.request_stop()
+        session.request_stop()
+        await run_task
+    assert calls == []
+    assert task.cancel_calls == 1
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="requires POSIX signal handlers")
+@pytest.mark.parametrize("signum", [signal.SIGINT, signal.SIGTERM])
+@pytest.mark.parametrize("install_signal_handlers", [False, True])
+async def test_voice_session_honors_signal_ownership_with_real_runner(
+    monkeypatch,
+    signum: signal.Signals,
+    install_signal_handlers: bool,
+) -> None:
+    started = asyncio.Event()
+    application_stopped = asyncio.Event()
+    pipeline = Pipeline([])
+    worker = PipelineWorker(pipeline, idle_timeout_secs=None)
+
+    @worker.event_handler("on_pipeline_started")
+    async def on_pipeline_started(_worker, _frame) -> None:
+        started.set()
+
+    monkeypatch.setattr(
+        session_module, "_build_voice_pipeline", lambda **_kwargs: (pipeline, worker)
+    )
+    loop = asyncio.get_running_loop()
+    async with _session(install_signal_handlers=install_signal_handlers) as session:
+
+        def stop_from_application() -> None:
+            application_stopped.set()
+            session.request_stop()
+
+        loop.add_signal_handler(signum, stop_from_application)
+        run_task = asyncio.create_task(session.run(_ignore_query))
+        try:
+            await asyncio.wait_for(started.wait(), timeout=5)
+            os.kill(os.getpid(), signum)
+            await asyncio.wait_for(asyncio.shield(run_task), timeout=5)
+            assert application_stopped.is_set() is not install_signal_handlers
+        finally:
+            try:
+                session.request_stop()
+                await asyncio.wait_for(run_task, timeout=5)
+            finally:
+                loop.remove_signal_handler(signum)
+
+
+async def test_voice_session_latches_stop_requested_before_pipeline_starts(
+    monkeypatch,
+) -> None:
+    task = _stoppable_pipeline(monkeypatch)
+    async with _session(install_signal_handlers=False) as session:
+        session.request_stop()
+        await asyncio.wait_for(session.run(_ignore_query), timeout=5)
+    assert task.cancel_calls == 1
+
+
+async def test_voice_session_owns_cancel_task_until_done(monkeypatch) -> None:
+    release = asyncio.Event()
+    stopped = asyncio.Event()
+
+    class _SlowTask(_PipelineTask):
+        async def cancel(self) -> None:
+            await release.wait()
+            stopped.set()
+
+    class _Runner:
+        async def run(self, _worker) -> None:
+            await stopped.wait()
+
+    monkeypatch.setattr(
+        session_module, "_build_voice_pipeline", lambda **_kw: (object(), _SlowTask())
+    )
+    monkeypatch.setattr(session_module, "PipelineRunner", lambda **_kwargs: _Runner())
+    async with _session(install_signal_handlers=False) as session:
+        run_task = asyncio.create_task(session.run(_ignore_query))
+        while session._request_stop is None:
+            await asyncio.sleep(0)
+        session.request_stop()
+        assert len(session._cancel_tasks) == 1
+        release.set()
+        await run_task
+        await asyncio.sleep(0)
+    assert not session._cancel_tasks
+
+
+async def test_voice_session_request_stop_after_close_is_a_no_op() -> None:
+    session = _session(install_signal_handlers=False)
+    async with session:
+        pass
+    session.request_stop()
+    assert not session._stop_requested

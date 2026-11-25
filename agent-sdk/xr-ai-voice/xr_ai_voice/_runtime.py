@@ -164,6 +164,10 @@ class VoiceAgent(Agent):
     profile and the same voice-gate configuration, without application-side
     backend inspection. The normal constructor accepts explicitly owned clients.
 
+    By default :meth:`run` installs SIGINT and SIGTERM handlers that stop the
+    pipeline. Pass ``install_signal_handlers=False`` when the application owns
+    signals and call :meth:`request_stop` to stop the agent instead.
+
     ``vad.silence_duration`` owns utterance finalization for either ASR backend,
     overriding any ``speaker.silence_duration`` in ``voice_gate`` for this agent.
     Each agent copies its effective speaker settings; the shared voice-gate
@@ -209,6 +213,7 @@ class VoiceAgent(Agent):
         interrupt_on_supersede: bool = False,
         combiner: Callable[[Sequence[str]], Awaitable[str]] | None = None,
         stream_idle_timeout_s: float = 15.0,
+        install_signal_handlers: bool = True,
     ) -> None:
         if response_capacity <= 0:
             raise ValueError("voice response capacity must be positive")
@@ -226,6 +231,7 @@ class VoiceAgent(Agent):
             text_topic=text_topic,
             idle_timeout_secs=idle_timeout_secs,
             transport=transport,
+            install_signal_handlers=install_signal_handlers,
         )
         self.query_topic = query_topic
         self.response_capacity = response_capacity
@@ -272,6 +278,7 @@ class VoiceAgent(Agent):
         interrupt_on_supersede: bool = False,
         combiner: Callable[[Sequence[str]], Awaitable[str]] | None = None,
         stream_idle_timeout_s: float = 15.0,
+        install_signal_handlers: bool = True,
     ) -> VoiceAgent:
         """Construct voice input from loaded models and voice-gate settings.
 
@@ -319,7 +326,18 @@ class VoiceAgent(Agent):
             interrupt_on_supersede=interrupt_on_supersede,
             combiner=combiner,
             stream_idle_timeout_s=stream_idle_timeout_s,
+            install_signal_handlers=install_signal_handlers,
         )
+
+    def request_stop(self) -> None:
+        """Ask the voice session to stop and clean up.
+
+        A request before the pipeline starts takes effect when it starts.
+        Requests after the session closes have no effect.
+        Use this with ``install_signal_handlers=False`` when the application
+        owns SIGINT and SIGTERM and decides when the voice agent stops.
+        """
+        self._session.request_stop()
 
     async def run(self, runtime: AgentRuntime, *, source: str = "voice") -> None:
         """Run the owned voice session and bridge it to a running runtime."""
