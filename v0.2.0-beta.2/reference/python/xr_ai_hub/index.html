@@ -971,8 +971,8 @@ only one FRAME_REQUEST is sent and all callers receive the same response.</p>
 <em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">run</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_hub.ProcessorEndpoint.run" title="Link to this definition">#</a></dt>
 <dd><p>Receive and dispatch messages until <a class="reference internal" href="#xr_ai_hub.ProcessorEndpoint.stop" title="xr_ai_hub.ProcessorEndpoint.stop"><code class="xref py py-meth docutils literal notranslate"><span class="pre">stop()</span></code></a> is called.</p>
 <p>Real-time callbacks run in independent tasks. File callbacks run
-serially on a bounded worker. An unhandled callback exception is fatal
-to the processor process in either case.</p>
+serially on a bounded worker. If a callback raises an exception,
+the endpoint logs the error and continues processing.</p>
 </dd></dl>
 
 <dl class="py method">
