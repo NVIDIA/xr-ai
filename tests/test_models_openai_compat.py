@@ -12,10 +12,15 @@ import asyncio
 import base64
 import io
 import json
+from io import StringIO
+from pathlib import Path
+import subprocess
+import sys
 import wave
 
 import httpx
 import pytest
+from loguru import logger
 
 from _stub_openai import StubOpenAI
 from _helpers_vlm_stream import require_complete_vlm_stream
@@ -34,6 +39,14 @@ from xr_ai_models import (
     ToolDef,
 )
 from xr_ai_models._openai_compat import _PocketTTS
+
+
+def _trace_records(sink: StringIO) -> list[dict]:
+    return [
+        json.loads(line.removeprefix("llm.trace "))
+        for line in sink.getvalue().splitlines()
+        if line.startswith("llm.trace ")
+    ]
 
 
 async def test_pocket_tts_streams_pcm_chunks() -> None:
@@ -1222,3 +1235,497 @@ async def test_owned_client_closed_by_close() -> None:
     inner = llm._client
     await llm.close()
     assert inner.is_closed is True
+
+
+@pytest.fixture
+def trace_payload_enabled(monkeypatch) -> None:
+    monkeypatch.setenv("XR_AI_TRACE_MODEL_PAYLOADS", "1")
+
+
+@pytest.mark.parametrize("mode", ["chat", "stream", "stream_events"])
+async def test_model_trace_logs_only_metadata_by_default(mode: str, monkeypatch) -> None:
+    monkeypatch.delenv("XR_AI_TRACE_MODEL_PAYLOADS", raising=False)
+    monkeypatch.setenv("XR_AI_VERBOSE", "1")
+    stub = StubOpenAI()
+    stub.set_chat_message(
+        content="response-marker", reasoning="reasoning-marker", finish_reason="finish-marker",
+    )
+    usage = {"prompt_tokens": 7, "completion_tokens": 2, "total_tokens": "usage-marker"}
+    stub._chat_response["usage"] = usage
+    stub.set_stream_chunks([
+        {"choices": [{"index": 0, "delta": {
+            "content": "response-marker",
+            "reasoning": "reasoning-marker",
+            "tool_calls": [{"index": 0, "id": "call_1", "function": {
+                "name": "lookup", "arguments": '{"query":"tool-marker"}',
+            }}],
+        }}]},
+        {"choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]},
+        {"choices": [], "usage": usage},
+    ])
+    messages = [ChatMessage(role="user", content="request-marker")]
+    sink = StringIO()
+    sink_id = logger.add(sink, level="DEBUG", format="{message}")
+    try:
+        async with stub.client() as client, OpenAICompatLLM("http://stub", "llm", client=client) as llm:
+            if mode == "chat":
+                assert (await llm.chat(messages)).content == "response-marker"
+            else:
+                _ = [event async for event in getattr(llm, mode)(messages)]
+    finally:
+        logger.remove(sink_id)
+
+    (summary,) = _trace_records(sink)
+    assert summary["event"] == "end"
+    assert summary["mode"] == mode
+    assert summary["status"] == "complete"
+    assert summary["http_status"] == 200
+    assert summary["usage"] == {"prompt_tokens": 7, "completion_tokens": 2}
+    assert summary["chunk_count"] == (0 if mode == "chat" else 3)
+    assert summary["finish_reason"] == (None if mode == "chat" else "tool_calls")
+    assert summary["duration_ms"] >= 0
+    assert not {"request", "raw"} & summary.keys()
+    for content in (
+        "request-marker", "response-marker", "reasoning-marker", "tool-marker", "usage-marker", "finish-marker",
+    ):
+        assert content not in sink.getvalue()
+
+
+def test_model_trace_payload_opt_in_with_normal_logging(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("XR_AI_LOG_ROOT", str(tmp_path))
+    monkeypatch.setenv("XR_AI_VERBOSE", "1")
+    monkeypatch.delenv("XR_AI_TRACE_MODEL_PAYLOADS", raising=False)
+    script = """
+import asyncio
+import os
+
+from _stub_openai import StubOpenAI
+from loguru import logger
+from xr_ai_logging import setup_logging
+from xr_ai_models import ChatMessage, OpenAICompatLLM
+
+
+async def run():
+    setup_logging("trace-test")
+    stub = StubOpenAI()
+    stub.set_chat_message(content="default-reply-marker")
+    async with stub.client() as client, OpenAICompatLLM("http://stub", "llm", client=client) as llm:
+        await llm.chat([ChatMessage(role="user", content="default-prompt-marker")])
+        os.environ["XR_AI_TRACE_MODEL_PAYLOADS"] = "1"
+        stub.set_chat_message(content="opt-in-reply-marker")
+        await llm.chat([ChatMessage(role="user", content="opt-in-prompt-marker")])
+    await logger.complete()
+
+
+asyncio.run(run())
+"""
+    subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=Path(__file__).parent,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    (log_path,) = tmp_path.glob("log_*/trace-test.log")
+    logged = log_path.read_text()
+    summaries = [line for line in logged.splitlines() if 'llm.trace {"event":"end"' in line]
+    assert len(summaries) == 2
+    assert "default-prompt-marker" not in logged
+    assert "default-reply-marker" not in logged
+    assert "opt-in-prompt-marker" in logged
+    assert "opt-in-reply-marker" in logged
+
+
+async def test_llm_trace_records_chat_request_and_raw_response_without_secrets(
+    monkeypatch,
+    trace_payload_enabled,
+) -> None:
+    monkeypatch.setenv("TRACE_TEST_KEY", "do-not-log-this-key")
+    stub = StubOpenAI()
+    stub.set_chat_message(
+        content="answer",
+        reasoning="raw thought",
+        reasoning_field="reasoning_content",
+    )
+    stub._chat_response["usage"] = {"prompt_tokens": 7, "completion_tokens": 2}
+    stub._chat_response["trace_probe"] = {
+        "image_url": {"url": "data:image/png;base64,response-media-secret"},
+    }
+    sink = StringIO()
+    sink_id = logger.add(sink, level="DEBUG", format="{message}")
+    try:
+        async with OpenAICompatVLM(
+            "http://stub",
+            "vlm",
+            api_key_env="TRACE_TEST_KEY",
+            default_extras={"chat_template_kwargs": {"enable_thinking": False}},
+            client=stub.client(),
+        ) as vlm:
+            await vlm.ask_image(
+                "https://private.invalid/image.png",
+                "inspect this",
+                max_tokens=256,
+            )
+    finally:
+        logger.remove(sink_id)
+
+    records = _trace_records(sink)
+    assert [record["event"] for record in records] == [
+        "request",
+        "provider_response",
+        "end",
+    ]
+    assert len({record["call_id"] for record in records}) == 1
+    request = records[0]["request"]
+    assert request["model"] == "vlm"
+    assert request["max_tokens"] == 256
+    assert request["chat_template_kwargs"] == {"enable_thinking": False}
+    assert request["messages"][0]["content"][1]["text"] == "inspect this"
+    assert request["messages"][0]["content"][0]["image_url"]["url"] == "<image reference redacted>"
+    raw = records[1]["raw"]
+    assert raw["choices"][0]["message"]["reasoning_content"] == "raw thought"
+    assert raw["usage"] == {"prompt_tokens": 7, "completion_tokens": 2}
+    assert raw["trace_probe"]["image_url"]["url"] == "<image reference redacted>"
+    assert records[-1]["status"] == "complete"
+    assert "private.invalid" not in sink.getvalue()
+    assert "response-media-secret" not in sink.getvalue()
+    assert "do-not-log-this-key" not in sink.getvalue()
+    assert "Authorization" not in sink.getvalue()
+
+
+@pytest.mark.parametrize("mode", ["chat", "stream", "stream_events"])
+async def test_llm_trace_preserves_integer_keyed_request_options(mode: str, trace_payload_enabled) -> None:
+    stub = StubOpenAI()
+    stub.set_chat_message(content="answer")
+    stub.set_stream_chunks([
+        {"choices": [{"index": 0, "delta": {"content": "answer"}, "finish_reason": "stop"}]},
+    ])
+    messages = [ChatMessage(role="user", content="question")]
+    sink = StringIO()
+    sink_id = logger.add(sink, level="DEBUG", format="{message}")
+    try:
+        async with stub.client() as client, OpenAICompatLLM(
+            "http://stub", "llm", default_extras={"logit_bias": {123: -100}}, client=client,
+        ) as llm:
+            if mode == "chat":
+                await llm.chat(messages)
+            else:
+                _ = [value async for value in getattr(llm, mode)(messages)]
+    finally:
+        logger.remove(sink_id)
+
+    assert stub.last_json()["logit_bias"] == {"123": -100}
+    assert _trace_records(sink)[0]["request"] == stub.last_json()
+
+
+async def test_llm_trace_redacts_tuple_tool_examples_without_changing_wire_payload(trace_payload_enabled) -> None:
+    stub = StubOpenAI()
+    stub.set_chat_message(content="answer")
+    example = {"password": "example-credential", "image_url": {"url": "https://example.invalid/media"}}
+    messages = [ChatMessage(role="user", content="question")]
+    sink = StringIO()
+    sink_id = logger.add(sink, level="DEBUG", format="{message}")
+    try:
+        async with stub.client() as client, OpenAICompatLLM("http://stub", "llm", client=client) as llm:
+            for examples in ((example,), [example]):
+                tool = ToolDef("lookup", "Look up a record", {"type": "object", "examples": examples})
+                await llm.chat(messages, tools=[tool])
+                assert stub.last_json()["tools"][0]["function"]["parameters"]["examples"] == [example]
+    finally:
+        logger.remove(sink_id)
+
+    requests = [record["request"] for record in _trace_records(sink) if record["event"] == "request"]
+    assert len(requests) == 2
+    for request in requests:
+        assert request["tools"][0]["function"]["parameters"]["examples"] == [{
+            "password": "<redacted>",
+            "image_url": {"url": "<image reference redacted>"},
+        }]
+    assert "example-credential" not in sink.getvalue()
+    assert "example.invalid/media" not in sink.getvalue()
+
+
+@pytest.mark.parametrize("mode", ["stream", "stream_events"])
+async def test_llm_trace_uses_the_primary_choice_finish_reason(mode: str, trace_payload_enabled) -> None:
+    stub = StubOpenAI()
+    secondary_finish = {"choices": [{"index": 1, "delta": {}, "finish_reason": "length"}]}
+    stub.set_stream_chunks([
+        {"choices": [{"index": 0, "delta": {"content": "answer"}, "finish_reason": "stop"}]},
+        secondary_finish,
+    ])
+    sink = StringIO()
+    sink_id = logger.add(sink, level="DEBUG", format="{message}")
+    try:
+        async with stub.client() as client, OpenAICompatLLM(
+            "http://stub", "llm", default_extras={"n": 2}, client=client,
+        ) as llm:
+            messages = [ChatMessage(role="user", content="x")]
+            if mode == "stream":
+                assert [text async for text in llm.stream(messages)] == ["answer"]
+            else:
+                events = [event async for event in llm.stream_events(messages)]
+                assert events[-1] == ChatStreamEvent(kind="finish", finish_reason="stop")
+    finally:
+        logger.remove(sink_id)
+
+    records = _trace_records(sink)
+    assert secondary_finish in [record["raw"] for record in records if record["event"] == "provider_chunk"]
+    assert records[-1]["finish_reason"] == "stop"
+
+
+@pytest.mark.parametrize("include_payloads", [False, True])
+async def test_llm_trace_records_http_failure_status(include_payloads: bool, monkeypatch) -> None:
+    monkeypatch.setenv("XR_AI_TRACE_MODEL_PAYLOADS", "1" if include_payloads else "0")
+    stub = StubOpenAI()
+    stub.set_chat_status(503)
+    sink = StringIO()
+    sink_id = logger.add(sink, level="DEBUG", format="{message}")
+    try:
+        async with OpenAICompatLLM("http://stub", "llm", client=stub.client()) as llm:
+            with pytest.raises(httpx.HTTPStatusError):
+                await llm.chat([ChatMessage(role="user", content="x")])
+    finally:
+        logger.remove(sink_id)
+
+    records = _trace_records(sink)
+    expected = ["request", "http_error", "end"] if include_payloads else ["end"]
+    assert [record["event"] for record in records] == expected
+    assert len({record["call_id"] for record in records}) == 1
+    assert records[-1]["status"] == "error"
+    assert records[-1]["http_status"] == 503
+
+
+async def test_vlm_legacy_stream_trace_keeps_raw_reasoning_fields(trace_payload_enabled) -> None:
+    stub = StubOpenAI()
+    stub.set_stream_chunks(
+        [
+            {
+                "choices": [
+                    {
+                        "index": 0,
+                        "delta": {
+                            "reasoning_content": "provider-only reasoning",
+                        },
+                    }
+                ]
+            },
+            {"choices": [{"index": 0, "delta": {"content": "visible answer"}}]},
+            {"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]},
+        ]
+    )
+    sink = StringIO()
+    sink_id = logger.add(sink, level="DEBUG", format="{message}")
+    try:
+        async with OpenAICompatVLM("http://stub", "vlm", client=stub.client()) as vlm:
+            chunks = [chunk async for chunk in vlm.stream(_PNG_HEADER, "what is this?")]
+    finally:
+        logger.remove(sink_id)
+
+    assert chunks == ["visible answer"]
+    records = _trace_records(sink)
+    assert [record["event"] for record in records] == [
+        "request",
+        "provider_chunk",
+        "provider_chunk",
+        "provider_chunk",
+        "provider_done",
+        "end",
+    ]
+    assert records[1]["raw"]["choices"][0]["delta"]["reasoning_content"] == "provider-only reasoning"
+    assert len({record["call_id"] for record in records}) == 1
+
+
+async def test_llm_trace_records_raw_stream_reasoning_tools_usage_and_finish(trace_payload_enabled) -> None:
+    stub = StubOpenAI()
+    chunks = [
+        {"choices": [{"index": 0, "delta": {"reasoning_content": "raw rationale"}}]},
+        {
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {
+                        "content": "spoken",
+                        "image_url": {"url": "data:image/png;base64,stream-media-secret"},
+                    },
+                }
+            ]
+        },
+        {
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {
+                        "tool_calls": [
+                            {"index": 0, "id": "call_x", "function": {"name": "lookup", "arguments": "{}"}},
+                        ]
+                    },
+                }
+            ]
+        },
+        {"choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]},
+        {"choices": [], "usage": {"prompt_tokens": 8, "completion_tokens": 3}},
+    ]
+    stub.set_stream_chunks(chunks)
+    sink = StringIO()
+    sink_id = logger.add(sink, level="DEBUG", format="{message}")
+    try:
+        async with OpenAICompatLLM("http://stub", "llm", client=stub.client()) as llm:
+            events = [
+                event
+                async for event in llm.stream_events(
+                    [ChatMessage(role="user", content="lookup")],
+                    max_tokens=256,
+                    enable_thinking=True,
+                    thinking_budget=512,
+                )
+            ]
+    finally:
+        logger.remove(sink_id)
+
+    records = _trace_records(sink)
+    assert [record["event"] for record in records] == [
+        "request",
+        "provider_chunk",
+        "provider_chunk",
+        "provider_chunk",
+        "provider_chunk",
+        "provider_chunk",
+        "provider_done",
+        "end",
+    ]
+    assert len({record["call_id"] for record in records}) == 1
+    assert records[0]["request"]["max_tokens"] == 256
+    assert records[0]["request"] == stub.last_json()
+    assert records[0]["request"]["chat_template_kwargs"] == {"enable_thinking": True}
+    assert records[0]["request"]["thinking_token_budget"] == 512
+    raw_chunks = [record["raw"] for record in records if record["event"] == "provider_chunk"]
+    safe_chunks = json.loads(json.dumps(chunks))
+    safe_chunks[1]["choices"][0]["delta"]["image_url"]["url"] = "<image reference redacted>"
+    assert raw_chunks == safe_chunks
+    assert raw_chunks[1]["choices"][0]["delta"]["image_url"]["url"] == "<image reference redacted>"
+    assert "stream-media-secret" not in sink.getvalue()
+    assert records[-1]["finish_reason"] == "tool_calls"
+    assert records[-1]["usage"] == {"prompt_tokens": 8, "completion_tokens": 3}
+    assert records[-1]["done"] is True
+    assert [(event.kind, event.text, event.reasoning) for event in events[:2]] == [
+        ("reasoning", None, "raw rationale"),
+        ("text", "spoken", None),
+    ]
+    assert events[-1] == ChatStreamEvent(kind="finish", finish_reason="tool_calls")
+
+
+@pytest.mark.parametrize(
+    ("chunks", "include_done", "message"),
+    [
+        ([{"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]}], False, "before \\[DONE\\]"),
+        (
+            [
+                {
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {
+                                "tool_calls": [
+                                    {"index": 0, "id": "call_bad", "function": {"name": "run", "arguments": "{"}},
+                                ]
+                            },
+                        }
+                    ]
+                },
+                {"choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]},
+            ],
+            True,
+            "malformed arguments",
+        ),
+    ],
+)
+async def test_llm_stream_trace_marks_post_stream_validation_errors(
+    chunks,
+    include_done: bool,
+    message: str,
+) -> None:
+    stub = StubOpenAI()
+    stub.set_stream_chunks(chunks, include_done=include_done)
+    sink = StringIO()
+    sink_id = logger.add(sink, level="DEBUG", format="{message}")
+    try:
+        async with OpenAICompatLLM("http://stub", "llm", client=stub.client()) as llm:
+            with pytest.raises(ValueError, match=message):
+                _ = [event async for event in llm.stream_events([ChatMessage(role="user", content="run")])]
+    finally:
+        logger.remove(sink_id)
+
+    records = _trace_records(sink)
+    assert records[-1]["event"] == "end"
+    assert records[-1]["status"] == "error"
+    assert records[-1]["done"] is include_done
+
+
+async def test_llm_stream_trace_marks_explicit_close() -> None:
+    stub = StubOpenAI()
+    stub.set_stream_chunks(
+        [
+            {"choices": [{"index": 0, "delta": {"content": "hello"}}]},
+        ],
+        include_done=False,
+    )
+    sink = StringIO()
+    sink_id = logger.add(sink, level="DEBUG", format="{message}")
+    try:
+        async with OpenAICompatLLM("http://stub", "llm", client=stub.client()) as llm:
+            stream = llm.stream_events([ChatMessage(role="user", content="x")])
+            assert (await anext(stream)).text == "hello"
+            await stream.aclose()
+    finally:
+        logger.remove(sink_id)
+
+    assert _trace_records(sink)[-1]["status"] == "closed"
+
+
+@pytest.mark.parametrize("mode", ["chat", "stream", "stream_events"])
+@pytest.mark.parametrize("include_payloads", [False, True])
+async def test_llm_trace_preserves_cancellation_and_closes_client(
+    mode: str,
+    include_payloads: bool,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("XR_AI_TRACE_MODEL_PAYLOADS", "1" if include_payloads else "0")
+    request_started = asyncio.Event()
+
+    async def wait_for_response(_request: httpx.Request) -> httpx.Response:
+        request_started.set()
+        await asyncio.Event().wait()
+        raise AssertionError("the test cancels the request before it returns")
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(wait_for_response))
+    sink = StringIO()
+    sink_id = logger.add(sink, level="DEBUG", format="{message}")
+
+    async def run_request() -> None:
+        async with OpenAICompatLLM("http://stub", "llm", client=client) as llm:
+            messages = [ChatMessage(role="user", content="x")]
+            if mode == "chat":
+                await llm.chat(messages)
+            elif mode == "stream":
+                _ = [chunk async for chunk in llm.stream(messages)]
+            else:
+                _ = [event async for event in llm.stream_events(messages)]
+
+    try:
+        async with client:
+            task = asyncio.create_task(run_request())
+            await request_started.wait()
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+    finally:
+        logger.remove(sink_id)
+
+    records = _trace_records(sink)
+    assert [record["event"] for record in records] == (["request", "end"] if include_payloads else ["end"])
+    assert len({record["call_id"] for record in records}) == 1
+    assert records[-1]["status"] == "cancelled"
+    assert records[-1]["error_type"] == "CancelledError"
+    assert records[-1]["mode"] == mode
+    assert client.is_closed

@@ -97,6 +97,32 @@ A client profile names logical roles and declares adapters and endpoints:
   outside the sample, whether locally or remotely. Existing explicit `reused`
   and `external` entries remain supported for compatibility.
 
+(model-call-tracing)=
+## Inspecting typed model calls
+
+The OpenAI-compatible LLM and VLM clients emit a structured `llm.trace` DEBUG
+summary for each chat call. The summary includes the call ID, model, mode,
+elapsed time, HTTP status, stream chunk count and completion status. When
+available, it includes standard finish reasons and numeric prompt, completion,
+and total token counts. Calls can complete, be cancelled, close before the
+consumer drains the stream, or fail. By default, the summary excludes request
+messages, provider replies, reasoning, and tool arguments.
+
+To include the effective request and provider payloads while diagnosing a
+call, set `XR_AI_TRACE_MODEL_PAYLOADS=1` in the process environment. This also
+enables individual streaming records. The adapter reads the setting at the
+start of each call. Payload events omit request headers and redact selected
+structured credential fields and image or video references. Prompt and reply
+text, tool arguments, and provider reasoning can still contain sensitive data.
+Enable payload tracing only where you can control access to the logs and
+their retention. Existing HTTP error logs are separate from these traces.
+
+When configured with `xr-ai-logging`, the app writes DEBUG records to
+`log_<namespace>_<timestamp>/<process>.log` under `XR_AI_LOG_ROOT` or
+`/tmp` by default. `XR_AI_VERBOSE` enables DEBUG output on stderr
+and is independent of payload tracing. Any configured DEBUG sink can receive
+payload events while the opt-in is set.
+
 ## Annotated consumer configuration
 
 The package reference below shows local endpoint examples, not a default launch

@@ -10,10 +10,13 @@ per-call ``enable_thinking`` reaches each model in its own dialect.
 """
 from __future__ import annotations
 
+import asyncio
 import base64
 import io
 import json
 import os
+import time
+import uuid
 import wave
 from pathlib import Path
 from typing import Any, AsyncIterator, Mapping, Sequence
@@ -186,6 +189,142 @@ def _parse_chat_response(data: dict[str, Any], reasoning_field: str | None) -> C
         finish_reason=choice.get("finish_reason"),
         raw=data,
     )
+
+
+def _trace_safe(value: Any, *, key: str | int | float | None = None) -> Any:
+    """Redact credentials and embedded media before model data reaches logs."""
+
+    if isinstance(key, str) and key.lower() in {
+        "authorization",
+        "api_key",
+        "access_token",
+        "client_secret",
+        "password",
+    }:
+        return "<redacted>"
+    if key in {"image_url", "video_url"}:
+        media = "image" if key == "image_url" else "video"
+        if isinstance(value, dict):
+            return {
+                name: _trace_safe(item, key=name) if name != "url" else f"<{media} reference redacted>"
+                for name, item in value.items()
+            }
+        return f"<{media} reference redacted>"
+    if isinstance(value, dict):
+        return {name: _trace_safe(item, key=name) for name, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_trace_safe(item) for item in value]
+    if isinstance(value, str) and value.startswith(("data:image/", "data:video/")):
+        media_type = value[5:].split(";", 1)[0].split(",", 1)[0]
+        return f"<{media_type} media redacted>"
+    if isinstance(value, bytes):
+        return "<binary data redacted>"
+    return value
+
+
+class _LLMCallTrace:
+    """Write a DEBUG call summary and opt-in redacted payload events."""
+
+    def __init__(self, model: str, mode: str, payload: dict[str, Any], timeout: float | None):
+        self.call_id = uuid.uuid4().hex
+        self.model = model
+        self.mode = mode
+        self.payload = payload if os.environ.get("XR_AI_TRACE_MODEL_PAYLOADS") == "1" else None
+        self.timeout = timeout
+        self.started_at = time.perf_counter()
+        self.http_status: int | None = None
+        self.finish_reason: str | None = None
+        self.usage: dict[str, int] | None = None
+        self.chunk_count = 0
+        self.done = False
+
+    def __enter__(self) -> "_LLMCallTrace":
+        if self.payload is not None:
+            self._emit("request", request=self.payload, timeout=self.timeout)
+        return self
+
+    def __exit__(self, exc_type, _exc, _traceback) -> None:
+        if exc_type is None:
+            status = "complete"
+        elif issubclass(exc_type, asyncio.CancelledError):
+            status = "cancelled"
+        elif issubclass(exc_type, GeneratorExit):
+            status = "closed"
+        else:
+            status = "error"
+        finish_reason = self.finish_reason
+        if finish_reason not in {"stop", "length", "tool_calls", "content_filter", "function_call"}:
+            finish_reason = None
+        self._emit(
+            "end",
+            status=status,
+            error_type=exc_type.__name__ if exc_type is not None else None,
+            http_status=self.http_status,
+            finish_reason=finish_reason,
+            usage=self.usage,
+            chunk_count=self.chunk_count,
+            done=self.done,
+            duration_ms=round((time.perf_counter() - self.started_at) * 1000, 3),
+        )
+
+    def provider_data(self, data: str) -> None:
+        if data == "[DONE]":
+            self.done = True
+            if self.payload is not None:
+                self._emit("provider_done")
+            return
+        try:
+            raw: Any = json.loads(data)
+        except json.JSONDecodeError:
+            raw = {"unparsed_event_length": len(data)}
+        self.chunk_count += 1
+        if isinstance(raw, dict):
+            self._record_usage(raw.get("usage"))
+        if self.payload is not None:
+            self._emit("provider_chunk", raw=raw)
+
+    def response(self, raw: Any) -> None:
+        if isinstance(raw, dict):
+            self._record_usage(raw.get("usage"))
+            choices = raw.get("choices")
+            if isinstance(choices, list) and choices and isinstance(choices[0], dict):
+                reason = choices[0].get("finish_reason")
+                if isinstance(reason, str):
+                    self.finish_reason = reason
+        if self.payload is not None:
+            self._emit("provider_response", raw=raw)
+
+    def _record_usage(self, value: Any) -> None:
+        if not isinstance(value, dict):
+            return
+        # Provider extension fields can contain arbitrary data.
+        self.usage = {
+            name: count
+            for name in ("prompt_tokens", "completion_tokens", "total_tokens")
+            if type(count := value.get(name)) is int
+        }
+
+    def http_error(self, body: bytes) -> None:
+        if self.payload is None:
+            return
+        try:
+            raw: Any = json.loads(body)
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            raw = {"unparsed_body_length": len(body)}
+        self._emit("http_error", status=self.http_status, raw=raw)
+
+    def _emit(self, event: str, **fields: Any) -> None:
+        record = {
+            "event": event,
+            "call_id": self.call_id,
+            "model": self.model,
+            "mode": self.mode,
+            **fields,
+        }
+        logger.opt(lazy=True).debug(
+            "llm.trace {}",
+            lambda: json.dumps(_trace_safe(record), ensure_ascii=False, separators=(",", ":")),
+        )
 
 
 _IMAGE_MAGIC: tuple[tuple[bytes, str], ...] = (
@@ -431,11 +570,17 @@ class OpenAICompatLLM:
         kwargs: dict[str, Any] = {"json": payload, "headers": _request_headers(self._api_key, headers)}
         if timeout is not None:
             kwargs["timeout"] = timeout
-        resp = await self._client.post(self._chat_url, **kwargs)
-        if resp.is_error:
-            logger.error("llm {} {}: {}", self._model, resp.status_code, resp.text[:300])
-        resp.raise_for_status()
-        return _parse_chat_response(resp.json(), self._reasoning_field)
+        with _LLMCallTrace(self._model, "chat", payload, timeout) as trace:
+            resp = await self._client.post(self._chat_url, **kwargs)
+            trace.http_status = resp.status_code
+            if resp.is_error:
+                body = await resp.aread()
+                trace.http_error(body)
+                logger.error("llm {} {}: {}", self._model, resp.status_code, body[:300])
+            resp.raise_for_status()
+            data = resp.json()
+            trace.response(data)
+            return _parse_chat_response(data, self._reasoning_field)
 
     async def stream(
         self,
@@ -470,25 +615,33 @@ class OpenAICompatLLM:
         kwargs: dict[str, Any] = {"json": payload, "headers": _request_headers(self._api_key, headers)}
         if timeout is not None:
             kwargs["timeout"] = timeout
-        async with self._client.stream("POST", self._chat_url, **kwargs) as resp:
-            if resp.is_error:
-                body = await resp.aread()
-                logger.error("llm {} {}: {}", self._model, resp.status_code, body[:300])
-                resp.raise_for_status()
-            async for line in resp.aiter_lines():
-                if not line.startswith("data: "):
-                    continue
-                data = line[6:]
-                if data == "[DONE]":
-                    return
-                try:
-                    chunk = json.loads(data)
-                    delta = chunk["choices"][0]["delta"]
-                except (json.JSONDecodeError, KeyError, IndexError):
-                    continue
-                content = delta.get("content")
-                if content:
-                    yield content
+        with _LLMCallTrace(self._model, "stream", payload, timeout) as trace:
+            async with self._client.stream("POST", self._chat_url, **kwargs) as resp:
+                trace.http_status = resp.status_code
+                if resp.is_error:
+                    body = await resp.aread()
+                    trace.http_error(body)
+                    logger.error("llm {} {}: {}", self._model, resp.status_code, body[:300])
+                    resp.raise_for_status()
+                async for line in resp.aiter_lines():
+                    if not line.startswith("data: "):
+                        continue
+                    data = line[6:]
+                    trace.provider_data(data)
+                    if data == "[DONE]":
+                        return
+                    try:
+                        chunk = json.loads(data)
+                        choice = chunk["choices"][0]
+                        delta = choice["delta"]
+                    except (json.JSONDecodeError, KeyError, IndexError):
+                        continue
+                    reason = choice.get("finish_reason")
+                    if choice.get("index", 0) == 0 and isinstance(reason, str):
+                        trace.finish_reason = reason
+                    content = delta.get("content")
+                    if content:
+                        yield content
 
     async def stream_events(
         self,
@@ -514,9 +667,14 @@ class OpenAICompatLLM:
 
         payload = self._build_payload(
             messages,
-            tools=tools, max_tokens=max_tokens, temperature=temperature,
-            enable_thinking=enable_thinking, thinking_budget=thinking_budget,
-            stream=True, tool_choice=tool_choice, response_schema=response_schema,
+            tools=tools,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            enable_thinking=enable_thinking,
+            thinking_budget=thinking_budget,
+            stream=True,
+            tool_choice=tool_choice,
+            response_schema=response_schema,
         )
         kwargs: dict[str, Any] = {
             "json": payload,
@@ -530,132 +688,140 @@ class OpenAICompatLLM:
         tool_fragments: dict[int, dict[str, str]] = {}
         finish_reason: str | None = None
         done = False
-        async with self._client.stream("POST", self._chat_url, **kwargs) as resp:
-            if resp.is_error:
-                body = await resp.aread()
-                logger.error("llm {} {}: {}", self._model, resp.status_code, body[:300])
-                resp.raise_for_status()
-            async for line in resp.aiter_lines():
-                if not line.startswith("data: "):
-                    continue
-                data = line[6:]
-                if data == "[DONE]":
-                    done = True
-                    break
-                try:
-                    chunk = json.loads(data)
-                except json.JSONDecodeError as exc:
-                    raise ValueError("LLM stream returned malformed event JSON") from exc
-                if not isinstance(chunk, dict):
-                    raise ValueError("LLM stream event must be a JSON object")
-                if "error" in chunk:
-                    raise RuntimeError(f"LLM stream error: {chunk['error']}")
-                choices = chunk.get("choices")
-                if not isinstance(choices, list):
-                    continue
-                if not choices:
-                    # Usage-only chunks are valid in stream_options mode.
-                    continue
-                for choice in choices:
-                    if not isinstance(choice, dict) or choice.get("index", 0) != 0:
+        with _LLMCallTrace(self._model, "stream_events", payload, timeout) as trace:
+            async with self._client.stream("POST", self._chat_url, **kwargs) as resp:
+                trace.http_status = resp.status_code
+                if resp.is_error:
+                    body = await resp.aread()
+                    trace.http_error(body)
+                    logger.error("llm {} {}: {}", self._model, resp.status_code, body[:300])
+                    resp.raise_for_status()
+                async for line in resp.aiter_lines():
+                    if not line.startswith("data: "):
                         continue
-                    delta = choice.get("delta") or {}
-                    if not isinstance(delta, dict):
-                        raise ValueError("LLM stream choice delta must be an object")
-                    content = delta.get("content")
-                    if isinstance(content, str) and content:
-                        yield ChatStreamEvent(kind="text", text=content)
-                    reasoning = None
-                    fields = (self._reasoning_field,) if self._reasoning_field else ()
-                    for field in (*fields, "reasoning", "reasoning_content"):
-                        value = delta.get(field)
-                        if isinstance(value, str) and value:
-                            reasoning = value
-                            break
-                    if reasoning:
-                        yield ChatStreamEvent(kind="reasoning", reasoning=reasoning)
-                    fragments = delta.get("tool_calls")
-                    if fragments is not None:
-                        if not isinstance(fragments, list):
-                            raise ValueError("LLM stream tool_calls delta must be a list")
-                        for fragment in fragments:
-                            if not isinstance(fragment, dict):
-                                raise ValueError("LLM stream tool call fragment must be an object")
-                            index = fragment.get("index")
-                            if not isinstance(index, int) or isinstance(index, bool) or index < 0:
-                                raise ValueError("LLM stream tool call fragment has an invalid index")
-                            accumulated = tool_fragments.setdefault(
-                                index, {"id": "", "name": "", "arguments": ""},
-                            )
-                            call_id = fragment.get("id")
-                            if call_id is not None:
-                                if not isinstance(call_id, str):
-                                    raise ValueError("LLM stream tool call ID must be a string")
-                                accumulated["id"] += call_id
-                            function = fragment.get("function")
-                            if function is not None:
-                                if not isinstance(function, dict):
-                                    raise ValueError("LLM stream tool function must be an object")
-                                name = function.get("name")
-                                arguments = function.get("arguments")
-                                if name is not None:
-                                    if not isinstance(name, str):
-                                        raise ValueError("LLM stream tool function name must be a string")
-                                    accumulated["name"] += name
-                                if arguments is not None:
-                                    if not isinstance(arguments, str):
-                                        raise ValueError("LLM stream tool arguments must be a string")
-                                    accumulated["arguments"] += arguments
-                    reason = choice.get("finish_reason")
-                    if isinstance(reason, str):
-                        finish_reason = reason
+                    data = line[6:]
+                    trace.provider_data(data)
+                    if data == "[DONE]":
+                        done = True
+                        break
+                    try:
+                        chunk = json.loads(data)
+                    except json.JSONDecodeError as exc:
+                        raise ValueError("LLM stream returned malformed event JSON") from exc
+                    if not isinstance(chunk, dict):
+                        raise ValueError("LLM stream event must be a JSON object")
+                    if "error" in chunk:
+                        raise RuntimeError(f"LLM stream error: {chunk['error']}")
+                    choices = chunk.get("choices")
+                    if not isinstance(choices, list):
+                        continue
+                    if not choices:
+                        # Usage-only chunks are valid in stream_options mode.
+                        continue
+                    for choice in choices:
+                        if not isinstance(choice, dict) or choice.get("index", 0) != 0:
+                            continue
+                        delta = choice.get("delta") or {}
+                        if not isinstance(delta, dict):
+                            raise ValueError("LLM stream choice delta must be an object")
+                        content = delta.get("content")
+                        if isinstance(content, str) and content:
+                            yield ChatStreamEvent(kind="text", text=content)
+                        reasoning = None
+                        fields = (self._reasoning_field,) if self._reasoning_field else ()
+                        for field in (*fields, "reasoning", "reasoning_content"):
+                            value = delta.get(field)
+                            if isinstance(value, str) and value:
+                                reasoning = value
+                                break
+                        if reasoning:
+                            yield ChatStreamEvent(kind="reasoning", reasoning=reasoning)
+                        fragments = delta.get("tool_calls")
+                        if fragments is not None:
+                            if not isinstance(fragments, list):
+                                raise ValueError("LLM stream tool_calls delta must be a list")
+                            for fragment in fragments:
+                                if not isinstance(fragment, dict):
+                                    raise ValueError("LLM stream tool call fragment must be an object")
+                                index = fragment.get("index")
+                                if not isinstance(index, int) or isinstance(index, bool) or index < 0:
+                                    raise ValueError("LLM stream tool call fragment has an invalid index")
+                                accumulated = tool_fragments.setdefault(
+                                    index,
+                                    {"id": "", "name": "", "arguments": ""},
+                                )
+                                call_id = fragment.get("id")
+                                if call_id is not None:
+                                    if not isinstance(call_id, str):
+                                        raise ValueError("LLM stream tool call ID must be a string")
+                                    accumulated["id"] += call_id
+                                function = fragment.get("function")
+                                if function is not None:
+                                    if not isinstance(function, dict):
+                                        raise ValueError("LLM stream tool function must be an object")
+                                    name = function.get("name")
+                                    arguments = function.get("arguments")
+                                    if name is not None:
+                                        if not isinstance(name, str):
+                                            raise ValueError("LLM stream tool function name must be a string")
+                                        accumulated["name"] += name
+                                    if arguments is not None:
+                                        if not isinstance(arguments, str):
+                                            raise ValueError("LLM stream tool arguments must be a string")
+                                        accumulated["arguments"] += arguments
+                        reason = choice.get("finish_reason")
+                        if isinstance(reason, str):
+                            finish_reason = reason
+                            trace.finish_reason = reason
 
-        if not done:
-            raise ValueError("LLM stream ended before [DONE]")
-        if finish_reason is None:
-            raise ValueError("LLM stream ended without a finish_reason")
+            if not done:
+                raise ValueError("LLM stream ended before [DONE]")
+            if finish_reason is None:
+                raise ValueError("LLM stream ended without a finish_reason")
 
-        calls: list[ToolCall] = []
-        if finish_reason == "tool_calls" and not tool_fragments:
-            raise ValueError("LLM stream finished with tool_calls but no tool call data")
-        if tool_fragments:
-            # A named tool_choice completes with "stop" on OpenAI-compatible
-            # servers: the call was required, not chosen by the model.
-            choice = payload.get("tool_choice")
-            named = isinstance(choice, Mapping) and choice.get("type") == "function"
-            if finish_reason != "tool_calls" and not (named and finish_reason == "stop"):
-                raise ValueError(
-                    f"LLM stream returned tool calls with finish_reason {finish_reason!r}",
-                )
-            if named and (
-                len(tool_fragments) != 1
-                or next(iter(tool_fragments.values()))["name"] != choice["function"]["name"]
-            ):
-                raise ValueError("LLM stream did not return exactly the named tool_choice")
-            # Validate the complete batch before exposing any call, avoiding
-            # partial execution when a later call in the batch is malformed.
-            for index in sorted(tool_fragments):
-                fragment = tool_fragments[index]
-                if not fragment["id"] or not fragment["name"]:
-                    raise ValueError(f"LLM stream returned incomplete tool call at index {index}")
-                try:
-                    arguments = json.loads(fragment["arguments"])
-                except json.JSONDecodeError as exc:
+            calls: list[ToolCall] = []
+            if finish_reason == "tool_calls" and not tool_fragments:
+                raise ValueError("LLM stream finished with tool_calls but no tool call data")
+            if tool_fragments:
+                # A named tool_choice completes with "stop" on OpenAI-compatible
+                # servers: the call was required, not chosen by the model.
+                choice = payload.get("tool_choice")
+                named = isinstance(choice, Mapping) and choice.get("type") == "function"
+                if finish_reason != "tool_calls" and not (named and finish_reason == "stop"):
                     raise ValueError(
-                        f"LLM stream returned malformed arguments for tool call at index {index}",
-                    ) from exc
-                if not isinstance(arguments, dict):
-                    raise ValueError(
-                        f"LLM stream returned non-object arguments for tool call at index {index}",
+                        f"LLM stream returned tool calls with finish_reason {finish_reason!r}",
                     )
-                calls.append(ToolCall(
-                    id=fragment["id"],
-                    name=fragment["name"],
-                    arguments=fragment["arguments"],
-                ))
-        for call in calls:
-            yield ChatStreamEvent(kind="tool_call", tool_call=call)
-        yield ChatStreamEvent(kind="finish", finish_reason=finish_reason)
+                if named and (
+                    len(tool_fragments) != 1
+                    or next(iter(tool_fragments.values()))["name"] != choice["function"]["name"]
+                ):
+                    raise ValueError("LLM stream did not return exactly the named tool_choice")
+                # Validate the complete batch before exposing any call, avoiding
+                # partial execution when a later call in the batch is malformed.
+                for index in sorted(tool_fragments):
+                    fragment = tool_fragments[index]
+                    if not fragment["id"] or not fragment["name"]:
+                        raise ValueError(f"LLM stream returned incomplete tool call at index {index}")
+                    try:
+                        arguments = json.loads(fragment["arguments"])
+                    except json.JSONDecodeError as exc:
+                        raise ValueError(
+                            f"LLM stream returned malformed arguments for tool call at index {index}",
+                        ) from exc
+                    if not isinstance(arguments, dict):
+                        raise ValueError(
+                            f"LLM stream returned non-object arguments for tool call at index {index}",
+                        )
+                    calls.append(
+                        ToolCall(
+                            id=fragment["id"],
+                            name=fragment["name"],
+                            arguments=fragment["arguments"],
+                        )
+                    )
+            for call in calls:
+                yield ChatStreamEvent(kind="tool_call", tool_call=call)
+            yield ChatStreamEvent(kind="finish", finish_reason=finish_reason)
 
     async def health(self) -> bool:
         """Return whether the endpoint health check succeeds.
