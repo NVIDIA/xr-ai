@@ -512,7 +512,7 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
   - `xr-ai-tools[services]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
   - `pyyaml>=6.0`
-  - `isaacteleop>=1.3.131`
+  - `pyopenxr>=1.1.5301`
 - Optional dependency groups: none
 - Commands:
   - `openxr_service` → `openxr_service.__main__:run`
