@@ -1998,14 +1998,15 @@ workflow.</p></li>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
 <span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
 
-<span class="c1"># CloudXR runtime configuration.</span>
-<span class="c1"># Full docs: python -m isaacteleop.cloudxr --help</span>
+<span class="c1"># CloudXR runtime configuration. Refer to docs/source/guides/adding-cloudxr.md.</span>
 
-<span class="c1"># Directory where CloudXR stores runtime state, certs, and logs (default: ~/.cloudxr).</span>
+<span class="c1"># Directory where CloudXR stores its SDK, runtime state, certs, and logs</span>
+<span class="c1"># (default: ~/.cloudxr).</span>
 <span class="nt">cloudxr_install_dir</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">~/.cloudxr</span>
 
-<span class="c1"># Set to true to accept the NVIDIA CloudXR EULA non-interactively.</span>
-<span class="c1"># EULA: https://github.com/NVIDIA/IsaacTeleop/blob/main/deps/cloudxr/CLOUDXR_LICENSE</span>
+<span class="c1"># Set to true to accept the NVIDIA CloudXR license agreement non-interactively.</span>
+<span class="c1"># The agreement ships with the SDK; a copy is in</span>
+<span class="c1"># third_party_licenses/nvidia-cloudxr-runtime-6.2.0/LICENSE.txt.</span>
 <span class="c1"># Once accepted the marker is written to &lt;cloudxr_install_dir&gt;/run/eula_accepted</span>
 <span class="c1"># and this flag is no longer checked.</span>
 <span class="nt">accept_eula</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>

@@ -499,8 +499,8 @@ rendering connection alongside the hub’s camera, audio, and data connection.</
 <span class="c1"># CloudXR runtime configuration.</span>
 <span class="nt">cloudxr_install_dir</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">~/.cloudxr</span>
 
-<span class="c1"># Accept the NVIDIA CloudXR EULA non-interactively.</span>
-<span class="c1"># View: https://github.com/NVIDIA/IsaacTeleop/blob/main/deps/cloudxr/CLOUDXR_LICENSE</span>
+<span class="c1"># Accept the NVIDIA CloudXR license agreement non-interactively. The agreement</span>
+<span class="c1"># ships with the SDK and is copied in third_party_licenses/nvidia-cloudxr-runtime-6.2.0/.</span>
 <span class="c1"># Written once to &lt;cloudxr_install_dir&gt;/run/eula_accepted; ignored on subsequent runs.</span>
 <span class="nt">accept_eula</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 
@@ -548,12 +548,20 @@ dynamically.</p>
 <section id="notes">
 <h2>Notes<a class="headerlink" href="#notes" title="Link to this heading">#</a></h2>
 <ul>
+<li><p>On first run the service downloads the pinned CloudXR Runtime SDK from public
+NGC (no API key needed), verifies its SHA-256, and unpacks it under
+<code class="docutils literal notranslate"><span class="pre">&lt;cloudxr_install_dir&gt;/sdk/</span></code>. Without network access, place the SDK tarball at
+the path printed in the download error and restart. The SDK’s libraries need
+the system <code class="docutils literal notranslate"><span class="pre">libssl3</span></code> and <code class="docutils literal notranslate"><span class="pre">libbsd0</span></code> packages, which Ubuntu installs by default.</p></li>
 <li><p>CloudXR and the DeviceIOHub are <strong>independent stacks</strong>. CloudXR streams
 simulation and render content through the transport selected by the device
 profile; the hub handles agent media via LiveKit. They share no ports.</p></li>
 <li><p>WebRTC profiles (<code class="docutils literal notranslate"><span class="pre">auto-webrtc</span></code> and <code class="docutils literal notranslate"><span class="pre">quest3</span></code>) start a WSS proxy on port 48322
 for signaling. Native profiles use a direct native transport and do not need
-the proxy.</p></li>
+the proxy. To change the proxy port, set <code class="docutils literal notranslate"><span class="pre">PROXY_PORT</span></code> in the process
+environment, <code class="docutils literal notranslate"><span class="pre">cloudxr_env</span></code>, or the configured env file; the env file wins,
+followed by the process environment and then <code class="docutils literal notranslate"><span class="pre">cloudxr_env</span></code>. The value must
+be an integer from 1 to 65535. Configure Web-XR clients to use that same port.</p></li>
 <li><p>After CloudXR is ready, activate its environment to run an OpenXR app against
 it. Run this in a separate terminal each time you start a new shell against a
 running stack:</p>

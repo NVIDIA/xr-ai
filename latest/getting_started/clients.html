@@ -757,13 +757,12 @@ bundles automatically when <code class="docutils literal notranslate"><span clas
 ./build.sh
 </pre></div>
 </div>
-<p>The idempotent script reads the CloudXR version from <code class="docutils literal notranslate"><span class="pre">.sdk-version</span></code>, reuses a
-matching versioned tarball when present, otherwise reuses the matching
-IsaacTeleop tarball at <code class="docutils literal notranslate"><span class="pre">~/hub/IsaacTeleop/deps/cloudxr/</span></code> when available, and
-finally downloads the public NGC tarball. It installs npm dependencies, writes
+<p>The script installs the exact <code class="docutils literal notranslate"><span class="pre">&#64;nvidia/cloudxr</span></code> version pinned in <code class="docutils literal notranslate"><span class="pre">package.json</span></code>
+from the public npm registry, checks it matches <code class="docutils literal notranslate"><span class="pre">.sdk-version</span></code>, and writes
 both ESM bundles to <code class="docutils literal notranslate"><span class="pre">../web-xr/vendor/</span></code>, and records the SDK version beside
 them. The orchestrator automatically rebuilds missing or stale bundles.
-To bump CloudXR, edit <code class="docutils literal notranslate"><span class="pre">.sdk-version</span></code> and re-run the script. To bump LiveKit,
+To bump CloudXR, update the exact version in <code class="docutils literal notranslate"><span class="pre">package.json</span></code> and <code class="docutils literal notranslate"><span class="pre">.sdk-version</span></code>
+together and re-run the script. To bump LiveKit,
 edit <code class="docutils literal notranslate"><span class="pre">package.json</span></code>, remove <code class="docutils literal notranslate"><span class="pre">node_modules</span></code>, and re-run the script.</p>
 </section>
 <section id="android">
