@@ -18,4 +18,5 @@ links to that release's documentation.
 :maxdepth: 1
 
 migration-history/through-v0.3.0-beta
+migration-history/v0.3.0-beta-to-v0.4.0-beta
 ```

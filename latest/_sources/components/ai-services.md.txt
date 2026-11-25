@@ -835,7 +835,8 @@ cleanup.
   the tea sample applies its own memory budget and indexes all 2048 dimensions.
   Its Spark profile selects Triton attention for GB10 compatibility; other
   profiles leave attention-backend selection to vLLM. Refer to
-  {doc}`/reference/migrations` for the model upgrade steps.
+  {doc}`/reference/migration-history/v0.3.0-beta-to-v0.4.0-beta`
+  for the model upgrade steps.
 - **rag-service** is a typed dense document-retrieval capability. Point
   `documents_dir` at an application-owned tree and `models_config` at a profile
   with an `embedding` role. It chunks and embeds supported documents at
@@ -855,7 +856,8 @@ cleanup.
   Every replica must remain on the same weights throughout indexing and serving;
   health probes check availability, not model consistency. Restart RAG whenever
   the embedding model changes. Refer to
-  {doc}`/reference/migrations` for upgrading existing indexes and servers.
+  {doc}`/reference/migration-history/v0.3.0-beta-to-v0.4.0-beta`
+  for upgrading existing indexes and servers.
 - **video-memory-service** owns recorded chunk queries, NVDEC, and PNG output
   behind typed msgpack over ZMQ on port 8310. Set `recordings_dir` in its YAML to
   enable recorded-video operations; the path must match the hub's

@@ -361,6 +361,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/magpie-nim-tts.html">Magpie NIM speech</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../reference/migration-history.html">Migration history</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="../reference/migration-history/through-v0.3.0-beta.html">Migration notes through v0.3.0-beta</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/migration-history/v0.3.0-beta-to-v0.4.0-beta.html">Migration from v0.3.0-beta to v0.4.0-beta</a></li>
 </ul>
 </details></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
@@ -1358,7 +1359,8 @@ The standalone configuration reserves 20% of a GPU and uses Docker;
 the tea sample applies its own memory budget and indexes all 2048 dimensions.
 Its Spark profile selects Triton attention for GB10 compatibility; other
 profiles leave attention-backend selection to vLLM. Refer to
-<a class="reference internal" href="../reference/migrations.html"><span class="doc">Release migration</span></a> for the model upgrade steps.</p></li>
+<a class="reference internal" href="../reference/migration-history/v0.3.0-beta-to-v0.4.0-beta.html"><span class="doc">Migration from v0.3.0-beta to v0.4.0-beta</span></a>
+for the model upgrade steps.</p></li>
 <li><p><strong>rag-service</strong> is a typed dense document-retrieval capability. Point
 <code class="docutils literal notranslate"><span class="pre">documents_dir</span></code> at an application-owned tree and <code class="docutils literal notranslate"><span class="pre">models_config</span></code> at a profile
 with an <code class="docutils literal notranslate"><span class="pre">embedding</span></code> role. It chunks and embeds supported documents at
@@ -1378,7 +1380,8 @@ startup. The manual key supplements the role hash and reported identity.
 Every replica must remain on the same weights throughout indexing and serving;
 health probes check availability, not model consistency. Restart RAG whenever
 the embedding model changes. Refer to
-<a class="reference internal" href="../reference/migrations.html"><span class="doc">Release migration</span></a> for upgrading existing indexes and servers.</p></li>
+<a class="reference internal" href="../reference/migration-history/v0.3.0-beta-to-v0.4.0-beta.html"><span class="doc">Migration from v0.3.0-beta to v0.4.0-beta</span></a>
+for upgrading existing indexes and servers.</p></li>
 <li><p><strong>video-memory-service</strong> owns recorded chunk queries, NVDEC, and PNG output
 behind typed msgpack over ZMQ on port 8310. Set <code class="docutils literal notranslate"><span class="pre">recordings_dir</span></code> in its YAML to
 enable recorded-video operations; the path must match the hub’s
