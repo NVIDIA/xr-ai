@@ -330,8 +330,10 @@ class VoiceAgent(Agent):
         )
 
     def request_stop(self) -> None:
-        """Ask a running voice session to stop and clean up; a no-op otherwise.
+        """Ask the voice session to stop and clean up.
 
+        A request before the pipeline starts takes effect when it starts.
+        Requests after the session closes have no effect.
         Use this with ``install_signal_handlers=False`` when the application
         owns SIGINT and SIGTERM and decides when the voice agent stops.
         """

@@ -175,8 +175,10 @@ class _VoiceSession:
             except NotImplementedError:
                 continue
             installed.append(sig)
+        # The session owns signal registration. Pipecat's default SIGINT
+        # handler would otherwise replace the session's or the application's.
         runner_task = asyncio.create_task(
-            PipelineRunner().run(task),
+            PipelineRunner(handle_sigint=False, handle_sigterm=False).run(task),
             name="voice-session-pipeline",
         )
         started_task = asyncio.create_task(
