@@ -73,6 +73,12 @@ class ResponseOutput(BaseModel):
     urgent: bool = False
     """Updates only: cut current output and play this update next."""
 
+    replace_pending: bool = False
+    """Updates only: revise this producer's queued nonurgent updates, if any.
+
+    Never creates a new notice after the previous one has started playing.
+    """
+
     response_id: str | None = Field(default=None, min_length=1)
     """Identifier shared by the fragments of one streamed reply from one participant and producer."""
 
@@ -86,6 +92,8 @@ class ResponseOutput(BaseModel):
     def validate_boundary(self) -> ResponseOutput:
         """Require identity for streamed replies and text for finite output."""
 
+        if self.replace_pending and (self.kind != "update" or self.urgent):
+            raise ValueError("replace_pending requires a nonurgent update")
         if self.kind == "withdraw":
             if self.text or self.request_id is not None or self.response_id is not None:
                 raise ValueError("a withdraw carries no text, request_id, or response_id")

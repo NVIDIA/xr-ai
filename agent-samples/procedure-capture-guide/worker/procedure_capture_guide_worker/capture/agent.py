@@ -5,7 +5,8 @@
 
 CaptureAgent welcomes participants on connection, handles "start capture" and "stop
 capture", and sends spoken acknowledgements. It passes narration to the capture
-backend in capturing.py and finalizes active capture on disconnect.
+backend in capturing.py and finalizes active capture on disconnect. Optional
+quality feedback has the same capture lifetime and never controls recording.
 """
 
 from __future__ import annotations
@@ -18,18 +19,17 @@ from dataclasses import dataclass, field
 from loguru import logger
 from xr_ai_hub import ParticipantEvent
 from xr_ai_interaction import ParticipantJoined, ResponseOutputs, UserQuery
-from xr_ai_runtime import Agent, RuntimeContext, Topic, subscribe
+from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, Topic, subscribe
 from xr_ai_voice import VOICE_OUTPUT_TOPIC
 
 from .capturing import _Capture
+from .preflight import check_setup
+from .quality import _MESSAGES, QualityConfig, QualityFeedback
 
+_SETUP_COMMAND = re.compile(r"\s*check\s+set(?:\s+|-)?up[.!?]*\s*", re.IGNORECASE)
 _COMMAND = re.compile(r"\s*(start|stop)\s+capture[.!?]*\s*", re.IGNORECASE)
 CAPTURE_INPUT_TOPIC = Topic("task.capture.input", UserQuery)
 CAPTURE_JOINED_TOPIC = Topic("task.capture.joined", ParticipantJoined)
-_WELCOME = (
-    "Say start capture to start the recording and demonstrate your procedure. "
-    "To finish recording, say stop capture."
-)
 
 
 @dataclass
@@ -40,6 +40,7 @@ class _Connection:
     # Accepted input identity, including a start still queued behind finalization.
     # It can differ from CaptureAgent._sessions, which tracks backend ownership.
     recording: _Recording | None = None
+    quality: QualityFeedback | None = None
 
 
 @dataclass
@@ -53,9 +54,15 @@ class CaptureAgent(Agent):
     Order accepted speech and connection events before invoking the capture
     backend so each demonstration keeps its own narration and finalization.
     """
-    def __init__(self, capture_backend: _Capture) -> None:
+    def __init__(
+        self, capture_backend: _Capture, *, runtime: AgentRuntime,
+        quality_config: QualityConfig | None = None,
+    ) -> None:
         super().__init__()
         self._capture_backend = capture_backend
+        # Background alerts own source scopes; input contexts retain the command source.
+        self._runtime = runtime
+        self._quality_config = quality_config
         # Recording ownership applied to the backend by queued actions. Keep this
         # separate from connection.recording: newer input may already be accepted.
         self._sessions: dict[str, _Recording] = {}
@@ -112,14 +119,25 @@ class CaptureAgent(Agent):
             if event.joined and not duplicate:
                 if connection is not None:
                     connection.cancelled.set()
+                    if connection.quality is not None:
+                        connection.quality.invalidate()
                 self._connections[pid] = _Connection(event.participant_session_id, event.pts_us)
+                if self._quality_config is not None and self._quality_config.enabled:
+                    self._connections[pid].quality = QualityFeedback(
+                        pid, self._capture_backend,
+                        self._quality_config,
+                    )
             elif not event.joined and duplicate:
                 connection.cancelled.set()
+                if connection.quality is not None:
+                    connection.quality.invalidate()
                 self._connections.pop(pid, None)
 
         async def apply() -> None:
             if not event.joined and not duplicate:
                 return
+            if connection is not None and connection.quality is not None and not (event.joined and duplicate):
+                await connection.quality.stop()
             recording = self._sessions.get(pid)
             try:
                 if recording is not None and recording.connection is connection and not (event.joined and duplicate):
@@ -149,7 +167,10 @@ class CaptureAgent(Agent):
         connection = self._connections.get(pid)
         if self._closed or (connection is not None and connection.recording is not None):
             return
-        await ResponseOutputs(ctx, VOICE_OUTPUT_TOPIC).update(pid, _WELCOME)
+        enabled = self._quality_config is not None and self._quality_config.enabled
+        messages = _MESSAGES["setup"]
+        welcome = messages["welcome"] if enabled else messages["welcome_disabled"]
+        await ResponseOutputs(ctx, VOICE_OUTPUT_TOPIC).update(pid, welcome)
 
     @subscribe(CAPTURE_INPUT_TOPIC)
     async def on_input(self, transcript: UserQuery, ctx: RuntimeContext) -> None:
@@ -167,6 +188,20 @@ class CaptureAgent(Agent):
             return
         command = _COMMAND.fullmatch(transcript.text)
         recording = connection.recording
+        quality = connection.quality
+        if quality is not None and recording is not None and command is None:
+            quality.audio.accept(transcript.timestamp_us)
+        if quality is not None and recording is None and _SETUP_COMMAND.fullmatch(transcript.text):
+            quality.audio.accept(transcript.timestamp_us, setup=True)
+            report = check_setup(quality)
+
+            async def preflight() -> None:
+                if self._closed or connection.cancelled.is_set() or self._capture_backend.is_capturing(pid):
+                    return
+                await self._say(pid, connection, ctx, report)
+
+            self._enqueue(pid, preflight)
+            return
         if command and command[1].lower() == "start":
             if recording is not None:
                 return
@@ -184,6 +219,9 @@ class CaptureAgent(Agent):
                     )
                     if self._capture_backend.is_capturing(pid):
                         await self._say(pid, connection, ctx, "Capture started.")
+                        if (connection.quality is not None and connection.recording is recording
+                                and not connection.cancelled.is_set()):
+                            connection.quality.start(self._runtime)
                 finally:
                     if not self._capture_backend.is_capturing(pid):
                         self._forget(pid, recording)
@@ -191,9 +229,13 @@ class CaptureAgent(Agent):
             self._enqueue(pid, start)
         elif command:
             connection.recording = None
+            if connection.quality is not None:
+                connection.quality.invalidate()
 
             async def finish() -> None:
                 if recording is not None and self._sessions.get(pid) is recording:
+                    if connection.quality is not None:
+                        await connection.quality.stop()
                     await self._say(pid, connection, ctx, "Capture stopped.")
                     try:
                         await self._capture_backend.finish_capture(
@@ -212,11 +254,50 @@ class CaptureAgent(Agent):
             self._enqueue(pid, narrate)
         # Return promptly; this owner drains per-participant writes and boundaries.
 
+    def on_audio_window(self, window) -> None:
+        connection = self._connections.get(window.participant_id)
+        if (not self._closed and connection is not None and connection.quality is not None
+                and not connection.cancelled.is_set()
+                and window.timestamp_us >= max(connection.joined_at_us, connection.quality.audio_track_started_us)):
+            connection.quality.audio.observe(window)
+
+    def on_audio_utterance(self, utterance) -> None:
+        connection = self._connections.get(utterance.participant_id)
+        if (not self._closed and connection is not None and connection.quality is not None
+                and not connection.cancelled.is_set()
+                and utterance.timestamp_us >= connection.joined_at_us):
+            quality = connection.quality
+            if utterance.timestamp_us < quality.audio_track_started_us:
+                # This utterance started on the previous mic but may include windows from the new one.
+                quality.audio.discard_utterance()
+            else:
+                quality.audio.finish(utterance)
+
+    async def on_quality_audio(self, chunk) -> None:
+        connection = self._connections.get(chunk.participant_id)
+        if (self._closed or connection is None or connection.quality is None or connection.cancelled.is_set()
+                or chunk.pts_us < max(connection.joined_at_us, connection.quality.audio_track_started_us)):
+            return
+        quality = connection.quality
+        track = (chunk.track_id, chunk.sample_rate, chunk.channels)
+        if quality.audio_track != track:
+            quality.audio.reset()
+            quality.audio_track = track
+            quality.audio_track_started_us = chunk.pts_us
+
+    async def on_quality_frame(self, frame) -> None:
+        connection = self._connections.get(frame.participant_id)
+        if connection is not None and connection.quality is not None:
+            connection.quality.frame(frame)
+
     async def close(self) -> None:
         self._closed = True
         for connection in self._connections.values():
             connection.cancelled.set()
+            if connection.quality is not None:
+                connection.quality.invalidate()
         try:
+            await asyncio.gather(*(c.quality.stop() for c in self._connections.values() if c.quality is not None))
             pending = tuple(self._tails.items())
             results = await asyncio.gather(*(task for _, task in pending), return_exceptions=True)
             for (pid, _), result in zip(pending, results):

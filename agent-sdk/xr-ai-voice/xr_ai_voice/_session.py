@@ -265,6 +265,12 @@ class _VoiceSession:
             pts_us=pts_us,
         )
 
+    async def replace_pending_update(self, participant_id: str, text: str, *, source: str) -> None:
+        """Revise one producer's queued nonurgent notice without replaying heard output."""
+        if self._io_processor is None:
+            raise RuntimeError("voice session is not running")
+        await self._io_processor.replace_pending_update(participant_id, text, source=source)
+
     async def withdraw_updates(self, participant_id: str, *, source: str) -> None:
         """Drop one producer's queued updates that have not started playing."""
 

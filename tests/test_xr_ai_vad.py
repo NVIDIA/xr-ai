@@ -448,3 +448,21 @@ async def test_max_duration_keeps_remaining_audio_from_same_feed(monkeypatch):
     await vad.feed(audio, SR)
     assert len(received) == 3
     assert b"".join(received) == audio
+
+
+async def test_window_observer_failure_does_not_stop_transcription():
+    utterances, observed = [], []
+
+    async def utterance(pcm, rate):
+        utterances.append((pcm, rate))
+
+    def observe(pcm, rate, speech):
+        observed.append((len(pcm), rate, speech))
+        raise RuntimeError("diagnostics unavailable")
+
+    vad = VadDetector(utterance, on_window=observe, silence_duration=0.1, min_speech=0.06)
+    _install_stub(vad)
+    await _feed_many(vad, 8, _tone_bytes(0.5))
+    await _feed_many(vad, 8, SILENT)
+    assert len(observed) == 10
+    assert len(utterances) == 1

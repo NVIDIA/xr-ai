@@ -1,0 +1,16 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+conditions:
+  low_frame_rate: The video frame rate has dropped by at least {drop_percent:.0f} percent from its initial value. Please move more slowly or check the connection.
+  low_resolution: The image resolution has dropped by at least {drop_percent:.0f} percent in pixel count from its initial value. Hold still or move closer for small text.
+  low_audio_snr: Your audio signal-to-noise ratio has dropped by at least {drop_percent:.0f} percent since setup, a decrease of {snr_drop_db:.0f} decibels. Move the microphone closer or reduce background noise.
+setup:
+  audio_snr: 'Estimated audio signal-to-noise ratio is {snr_db:.0f} decibels.'
+  audio_unavailable: 'Audio signal-to-noise ratio is unavailable. Say check setup after a brief quiet pause.'
+  welcome: Say check setup to check video frame rate, resolution and audio signal-to-noise ratio, or start capture to record. To finish recording, say stop capture.
+  welcome_disabled: Say start capture to record. To finish recording, say stop capture.
+  video_fps: 'Received video is {fps:.1f} frames per second.'
+  fps_unavailable: 'The current video frame rate is unavailable.'
+  resolution: 'Image resolution is {width} by {height} pixels.'
+  unavailable: 'The current image resolution is unavailable. Check that live video is enabled and connected.'

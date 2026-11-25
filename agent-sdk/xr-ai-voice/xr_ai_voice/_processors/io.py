@@ -199,6 +199,22 @@ class _VoiceIOProcessor(FrameProcessor):
         pending.append(_PendingUpdate(text=text, pts_us=pts_us, source=source))
         await self._start_next(participant_id)
 
+    async def replace_pending_update(self, participant_id: str, text: str, *, source: str) -> None:
+        """Revise queued nonurgent output in place; already heard output stays heard."""
+        pending = self._pending_updates.get(participant_id, ())
+        kept = deque()
+        replaced = False
+        for update in pending:
+            if update.source != source:
+                kept.append(update)
+            elif not replaced:
+                kept.append(_PendingUpdate(text=text, pts_us=update.pts_us, source=source))
+                replaced = True
+        if replaced:
+            self._pending_updates[participant_id] = kept
+            # Invalidate any synthesized but not-yet-playing version as well.
+            await self._recheck(participant_id)
+
     async def withdraw_updates(self, participant_id: str, *, source: str) -> None:
         """Drop one producer's updates that have not been heard.
 

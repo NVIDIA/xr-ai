@@ -80,6 +80,7 @@ class _Session:
         self.queries: list[tuple[str, str, int | None]] = []
         self.update_sources: list[str | None] = []
         self.withdrawn: list[tuple[str, str]] = []
+        self.replacements: list[tuple[str, str, str]] = []
 
     @property
     def is_running(self) -> bool:
@@ -130,6 +131,9 @@ class _Session:
         self.responses.append((participant_id, text, "urgent" if urgent else "update", pts_us))
         self.update_sources.append(source)
         self.changed.set()
+
+    async def replace_pending_update(self, participant_id: str, text: str, *, source: str) -> None:
+        self.replacements.append((participant_id, source, text))
 
     async def withdraw_updates(self, participant_id: str, *, source: str) -> None:
         self.withdrawn.append((participant_id, source))
@@ -1475,3 +1479,18 @@ async def test_query_delivery_child_cancellation_preserves_owned_task_cancellati
     finally:
         await output._shutdown()
         await output.cleanup()
+
+
+async def test_voice_agent_routes_pending_replacement_without_creating_a_new_update():
+    session = _Session()
+    runtime = AgentRuntime()
+    voice = _voice_agent(session, text_input=False)
+    runtime.register("voice", voice)
+    async with _running_voice(runtime, voice, session):
+        await runtime.publish(
+            VOICE_OUTPUT_TOPIC,
+            ResponseOutput(kind="update", text="Video is slow.", replace_pending=True),
+            participant_id="alice", source="quality",
+        )
+    assert session.replacements == [("alice", "quality", "Video is slow.")]
+    assert not session.responses
