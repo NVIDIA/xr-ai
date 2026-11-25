@@ -67,6 +67,7 @@ _ALLOWED_LEGACY_REFERENCES = {
 }
 _HUB_PROJECT = _ROOT / "services" / "device-io-hub"
 _SAMPLE_WEB_CLIENTS = {
+    "gesture-capture": _ROOT / "client-samples" / "web",
     "conversation-example": _ROOT / "client-samples" / "web",
     "procedure-capture-guide": _ROOT / "client-samples" / "web",
     "lab-instrument-monitoring": _ROOT / "client-samples" / "web",

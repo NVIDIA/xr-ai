@@ -366,7 +366,11 @@ def test_sample_readmes_use_sample_directory_commands() -> None:
                 in configure_section
             )
         if sample_dir.parent.name == "agent-samples":
-            assert f"uv run --project model-servers {sample_dir.name.replace('-', '_')}_model_servers" in bash
+            if sample_dir.name == "gesture-capture":
+                # The VLM-only sample reuses an existing model stack.
+                assert "uv run --project ../simple-vlm-example/model-servers simple_vlm_example_model_servers" in bash
+            else:
+                assert f"uv run --project model-servers {sample_dir.name.replace('-', '_')}_model_servers" in bash
             assert "same terminal" in run_section
             assert "sample configuration guide" in configure_section
 

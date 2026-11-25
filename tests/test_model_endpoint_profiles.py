@@ -144,7 +144,7 @@ def test_endpoint_profile_and_sample_environments_use_existing_contract():
     assert config.ocr("ocr").deployment.service is None
     for path in ROOT.glob("agent-samples/*/worker/pyproject.toml"):
         project = tomllib.loads(path.read_text())["project"]
-        if any(dep.startswith("xr-ai-models") for dep in project["dependencies"]):
+        if any(dep.startswith("xr-ai-voice") for dep in project["dependencies"]):
             assert "xr-ai-models[riva]" in project["dependencies"]
 
 

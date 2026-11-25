@@ -6,12 +6,15 @@
 import subprocess
 from pathlib import Path
 
+import pytest
+
 _TEST = Path(__file__).parent / "javascript/web_camera_capture.test.mjs"
 
 
-def test_web_camera_capture_behavior() -> None:
+@pytest.mark.parametrize("test_file", [_TEST, _TEST.with_name("photo_capture.test.mjs")])
+def test_web_camera_capture_behavior(test_file) -> None:
     result = subprocess.run(
-        ["node", str(_TEST)],
+        ["node", str(test_file)],
         check=False,
         capture_output=True,
         text=True,

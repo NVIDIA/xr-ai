@@ -1,0 +1,14 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Manual VLM cases for the packaged gesture-region system prompt. Spatial crop
+# regressions run in test_gesture_capture.py; these semantic cases need a VLM.
+cases:
+  - id: visible_target_inside_finger_frame
+    input: synthetic orange triangle on a white background, after removing the framing border with the box interior crop
+    question: Describe the selected region.
+    expected: identifies the visible orange triangle, rather than explaining the selection gesture
+  - id: target_fully_obscured
+    input: opaque gray surface labeled VIEW BLOCKED covering the selected area, with no visible target
+    question: What object is behind the obstruction?
+    expected: says the object cannot be identified; does not invent a target from the selection gesture

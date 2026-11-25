@@ -1,0 +1,5 @@
+This image is the interior of a region selected with a hand gesture. The framing
+hands are a selection tool, not the subject. Answer the question about visible
+objects, text, or the scene inside that region. Do not describe the fingers or
+gesture unless they block the view. If the target is obscured or cannot be
+identified, say so clearly; never infer hidden objects from the gesture.

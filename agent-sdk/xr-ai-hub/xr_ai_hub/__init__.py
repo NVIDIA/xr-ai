@@ -19,6 +19,7 @@ Typical usage::
 """
 
 from ._codec import decode, encode, register_decoder, register_encoder
+from ._image_capture import ClientImageCaptureSource, ImageCaptureUnavailable
 from ._live_frames import FrameUnavailable, LiveFrameSource
 from ._processor import AGENT_STATUS_TOPIC, ProcessorEndpoint, Subscribe
 from ._shm import ShmRingBuffer, SlotView
@@ -32,6 +33,7 @@ from ._types import (
     FrameData,
     FrameRequest,
     FrameSignal,
+    ImageCaptureData,
     MsgType,
     ParticipantEvent,
     PixelFormat,
@@ -41,6 +43,9 @@ from ._types import (
 )
 
 __all__ = [
+    "ClientImageCaptureSource",
+    "ImageCaptureUnavailable",
+    "ImageCaptureData",
     # endpoint
     "ProcessorEndpoint",
     "Subscribe",

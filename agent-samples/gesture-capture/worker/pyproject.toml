@@ -1,0 +1,27 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "gesture-capture-worker"
+version = "0.1.0"
+requires-python = ">=3.11,<3.15"
+dependencies = [
+    "xr-ai-hub-client", "xr-ai-models", "xr-ai-logging",
+    "xr-ai-tools[frames,hand-tracking,image-editing,vision]", "pyyaml>=6.0",
+]
+
+[tool.uv.sources]
+xr-ai-hub-client = { path = "../../../agent-sdk/xr-ai-hub", editable = true }
+xr-ai-models = { path = "../../../agent-sdk/xr-ai-models", editable = true }
+xr-ai-logging = { path = "../../../utils/xr-ai-logging", editable = true }
+xr-ai-tools = { path = "../../../agent-sdk/xr-ai-tools", editable = true }
+
+[project.scripts]
+gesture_capture_worker = "gesture_capture_worker.__main__:run"
+
+[tool.hatch.build.targets.wheel]
+packages = ["gesture_capture_worker"]

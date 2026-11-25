@@ -17,12 +17,15 @@ from device_io_hub.transport.livekit._room_client import (
     RoomClient,
 )
 from PIL import Image
-from xr_ai_hub import FrameData, FrameSignal, FrameUnavailable, PixelFormat
-from xr_ai_hub._image_capture import (
-    _CAPTURE_REJECTION_MIME_TYPE,
-    _ClientImageCaptureSource,
-    _ImageCaptureUnavailable,
+from xr_ai_hub import (
+    ClientImageCaptureSource,
+    FrameData,
+    FrameSignal,
+    FrameUnavailable,
+    ImageCaptureUnavailable,
+    PixelFormat,
 )
+from xr_ai_hub._image_capture import _CAPTURE_REJECTION_MIME_TYPE
 from xr_ai_hub._types import ImageCaptureData
 from xr_ai_tools.current_frame import CurrentFrameRequest, CurrentFrameTool
 from xr_ai_tools.image import ImageRegistry
@@ -248,9 +251,9 @@ async def test_capture_rejection_rechecks_an_already_fresh_live_frame() -> None:
 
 async def test_timed_out_capture_is_cancelled_on_the_client() -> None:
     endpoint = _Endpoint(respond=False)
-    source = _ClientImageCaptureSource(endpoint, timeout_s=0.01)  # type: ignore[arg-type]
+    source = ClientImageCaptureSource(endpoint, timeout_s=0.01)  # type: ignore[arg-type]
 
-    with pytest.raises(_ImageCaptureUnavailable, match="timeout"):
+    with pytest.raises(ImageCaptureUnavailable, match="timeout"):
         await source.capture("alice")
 
     assert len(endpoint.cancels) == 1
@@ -259,7 +262,7 @@ async def test_timed_out_capture_is_cancelled_on_the_client() -> None:
 
 async def test_cancelled_capture_is_cancelled_on_the_client() -> None:
     endpoint = _Endpoint(respond=False)
-    source = _ClientImageCaptureSource(endpoint, timeout_s=1)  # type: ignore[arg-type]
+    source = ClientImageCaptureSource(endpoint, timeout_s=1)  # type: ignore[arg-type]
     pending = asyncio.create_task(source.capture("alice"))
     await asyncio.sleep(0)
 
@@ -273,7 +276,7 @@ async def test_cancelled_capture_is_cancelled_on_the_client() -> None:
 
 async def test_client_rejection_fails_capture_without_waiting_for_timeout() -> None:
     endpoint = _Endpoint(respond=False)
-    source = _ClientImageCaptureSource(endpoint, timeout_s=10)  # type: ignore[arg-type]
+    source = ClientImageCaptureSource(endpoint, timeout_s=10)  # type: ignore[arg-type]
     pending = asyncio.create_task(source.capture("alice"))
     await asyncio.sleep(0)
     request = endpoint.requests[0]
@@ -286,7 +289,7 @@ async def test_client_rejection_fails_capture_without_waiting_for_timeout() -> N
         data=b'{"version":1,"status":"rejected"}',
     ))
 
-    with pytest.raises(_ImageCaptureUnavailable, match="could not provide"):
+    with pytest.raises(ImageCaptureUnavailable, match="could not provide"):
         await pending
     assert endpoint.cancels == []
 
@@ -294,9 +297,9 @@ async def test_client_rejection_fails_capture_without_waiting_for_timeout() -> N
 async def test_capture_rejects_a_disconnected_participant() -> None:
     endpoint = _Endpoint()
     endpoint.connected_participants = frozenset()
-    source = _ClientImageCaptureSource(endpoint)  # type: ignore[arg-type]
+    source = ClientImageCaptureSource(endpoint)  # type: ignore[arg-type]
 
-    with pytest.raises(_ImageCaptureUnavailable, match="not connected"):
+    with pytest.raises(ImageCaptureUnavailable, match="not connected"):
         await source.capture("alice")
 
 
@@ -378,7 +381,7 @@ async def test_capture_request_and_image_route_through_real_hub(
     connector.on_return_data(respond)
     connector_task = asyncio.create_task(connector.run())
     try:
-        image = await _ClientImageCaptureSource(endpoint, timeout_s=1).capture("alice")
+        image = await ClientImageCaptureSource(endpoint, timeout_s=1).capture("alice")
     finally:
         connector_task.cancel()
         with pytest.raises(asyncio.CancelledError):
@@ -395,5 +398,5 @@ async def test_current_frame_execute_preserves_unavailable_type_and_cause() -> N
     with pytest.raises(FrameUnavailable, match="Participant is not connected") as raised:
         await tool.execute(CurrentFrameRequest(participant_id="disconnected"))
 
-    assert isinstance(raised.value.__cause__, _ImageCaptureUnavailable)
+    assert isinstance(raised.value.__cause__, ImageCaptureUnavailable)
     assert endpoint.requests == []
