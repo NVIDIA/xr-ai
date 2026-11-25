@@ -214,12 +214,9 @@ async def test_audio_baselines_are_per_participant_and_reconnect_clears_them(dem
     assert demo.capture._connections["user"].quality.audio.baseline is None
 
 
-async def test_long_narration_snr_is_ready_before_real_vad_transcription(monkeypatch):
-    import numpy as np
-    from pipecat.frames.frames import InputAudioRawFrame
-    from test_voice_pipeline import _FakeStt, _run_chain
+@pytest.fixture
+def amplitude_vad(monkeypatch):
     from xr_ai_vad import detector
-    from xr_ai_voice._processors.vad_stt import VadConfig, VadSttProcessor
 
     class Silero:
         def __call__(self, tensor, sample_rate):
@@ -229,6 +226,14 @@ async def test_long_narration_snr_is_ready_before_real_vad_transcription(monkeyp
             pass
 
     monkeypatch.setattr(detector, "load_silero_vad", lambda **kwargs: Silero())
+
+
+async def test_long_narration_snr_is_ready_before_real_vad_transcription(amplitude_vad):
+    import numpy as np
+    from pipecat.frames.frames import InputAudioRawFrame
+    from test_voice_pipeline import _FakeStt, _run_chain
+    from xr_ai_voice._processors.vad_stt import VadConfig, VadSttProcessor
+
     scene = AudioScene()
     scene.audio.baseline = 1000
     accepted = []
@@ -253,3 +258,46 @@ async def test_long_narration_snr_is_ready_before_real_vad_transcription(monkeyp
     assert len(accepted) == 1
     assert accepted[0][0]  # Accepted speech must already have its low-SNR measurement.
     assert accepted[0][1]["audio_snr_db"] == pytest.approx(20, abs=.1)
+
+
+async def test_setup_after_mid_utterance_mic_change_uses_only_its_own_pcm(demo, amplitude_vad, monkeypatch):
+    import numpy as np
+    from pipecat.frames.frames import InputAudioRawFrame
+    from test_voice_pipeline import _FakeStt
+    from xr_ai_voice._processors.vad_stt import VadConfig, VadSttProcessor
+
+    install_quality(demo)
+    await demo.capture.receive(joined())
+    baselines = []
+
+    async def accept(pid, text, timestamp_us):
+        await speak(demo, text, pid=pid, timestamp_us=timestamp_us)
+        baselines.append(demo.capture._connections[pid].quality.audio.baseline)
+
+    proc = VadSttProcessor(
+        stt=_FakeStt(text="check setup"),
+        vad_cfg=VadConfig(stop_probe_after_s=0, on_audio_window=demo.capture.on_audio_window,
+                          on_audio_utterance=demo.capture.on_audio_utterance),
+        on_final_transcript=accept,
+    )
+    monkeypatch.setattr(proc, "push_frame", AsyncMock())
+    pts_us = 1_000_000
+    # The 736 ms pause after switching microphones is shorter than VAD finalization.
+    # Both sides of that pause therefore belong to the first utterance.
+    for track, count, amplitude in [
+        ("mic1", 40, 160), ("mic1", 20, 1600),
+        ("mic2", 23, 160), ("mic2", 30, 5000), ("mic2", 40, 160),
+        ("mic2", 30, 480), ("mic2", 30, 160),
+    ]:
+        chunk = SimpleNamespace(participant_id="user", track_id=track, sample_rate=16000, channels=1)
+        pcm = np.full(512, amplitude, np.int16).tobytes()
+        for _ in range(count):
+            chunk.pts_us = pts_us
+            await demo.capture.on_quality_audio(chunk)
+            frame = InputAudioRawFrame(audio=pcm, sample_rate=16000, num_channels=1)
+            frame.transport_source, frame.pts = "user", pts_us * 1000
+            await proc._handle_audio(frame)
+            pts_us += 32_000
+
+    assert baselines == [None, pytest.approx(8)]  # (480 / 160) squared, minus noise power
+    assert "9 decibels" in announcements(demo)[-1]

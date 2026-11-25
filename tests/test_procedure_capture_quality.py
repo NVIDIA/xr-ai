@@ -89,6 +89,18 @@ def test_half_initial_value_is_the_warning_threshold(values, expected):
     assert conditions == expected
 
 
+def test_long_window_measures_full_initial_rate_and_warns_at_half_rate():
+    scene = Scene()
+    scene.state.config = QualityConfig(window_s=120)
+    for _ in range(123):
+        assert not scene.second(fps=60)
+    assert scene.state.baseline_fps == pytest.approx(60)
+    for _ in range(120):
+        conditions = scene.second(fps=30)
+    assert scene.state.metrics["received_fps"] == pytest.approx(30)
+    assert conditions == {"low_frame_rate"}
+
+
 def test_track_change_and_duplicate_frames():
     scene = Scene()
     for _ in range(12):

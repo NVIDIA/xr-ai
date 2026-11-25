@@ -51,7 +51,7 @@ class QualityState:
 
     def __init__(self, config: QualityConfig, *, clock: Callable[[], float] = time.monotonic):
         self.config, self.clock = config, clock
-        self.frames: deque[float] = deque(maxlen=4096)
+        self.frames: deque[float] = deque()
         self.track_id: str | None = None
         self.started = clock()
         self.last_frame = None
@@ -83,22 +83,27 @@ class QualityState:
         if self.track_id is None:
             self.started = now
         self.track_id = frame.track_id
+        self._expire_frames(now)
         self.frames.append(now)
         self.last_frame, self.last_sequence = now, frame.seq
         self.resolution = (frame.width, frame.height)
 
+    def _expire_frames(self, now: float) -> None:
+        cutoff = now - self.config.window_s
+        while self.frames and self.frames[0] < cutoff:
+            self.frames.popleft()
+
     def setup_video(self, now: float) -> tuple[float | None, tuple[int, int] | None]:
+        self._expire_frames(now)
         if self.last_frame is None or now - self.last_frame >= self.config.stall_s:
             return None, None
-        frames = [t for t in self.frames if t >= now - self.config.window_s]
-        span = frames[-1] - frames[0] if frames else 0
-        fps = (len(frames) - 1) / span if span > 0 else None
+        span = self.frames[-1] - self.frames[0] if self.frames else 0
+        fps = (len(self.frames) - 1) / span if span > 0 else None
         return fps, self.resolution
 
     def evaluate(self) -> set[str]:
         now, c = self.clock(), self.config
-        while self.frames and self.frames[0] < now - c.window_s:
-            self.frames.popleft()
+        _, resolution = self.setup_video(now)
         conditions = set()
         fps = None
         if self.last_frame is not None:
@@ -120,7 +125,7 @@ class QualityState:
                     self.baseline_pixels = pixels
                 if pixels <= self.baseline_pixels * c.resolution_drop_ratio:
                     conditions.add("low_resolution")
-        self.metrics = {"received_fps": fps, "resolution": self.setup_video(now)[1], "baseline_fps": self.baseline_fps}
+        self.metrics = {"received_fps": fps, "resolution": resolution, "baseline_fps": self.baseline_fps}
         return conditions
 
 

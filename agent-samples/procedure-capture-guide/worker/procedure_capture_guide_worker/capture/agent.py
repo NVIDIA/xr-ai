@@ -265,8 +265,13 @@ class CaptureAgent(Agent):
         connection = self._connections.get(utterance.participant_id)
         if (not self._closed and connection is not None and connection.quality is not None
                 and not connection.cancelled.is_set()
-                and utterance.timestamp_us >= max(connection.joined_at_us, connection.quality.audio_track_started_us)):
-            connection.quality.audio.finish(utterance)
+                and utterance.timestamp_us >= connection.joined_at_us):
+            quality = connection.quality
+            if utterance.timestamp_us < quality.audio_track_started_us:
+                # This utterance started on the previous mic but may include windows from the new one.
+                quality.audio.discard_utterance()
+            else:
+                quality.audio.finish(utterance)
 
     async def on_quality_audio(self, chunk) -> None:
         connection = self._connections.get(chunk.participant_id)

@@ -37,9 +37,9 @@ class AudioQuality:
         self.noise = deque(maxlen=2048)
         self.estimates = deque(maxlen=64)
         self.last_us = None
-        self._clear_utterance()
+        self.discard_utterance()
 
-    def _clear_utterance(self):
+    def discard_utterance(self):
         self.start_us = None
         self.noise_power = None
         self.energy = self.speech_s = 0.0
@@ -53,7 +53,7 @@ class AudioQuality:
             if window.timestamp_us - self.last_us > 1_000_000:
                 # A discontinuity invalidates the noise estimate, not the setup baseline.
                 self.noise.clear()
-                self._clear_utterance()
+                self.discard_utterance()
         self.last_us = window.timestamp_us
         cutoff = window.timestamp_us - int(self.config.audio_noise_window_s * 1e6)
         while self.noise and self.noise[0].timestamp_us < cutoff:
@@ -79,7 +79,7 @@ class AudioQuality:
             if ratio <= 0 or not math.isfinite(ratio):
                 ratio = None
         self.estimates.append(_Estimate(utterance.timestamp_us, self.speech_s, ratio, self.clock()))
-        self._clear_utterance()
+        self.discard_utterance()
 
     def accept(self, timestamp_us: int, *, setup: bool = False):
         estimate = next((e for e in reversed(self.estimates) if e.start_us == timestamp_us), None)
