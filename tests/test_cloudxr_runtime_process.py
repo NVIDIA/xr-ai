@@ -37,6 +37,13 @@ def isolated_environment():
     with patch.dict(os.environ):
         yield
 
+
+@pytest.fixture
+def mock_native_loader_flags(monkeypatch):
+    # The loader is mocked; its Linux-only flag must not depend on the test host.
+    monkeypatch.setattr(os, "RTLD_DEEPBIND", 0, raising=False)
+
+
 _SDK_FILES = {
     "./libcloudxr.so": b"cloudxr",
     "./libopenxr_cloudxr.so": b"openxr",
@@ -325,7 +332,7 @@ async def test_invalid_proxy_port_fails_before_certificate_or_bind(tmp_path, mon
 
 @pytest.mark.parametrize("signals,join_result,stop_result", [(0, 0, 0), (2, 0, 0), (2, -6, -6)])
 def test_native_shutdown_stops_once_and_destroys_on_owner_thread(
-    tmp_path, monkeypatch, signals, join_result, stop_result,
+    tmp_path, monkeypatch, mock_native_loader_flags, signals, join_result, stop_result,
 ):
     from cloudxr_runtime import _service
 
@@ -366,7 +373,9 @@ def test_native_shutdown_stops_once_and_destroys_on_owner_thread(
 
 
 @pytest.mark.parametrize("failed_call", ["create", "start"])
-def test_native_startup_error_does_not_use_invalid_handle(tmp_path, monkeypatch, failed_call):
+def test_native_startup_error_does_not_use_invalid_handle(
+    tmp_path, monkeypatch, mock_native_loader_flags, failed_call,
+):
     from cloudxr_runtime import _service
 
     monkeypatch.setenv("NV_CXR_FILE_LOGGING", "false")
@@ -537,6 +546,8 @@ def test_native_child_real_signals_cannot_reach_a_destroyed_handle(tmp_path, nat
                 signal.raise_signal(signal.SIGTERM)
                 calls.append("destroy")
 
+        # This child loads a fake library, not the platform's native runtime.
+        os.RTLD_DEEPBIND = 0
         _service.ctypes.CDLL = lambda *args, **kwargs: Library()
         _service.serve(Path(sys.argv[1]), Path(sys.argv[1]))
         assert calls == (["destroy"] if natural_exit else ["stop", "destroy"]), calls
