@@ -709,8 +709,8 @@ class ProcessorEndpoint:
         """Receive and dispatch messages until :meth:`stop` is called.
 
         Real-time callbacks run in independent tasks. File callbacks run
-        serially on a bounded worker. An unhandled callback exception is fatal
-        to the processor process in either case.
+        serially on a bounded worker. If a callback raises an exception,
+        the endpoint logs the error and continues processing.
         """
         self._running_event.clear()
         self._running = True
