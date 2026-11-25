@@ -655,7 +655,7 @@ def test_file_callback_unsubscriber_is_idempotent() -> None:
         processor.close()
 
 
-async def test_file_callback_failure_uses_fatal_callback_policy(monkeypatch) -> None:
+async def test_file_callback_failure_is_isolated(monkeypatch) -> None:
     processor = ProcessorEndpoint(
         "inproc://file-callback-error-pub",
         "inproc://file-callback-error-in",
@@ -676,22 +676,63 @@ async def test_file_callback_failure_uses_fatal_callback_policy(monkeypatch) -> 
     async def fail(_message: FileMessage) -> None:
         raise RuntimeError("callback failed")
 
+    delivered: list[FileMessage] = []
+
+    async def record(received: FileMessage) -> None:
+        delivered.append(received)
+
     exit_process = Mock()
-    monkeypatch.setattr("xr_ai_hub._processor.os._exit", exit_process)
+    monkeypatch.setattr("os._exit", exit_process)
     processor._participants.add("alice")
     processor._participant_sessions["alice"] = "session-1"
     processor._subscribed["alice"] = Subscribe.FILE
     processor.on_file(fail)
+    processor.on_file(record)
     processor._running = True
     worker = asyncio.create_task(processor._run_file_callbacks())
     processor._file_queue.put_nowait(message)
     try:
         await asyncio.wait_for(processor._file_queue.join(), 1)
-        exit_process.assert_called_once_with(1)
+        exit_process.assert_not_called()
+        assert delivered == [message]
+        assert not worker.done()
     finally:
         processor._running = False
         worker.cancel()
         await asyncio.gather(worker, return_exceptions=True)
+        processor.close()
+
+
+async def test_spawned_callback_failure_is_isolated_and_task_retained(monkeypatch) -> None:
+    processor = ProcessorEndpoint(
+        "inproc://spawn-error-pub",
+        "inproc://spawn-error-in",
+    )
+    exit_process = Mock()
+    monkeypatch.setattr("os._exit", exit_process)
+    release = asyncio.Event()
+    ran: list[str] = []
+
+    async def fail() -> None:
+        raise RuntimeError("callback failed")
+
+    async def wait() -> None:
+        await release.wait()
+        ran.append("later")
+
+    try:
+        processor._spawn(fail())
+        processor._spawn(wait())
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert len(processor._background_tasks) == 1
+        release.set()
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert ran == ["later"]
+        assert not processor._background_tasks
+        exit_process.assert_not_called()
+    finally:
         processor.close()
 
 

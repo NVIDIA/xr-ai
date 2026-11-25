@@ -241,7 +241,7 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
   - `xr-ai-models[speaker]` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
   - `xr-ai-vad` → [`xr-ai-vad`](utils/xr-ai-vad/) (local, editable)
   - `xr-ai-voicegate` → [`xr-ai-voicegate`](utils/xr-ai-voicegate/) (local, editable)
-  - `pipecat-ai>=1.14.0`
+  - `pipecat-ai>=1.14.0,<2`
   - `Pillow>=13.0.0`
   - `nltk!=3.10.1`
   - `numpy>=1.24`
@@ -986,6 +986,7 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
   - `xr-rag-service` → [`xr-rag-service`](services/rag-service/) (local, editable)
   - `pytest>=8.0`
   - `pytest-asyncio>=0.23`
+  - `jsonschema>=4.23`
   - `coverage>=7.10`
   - `numpy>=1.24`
   - `audioop-lts; python_version >= '3.13'`

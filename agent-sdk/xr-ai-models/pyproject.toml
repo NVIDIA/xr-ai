@@ -21,6 +21,10 @@ riva = ["nvidia-riva-client>=2.17", "urllib3>=2.8.0"]
 # Private speaker-ASR streams use WebSocket audio without changing batch HTTP clients.
 speaker = ["websockets>=15.0"]
 
+[dependency-groups]
+# The live structured-output eval in eval/ validates answers against JSON Schema.
+eval = ["jsonschema>=4.23"]
+
 [tool.uv.sources]
 xr-ai-logging = { path = "../../utils/xr-ai-logging", editable = true }
 
