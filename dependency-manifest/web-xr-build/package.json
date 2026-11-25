@@ -7,7 +7,7 @@
     "build": "webpack --mode production"
   },
   "dependencies": {
-    "@nvidia/cloudxr": "file:./sdk.tgz",
+    "@nvidia/cloudxr": "6.2.0",
     "gl-matrix": "^3.4.3",
     "long": "^5.3.2",
     "livekit-client": "^2.21.0"

@@ -113,11 +113,10 @@ jobs:
           work="$(mktemp -d)"
           cp dependency-manifest/web-xr-build/package.json \
              dependency-manifest/web-xr-build/package-lock.json \
-             dependency-manifest/web-xr-build/sdk.tgz \
              client-samples/web-xr-build/webpack.config.js "${work}/"
           cp -r client-samples/web-xr-build/src "${work}/src"
           cd "${work}"
-          npm ci --no-audit --no-fund --legacy-peer-deps
+          npm ci --no-audit --no-fund
           npx webpack --mode production
           test -f ../web-xr/vendor/cloudxr-sdk.esm.mjs
           test -f node_modules/livekit-client/dist/livekit-client.esm.mjs
