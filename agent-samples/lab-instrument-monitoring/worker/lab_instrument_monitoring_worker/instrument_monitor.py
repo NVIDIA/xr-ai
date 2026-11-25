@@ -35,7 +35,8 @@ from .instruments import LabInstrumentAgent, ReadLabInstrumentsRequest
 from .monitor import MonitoringRequest, MonitoringState
 
 _EXPONENT = r"(?:[eE][+-]?\d+)?"
-_GROUPED = r"\d{1,3}(?:,\d{3})+(?:\.\d+)?"
+# A lone comma is a decimal separator unless a dot or another group disambiguates it.
+_GROUPED = r"\d{1,3},\d{3}(?:\.\d+|(?:,\d{3})+(?:\.\d+)?)"
 _NUMBER = re.compile(rf"[+-]?(?:{_GROUPED}|\d+(?:[.,]\d+)?|[.,]\d+){_EXPONENT}")
 _GROUPED_NUMBER = re.compile(rf"[+-]?{_GROUPED}{_EXPONENT}")
 _UNIT = re.compile(
