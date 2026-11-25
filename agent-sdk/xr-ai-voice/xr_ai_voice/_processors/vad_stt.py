@@ -194,9 +194,11 @@ class VadSttProcessor(FrameProcessor):
             self._probe_buffer[pid] = bytearray(audio_snapshot)
             self._probe_sr[pid] = sample_rate
             if self._vad_cfg.stop_probe_after_s > 0:
+                # Own Relay scope stack: the probe's voice.stt scope overlaps the final transcription's.
                 self._probe_task[pid] = asyncio.create_task(
                     self._run_partial_probes(pid),
                     name=f"vad-partial-probe-{pid}",
+                    context=nemo_relay.fork_asyncio_context(),
                 )
                 logger.info(
                     "early transcript probe scheduled pid={!r} after={:.2f}s",
