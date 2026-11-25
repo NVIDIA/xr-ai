@@ -1001,11 +1001,14 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 
 #### `xr-ai-dependency-manifest` — [`dependency-manifest/`](dependency-manifest/)
 
-- Python: `>=3.11,<3.14`
+- Python: `>=3.11.4,<3.14`
 - Build dependencies: none
 - Runtime dependencies: none
 - Optional dependency groups:
   - `repository`:
+    - `conversation-example` → [`conversation-example`](agent-samples/conversation-example/) (local, editable)
+    - `conversation-example-model-servers` → [`conversation-example-model-servers`](agent-samples/conversation-example/model-servers/) (local, editable)
+    - `conversation-example-worker` → [`conversation-example-worker`](agent-samples/conversation-example/worker/) (local, editable)
     - `lab-instrument-monitoring` → [`lab-instrument-monitoring`](agent-samples/lab-instrument-monitoring/) (local, editable)
     - `lab-instrument-monitoring-model-servers` → [`lab-instrument-monitoring-model-servers`](agent-samples/lab-instrument-monitoring/model-servers/) (local, editable)
     - `lab-instrument-monitoring-worker` → [`lab-instrument-monitoring-worker`](agent-samples/lab-instrument-monitoring/worker/) (local, editable)

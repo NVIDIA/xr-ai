@@ -203,6 +203,20 @@ def test_manifest_narrows_python_range_to_what_every_project_accepts(tmp_path: P
     assert 'requires-python = ">=3.12,<3.13"' in _render(tmp_path)
 
 
+def test_manifest_preserves_a_patch_level_python_floor(tmp_path: Path) -> None:
+    _write_project(tmp_path, "agent-sdk/library", name="library")
+    _write_project(tmp_path, "services/server", name="server", requires_python=">=3.11.4,<3.14")
+
+    assert 'requires-python = ">=3.11.4,<3.13"' in _render(tmp_path)
+
+
+def test_manifest_uses_the_strongest_patch_floor_in_the_shared_minor(tmp_path: Path) -> None:
+    _write_project(tmp_path, "agent-sdk/library", name="library", requires_python=">=3.11.4,<3.14")
+    _write_project(tmp_path, "services/server", name="server", requires_python=">=3.11.8,<3.15")
+
+    assert 'requires-python = ">=3.11.8,<3.14"' in _render(tmp_path)
+
+
 def test_manifest_rejects_disjoint_python_ranges(tmp_path: Path) -> None:
     _write_project(tmp_path, "agent-sdk/library", name="library", requires_python=">=3.11,<3.12")
     _write_project(tmp_path, "services/server", name="server", requires_python=">=3.12")
