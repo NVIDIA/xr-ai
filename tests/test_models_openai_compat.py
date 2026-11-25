@@ -13,6 +13,9 @@ import base64
 import io
 import json
 from io import StringIO
+from pathlib import Path
+import subprocess
+import sys
 import wave
 
 import httpx
@@ -1234,7 +1237,110 @@ async def test_owned_client_closed_by_close() -> None:
     assert inner.is_closed is True
 
 
-async def test_llm_trace_records_chat_request_and_raw_response_without_secrets(monkeypatch) -> None:
+@pytest.fixture
+def trace_payload_enabled(monkeypatch) -> None:
+    monkeypatch.setenv("XR_AI_TRACE_MODEL_PAYLOADS", "1")
+
+
+@pytest.mark.parametrize("mode", ["chat", "stream", "stream_events"])
+async def test_model_trace_logs_only_metadata_by_default(mode: str, monkeypatch) -> None:
+    monkeypatch.delenv("XR_AI_TRACE_MODEL_PAYLOADS", raising=False)
+    monkeypatch.setenv("XR_AI_VERBOSE", "1")
+    stub = StubOpenAI()
+    stub.set_chat_message(
+        content="response-marker", reasoning="reasoning-marker", finish_reason="finish-marker",
+    )
+    usage = {"prompt_tokens": 7, "completion_tokens": 2, "total_tokens": "usage-marker"}
+    stub._chat_response["usage"] = usage
+    stub.set_stream_chunks([
+        {"choices": [{"index": 0, "delta": {
+            "content": "response-marker",
+            "reasoning": "reasoning-marker",
+            "tool_calls": [{"index": 0, "id": "call_1", "function": {
+                "name": "lookup", "arguments": '{"query":"tool-marker"}',
+            }}],
+        }}]},
+        {"choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]},
+        {"choices": [], "usage": usage},
+    ])
+    messages = [ChatMessage(role="user", content="request-marker")]
+    sink = StringIO()
+    sink_id = logger.add(sink, level="DEBUG", format="{message}")
+    try:
+        async with stub.client() as client, OpenAICompatLLM("http://stub", "llm", client=client) as llm:
+            if mode == "chat":
+                assert (await llm.chat(messages)).content == "response-marker"
+            else:
+                _ = [event async for event in getattr(llm, mode)(messages)]
+    finally:
+        logger.remove(sink_id)
+
+    (summary,) = _trace_records(sink)
+    assert summary["event"] == "end"
+    assert summary["mode"] == mode
+    assert summary["status"] == "complete"
+    assert summary["http_status"] == 200
+    assert summary["usage"] == {"prompt_tokens": 7, "completion_tokens": 2}
+    assert summary["chunk_count"] == (0 if mode == "chat" else 3)
+    assert summary["finish_reason"] == (None if mode == "chat" else "tool_calls")
+    assert summary["duration_ms"] >= 0
+    assert not {"request", "raw"} & summary.keys()
+    for content in (
+        "request-marker", "response-marker", "reasoning-marker", "tool-marker", "usage-marker", "finish-marker",
+    ):
+        assert content not in sink.getvalue()
+
+
+def test_model_trace_payload_opt_in_with_normal_logging(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("XR_AI_LOG_ROOT", str(tmp_path))
+    monkeypatch.setenv("XR_AI_VERBOSE", "1")
+    monkeypatch.delenv("XR_AI_TRACE_MODEL_PAYLOADS", raising=False)
+    script = """
+import asyncio
+import os
+
+from _stub_openai import StubOpenAI
+from loguru import logger
+from xr_ai_logging import setup_logging
+from xr_ai_models import ChatMessage, OpenAICompatLLM
+
+
+async def run():
+    setup_logging("trace-test")
+    stub = StubOpenAI()
+    stub.set_chat_message(content="default-reply-marker")
+    async with stub.client() as client, OpenAICompatLLM("http://stub", "llm", client=client) as llm:
+        await llm.chat([ChatMessage(role="user", content="default-prompt-marker")])
+        os.environ["XR_AI_TRACE_MODEL_PAYLOADS"] = "1"
+        stub.set_chat_message(content="opt-in-reply-marker")
+        await llm.chat([ChatMessage(role="user", content="opt-in-prompt-marker")])
+    await logger.complete()
+
+
+asyncio.run(run())
+"""
+    subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=Path(__file__).parent,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    (log_path,) = tmp_path.glob("log_*/trace-test.log")
+    logged = log_path.read_text()
+    summaries = [line for line in logged.splitlines() if 'llm.trace {"event":"end"' in line]
+    assert len(summaries) == 2
+    assert "default-prompt-marker" not in logged
+    assert "default-reply-marker" not in logged
+    assert "opt-in-prompt-marker" in logged
+    assert "opt-in-reply-marker" in logged
+
+
+async def test_llm_trace_records_chat_request_and_raw_response_without_secrets(
+    monkeypatch,
+    trace_payload_enabled,
+) -> None:
     monkeypatch.setenv("TRACE_TEST_KEY", "do-not-log-this-key")
     stub = StubOpenAI()
     stub.set_chat_message(
@@ -1289,7 +1395,7 @@ async def test_llm_trace_records_chat_request_and_raw_response_without_secrets(m
 
 
 @pytest.mark.parametrize("mode", ["chat", "stream", "stream_events"])
-async def test_llm_trace_preserves_integer_keyed_request_options(mode: str) -> None:
+async def test_llm_trace_preserves_integer_keyed_request_options(mode: str, trace_payload_enabled) -> None:
     stub = StubOpenAI()
     stub.set_chat_message(content="answer")
     stub.set_stream_chunks([
@@ -1313,7 +1419,7 @@ async def test_llm_trace_preserves_integer_keyed_request_options(mode: str) -> N
     assert _trace_records(sink)[0]["request"] == stub.last_json()
 
 
-async def test_llm_trace_redacts_tuple_tool_examples_without_changing_wire_payload() -> None:
+async def test_llm_trace_redacts_tuple_tool_examples_without_changing_wire_payload(trace_payload_enabled) -> None:
     stub = StubOpenAI()
     stub.set_chat_message(content="answer")
     example = {"password": "example-credential", "image_url": {"url": "https://example.invalid/media"}}
@@ -1341,7 +1447,7 @@ async def test_llm_trace_redacts_tuple_tool_examples_without_changing_wire_paylo
 
 
 @pytest.mark.parametrize("mode", ["stream", "stream_events"])
-async def test_llm_trace_uses_the_primary_choice_finish_reason(mode: str) -> None:
+async def test_llm_trace_uses_the_primary_choice_finish_reason(mode: str, trace_payload_enabled) -> None:
     stub = StubOpenAI()
     secondary_finish = {"choices": [{"index": 1, "delta": {}, "finish_reason": "length"}]}
     stub.set_stream_chunks([
@@ -1368,7 +1474,9 @@ async def test_llm_trace_uses_the_primary_choice_finish_reason(mode: str) -> Non
     assert records[-1]["finish_reason"] == "stop"
 
 
-async def test_llm_trace_records_http_failure_status() -> None:
+@pytest.mark.parametrize("include_payloads", [False, True])
+async def test_llm_trace_records_http_failure_status(include_payloads: bool, monkeypatch) -> None:
+    monkeypatch.setenv("XR_AI_TRACE_MODEL_PAYLOADS", "1" if include_payloads else "0")
     stub = StubOpenAI()
     stub.set_chat_status(503)
     sink = StringIO()
@@ -1381,13 +1489,14 @@ async def test_llm_trace_records_http_failure_status() -> None:
         logger.remove(sink_id)
 
     records = _trace_records(sink)
-    assert [record["event"] for record in records] == ["request", "http_error", "end"]
+    expected = ["request", "http_error", "end"] if include_payloads else ["end"]
+    assert [record["event"] for record in records] == expected
     assert len({record["call_id"] for record in records}) == 1
     assert records[-1]["status"] == "error"
     assert records[-1]["http_status"] == 503
 
 
-async def test_vlm_legacy_stream_trace_keeps_raw_reasoning_fields() -> None:
+async def test_vlm_legacy_stream_trace_keeps_raw_reasoning_fields(trace_payload_enabled) -> None:
     stub = StubOpenAI()
     stub.set_stream_chunks(
         [
@@ -1427,7 +1536,7 @@ async def test_vlm_legacy_stream_trace_keeps_raw_reasoning_fields() -> None:
     assert len({record["call_id"] for record in records}) == 1
 
 
-async def test_llm_trace_records_raw_stream_reasoning_tools_usage_and_finish() -> None:
+async def test_llm_trace_records_raw_stream_reasoning_tools_usage_and_finish(trace_payload_enabled) -> None:
     stub = StubOpenAI()
     chunks = [
         {"choices": [{"index": 0, "delta": {"reasoning_content": "raw rationale"}}]},
@@ -1575,7 +1684,13 @@ async def test_llm_stream_trace_marks_explicit_close() -> None:
 
 
 @pytest.mark.parametrize("mode", ["chat", "stream", "stream_events"])
-async def test_llm_trace_preserves_cancellation_and_closes_client(mode: str) -> None:
+@pytest.mark.parametrize("include_payloads", [False, True])
+async def test_llm_trace_preserves_cancellation_and_closes_client(
+    mode: str,
+    include_payloads: bool,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("XR_AI_TRACE_MODEL_PAYLOADS", "1" if include_payloads else "0")
     request_started = asyncio.Event()
 
     async def wait_for_response(_request: httpx.Request) -> httpx.Response:
@@ -1608,7 +1723,7 @@ async def test_llm_trace_preserves_cancellation_and_closes_client(mode: str) -> 
         logger.remove(sink_id)
 
     records = _trace_records(sink)
-    assert [record["event"] for record in records] == ["request", "end"]
+    assert [record["event"] for record in records] == (["request", "end"] if include_payloads else ["end"])
     assert len({record["call_id"] for record in records}) == 1
     assert records[-1]["status"] == "cancelled"
     assert records[-1]["error_type"] == "CancelledError"

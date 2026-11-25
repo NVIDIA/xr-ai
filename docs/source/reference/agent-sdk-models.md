@@ -100,19 +100,28 @@ A client profile names logical roles and declares adapters and endpoints:
 (model-call-tracing)=
 ## Inspecting typed model calls
 
-The OpenAI-compatible LLM and VLM clients write structured `llm.trace` DEBUG
-records for each chat request. A call ID groups the effective model request,
-provider response chunks (including reasoning fields, tool-call deltas, usage,
-and finish information when returned), and a final status for completion,
-cancellation, or error. These records do not include request headers or
-embedded image and video data. Request messages and text responses can contain
-conversation content, so protect the per-run log directory like other
-application data.
+The OpenAI-compatible LLM and VLM clients emit a structured `llm.trace` DEBUG
+summary for each chat call. The summary includes the call ID, model, mode,
+elapsed time, HTTP status, stream chunk count and completion status. When
+available, it includes standard finish reasons and numeric prompt, completion,
+and total token counts. Calls can complete, be cancelled, close before the
+consumer drains the stream, or fail. By default, the summary excludes request
+messages, provider replies, reasoning, and tool arguments.
 
-`xr-ai-logging` always writes DEBUG records to
-`/tmp/log_<namespace>_<timestamp>/<process>.log`. `XR_AI_VERBOSE` controls
-whether DEBUG records also appear on stderr; it does not enable or disable the
-trace records in the per-run file.
+To include the effective request and provider payloads while diagnosing a
+call, set `XR_AI_TRACE_MODEL_PAYLOADS=1` in the process environment. This also
+enables individual streaming records. The adapter reads the setting at the
+start of each call. Payload events omit request headers and redact selected
+structured credential fields and image or video references. Prompt and reply
+text, tool arguments, and provider reasoning can still contain sensitive data.
+Enable payload tracing only where you can control access to the logs and
+their retention. Existing HTTP error logs are separate from these traces.
+
+When configured with `xr-ai-logging`, the app writes DEBUG records to
+`log_<namespace>_<timestamp>/<process>.log` under `XR_AI_LOG_ROOT` or
+`/tmp` by default. `XR_AI_VERBOSE` enables DEBUG output on stderr
+and is independent of payload tracing. Any configured DEBUG sink can receive
+payload events while the opt-in is set.
 
 ## Annotated consumer configuration
 

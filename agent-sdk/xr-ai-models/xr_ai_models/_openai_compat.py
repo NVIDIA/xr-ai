@@ -223,23 +223,24 @@ def _trace_safe(value: Any, *, key: str | int | float | None = None) -> Any:
 
 
 class _LLMCallTrace:
-    """Write a correlated request and provider-event trace at DEBUG level."""
+    """Write a DEBUG call summary and opt-in redacted payload events."""
 
     def __init__(self, model: str, mode: str, payload: dict[str, Any], timeout: float | None):
         self.call_id = uuid.uuid4().hex
         self.model = model
         self.mode = mode
-        self.payload = payload
+        self.payload = payload if os.environ.get("XR_AI_TRACE_MODEL_PAYLOADS") == "1" else None
         self.timeout = timeout
         self.started_at = time.perf_counter()
         self.http_status: int | None = None
         self.finish_reason: str | None = None
-        self.usage: Any = None
+        self.usage: dict[str, int] | None = None
         self.chunk_count = 0
         self.done = False
 
     def __enter__(self) -> "_LLMCallTrace":
-        self._emit("request", request=self.payload, timeout=self.timeout)
+        if self.payload is not None:
+            self._emit("request", request=self.payload, timeout=self.timeout)
         return self
 
     def __exit__(self, exc_type, _exc, _traceback) -> None:
@@ -251,12 +252,15 @@ class _LLMCallTrace:
             status = "closed"
         else:
             status = "error"
+        finish_reason = self.finish_reason
+        if finish_reason not in {"stop", "length", "tool_calls", "content_filter", "function_call"}:
+            finish_reason = None
         self._emit(
             "end",
             status=status,
             error_type=exc_type.__name__ if exc_type is not None else None,
             http_status=self.http_status,
-            finish_reason=self.finish_reason,
+            finish_reason=finish_reason,
             usage=self.usage,
             chunk_count=self.chunk_count,
             done=self.done,
@@ -266,7 +270,8 @@ class _LLMCallTrace:
     def provider_data(self, data: str) -> None:
         if data == "[DONE]":
             self.done = True
-            self._emit("provider_done")
+            if self.payload is not None:
+                self._emit("provider_done")
             return
         try:
             raw: Any = json.loads(data)
@@ -274,20 +279,34 @@ class _LLMCallTrace:
             raw = {"unparsed_event_length": len(data)}
         self.chunk_count += 1
         if isinstance(raw, dict):
-            self.usage = raw.get("usage", self.usage)
-        self._emit("provider_chunk", raw=raw)
+            self._record_usage(raw.get("usage"))
+        if self.payload is not None:
+            self._emit("provider_chunk", raw=raw)
 
     def response(self, raw: Any) -> None:
         if isinstance(raw, dict):
-            self.usage = raw.get("usage", self.usage)
+            self._record_usage(raw.get("usage"))
             choices = raw.get("choices")
             if isinstance(choices, list) and choices and isinstance(choices[0], dict):
                 reason = choices[0].get("finish_reason")
                 if isinstance(reason, str):
                     self.finish_reason = reason
-        self._emit("provider_response", raw=raw)
+        if self.payload is not None:
+            self._emit("provider_response", raw=raw)
+
+    def _record_usage(self, value: Any) -> None:
+        if not isinstance(value, dict):
+            return
+        # Provider extension fields can contain arbitrary data.
+        self.usage = {
+            name: count
+            for name in ("prompt_tokens", "completion_tokens", "total_tokens")
+            if type(count := value.get(name)) is int
+        }
 
     def http_error(self, body: bytes) -> None:
+        if self.payload is None:
+            return
         try:
             raw: Any = json.loads(body)
         except (UnicodeDecodeError, json.JSONDecodeError):
