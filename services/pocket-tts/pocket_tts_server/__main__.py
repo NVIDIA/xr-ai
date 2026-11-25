@@ -19,6 +19,8 @@ Accepts --config <path>.yaml (auto-passed by xr-ai-launcher).
 
 Config keys
 -----------
+    mps:          dict  Optional enabled, active_thread_percentage and client_priority.
+                        Refer to xr_ai_launcher.configure_cuda_mps.
     voice:        str   Must be "bill_boerst" (required)
     language:     str   Pocket TTS language/model variant (default: "english")
     device:       str   "cpu", "cuda", or "auto" (default: "auto")
@@ -48,6 +50,7 @@ from pathlib import Path
 import anyio
 import yaml
 from loguru import logger
+from xr_ai_launcher import configure_cuda_mps, cuda_mps_identity
 from xr_ai_logging import setup_logging
 
 _SERVICE = "pocket_tts_server"
@@ -362,11 +365,13 @@ def _build_app(cfg: dict, _model_cache: Path):
         response_format: str   = "wav"
         stream:          bool  = False
 
+    mps_identity = cfg.get("_mps_identity", {"enabled": False})
+
     @app.get("/health")
     def health():
         if not backend.ready:
             raise HTTPException(status_code=503, detail="model not loaded")
-        return {"status": "ok", "service": _SERVICE}
+        return {"status": "ok", "service": _SERVICE, "mps": mps_identity}
 
     @app.get("/v1/models")
     def list_models():
@@ -494,14 +499,18 @@ def _build_app(cfg: dict, _model_cache: Path):
     return app, backend
 
 
-def _health_url_ok(health_url: str) -> bool:
+def _health_url_ok(health_url: str, *, mps: dict | None = None) -> bool:
     """Return True if *health_url* identifies a healthy Pocket TTS service."""
     try:
         with urllib.request.urlopen(health_url, timeout=2) as response:
             if response.status != 200:
                 return False
             body = json.load(response)
-            return isinstance(body, dict) and body.get("service") == _SERVICE
+            if not isinstance(body, dict) or body.get("service") != _SERVICE:
+                return False
+            if mps is not None and body.get("mps") != mps:
+                raise RuntimeError("Pocket TTS MPS configuration changed; stop the existing service before restarting")
+            return True
     except (OSError, http.client.HTTPException, ValueError):
         # ignored: unavailable or invalid health responses cannot establish reuse.
         return False
@@ -691,6 +700,13 @@ def run() -> None:
         with open(ns.config) as f:
             cfg = yaml.safe_load(f) or {}
 
+    try:
+        cfg["_mps_identity"] = (
+            configure_cuda_mps(cfg["mps"]) if "mps" in cfg else cuda_mps_identity()
+        )
+    except (ValueError, RuntimeError) as exc:
+        raise SystemExit(f"[pocket_tts_server] {exc}") from None
+
     if ns._serve:
         try:
             asyncio.run(_run(cfg, yaml_dir, ready_file=ns.ready_file))
@@ -708,7 +724,11 @@ def run() -> None:
         raise SystemExit(f"[pocket_tts_server] {exc}") from exc
     health_url = _health_url(probe_host, port)
 
-    if _health_url_ok(health_url):
+    try:
+        reusable = _health_url_ok(health_url, mps=cfg["_mps_identity"])
+    except RuntimeError as exc:
+        raise SystemExit(f"[pocket_tts_server] {exc}") from None
+    if reusable:
         print(
             f"[pocket_tts_server] already running on port {port} — reusing",
             flush=True,

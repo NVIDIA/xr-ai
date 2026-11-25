@@ -11,6 +11,9 @@ the pip-installed ``vllm`` CLI or a configured vLLM Docker image (per
 
 Config keys (nemotron_omni_llm_server.yaml)
 -------------------------------------------
+    mps:                      dict   Optional enabled, active_thread_percentage
+                                     and client_priority. Refer to
+                                     xr_ai_launcher.configure_cuda_mps.
     model_blackwell:          str    HF model ID for Blackwell (SM100+) — NVFP4.
     model_ada:                str    HF model ID for Ada / Hopper / Ampere — FP8.
     model_bf16:               str    HF model ID for BF16 (fallback / no quant).

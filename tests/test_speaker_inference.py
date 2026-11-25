@@ -58,6 +58,9 @@ def test_inference_runs_one_target_stream_and_bounds_diarization_history(_stream
     assert {call["keep_all_outputs"] for call in asr_calls[count:]} == {False, True}
     assert session.selection.owner == 7
     assert warmed[0] is not session
+    diar = models.diar.sortformer_modules
+    warmed_frames = warmed[0]._audio_samples * models.asr.encoder.streaming_cfg.valid_out_len // models.hop_samples
+    assert warmed_frames >= diar.spkcache_len + diar.fifo_len + diar.chunk_len
 
 
 @pytest.mark.parametrize("audio", [bytes(1), bytes(32002)])

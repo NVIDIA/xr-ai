@@ -188,6 +188,10 @@ The copied `model-servers/` directory is an application-owned preset if you
 choose to maintain it; the commands below reuse the repository's Conversation
 stack without changing its configuration.
 
+For model selection, GPU placement, memory budgets, and optional CUDA MPS
+settings, edit the preset's hardware-profile YAML following
+{doc}`customizing-model-servers`.
+
 The copied DeviceIOHub YAML leaves credentials blank, so the hub generates a
 fresh pair at startup. To use a fixed pair, set `LIVEKIT_API_KEY` and
 `LIVEKIT_API_SECRET` in the launch environment. Never put actual keys or tokens

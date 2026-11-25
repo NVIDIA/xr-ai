@@ -533,6 +533,7 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
   - `uvicorn[standard]>=0.29`
   - `pyyaml>=6.0`
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
+  - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
 - Optional dependency groups: none
 - Commands:
   - `pocket_tts_server` → `pocket_tts_server.__main__:run`
@@ -596,6 +597,7 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
   - `hf-xet>=1.1.2,<2.0.0`
   - `pyyaml>=6.0`
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
+  - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
 - Optional dependency groups: none
 - Commands:
   - `stt_server` → `stt_server.__main__:run`

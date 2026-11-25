@@ -14,5 +14,7 @@ Its private WebSocket contract accepts serialized, capture-ordered PCM. The
 opening message supplies the first sample's capture timestamp; later event
 timing is derived from accepted sample counts rather than packet arrival times.
 HTTP health and model identity follow the repository's model-service pattern,
-with loopback as this service's default. The streaming route is private to voice
-workers and is not a public SDK API.
+with loopback as this service's default. Readiness follows a disposable stream
+that fills the diarizer's bounded history and exercises streaming and final
+decoding, so initial GPU kernel compilation finishes before live enrollment.
+The streaming route is private to voice workers and is not a public SDK API.

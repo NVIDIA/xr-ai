@@ -17,6 +17,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from xr_ai_launcher import configure_cuda_mps
+
 log = logging.getLogger(__name__)
 
 _TRUE_BOOL_STRINGS = {"1", "true", "yes", "on"}
@@ -80,6 +82,11 @@ def load_config(argv: list[str] | None = None) -> tuple[dict, Path, Path | None]
 def setup_hf_env(cfg: dict, model_cache: Path) -> str | None:
     """Apply the shared HuggingFace / CUDA env block.
 
+    Applies an explicit ``mps`` mapping through
+    :func:`xr_ai_launcher.configure_cuda_mps` before CUDA initialization.
+    Explicit enablement requires ``vllm_backend: docker``. Omission preserves
+    inherited MPS settings.
+
     Sets ``CUDA_VISIBLE_DEVICES`` (when configured), ``HF_TOKEN`` (when
     provided), ``HF_XET_HIGH_PERFORMANCE``, ``HF_HOME``, and
     ``TRANSFORMERS_CACHE``.
@@ -93,6 +100,13 @@ def setup_hf_env(cfg: dict, model_cache: Path) -> str | None:
     Returns the YAML device selection when configured, otherwise inherited
     ``CUDA_VISIBLE_DEVICES`` (or ``None``), for GPU probes and Docker placement.
     """
+    if "mps" in cfg:
+        if (
+            isinstance(cfg["mps"], dict) and cfg["mps"].get("enabled") is True
+            and cfg.get("vllm_backend", "pip") != "docker"
+        ):
+            raise ValueError("mps.enabled requires vllm_backend: docker")
+        configure_cuda_mps(cfg["mps"])
     cuda_devices = cfg.get("cuda_visible_devices")
     if cuda_devices is not None:
         cuda_devices = str(cuda_devices)

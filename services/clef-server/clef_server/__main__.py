@@ -17,7 +17,7 @@ from urllib.request import urlopen
 
 import uvicorn
 from loguru import logger
-from xr_ai_launcher import has_ownership_marker, pid_on_port_checked
+from xr_ai_launcher import configure_cuda_mps, has_ownership_marker, pid_on_port_checked
 from xr_ai_logging import setup_logging
 
 from ._config import identity, load_config
@@ -33,6 +33,9 @@ def run() -> None:
     args = parser.parse_args()
     try:
         config = load_config(args.config)
+    except ValueError as exc:
+        raise SystemExit(f"[clef_server] {exc}") from None
+    try:
         markers = {f"{_MARKER}_MANAGED": "1", f"{_MARKER}_PORT": str(config.port)}
         if any(os.environ.get(key) != value for key, value in markers.items()):
             # /proc/<pid>/environ records the exec-time environment. Re-exec so
@@ -43,6 +46,11 @@ def run() -> None:
                 os.environ | markers,
             )
         setup_logging("clef-server")
+        if config.mps is not None:
+            try:
+                configure_cuda_mps(config.mps)
+            except (ValueError, RuntimeError) as exc:
+                raise SystemExit(f"[clef_server] {exc}") from None
         logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
         if _reuse_ready_server(config):
             if args.ready_file is not None:

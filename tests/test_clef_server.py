@@ -35,6 +35,17 @@ from clef_server._service import (  # noqa: E402
 REVISION = "17f0b0ad64efb65d273590632833508766b2aae6"
 
 
+def test_explicit_mps_settings_change_reuse_identity(tmp_path):
+    config = _config(tmp_path)
+    disabled = replace(config, mps={"enabled": False})
+    enabled = replace(config, mps={"enabled": True, "active_thread_percentage": 75})
+    changed_share = replace(config, mps={"enabled": True, "active_thread_percentage": 50})
+    fingerprints = {
+        identity(value)["configuration_fingerprint"] for value in (config, disabled, enabled, changed_share)
+    }
+    assert len(fingerprints) == 4
+
+
 class _Backend:
     def __init__(self, config: ServerConfig) -> None:
         self.config = config

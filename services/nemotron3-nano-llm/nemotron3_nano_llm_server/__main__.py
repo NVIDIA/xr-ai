@@ -13,6 +13,8 @@ Accepts ``--config <path>.yaml`` (auto-passed by xr-ai-launcher).
 
 Config keys
 -----------
+    mps:          dict  Optional enabled, active_thread_percentage and client_priority.
+                        Refer to xr_ai_launcher.configure_cuda_mps.
     model_blackwell:         str    HF model ID for Blackwell (SM100+).
     model_ada:               str    HF model ID for Ada / Hopper / Ampere.
     host:                    str    Bind address (default: "0.0.0.0").

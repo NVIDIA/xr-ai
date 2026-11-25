@@ -14,6 +14,8 @@ Accepts --config <path>.yaml (auto-passed by xr-ai-launcher).
 
 Config keys
 -----------
+    mps:          dict  Optional enabled, active_thread_percentage and client_priority.
+                        Refer to xr_ai_launcher.configure_cuda_mps.
     model:             str    NeMo / HuggingFace model name (required)
     device:            str    "cuda" | "cpu" | "auto" (default: "auto")
     port:              int    HTTP port (default: 8103)
@@ -50,6 +52,7 @@ warnings.filterwarnings(
 
 import yaml
 from loguru import logger
+from xr_ai_launcher import configure_cuda_mps
 from xr_ai_logging import setup_logging
 
 _DEFAULT_PORT              = 8103
@@ -461,6 +464,12 @@ def run() -> None:
         yaml_dir = ns.config.parent.resolve()
         with open(ns.config) as f:
             cfg = yaml.safe_load(f) or {}
+
+    if "mps" in cfg:
+        try:
+            configure_cuda_mps(cfg["mps"])
+        except (ValueError, RuntimeError) as exc:
+            raise SystemExit(f"[stt_server] {exc}") from None
 
     if ns._serve:
         # Persistent server subprocess — loads model and serves until killed.

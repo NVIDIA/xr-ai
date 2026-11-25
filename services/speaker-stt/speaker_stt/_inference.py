@@ -124,10 +124,12 @@ class _Models:
         self._warmup()
 
     def _warmup(self) -> None:
-        # The first decoder call initializes GPU kernels and can take seconds.
-        # Exercise streaming and utterance-final decoding before readiness,
-        # in a disposable session that cannot enroll a real participant.
+        # Fill the bounded diarization history so attention compilation and
+        # streaming/final decoding finish before live audio is accepted.
         seconds = self.hop_samples / 16000
+        diar = self.diar.sortformer_modules
+        context_frames = diar.spkcache_len + diar.fifo_len + diar.chunk_len
+        hops = max(3, ceil(context_frames / self.asr.encoder.streaming_cfg.valid_out_len))
         session = self._session(
             _SpeakerConfig(
                 silence_duration=2.5 * seconds,
@@ -137,7 +139,7 @@ class _Models:
         )
         session.selection.owner = 0
         session.selection.candidate = 0
-        for second in range(ceil(3 * seconds)):
+        for _ in range(ceil(hops * seconds)):
             session._feed(bytes(32000))
 
     def _session(self, cfg: _SpeakerConfig, *, audio_origin_us: int) -> _Session:

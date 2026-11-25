@@ -23,7 +23,7 @@ import yaml
 from anyio import CancelScope
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from loguru import logger
-from xr_ai_launcher import has_ownership_marker, pid_on_port_checked
+from xr_ai_launcher import configure_cuda_mps, cuda_mps_identity, has_ownership_marker, pid_on_port_checked
 from xr_ai_logging import setup_logging
 from xr_ai_voicegate._speaker import _SpeakerConfig
 
@@ -388,6 +388,13 @@ def _run() -> None:
     if "cuda_visible_devices" in cfg:
         os.environ["CUDA_VISIBLE_DEVICES"] = str(cfg["cuda_visible_devices"])
     setup_logging("speaker-stt")
+    try:
+        if "mps" in cfg:
+            cfg["_mps_identity"] = configure_cuda_mps(cfg["mps"])
+        elif os.environ.get("CUDA_MPS_PIPE_DIRECTORY"):
+            cfg["_mps_identity"] = cuda_mps_identity()
+    except (ValueError, RuntimeError) as exc:
+        raise SystemExit(f"[speaker_stt] {exc}") from None
     if not args._serve:
         try:
             if asyncio.run(_reuse(cfg, args.ready_file)):

@@ -110,13 +110,24 @@ def serve(
     Docker mode resolves *model* from the mounted *model_cache* inside the
     container and serves the cached snapshot directory under
     ``--served-model-name`` without contacting the Hub. Only when the snapshot
-    is absent does it verify a Xet-capable Hub, repairing a
-    missing or incompatible ``hf-xet`` wheel, and download the snapshot before
-    CUDA starts. With ``HF_HUB_OFFLINE=1`` a missing snapshot fails startup
-    instead. *extra_pip* is an additional
-    docker-only list of pip-installable package specs for model architectures
-    whose wheels the image doesn't bundle. Silently ignored in pip mode (deps
-    belong in the wrapper's pyproject.toml there).
+    is absent does it verify a Xet-capable Hub, repairing a missing or
+    incompatible ``hf-xet`` wheel, and download the snapshot before CUDA
+    starts. Under MPS, install compatible ``hf-xet`` in the image or set
+    ``HF_HUB_DISABLE_XET=1``; automatic repair is disabled. With
+    ``HF_HUB_OFFLINE=1`` a missing snapshot fails startup instead. *extra_pip*
+    is an additional docker-only list of pip-installable package specs for
+    model architectures whose wheels the image doesn't bundle. With MPS in
+    Docker mode it must be empty; install those dependencies in the image
+    instead. Silently ignored in pip mode (deps belong in the wrapper's
+    pyproject.toml there).
+
+    Docker mode joins an operator-managed CUDA MPS controller when
+    ``CUDA_MPS_PIPE_DIRECTORY`` is nonempty in the environment or *extra_env*.
+    An empty *extra_env* value for that key disables inherited MPS settings.
+    It verifies the controller, mounts its socket directory, and runs as the
+    launching user. ``CUDA_MPS_ACTIVE_THREAD_PERCENTAGE`` (1..100) and
+    ``CUDA_MPS_CLIENT_PRIORITY`` (0 or 1) are forwarded to that client.
+    The controller remains operator-owned; this wrapper does not start or stop it.
 
     *spark_uma* enables the DGX Spark cold-start safeguard in docker mode:
     one bounded restart of a container attempt launched by this wrapper after
