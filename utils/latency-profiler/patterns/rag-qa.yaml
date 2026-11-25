@@ -1,0 +1,10 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+title: Knowledge question with one retrieval
+description: One LLM round picks a retrieval tool, a search runs, a second round answers. Search time is an assumption.
+stages:
+  - {kind: endpoint, name: End of speech to final transcript}
+  - {kind: llm, name: Round 1 picks the tool, prompt_tokens: 1800, out_tokens: 30, cached: true}
+  - {kind: fixed, name: Retrieval, p50: 150, p90: 400, basis: assumed, note: embedding plus vector search}
+  - {kind: speak, name: Round 2 answer, prompt_tokens: 2400, cached: true, out_tokens: 80, first_sentence_tokens: 20, strategy: sentence, playback_ms: 140}

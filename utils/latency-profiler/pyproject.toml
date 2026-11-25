@@ -1,0 +1,39 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "xr-ai-latency-profiler"
+version = "0.1.0"
+description = "Component, router-path, and streaming latency profiler with a design-time latency estimator."
+requires-python = ">=3.11,<3.15"
+# Inference goes through the typed xr_ai_models services so the numbers include
+# the SDK's own request building and streaming overhead.
+dependencies = [
+    "xr-ai-models",
+    "numpy>=1.24",
+    "pyyaml>=6.0",
+    "pillow>=10.0",
+]
+
+[project.optional-dependencies]
+router = ["xr-ai-routing", "xr-ai-agent-runtime", "xr-ai-interaction"]
+vad = ["xr-ai-vad"]
+speech = ["xr-ai-models[speaker]", "xr-ai-voicegate"]
+
+[project.scripts]
+xr-latency = "xr_latency.cli:main"
+
+[tool.uv.sources]
+xr-ai-models = { path = "../../agent-sdk/xr-ai-models", editable = true }
+xr-ai-routing = { path = "../../agent-sdk/xr-ai-routing", editable = true }
+xr-ai-agent-runtime = { path = "../../agent-sdk/xr-ai-runtime", editable = true }
+xr-ai-interaction = { path = "../../agent-sdk/xr-ai-interaction", editable = true }
+xr-ai-vad = { path = "../xr-ai-vad", editable = true }
+xr-ai-voicegate = { path = "../xr-ai-voicegate", editable = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["xr_latency"]

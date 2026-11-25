@@ -1,0 +1,7 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+title: Background event spoken to the user
+description: A monitor finds something and speaks a templated alert. No ASR, no routing, no LLM.
+stages:
+  - {kind: tts, name: Alert speech, chars: 80, stream: true, playback_ms: 140}
