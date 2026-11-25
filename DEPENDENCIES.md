@@ -989,6 +989,7 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
   - `jsonschema>=4.23`
   - `coverage>=7.10`
   - `numpy>=1.24`
+  - `scipy>=1.11`
   - `audioop-lts; python_version >= '3.13'`
   - `huggingface-hub>=0.32.0`
   - `Pillow>=13.0.0`

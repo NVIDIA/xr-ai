@@ -1,0 +1,46 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+duration_s: 300
+worker:
+  package: procedure_capture_guide_worker
+  config: ../../yaml/worker.yaml
+  launch:
+    mode: guide
+    guide_path: ../../example-guides/tea-making/guide.yaml
+events:
+- at_s: 0
+  say: Start guide.
+  scene:
+    kind: packet
+    blend: CHAMOMILE
+- at_s: 35
+  say: What tea do you see?
+- at_s: 65
+  say: What is the current step?
+- at_s: 90
+  say: Next.
+  scene:
+    kind: kettle
+    readings:
+    - label: CURRENT
+      value: 20 C
+- at_s: 120
+  say: Is this hot enough?
+- at_s: 150
+  scene:
+    kind: kettle
+    readings:
+    - label: CURRENT
+      value: 100 C
+- at_s: 180
+  say: What is the current step?
+- at_s: 210
+  say: Next.
+  scene:
+    kind: cup
+    state: immersed
+- at_s: 245
+  say: What should I do now?
+- at_s: 280
+  say: Stop guide.

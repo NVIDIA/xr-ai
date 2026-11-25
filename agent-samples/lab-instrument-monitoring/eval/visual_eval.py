@@ -56,6 +56,7 @@ def _instrument_scene(
     right_reading: str | None,
     competing: bool = False,
     instruction_text: bool = False,
+    annotate: bool = True,
 ) -> bytes:
     image = np.full((720, 1280, 3), 245, dtype=np.uint8)
     gap = 10 if competing else 120
@@ -116,7 +117,8 @@ def _instrument_scene(
             (20, 20, 20),
             3,
         )
-    return _annotate_markers(_encode(image), _assign_marker_colors(markers))
+    raw = _encode(image)
+    return _annotate_markers(raw, _assign_marker_colors(markers)) if annotate else raw
 
 
 def _six_color_instrument_scene() -> bytes:

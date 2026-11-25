@@ -1,0 +1,40 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+duration_s: 300
+worker:
+  package: xr_render_demo_worker
+  config: ../../yaml/xr_render_demo_worker.yaml
+events:
+- at_s: 0
+  say: Start talking to me
+  handler: false
+  scene:
+    rectangle: blue
+- at_s: 12
+  say: Start talking to me
+  handler: false
+- at_s: 25
+  say: Make a red sphere at position zero, one point six, minus two meters.
+- at_s: 50
+  say: Make the sphere green.
+- at_s: 75
+  say: Double its size.
+- at_s: 100
+  say: What color is the rectangle in my camera?
+- at_s: 125
+  say: Move the sphere to position one, one point six, minus two meters.
+- at_s: 150
+  scene:
+    rectangle: red
+- at_s: 175
+  say: What color is the rectangle in my camera?
+- at_s: 200
+  say: Remove the sphere.
+- at_s: 225
+  say: Make a green cube at position zero, one point six, minus two meters.
+- at_s: 250
+  say: Remove the cube.
+- at_s: 280
+  say: Stop talking to me
+  handler: false

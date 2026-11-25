@@ -105,3 +105,33 @@ stop them with `uv run --project model-servers xr_render_demo_model_servers --st
 Refer to the [sample reference](https://nvidia.github.io/xr-ai/latest/reference/xr-render-demo.html)
 for client selection, the process stack, extension points, evaluation, GPU
 placement, and tracing guidance.
+
+Speech benchmark inputs live in [`eval/speech/`](eval/speech/). See
+[Measure sample speech performance](https://nvidia.github.io/xr-ai/latest/guides/evaluating-sample-models.html)
+for the shared runner and required services.
+
+Speech replay requires `--worker-config` with dedicated scene and tracking endpoints
+and a fresh empty scene. Copy the sample's full worker YAML and change those
+endpoints; the override replaces the whole YAML. An endpoint-only file resets
+other settings to loader defaults, including `silero_threshold` (0.3 to 0.5).
+The default scene/tracking ports (8320/8330 respectively) are rejected on every host.
+
+To start dedicated services, work from `agent-samples/xr-render-demo/`. Copy
+`scene/scene_service.yaml` to `scene/scene_service.eval.yaml` and
+`yaml/openxr_service.yaml` to `yaml/openxr_service.eval.yaml`, preserving the other
+settings and relative paths. In the scene copy set `endpoint: tcp://127.0.0.1:18320`
+and a separate `scene_socket: ipc:///tmp/xr_eval_scene`; in the OpenXR copy set
+`endpoint: tcp://127.0.0.1:18330`. Start each in its own terminal:
+
+```bash
+uv run --project scene xr_render_scene --config scene/scene_service.eval.yaml
+uv run --project ../../services/openxr-service openxr_service --config yaml/openxr_service.eval.yaml
+```
+
+Copy the full worker YAML alongside its original and set
+`scene_endpoint: tcp://127.0.0.1:18320` and `openxr_endpoint: tcp://127.0.0.1:18330`.
+Pass that copy to `--worker-config`. Restart the dedicated scene service between
+configurations to provide an empty scene. The sample reference describes the LOVR
+and OpenXR prerequisites. The shared service package also has its own default
+`services/openxr-service/openxr_service.yaml`; `--config` selects the sample copy
+shown here.
