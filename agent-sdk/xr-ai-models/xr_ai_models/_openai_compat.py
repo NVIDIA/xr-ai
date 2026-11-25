@@ -191,10 +191,10 @@ def _parse_chat_response(data: dict[str, Any], reasoning_field: str | None) -> C
     )
 
 
-def _trace_safe(value: Any, *, key: str | None = None) -> Any:
+def _trace_safe(value: Any, *, key: str | int | float | None = None) -> Any:
     """Redact credentials and embedded media before model data reaches logs."""
 
-    if key is not None and key.lower() in {
+    if isinstance(key, str) and key.lower() in {
         "authorization",
         "api_key",
         "access_token",
@@ -212,7 +212,7 @@ def _trace_safe(value: Any, *, key: str | None = None) -> Any:
         return f"<{media} reference redacted>"
     if isinstance(value, dict):
         return {name: _trace_safe(item, key=name) for name, item in value.items()}
-    if isinstance(value, list):
+    if isinstance(value, (list, tuple)):
         return [_trace_safe(item) for item in value]
     if isinstance(value, str) and value.startswith(("data:image/", "data:video/")):
         media_type = value[5:].split(";", 1)[0].split(",", 1)[0]
@@ -275,11 +275,6 @@ class _LLMCallTrace:
         self.chunk_count += 1
         if isinstance(raw, dict):
             self.usage = raw.get("usage", self.usage)
-            choices = raw.get("choices")
-            if isinstance(choices, list):
-                for choice in choices:
-                    if isinstance(choice, dict) and isinstance(choice.get("finish_reason"), str):
-                        self.finish_reason = choice["finish_reason"]
         self._emit("provider_chunk", raw=raw)
 
     def response(self, raw: Any) -> None:
@@ -618,9 +613,13 @@ class OpenAICompatLLM:
                         return
                     try:
                         chunk = json.loads(data)
-                        delta = chunk["choices"][0]["delta"]
+                        choice = chunk["choices"][0]
+                        delta = choice["delta"]
                     except (json.JSONDecodeError, KeyError, IndexError):
                         continue
+                    reason = choice.get("finish_reason")
+                    if choice.get("index", 0) == 0 and isinstance(reason, str):
+                        trace.finish_reason = reason
                     content = delta.get("content")
                     if content:
                         yield content

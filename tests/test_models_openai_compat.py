@@ -1288,6 +1288,86 @@ async def test_llm_trace_records_chat_request_and_raw_response_without_secrets(m
     assert "Authorization" not in sink.getvalue()
 
 
+@pytest.mark.parametrize("mode", ["chat", "stream", "stream_events"])
+async def test_llm_trace_preserves_integer_keyed_request_options(mode: str) -> None:
+    stub = StubOpenAI()
+    stub.set_chat_message(content="answer")
+    stub.set_stream_chunks([
+        {"choices": [{"index": 0, "delta": {"content": "answer"}, "finish_reason": "stop"}]},
+    ])
+    messages = [ChatMessage(role="user", content="question")]
+    sink = StringIO()
+    sink_id = logger.add(sink, level="DEBUG", format="{message}")
+    try:
+        async with stub.client() as client, OpenAICompatLLM(
+            "http://stub", "llm", default_extras={"logit_bias": {123: -100}}, client=client,
+        ) as llm:
+            if mode == "chat":
+                await llm.chat(messages)
+            else:
+                _ = [value async for value in getattr(llm, mode)(messages)]
+    finally:
+        logger.remove(sink_id)
+
+    assert stub.last_json()["logit_bias"] == {"123": -100}
+    assert _trace_records(sink)[0]["request"] == stub.last_json()
+
+
+async def test_llm_trace_redacts_tuple_tool_examples_without_changing_wire_payload() -> None:
+    stub = StubOpenAI()
+    stub.set_chat_message(content="answer")
+    example = {"password": "example-credential", "image_url": {"url": "https://example.invalid/media"}}
+    messages = [ChatMessage(role="user", content="question")]
+    sink = StringIO()
+    sink_id = logger.add(sink, level="DEBUG", format="{message}")
+    try:
+        async with stub.client() as client, OpenAICompatLLM("http://stub", "llm", client=client) as llm:
+            for examples in ((example,), [example]):
+                tool = ToolDef("lookup", "Look up a record", {"type": "object", "examples": examples})
+                await llm.chat(messages, tools=[tool])
+                assert stub.last_json()["tools"][0]["function"]["parameters"]["examples"] == [example]
+    finally:
+        logger.remove(sink_id)
+
+    requests = [record["request"] for record in _trace_records(sink) if record["event"] == "request"]
+    assert len(requests) == 2
+    for request in requests:
+        assert request["tools"][0]["function"]["parameters"]["examples"] == [{
+            "password": "<redacted>",
+            "image_url": {"url": "<image reference redacted>"},
+        }]
+    assert "example-credential" not in sink.getvalue()
+    assert "example.invalid/media" not in sink.getvalue()
+
+
+@pytest.mark.parametrize("mode", ["stream", "stream_events"])
+async def test_llm_trace_uses_the_primary_choice_finish_reason(mode: str) -> None:
+    stub = StubOpenAI()
+    secondary_finish = {"choices": [{"index": 1, "delta": {}, "finish_reason": "length"}]}
+    stub.set_stream_chunks([
+        {"choices": [{"index": 0, "delta": {"content": "answer"}, "finish_reason": "stop"}]},
+        secondary_finish,
+    ])
+    sink = StringIO()
+    sink_id = logger.add(sink, level="DEBUG", format="{message}")
+    try:
+        async with stub.client() as client, OpenAICompatLLM(
+            "http://stub", "llm", default_extras={"n": 2}, client=client,
+        ) as llm:
+            messages = [ChatMessage(role="user", content="x")]
+            if mode == "stream":
+                assert [text async for text in llm.stream(messages)] == ["answer"]
+            else:
+                events = [event async for event in llm.stream_events(messages)]
+                assert events[-1] == ChatStreamEvent(kind="finish", finish_reason="stop")
+    finally:
+        logger.remove(sink_id)
+
+    records = _trace_records(sink)
+    assert secondary_finish in [record["raw"] for record in records if record["event"] == "provider_chunk"]
+    assert records[-1]["finish_reason"] == "stop"
+
+
 async def test_llm_trace_records_http_failure_status() -> None:
     stub = StubOpenAI()
     stub.set_chat_status(503)
