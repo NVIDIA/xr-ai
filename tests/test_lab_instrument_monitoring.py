@@ -473,6 +473,41 @@ def test_instrument_reading_normalization_retains_units() -> None:
     assert normalize_meter_reading("UNKNOWN", previous_unit="V") is None
 
 
+def test_instrument_reading_normalization_handles_separators_and_two_word_units() -> None:
+    assert normalize_meter_reading("1,234.5 Hz") == (
+        Decimal("1234.5"),
+        "Hz",
+        "1234.5 Hz",
+    )
+    assert normalize_meter_reading("1,234,567 Ω") == (
+        Decimal("1234567"),
+        "Ω",
+        "1234567 Ω",
+    )
+    assert normalize_meter_reading("-4 degrees C") == (Decimal("-4"), "°C", "-4 °C")
+    assert normalize_meter_reading("98.6 degrees F") == (
+        Decimal("98.6"),
+        "°F",
+        "98.6 °F",
+    )
+    assert normalize_meter_reading("1,5 V") == (Decimal("1.5"), "V", "1.5 V")
+    assert normalize_meter_reading("12 degrees") == (
+        Decimal("12"),
+        "degrees",
+        "12 degrees",
+    )
+
+
+@pytest.mark.parametrize(
+    ("reading", "value"),
+    [("0,005 V", "0.005"), ("1,234 V", "1.234"), ("-12,345 V", "-12.345")],
+)
+def test_instrument_reading_normalization_preserves_decimal_comma(
+    reading: str, value: str
+) -> None:
+    assert normalize_meter_reading(reading) == (Decimal(value), "V", f"{value} V")
+
+
 def test_instrument_reader_uses_configured_prompt_without_rgb_hex_query(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1094,7 +1129,24 @@ async def test_instrument_monitor_emits_only_changes_lost_once_and_full_state() 
 
 
 @pytest.mark.asyncio
-async def test_instrument_monitor_emits_changes_when_only_unit_changes() -> None:
+@pytest.mark.parametrize(
+    ("readings", "changes"),
+    [
+        pytest.param(
+            ("1 V", "1 A", "12 V", "12 mV"),
+            [("1 V", "1 A"), ("1 A", "12 V"), ("12 V", "12 mV")],
+            id="unit-changes",
+        ),
+        pytest.param(
+            ("1,234 V", "1.234 V", "1,234.5 V", "1,234.9 V"),
+            [("1.234 V", "1234.5 V"), ("1234.5 V", "1234.9 V")],
+            id="separator-changes",
+        ),
+    ],
+)
+async def test_instrument_monitor_emits_reading_changes(
+    readings: tuple[str, ...], changes: list[tuple[str, str]]
+) -> None:
     monitor = _make_instrument_monitor()
     collector = _InstrumentEventCollector()
     runtime = AgentRuntime()
@@ -1104,10 +1156,7 @@ async def test_instrument_monitor_emits_changes_when_only_unit_changes() -> None
     async with runtime:
         monitor.bind_runtime(runtime)
         monitor._trackers["participant-1"] = _ParticipantTracker()
-        for timestamp_us, reading in enumerate(
-            ("1 V", "1 A", "12 V", "12 mV"),
-            start=1,
-        ):
+        for timestamp_us, reading in enumerate(readings, start=1):
             await monitor._observe(
                 "participant-1",
                 [
@@ -1127,11 +1176,7 @@ async def test_instrument_monitor_emits_changes_when_only_unit_changes() -> None
         (event.previous_reading, event.meter_reading)
         for event in collector.changes
         if event.change_type == "reading_changed"
-    ] == [
-        ("1 V", "1 A"),
-        ("1 A", "12 V"),
-        ("12 V", "12 mV"),
-    ]
+    ] == changes
 
 
 @pytest.mark.asyncio

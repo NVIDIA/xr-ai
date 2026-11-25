@@ -34,8 +34,14 @@ from .events import (
 from .instruments import LabInstrumentAgent, ReadLabInstrumentsRequest
 from .monitor import MonitoringRequest, MonitoringState
 
-_NUMBER = re.compile(r"[+-]?(?:\d+(?:[.,]\d+)?|[.,]\d+)(?:[eE][+-]?\d+)?")
-_UNIT = re.compile(r"(?:°\s*)?[A-Za-zµμΩ%]+(?:\s*/\s*[A-Za-z]+)?")
+_EXPONENT = r"(?:[eE][+-]?\d+)?"
+# A lone comma is a decimal separator unless a dot or another group disambiguates it.
+_GROUPED = r"\d{1,3},\d{3}(?:\.\d+|(?:,\d{3})+(?:\.\d+)?)"
+_NUMBER = re.compile(rf"[+-]?(?:{_GROUPED}|\d+(?:[.,]\d+)?|[.,]\d+){_EXPONENT}")
+_GROUPED_NUMBER = re.compile(rf"[+-]?{_GROUPED}{_EXPONENT}")
+_UNIT = re.compile(
+    r"(?:°\s*)?(?:degrees?\s+[CcFf]\b|[A-Za-zµμΩ%]+(?:\s*/\s*[A-Za-z]+)?)"
+)
 _UNIT_ALIASES = {
     "amp": "A",
     "amps": "A",
@@ -96,7 +102,7 @@ def normalize_meter_reading(
     if match is None:
         return None
     token = match.group(0)
-    if "," in token and "." in token:
+    if _GROUPED_NUMBER.fullmatch(token):
         token = token.replace(",", "")
     else:
         token = token.replace(",", ".")
