@@ -68,6 +68,8 @@ def _parser() -> argparse.ArgumentParser:
         "--output-root", type=Path, metavar="PATH",
         help="save task packets under PATH/sessions; overrides YAML artifacts_dir (relative to the launch directory)",
     )
+    parser.add_argument("--capture-config", type=Path, metavar="PATH",
+                        help="use a capture policy YAML instead of the sample default (capture mode only)")
     parser.add_argument(
         "--session-recording",
         action="store_true",
@@ -91,6 +93,8 @@ def run(argv: Sequence[str] | None = None) -> None:
         parser.error("GUIDE_PATH requires --mode guide")
     if args.mode == "guide" and args.output_root is not None:
         parser.error("--output-root requires --mode capture")
+    if args.mode == "guide" and args.capture_config is not None:
+        parser.error("--capture-config requires --mode capture")
     if args.mode == "guide" and (args.guide_path is None or not args.guide_path.strip()):
         parser.error("--mode guide requires a non-empty GUIDE_PATH")
     guide_path = None
@@ -98,7 +102,7 @@ def run(argv: Sequence[str] | None = None) -> None:
         # Preserve sample-relative CLI paths without coupling the worker to this tree.
         guide_path = str((_BASE / Path(args.guide_path).expanduser()).resolve())
     setup_logging("orchestrator", namespace="procedure-capture-guide")
-    if args.mode == "capture" and args.output_root is None:
+    if args.mode == "capture" and args.output_root is None and args.capture_config is None:
         run_stack(_build_processes(capture=args.session_recording, hub_config=hub_config), _BASE,
                   health_port=args.health_port)
         return
@@ -106,12 +110,15 @@ def run(argv: Sequence[str] | None = None) -> None:
     # relative model and voice configuration paths. Keep it until workers exit.
     with tempfile.TemporaryDirectory(prefix="procedure-capture-guide-") as directory:
         request = Path(directory) / "worker.json"
-        request.write_text(json.dumps({
+        request_data = {
             "worker_config": str(_BASE / "yaml/worker.yaml"),
             "mode": args.mode,
             "guide_path": guide_path,
             "output_root": str(args.output_root.expanduser().resolve()) if args.output_root is not None else None,
-        }), encoding="utf-8")
+        }
+        if args.capture_config is not None:
+            request_data["capture_config"] = str(args.capture_config.expanduser().resolve())
+        request.write_text(json.dumps(request_data), encoding="utf-8")
         run_stack(_build_processes(worker_config=request, capture=args.session_recording, hub_config=hub_config), _BASE,
                   health_port=args.health_port)
 

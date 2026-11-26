@@ -136,6 +136,40 @@ def test_capture_config_rejects_invalid_intervals(tmp_path, name, value):
         load_config(config_path)
 
 
+def test_capture_config_cli_preserves_sample_settings(monkeypatch, tmp_path):
+    spec = importlib.util.spec_from_file_location("sop_main", _SAMPLE / "main.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    (tmp_path / "bench.yaml").write_text("start_aliases: [watch me doing it]\nstop_aliases: [I'm done]\n")
+    monkeypatch.chdir(tmp_path)
+
+    def launch(processes, _base, *, health_port):
+        config = load_config(next(process.config for process in processes if process.name == "worker"))
+        assert config.capture.start_aliases == ("watch me doing it",)
+        assert config.capture.stop_aliases == ("I'm done",)
+        assert config.capture.artifacts_dir == tmp_path / "evidence"
+        assert config.models_config == _SAMPLE / "yaml/models.json"
+
+    monkeypatch.setattr(module, "run_stack", launch)
+    module.run(["--capture-config", "bench.yaml", "--output-root", "evidence"])
+    with pytest.raises(SystemExit):
+        module.run(["--mode", "guide", "bench-guide.yaml", "--capture-config", "bench.yaml"])
+
+
+@pytest.mark.parametrize("data", [
+    "start_aliases: begin\n",
+    "stop_aliases: [null]\n",
+    "start_aliases: [STOP CAPTURE!]\n",
+    "start_aliases: [finished]\nstop_aliases: [Finished.]\n",
+])
+def test_capture_rejects_invalid_aliases(tmp_path, data):
+    config_path = tmp_path / "worker.yaml"
+    config_path.write_text("{}\n")
+    (tmp_path / "capture-agent-config.yaml").write_text(data)
+    with pytest.raises(ValueError):
+        load_config(config_path)
+
+
 @pytest.mark.parametrize("gpu_profile", ["spark", "dual_48G_ada", "96G_blackwell"])
 def test_documented_model_deployment_matches_worker(gpu_profile, monkeypatch):
     from xr_ai_model_server_stack import _stack
@@ -248,7 +282,7 @@ async def test_shared_voice_gate_passes_capture_and_guide_controls_without_gener
 
 
 @pytest.fixture
-async def demo(tmp_path):
+async def demo(tmp_path, request):
     image = io.BytesIO()
     Image.new("RGB", (8, 8), "blue").save(image, format="JPEG")
     images = ImageRegistry()
@@ -265,7 +299,7 @@ async def demo(tmp_path):
         sessions_dir=tmp_path / "sessions", current_frame=frames, images=images,
         query_images=captioner, capture_fps=2, caption_interval_s=5,
     )
-    capture = CaptureAgent(capture_backend)
+    capture = CaptureAgent(capture_backend, **getattr(request, "param", {}))
     try:
         yield SimpleNamespace(
             capture_backend=capture_backend, capture=capture, root=tmp_path, frames=frames,
@@ -864,6 +898,24 @@ async def test_only_standalone_commands_control_recording(demo, text):
     assert demo.capture_backend.is_capturing("user")
     await speak(demo, "stop capture")
     assert narration(state) == [text]
+
+
+@pytest.mark.parametrize("demo", [{"start_aliases": ("watch me doing it",), "stop_aliases": ("I'm done",)}],
+                         indirect=True)
+async def test_capture_aliases_keep_exact_capture_boundaries(demo):
+    await demo.capture.receive(joined())
+    await speak(demo, "Can you watch me doing it?")
+    assert not demo.capture_backend.is_capturing("user")
+    await speak(demo, " WATCH me doing it. ")
+    state = demo.capture_backend._sessions["user"]
+    await speak(demo, "I'm done with the first part")
+    assert demo.capture_backend.is_capturing("user")
+    await speak(demo, "I’m done!")
+    saved = packet(state)
+    assert saved["status"] == "complete"
+    assert saved["stop_command"]["text"] == "I’m done!"
+    assert narration(state) == ["I'm done with the first part"]
+    assert announcements(demo) == ["Capture started.", "Capture stopped."]
 
 
 async def test_failed_narration_write_cannot_seal_a_complete_packet(demo, monkeypatch):

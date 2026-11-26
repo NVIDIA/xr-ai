@@ -54,6 +54,8 @@ def load_config(path: Path | None) -> WorkerConfig:
         raise ValueError("mode must be capture or guide")
     if mode == "guide" and output_root is not None:
         raise ValueError("--output-root is only available in capture mode")
+    if mode == "guide" and overrides.get("capture_config") is not None:
+        raise ValueError("--capture-config is only available in capture mode")
     if mode == "capture" and overrides.get("guide_path") is not None:
         raise ValueError("GUIDE_PATH is only available in guide mode")
     settings = {}
@@ -74,7 +76,8 @@ def load_config(path: Path | None) -> WorkerConfig:
         voice_gate_yaml=base / "voice_gate.yaml",
         mode=mode,
         capture=load_capture_config(
-            base / data.get("capture_config", "capture-agent-config.yaml"), output_root=output_root,
+            base / overrides.get("capture_config", data.get("capture_config", "capture-agent-config.yaml")),
+            output_root=output_root,
         ) if mode == "capture" else None,
         guide=load_guide_config(
             base / data.get("guide_config", "guide-agent-config.yaml"), guide_path=overrides.get("guide_path"),

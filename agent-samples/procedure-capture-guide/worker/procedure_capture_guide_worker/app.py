@@ -73,7 +73,9 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
         )
         # One owner orders command boundaries and admitted narration, including
         # repeated captures on the same participant connection.
-        capture = runtime.register("capture", CaptureAgent(capture_backend))
+        capture = runtime.register("capture", CaptureAgent(
+            capture_backend, start_aliases=config.capture.start_aliases, stop_aliases=config.capture.stop_aliases,
+        ))
         endpoint.on_participant(capture.receive)
         voice_options["participant_joined_topic"] = CAPTURE_JOINED_TOPIC
     else:

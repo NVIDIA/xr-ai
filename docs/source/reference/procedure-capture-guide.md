@@ -139,6 +139,12 @@ through `out_dir` in `yaml/media_capture.yaml`.
 
 ## Recording boundaries
 
+For a procedure with its own spoken wording, set `start_aliases` and
+`stop_aliases` in the capture policy YAML. Pass `--capture-config PATH` to use
+an alternate policy file. Configured phrases and the standard commands match
+whole utterances, ignoring capitalization, whitespace, and trailing sentence
+punctuation. The first alias for each command appears in the spoken welcome.
+
 - After connecting, the worker waits for **start capture** to open a packet.
   **stop capture** finalizes it. Repeat the pair to record another demonstration
   on the same connection; duplicate starts during recording are ignored.

@@ -11,7 +11,6 @@ backend in capturing.py and finalizes active capture on disconnect.
 from __future__ import annotations
 
 import asyncio
-import re
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 
@@ -22,8 +21,8 @@ from xr_ai_runtime import Agent, RuntimeContext, Topic, subscribe
 from xr_ai_voice import VOICE_OUTPUT_TOPIC
 
 from .capturing import _Capture
+from .config import normalize_command
 
-_COMMAND = re.compile(r"\s*(start|stop)\s+capture[.!?]*\s*", re.IGNORECASE)
 CAPTURE_INPUT_TOPIC = Topic("task.capture.input", UserQuery)
 CAPTURE_JOINED_TOPIC = Topic("task.capture.joined", ParticipantJoined)
 _WELCOME = (
@@ -53,9 +52,21 @@ class CaptureAgent(Agent):
     Order accepted speech and connection events before invoking the capture
     backend so each demonstration keeps its own narration and finalization.
     """
-    def __init__(self, capture_backend: _Capture) -> None:
+    def __init__(
+        self, capture_backend: _Capture, *, start_aliases: tuple[str, ...] = (), stop_aliases: tuple[str, ...] = (),
+    ) -> None:
         super().__init__()
         self._capture_backend = capture_backend
+        self._commands = {
+            **{normalize_command(phrase): "start" for phrase in ("start capture", *start_aliases)},
+            **{normalize_command(phrase): "stop" for phrase in ("stop capture", *stop_aliases)},
+        }
+        start = start_aliases[0] if start_aliases else "start capture"
+        stop = stop_aliases[0] if stop_aliases else "stop capture"
+        self._welcome = (
+            f"Say {start} to start the recording and demonstrate your procedure. To finish recording, say {stop}."
+            if start_aliases or stop_aliases else _WELCOME
+        )
         # Recording ownership applied to the backend by queued actions. Keep this
         # separate from connection.recording: newer input may already be accepted.
         self._sessions: dict[str, _Recording] = {}
@@ -149,7 +160,7 @@ class CaptureAgent(Agent):
         connection = self._connections.get(pid)
         if self._closed or (connection is not None and connection.recording is not None):
             return
-        await ResponseOutputs(ctx, VOICE_OUTPUT_TOPIC).update(pid, _WELCOME)
+        await ResponseOutputs(ctx, VOICE_OUTPUT_TOPIC).update(pid, self._welcome)
 
     @subscribe(CAPTURE_INPUT_TOPIC)
     async def on_input(self, transcript: UserQuery, ctx: RuntimeContext) -> None:
@@ -165,9 +176,9 @@ class CaptureAgent(Agent):
             or transcript.timestamp_us < connection.joined_at_us
         ):
             return
-        command = _COMMAND.fullmatch(transcript.text)
+        command = self._commands.get(normalize_command(transcript.text))
         recording = connection.recording
-        if command and command[1].lower() == "start":
+        if command == "start":
             if recording is not None:
                 return
             recording = _Recording(connection)
@@ -189,7 +200,7 @@ class CaptureAgent(Agent):
                         self._forget(pid, recording)
 
             self._enqueue(pid, start)
-        elif command:
+        elif command == "stop":
             connection.recording = None
 
             async def finish() -> None:
