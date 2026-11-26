@@ -182,8 +182,6 @@ def test_attribution_resources_cover_bundled_adaptations() -> None:
     tokenspeed = (_ROOT / "third_party_licenses/tokenspeed-mla-2.0.3/licenses/THIRDPARTYNOTICES").read_text()
     assert "Notice for NVIDIA/cutlass" in tokenspeed
     assert "Notice for flashinfer-ai/flashinfer" in tokenspeed
-    kotlin = (_ROOT / "third_party_licenses/kotlin-gradle-plugin-2.4.21/META-INF/COPYRIGHT").read_text()
-    assert "Copyright 2015-2023 the original author or authors." in kotlin
 
 
 def test_bundled_license_index_is_one_markdown_table() -> None:

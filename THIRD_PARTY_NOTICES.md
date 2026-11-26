@@ -122,7 +122,7 @@ the whole artifact or only its license resources were inspected.
 | `triton-windows` | 3.8.0.post29 | MIT; [upstream license](third_party_licenses/triton-windows-3.8.0.post29/) |
 | `orjson` | 3.13.0 | MPL-2.0 AND MIT (elected); [license texts](third_party_licenses/orjson-3.13.0/) |
 | `nvidia-cudnn-cu13` | 9.24.0.43 | NVIDIA SDK license; [upstream terms](third_party_licenses/nvidia-cudnn-cu13-9.24.0.43/) |
-| `nvidia-nccl-cu13` | 2.30.7 | BSD-3-Clause; [upstream license](third_party_licenses/nvidia-nccl-cu13-2.30.7/) |
+| `nvidia-nccl-cu13` | 2.30.7 | Wheel metadata: `LicenseRef-NVIDIA-Proprietary`; bundled license: BSD-3-Clause with an NVTX reference; [both declarations](third_party_licenses/nvidia-nccl-cu13-2.30.7/) |
 | `oss-harmony` | 0.0.11 | Apache-2.0; [upstream license](third_party_licenses/oss-harmony-0.0.11/) |
 | `nccl-extensions` | 0.1.0 | Apache-2.0; [upstream license](third_party_licenses/nccl-extensions-0.1.0/) |
 | `instanttensor` | 0.2.2 | Apache-2.0; [upstream license](third_party_licenses/instanttensor-0.2.2/) |
@@ -142,6 +142,12 @@ license, independently of the permissive terms of PyTorch and NCCL.
 pin protobuf to 7.36.1 only when `platform_machine == "s390x"`. The service
 environments require 7.36.2 elsewhere; the aggregate inventory retains
 6.33.5 for a separate dependency branch.
+
+NCCL 2.30.7's Linux x86_64 and aarch64 wheel metadata declares
+`LicenseRef-NVIDIA-Proprietary`, while each bundled `License.txt` contains
+BSD-3-Clause text and an NVTX reference. The versioned provenance directory
+preserves both METADATA resources and their published artifact hashes. These
+conflicting declarations have not been reconciled.
 
 ### Speaker enrollment runtime and models
 
@@ -346,13 +352,6 @@ The wrapper files are licensed under
 The JAR contains compiled Gradle Wrapper classes and its own license text in
 `META-INF/LICENSE`; the Apache-2.0 text is also bundled in [`LICENSE`](LICENSE).
 
-The Android build uses Kotlin Gradle plugin 2.4.21 (Apache-2.0), Commons IO
-2.14.0 (Apache-2.0), and Protobuf Java 3.25.9 (BSD-3-Clause). Their upstream
-license and attribution texts are preserved under `third_party_licenses/`,
-including the Kotlin plugin's bundled third-party notices. Commons IO and
-Protobuf Java are build/test tooling dependencies; the APK uses the separately
-resolved Protobuf Java Lite artifact.
-
 Building the Android sample with the Android Gradle Plugin (declared in
 `client-samples/android/gradle/libs.versions.toml`) places dual-licensed
 artifacts on the build classpath, including the following, for which `xr-ai`
@@ -474,12 +473,6 @@ refer to the component disclosures above for applicable license elections.
 | `opentelemetry-api-1.45.2` | [`LICENSE`](third_party_licenses/opentelemetry-api-1.45.2/LICENSE) |
 | `opentelemetry-sdk-1.45.2` | [`LICENSE`](third_party_licenses/opentelemetry-sdk-1.45.2/LICENSE) |
 | `opentelemetry-semantic-conventions-0.66b2` | [`LICENSE`](third_party_licenses/opentelemetry-semantic-conventions-0.66b2/LICENSE) |
-| `commons-io-2.14.0` | [`META-INF/LICENSE.txt`](third_party_licenses/commons-io-2.14.0/META-INF/LICENSE.txt) |
-| `protobuf-java-3.25.9` | [`LICENSE`](third_party_licenses/protobuf-java-3.25.9/LICENSE) |
-| `kotlin-gradle-plugin-2.4.21` | [`LICENSE`](third_party_licenses/kotlin-gradle-plugin-2.4.21/LICENSE) |
-| `kotlin-gradle-plugin-2.4.21` | [`META-INF/LICENSE`](third_party_licenses/kotlin-gradle-plugin-2.4.21/META-INF/LICENSE) |
-| `kotlin-gradle-plugin-2.4.21` | [`META-INF/LICENSE.txt`](third_party_licenses/kotlin-gradle-plugin-2.4.21/META-INF/LICENSE.txt) |
-| `kotlin-gradle-plugin-2.4.21` | [`driver/package/LICENSE`](third_party_licenses/kotlin-gradle-plugin-2.4.21/driver/package/LICENSE) |
 | `flashinfer-python-0.7.2.post1` | [`LICENSE.kda-for-kda.txt`](third_party_licenses/flashinfer-python-0.7.2.post1/licenses/LICENSE.kda-for-kda.txt) |
 | `flashinfer-python-0.7.2.post1` | [`LICENSE`](third_party_licenses/flashinfer-python-0.7.2.post1/licenses/LICENSE) |
 | `flashinfer-python-0.7.2.post1` | [`LICENSE.kda-for-kda`](third_party_licenses/flashinfer-python-0.7.2.post1/licenses/licenses/LICENSE.kda-for-kda) |
@@ -593,7 +586,6 @@ refer to the component disclosures above for applicable license elections.
 | `vllm-0.33.0` | [`LICENSE`](third_party_licenses/vllm-0.33.0/vllm/third_party/flash_linear_attention/LICENSE) |
 | `xgrammar-0.2.8` | [`LICENSE`](third_party_licenses/xgrammar-0.2.8/licenses/LICENSE) |
 | `tokenspeed-mla-2.0.3` | [`THIRDPARTYNOTICES`](third_party_licenses/tokenspeed-mla-2.0.3/licenses/THIRDPARTYNOTICES) |
-| `kotlin-gradle-plugin-2.4.21` | [`META-INF/COPYRIGHT`](third_party_licenses/kotlin-gradle-plugin-2.4.21/META-INF/COPYRIGHT) |
 
 ## Updating this file
 
