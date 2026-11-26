@@ -142,7 +142,7 @@ def test_bundled_license_index_is_complete_and_links_exist() -> None:
         and path.name != "license_notes.md"
         and (
             path.name.upper().startswith(("LICENSE", "LICENCE", "COPYING"))
-            or path.name == "FTL.TXT"
+            or path.name in {"FTL.TXT", "COPYRIGHT"}
         )
     }
     assert set(table_links) == expected, (
@@ -168,3 +168,8 @@ def test_voice_image_refresh_has_current_license_record(package: str) -> None:
     version = _VOICE_IMAGE_AUDITED_VERSIONS[package]
     assert _LOCK_VERSIONS[package] == {version}
     assert f"third_party_licenses/{package}-{version}/" in _NOTICES
+
+
+def test_android_plugin_copyright_is_preserved() -> None:
+    path = _ROOT / "third_party_licenses/kotlin-gradle-plugin-2.4.21/META-INF/COPYRIGHT"
+    assert "Copyright 2015-2023 the original author or authors." in path.read_text()

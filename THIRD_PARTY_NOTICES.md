@@ -337,6 +337,13 @@ The wrapper files are licensed under
 The JAR contains compiled Gradle Wrapper classes and its own license text in
 `META-INF/LICENSE`; the Apache-2.0 text is also bundled in [`LICENSE`](LICENSE).
 
+The Android build uses Kotlin Gradle plugin 2.4.21 (Apache-2.0), Commons IO
+2.14.0 (Apache-2.0), and Protobuf Java 3.25.9 (BSD-3-Clause). Their upstream
+license and attribution texts are preserved under `third_party_licenses/`,
+including the Kotlin plugin's bundled third-party notices. Commons IO and
+Protobuf Java are build/test tooling dependencies; the APK uses the separately
+resolved Protobuf Java Lite artifact.
+
 Building the Android sample with the Android Gradle Plugin (declared in
 `client-samples/android/gradle/libs.versions.toml`) places dual-licensed
 artifacts on the build classpath, including the following, for which `xr-ai`
@@ -457,6 +464,13 @@ refer to the component disclosures above for applicable license elections.
 | `nccl-extensions-0.1.0` | [`LICENSE.txt`](third_party_licenses/nccl-extensions-0.1.0/LICENSE.txt) |
 | `oss-harmony-0.0.11` | [`LICENSE`](third_party_licenses/oss-harmony-0.0.11/LICENSE) |
 | `protobuf-7.36.2` | [`LICENSE`](third_party_licenses/protobuf-7.36.2/LICENSE) |
+| `commons-io-2.14.0` | [`META-INF/LICENSE.txt`](third_party_licenses/commons-io-2.14.0/META-INF/LICENSE.txt) |
+| `protobuf-java-3.25.9` | [`LICENSE`](third_party_licenses/protobuf-java-3.25.9/LICENSE) |
+| `kotlin-gradle-plugin-2.4.21` | [`LICENSE`](third_party_licenses/kotlin-gradle-plugin-2.4.21/LICENSE) |
+| `kotlin-gradle-plugin-2.4.21` | [`META-INF/LICENSE`](third_party_licenses/kotlin-gradle-plugin-2.4.21/META-INF/LICENSE) |
+| `kotlin-gradle-plugin-2.4.21` | [`META-INF/LICENSE.txt`](third_party_licenses/kotlin-gradle-plugin-2.4.21/META-INF/LICENSE.txt) |
+| `kotlin-gradle-plugin-2.4.21` | [`driver/package/LICENSE`](third_party_licenses/kotlin-gradle-plugin-2.4.21/driver/package/LICENSE) |
+| `kotlin-gradle-plugin-2.4.21` | [`META-INF/COPYRIGHT`](third_party_licenses/kotlin-gradle-plugin-2.4.21/META-INF/COPYRIGHT) |
 
 ## Updating this file
 

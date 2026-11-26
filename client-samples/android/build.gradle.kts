@@ -13,6 +13,8 @@ buildscript {
     val catalog = project.extensions.getByType<VersionCatalogsExtension>().named("libs")
     val nettyPin = catalog.findVersion("netty").get().requiredVersion
     val guavaPin = catalog.findVersion("guava").get().requiredVersion
+    val commonsIoPin = catalog.findVersion("commonsIo").get().requiredVersion
+    val protobufJavaPin = catalog.findVersion("protobufJava").get().requiredVersion
     val nettyPinParts = nettyPin.split('.').mapNotNull { it.toIntOrNull() }
 
     fun belowNettyPin(version: String): Boolean {
@@ -32,6 +34,14 @@ buildscript {
         // CVE-2026-102554: avoid eager allocation during Guava deserialization.
         if (requested.group == "com.google.guava" && requested.name == "guava") {
             useVersion(guavaPin)
+        }
+        // CVE-2024-47554 and CVE-2024-7254 in AGP build/test tooling.
+        if (requested.group == "commons-io" && requested.name == "commons-io") {
+            useVersion(commonsIoPin)
+        }
+        if (requested.group == "com.google.protobuf" &&
+            requested.name in setOf("protobuf-java", "protobuf-java-util")) {
+            useVersion(protobufJavaPin)
         }
     }
 
@@ -93,14 +103,21 @@ tasks.register("verifyBuildscriptSecurityVersions") {
         val expectedVersions = listOf(
             Triple("com.google.common.collect.ImmutableList", "com.google.guava/guava", libs.versions.guava.get()),
             Triple("io.netty.util.Version", "io.netty/netty-common", libs.versions.netty.get()),
+            Triple("org.apache.commons.io.IOUtils", "commons-io/commons-io", libs.versions.commonsIo.get()),
+            Triple("com.google.protobuf.Message", "com.google.protobuf/protobuf-java", libs.versions.protobufJava.get()),
         )
         expectedVersions.forEach { (className, artifact, expectedVersion) ->
             val source = agpClassLoader.loadClass(className).protectionDomain.codeSource.location
             val loadedVersion = JarFile(File(source.toURI())).use { jar ->
                 val metadata = jar.getJarEntry("META-INF/maven/$artifact/pom.properties")
-                val properties = Properties()
-                jar.getInputStream(metadata).use { properties.load(it) }
-                properties.getProperty("version")
+                if (metadata != null) {
+                    val properties = Properties()
+                    jar.getInputStream(metadata).use { properties.load(it) }
+                    properties.getProperty("version")
+                } else {
+                    // Protobuf publishes its version in the OSGi manifest.
+                    jar.manifest.mainAttributes.getValue("Bundle-Version")
+                }
             }
             check(loadedVersion == expectedVersion) {
                 "AGP loaded $artifact:$loadedVersion from $source; expected $expectedVersion"
