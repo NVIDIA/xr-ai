@@ -7,3 +7,17 @@ exclude-newer = "2026-10-22T21:39:43Z"
 # Pipecat 1.14 permits the Pillow 13 security release in voice environments.
 [exclude-newer-package]
 pipecat-ai = "2026-10-24T01:24:20.438725Z"
+
+# Include every release artifact strictly before these cutoffs.
+# Retain the repository-wide qualification cutoff.
+pydantic = "2026-11-19T12:57:40Z"
+pydantic-core = "2026-11-19T12:56:39Z"
+dnspython = "2026-11-03T23:56:54Z"
+opentelemetry-api = "2026-10-29T17:29:38Z"
+opentelemetry-sdk = "2026-10-29T17:29:55Z"
+opentelemetry-semantic-conventions = "2026-10-29T17:29:56Z"
+
+# Base release aligned with NVIDIA NGC 26.11.
+vllm = "2026-11-02T10:13:43Z"
+flashinfer-python = "2026-10-23T18:49:36Z"
+humming-kernels = "2026-10-30T19:30:58Z"

@@ -640,27 +640,35 @@ flags. Docker-only lifecycle settings such as `vllm_image`, `extra_pip`, and
 ```yaml
 # vlm-server (Cosmos3)
 vllm_backend: docker
-vllm_image:   nvcr.io/nvidia/vllm:26.10.pre1-py3
+vllm_image:   nvcr.io/nvidia/vllm:26.11-py3
 ```
 
-`vllm_image:` defaults to `nvcr.io/nvidia/vllm:26.10.pre1-py3` for all wrappers.
-The Python environments also pin vLLM 0.31.0. vLLM 0.31.0 is the upstream fixed
-release for CVE-2026-114050 and CVE-2026-114055. Keep per-request multimodal
-processor overrides disabled; server-level processor configuration remains
-available.
+`vllm_image:` defaults to `nvcr.io/nvidia/vllm:26.11-py3` for all wrappers.
+The four pip environments pin upstream vLLM 0.33.0, matching the base release
+in the NVIDIA container. The pip release requires Torch 2.14.0; NVIDIA ships
+its own Torch and CUDA builds. Validate each backend on its target GPU and
+model workload. Use Docker mode for the NVIDIA runtime.
 
-This NVIDIA NGC preview uses CUDA 13.4 and reports vLLM
-`0.31.0+88641915` on Linux x86_64 and aarch64. The checked-in Cosmos3 and
-Nemotron model configurations select this image. Qualify the preview on the
-target GPU and model workload before deploying it. Nemotron Omni uses its
-native Mamba and causal-convolution implementations, so the shipped
+The [NVIDIA 26.11 release](https://docs.nvidia.com/deeplearning/frameworks/vllm-release-notes/rel-26-11.html)
+uses CUDA 13.5 and reports vLLM `0.33.0+121396e7` on Linux x86_64 and aarch64.
+NVIDIA's release notes identify Torch `2.15.0a0+fd23299d96`. The checked-in
+Cosmos3 and Nemotron model configurations select this image. Qualify the image
+on the target GPU and model workload before deploying it. Nemotron Omni uses
+its native Mamba and causal-convolution implementations, so the shipped
 configuration does not compile or install `mamba-ssm` or `causal-conv1d`.
 Override the image to pin another tag, an internal mirror, or a custom build.
+Keep per-request multimodal processor overrides disabled.
 
-The preview tag is mutable. The observed multi-architecture manifest digest is
-`sha256:cb38bbefdbc3e9fe045f931dd72cbd58cd48985c7e09916bcc6c15c10f39b929`.
+The tag is mutable. The observed multi-architecture manifest digest is
+`sha256:d773319054eae41f5eea626da6fd72bbdb747b39deaabcae36f62cae9453a0ae`.
 For reproducible deployments, append `@sha256:<digest>` to the image reference
 in each service configuration and qualify that exact manifest.
+
+For Cosmos3 on SM12, digest-pinning changes the image reference used by the
+automatic attention selection. To retain the default tag's Triton selection,
+set both `attention_backend: TRITON_ATTN` and
+`mm_encoder_attn_backend: TRITON_ATTN` explicitly. Use the same settings when
+retaining an older pinned image that previously received the Triton default.
 
 ::::{important}
 When upgrading an existing checkout, stop the persistent model stack before
@@ -668,7 +676,7 @@ starting it with the new image:
 
 ```bash
 uv run --project agent-samples/simple-vlm-example/model-servers simple_vlm_example_model_servers --stop
-docker pull nvcr.io/nvidia/vllm:26.10.pre1-py3
+docker pull nvcr.io/nvidia/vllm:26.11-py3
 ```
 
 The next launch recreates stale managed containers when their image or command
@@ -724,11 +732,11 @@ Existing `~/.docker/config.json` entries take priority and are not overwritten.
   forwarded, and included in the container fingerprint, so changing one
   recreates a persistent container.
 
-The selected NGC preview reports this vLLM version in its image metadata:
+The selected NGC release reports this vLLM version in its image metadata:
 
 | Image | vLLM |
 |---|---:|
-| `nvcr.io/nvidia/vllm:26.10.pre1-py3` | 0.31.0+88641915 |
+| `nvcr.io/nvidia/vllm:26.11-py3` | 0.33.0+121396e7 |
 
 - Container name is deterministic per service: `xr-ai-vllm-vlm-server`,
   `xr-ai-vllm-nemotron3-nano-llm-server`,
@@ -771,8 +779,8 @@ cleanup.
   Measurements on NGC 26.09 showed lower cold image latency with Triton:
   the x86 image fell back to FlashAttention-2 PTX compilation, while the ARM
   image included native Blackwell kernels. This conservative default is
-  retained for the NGC 26.10 preview pending GPU qualification; those kernel
-  properties and latency results have not been reverified on the preview.
+  retained for NGC 26.11 pending GPU qualification; those kernel
+  properties and latency results have not been reverified on NGC 26.11.
   Other GPUs, custom images, and pip mode retain vLLM's backend selection.
   The optional `attention_backend` and `mm_encoder_attn_backend` YAML keys
   override each component independently; explicit `auto` restores vLLM's

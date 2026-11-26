@@ -10,6 +10,11 @@ name = "nemotron3-nano-llm-server"
 version = "0.1.0"
 requires-python = ">=3.11,<3.15"
 dependencies = [
+    # Security minimums for transitive dependencies.
+    "dnspython>=2.9.2",
+    "opentelemetry-api>=1.45.2",
+    "opentelemetry-sdk>=1.45.2",
+    "pydantic>=2.14.4",
     # CVE-2026-104874: fixed C-extension items-view reference leak.
     "multidict>=6.9.1",
     # Security floors for vLLM's HTTP and JWT dependencies.
@@ -19,11 +24,11 @@ dependencies = [
     "transformers>=5.17.0",
     # vLLM provides the OpenAI-compatible HTTP server, the Qwen3-coder
     # tool-call parser, the nano_v3 reasoning parser plugin, and the
-    # FlashInfer NVFP4 MoE kernels. 0.31.0 retains the CVE-2026-73558 fix.
-    # CVE-2026-114050 and CVE-2026-114055: fixed multimodal cache and request validation.
-    # Qualify this exact release with the NGC preview; patch upgrades require
-    # requalification too, so keep the four service environments aligned.
-    "vllm==0.31.0",
+    # FlashInfer NVFP4 MoE kernels. 0.33.0 retains the CVE-2026-73558 fix.
+    # Match the base vLLM release in NVIDIA NGC 26.11.
+    # Keep all four pip environments aligned; GPU qualification is separate
+    # from the NVIDIA container build and required for every version change.
+    "vllm==0.33.0",
     # vLLM pins protobuf 7.36.1 only on s390x; preserve 7.36.2 elsewhere.
     "protobuf>=7.36.2; platform_machine != 's390x'",
     "protobuf==7.36.1; platform_machine == 's390x'",

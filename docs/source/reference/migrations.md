@@ -17,6 +17,27 @@ If upgrading from an older release, first apply
 {doc}`migration-history/v0.3.0-beta-to-v0.4.0-beta`. Refer to
 {doc}`migration-history` for earlier guides and apply them in release order.
 
+### NVIDIA vLLM container
+
+Docker-mode model services now default to `nvcr.io/nvidia/vllm:26.11-py3`
+(CUDA 13.5, NVIDIA vLLM 0.33.0). Stop the running model stack before updating
+and restart it to use the new image. Verify host driver compatibility and
+qualify your GPU and model workload. Explicit `vllm_image` overrides remain
+in effect. Pip-mode environments now pin upstream vLLM 0.33.0 with Torch
+2.14.0; refresh their environments and qualify them separately from the
+NVIDIA container.
+Refer to {doc}`/components/ai-services` for image metadata and configuration.
+
+For Cosmos3 on SM12, the automatic Triton selection applies only when
+`vllm_image` exactly matches the default tag. A pinned 26.10 image or a tag
+with an appended digest does not receive that selection. To retain both
+Triton settings for those image references, set:
+
+```yaml
+attention_backend: TRITON_ATTN
+mm_encoder_attn_backend: TRITON_ATTN
+```
+
 ### LLM request defaults
 
 `OpenAICompatLLM` now applies `adapter.default_extras` only when a call omits

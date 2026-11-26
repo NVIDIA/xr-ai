@@ -53,6 +53,16 @@ def _load_server_module():
         (12, {"model": "other/model"}, None, None),
         (12, {"vllm_backend": "pip"}, None, None),
         (12, {"vllm_image": "custom/image:tag"}, None, None),
+        (12, {"vllm_image": "nvcr.io/nvidia/vllm:26.10.pre1-py3"}, None, None),
+        (12, {"vllm_image": "nvcr.io/nvidia/vllm:26.11-py3@sha256:" + "a" * 64}, None, None),
+        (12, {
+            "vllm_image": "nvcr.io/nvidia/vllm:26.10.pre1-py3",
+            "attention_backend": "TRITON_ATTN", "mm_encoder_attn_backend": "TRITON_ATTN",
+        }, "TRITON_ATTN", "TRITON_ATTN"),
+        (12, {
+            "vllm_image": "nvcr.io/nvidia/vllm:26.11-py3@sha256:" + "a" * 64,
+            "attention_backend": "TRITON_ATTN", "mm_encoder_attn_backend": "TRITON_ATTN",
+        }, "TRITON_ATTN", "TRITON_ATTN"),
         (12, {"vllm_backend": "pip", "attention_backend": "TRITON_ATTN"}, "TRITON_ATTN", None),
         (8, {"attention_backend": "triton_attn"}, "TRITON_ATTN", None),
     ],
@@ -170,7 +180,7 @@ def test_default_cosmos3_service_uses_reasoner_only_path(monkeypatch, tmp_path) 
 
     args = captured["extra_serve_args"]
     assert captured["model"] == "nvidia/Cosmos3-Nano"
-    assert captured["image"] == "nvcr.io/nvidia/vllm:26.10.pre1-py3"
+    assert captured["image"] == "nvcr.io/nvidia/vllm:26.11-py3"
     assert "--async-scheduling" in args
     overrides_index = args.index("--hf-overrides")
     assert json.loads(args[overrides_index + 1]) == {
@@ -233,7 +243,7 @@ def test_all_local_profiles_select_cosmos3_reasoner_runtime() -> None:
     for config_path in _LOCAL_VLM_CONFIGS:
         cfg = yaml.safe_load(config_path.read_text())
         assert cfg["model"] == "nvidia/Cosmos3-Nano", config_path
-        assert cfg["vllm_image"] == "nvcr.io/nvidia/vllm:26.10.pre1-py3", config_path
+        assert cfg["vllm_image"] == "nvcr.io/nvidia/vllm:26.11-py3", config_path
         assert cfg["async_scheduling"] is True, config_path
         assert cfg["hf_overrides"] == {
             "architectures": ["Cosmos3ForConditionalGeneration"],

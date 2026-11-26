@@ -121,7 +121,7 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
   - `hatchling`
 - Runtime dependencies:
   - `nemo-relay>=0.10.0,<0.11`
-  - `pydantic>=2.10`
+  - `pydantic>=2.14.4`
   - `xr-ai-models` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
   - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
   - `xr-ai-interaction` → [`xr-ai-interaction`](agent-sdk/xr-ai-interaction/) (local, editable)
@@ -146,7 +146,7 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
-  - `pydantic>=2.10`
+  - `pydantic>=2.14.4`
 - Optional dependency groups: none
 - Commands: none
 
@@ -188,7 +188,7 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
   - `hatchling`
 - Runtime dependencies:
   - `nemo-relay>=0.10.0,<0.11`
-  - `pydantic>=2.10`
+  - `pydantic>=2.14.4`
   - `xr-ai-tools` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
 - Optional dependency groups: none
 - Commands: none
@@ -200,7 +200,7 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
   - `hatchling`
 - Runtime dependencies:
   - `nemo-relay>=0.10.0,<0.11`
-  - `pydantic>=2.10`
+  - `pydantic>=2.14.4`
 - Optional dependency groups:
   - `capture`:
     - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
@@ -233,7 +233,7 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Runtime dependencies:
   - `multidict>=6.9.1`
   - `nemo-relay>=0.10.0,<0.11`
-  - `pydantic>=2.10`
+  - `pydantic>=2.14.4`
   - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
   - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
   - `xr-ai-interaction` → [`xr-ai-interaction`](agent-sdk/xr-ai-interaction/) (local, editable)
@@ -255,7 +255,7 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
-  - `pydantic>=2.10`
+  - `pydantic>=2.14.4`
   - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
 - Optional dependency groups: none
 - Commands: none
@@ -346,6 +346,8 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `opentelemetry-api>=1.45.2`
+  - `pydantic>=2.14.4`
   - `accelerate>=1.2.0`
   - `fastapi>=0.115.0`
   - `huggingface-hub>=0.32.0`
@@ -383,6 +385,8 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `opentelemetry-api>=1.45.2`
+  - `pydantic>=2.14.4`
   - `multidict>=6.9.1`
   - `pyjwt>=2.15.1`
   - `urllib3>=2.8.0`
@@ -411,11 +415,15 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `dnspython>=2.9.2`
+  - `opentelemetry-api>=1.45.2`
+  - `opentelemetry-sdk>=1.45.2`
+  - `pydantic>=2.14.4`
   - `multidict>=6.9.1`
   - `urllib3>=2.8.0`
   - `pyjwt>=2.15.1`
   - `transformers>=5.17.0`
-  - `vllm==0.31.0`
+  - `vllm==0.33.0`
   - `protobuf>=7.36.2; platform_machine != 's390x'`
   - `protobuf==7.36.1; platform_machine == 's390x'`
   - `mcp>=2.2.0`
@@ -435,6 +443,9 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `opentelemetry-api>=1.45.2`
+  - `opentelemetry-sdk>=1.45.2`
+  - `pydantic>=2.14.4`
   - `multidict>=6.9.1`
   - `werkzeug>=3.1.9`
   - `pytorch-lightning>=2.6.6`
@@ -460,11 +471,15 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `dnspython>=2.9.2`
+  - `opentelemetry-api>=1.45.2`
+  - `opentelemetry-sdk>=1.45.2`
+  - `pydantic>=2.14.4`
   - `multidict>=6.9.1`
   - `urllib3>=2.8.0`
   - `pyjwt>=2.15.1`
   - `transformers>=5.17.0`
-  - `vllm==0.31.0`
+  - `vllm==0.33.0`
   - `protobuf>=7.36.2; platform_machine != 's390x'`
   - `protobuf==7.36.1; platform_machine == 's390x'`
   - `mcp>=2.2.0`
@@ -484,11 +499,15 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `dnspython>=2.9.2`
+  - `opentelemetry-api>=1.45.2`
+  - `opentelemetry-sdk>=1.45.2`
+  - `pydantic>=2.14.4`
   - `multidict>=6.9.1`
   - `urllib3>=2.8.0`
   - `pyjwt>=2.15.1`
   - `transformers>=5.17.0`
-  - `vllm==0.31.0`
+  - `vllm==0.33.0`
   - `protobuf>=7.36.2; platform_machine != 's390x'`
   - `protobuf==7.36.1; platform_machine == 's390x'`
   - `mcp>=2.2.0`
@@ -508,6 +527,7 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `pydantic>=2.14.4`
   - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
   - `xr-ai-tools[services]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
@@ -523,6 +543,8 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `opentelemetry-api>=1.45.2`
+  - `pydantic>=2.14.4`
   - `urllib3>=2.8.0`
   - `anyio>=4.0`
   - `pocket-tts==3.1.0`
@@ -543,6 +565,7 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `pydantic>=2.14.4`
   - `numpy>=1.24`
   - `pyyaml>=6.0`
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
@@ -558,6 +581,9 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `opentelemetry-api>=1.45.2`
+  - `opentelemetry-sdk>=1.45.2`
+  - `pydantic>=2.14.4`
   - `multidict>=6.9.1`
   - `werkzeug>=3.1.9`
   - `pytorch-lightning>=2.6.6`
@@ -582,6 +608,9 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `opentelemetry-api>=1.45.2`
+  - `opentelemetry-sdk>=1.45.2`
+  - `pydantic>=2.14.4`
   - `multidict>=6.9.1`
   - `werkzeug>=3.1.9`
   - `pytorch-lightning>=2.6.6`
@@ -606,6 +635,7 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `pydantic>=2.14.4`
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
   - `xr-ai-tools[services]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
   - `numpy>=1.24`
@@ -622,11 +652,15 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `dnspython>=2.9.2`
+  - `opentelemetry-api>=1.45.2`
+  - `opentelemetry-sdk>=1.45.2`
+  - `pydantic>=2.14.4`
   - `multidict>=6.9.1`
   - `urllib3>=2.8.0`
   - `pyjwt>=2.15.1`
   - `transformers>=5.17.0`
-  - `vllm==0.31.0`
+  - `vllm==0.33.0`
   - `protobuf>=7.36.2; platform_machine != 's390x'`
   - `protobuf==7.36.1; platform_machine == 's390x'`
   - `mcp>=2.2.0`
@@ -729,7 +763,7 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
   - `xr-ai-web-events` → [`xr-ai-web-events`](agent-sdk/xr-ai-web-events/) (local, editable)
   - `xr-ai-voicegate` → [`xr-ai-voicegate`](utils/xr-ai-voicegate/) (local, editable)
   - `loguru>=0.7`
-  - `pydantic>=2.12`
+  - `pydantic>=2.14.4`
   - `pyyaml>=6.0`
 - Optional dependency groups: none
 - Commands:
@@ -775,7 +809,7 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
   - `xr-ai-voicegate` → [`xr-ai-voicegate`](utils/xr-ai-voicegate/) (local, editable)
   - `loguru>=0.7`
   - `pyyaml>=6.0`
-  - `pydantic>=2.0,<3.0`
+  - `pydantic>=2.14.4,<3.0`
 - Optional dependency groups: none
 - Commands:
   - `procedure_capture_guide_worker` → `procedure_capture_guide_worker.__main__:run`
@@ -864,7 +898,7 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
   - `xr-ai-web-events` → [`xr-ai-web-events`](agent-sdk/xr-ai-web-events/) (local, editable)
   - `xr-ai-voicegate` → [`xr-ai-voicegate`](utils/xr-ai-voicegate/) (local, editable)
   - `loguru>=0.7`
-  - `pydantic>=2.12`
+  - `pydantic>=2.14.4`
   - `pyyaml>=6.0`
 - Optional dependency groups: none
 - Commands:
@@ -948,7 +982,7 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
   - `xr-ai-voicegate` → [`xr-ai-voicegate`](utils/xr-ai-voicegate/) (local, editable)
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
   - `xr-render-scene` → [`xr-render-scene`](agent-samples/xr-render-demo/scene/) (local, editable)
-  - `pydantic>=2.12`
+  - `pydantic>=2.14.4`
   - `pyyaml>=6.0`
 - Optional dependency groups: none
 - Commands:

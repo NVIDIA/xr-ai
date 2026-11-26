@@ -21,7 +21,7 @@ dependencies = [
     "xr-ai-web-events",
     "xr-ai-voicegate",
     "loguru>=0.7",
-    "pydantic>=2.12",
+    "pydantic>=2.14.4",
     "pyyaml>=6.0",
 ]
 

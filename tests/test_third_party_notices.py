@@ -31,6 +31,7 @@ _LICENSE_SENSITIVE_PACKAGES = frozenset(
     {
         "certifi",
         "num2words",
+        "orjson",
         "opencv-python-headless",
         "pycountry",
         "pyzmq",
@@ -42,6 +43,13 @@ _LICENSE_SENSITIVE_PACKAGES = frozenset(
 )
 
 _LICENSE_RECORDS = {
+    "orjson": (
+        "3.13.0",
+        (
+            ("orjson-3.13.0/licenses/LICENSE-MPL-2.0", "Mozilla Public License"),
+            ("orjson-3.13.0/licenses/LICENSE-MIT", "Permission is hereby granted"),
+        ),
+    ),
     "certifi": (
         "2026.10.19",
         (("certifi-2026.10.19/LICENSE", "Mozilla Public License"),),
@@ -142,7 +150,7 @@ def test_bundled_license_index_is_complete_and_links_exist() -> None:
         and path.name != "license_notes.md"
         and (
             path.name.upper().startswith(("LICENSE", "LICENCE", "COPYING"))
-            or path.name == "FTL.TXT"
+            or path.name in {"FTL.TXT", "COPYRIGHT", "THIRDPARTYNOTICES"}
         )
     }
     assert set(table_links) == expected, (
@@ -168,3 +176,16 @@ def test_voice_image_refresh_has_current_license_record(package: str) -> None:
     version = _VOICE_IMAGE_AUDITED_VERSIONS[package]
     assert _LOCK_VERSIONS[package] == {version}
     assert f"third_party_licenses/{package}-{version}/" in _NOTICES
+
+
+def test_attribution_resources_cover_bundled_adaptations() -> None:
+    tokenspeed = (_ROOT / "third_party_licenses/tokenspeed-mla-2.0.3/licenses/THIRDPARTYNOTICES").read_text()
+    assert "Notice for NVIDIA/cutlass" in tokenspeed
+    assert "Notice for flashinfer-ai/flashinfer" in tokenspeed
+
+
+def test_bundled_license_index_is_one_markdown_table() -> None:
+    section = _NOTICES.split("## Bundled license file index\n", 1)[1].split("\n## ", 1)[0]
+    rows = section.splitlines()
+    table_lines = [i for i, line in enumerate(rows) if line.startswith("|")]
+    assert all(rows[i].startswith("|") for i in range(table_lines[0], table_lines[-1] + 1))

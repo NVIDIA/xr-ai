@@ -45,9 +45,16 @@ qualified lock; the reciprocal-license table records exact resolved versions.
 | `text-unidecode` | 1.3    | Artistic-1.0-Perl (elected) | https://github.com/kmike/text-unidecode |
 | `tqdm`         | 4.70.1   | MPL-2.0 AND MIT | https://github.com/tqdm/tqdm |
 | `opencv-python-headless` | 5.0.0.93 | Apache-2.0 and MIT packaging terms (wheel includes other licenses) | https://github.com/opencv/opencv-python |
-| `pydantic`     | >=2.10   | MIT           | https://github.com/pydantic/pydantic |
+| `pydantic`     | >=2.14.4   | MIT           | https://github.com/pydantic/pydantic |
 | `python-multipart` | >=0.0.9 | Apache-2.0 | https://github.com/Kludex/python-multipart |
 | `websockets`   | 12.0     | BSD-3-Clause  | https://github.com/python-websockets/websockets |
+
+### Validation, DNS, and telemetry security releases
+
+The targeted security refresh qualifies Pydantic 2.14.4 and pydantic-core
+2.50.5 (MIT), dnspython 2.9.2 (ISC), OpenTelemetry API and SDK 1.45.2,
+and semantic conventions 0.66b2 (Apache-2.0). Unmodified license texts and
+SHA-256 artifact provenance are bundled under `third_party_licenses/`.
 
 ### Nemotron OCR v2
 
@@ -94,50 +101,53 @@ copied-file hashes.
 
 ### vLLM security dependency refresh
 
-The vLLM 0.31.0 security refresh resolves the following versions. The linked
-license texts were copied without modification from SHA-256-verified upstream
-artifacts; each directory records the artifact URL and hashes.
-
-Relative to the previous security refresh, this resolution downgrades
-`huggingface-hub` from 2.2.0 to 1.33.0, `transformers` from 5.20.2 to 5.17.0,
-and `xgrammar` from 0.2.8 to 0.2.7. These downgrades follow
-[vLLM 0.31.0's requirements][vllm-031-requirements]: Transformers must be below
-5.18.0 and XGrammar must be exactly 0.2.7. The resolved
-[Transformers 5.17.0 metadata][transformers-517-metadata] requires Hugging Face
-Hub below 2.0. vLLM also replaces its `openai-harmony` dependency (previously
-resolved to 0.0.8) with `oss-harmony>=0.0.11` (resolved to 0.0.11), whose
-Apache-2.0 license and artifact provenance are linked below.
-
-Exact-version queries to the [OSV API][osv-query-api] on 2026-10-26 found no
-known advisories for these three downgraded versions or `oss-harmony` 0.0.11;
-none reopens a known advisory according to that check. This is an advisory
-database result, not a substitute for the pending source and container scans.
-
-[vllm-031-requirements]: https://github.com/vllm-project/vllm/blob/v0.31.0/requirements/common.txt
-[transformers-517-metadata]: https://pypi.org/pypi/transformers/5.17.0/json
-[osv-query-api]: https://google.github.io/osv.dev/api/#operation/OSV_QueryBatch
+The four pip-mode service environments pin upstream vLLM 0.33.0, matching
+the base release of NVIDIA NGC 26.11. Their dependencies resolve separately
+from NVIDIA's container builds. License and attribution texts from the
+resolved wheels are preserved without modification; each directory records
+the artifact URL, published artifact hash, copied-file hashes, and whether
+the whole artifact or only its license resources were inspected.
 
 | Component | Resolved version | License and notices |
 |---|---|---|
+| `vllm` | 0.33.0 | Apache-2.0; [upstream notices](third_party_licenses/vllm-0.33.0/) |
+| `torch` | 2.14.0 | BSD-3-Clause and bundled third-party terms; [complete wheel license resources](third_party_licenses/torch-2.14.0/) |
+| `torchvision` | 0.29.0 | BSD-3-Clause; [upstream license](third_party_licenses/torchvision-0.29.0/) |
+| `transformers` | 5.20.2 | Apache-2.0; [upstream license](third_party_licenses/transformers-5.20.2/) |
+| `huggingface-hub` | 2.2.0 | Apache-2.0; [upstream license](third_party_licenses/huggingface-hub-2.2.0/) |
+| `flashinfer-python` | 0.7.2.post1 | Apache-2.0 and bundled third-party terms; [upstream notices](third_party_licenses/flashinfer-python-0.7.2.post1/) |
+| `humming-kernels` | 0.1.19 | Apache-2.0; [upstream license](third_party_licenses/humming-kernels-0.1.19/) |
+| `tokenspeed-mla` | 2.0.3 | MIT, BSD-3-Clause, Apache-2.0, and referenced NVIDIA CUTLASS DSL terms; [upstream license and attribution](third_party_licenses/tokenspeed-mla-2.0.3/) |
+| `xgrammar` | 0.2.8 | Apache-2.0 and bundled third-party terms; [upstream notices](third_party_licenses/xgrammar-0.2.8/) |
+| `triton-windows` | 3.8.0.post29 | MIT; [upstream license](third_party_licenses/triton-windows-3.8.0.post29/) |
+| `orjson` | 3.13.0 | MPL-2.0 AND MIT (elected); [license texts](third_party_licenses/orjson-3.13.0/) |
+| `nvidia-cudnn-cu13` | 9.24.0.43 | NVIDIA SDK license; [upstream terms](third_party_licenses/nvidia-cudnn-cu13-9.24.0.43/) |
+| `nvidia-nccl-cu13` | 2.30.7 | BSD-3-Clause for the bundled wheel license; Apache-2.0 and BSD-3-Clause in upstream source; [license texts and provenance](third_party_licenses/nvidia-nccl-cu13-2.30.7/) |
 | `oss-harmony` | 0.0.11 | Apache-2.0; [upstream license](third_party_licenses/oss-harmony-0.0.11/) |
-| `vllm` | 0.31.0 | Apache-2.0; [upstream license](third_party_licenses/vllm-0.31.0/) |
-| `huggingface-hub` | 1.33.0 | Apache-2.0; [upstream license](third_party_licenses/huggingface-hub-1.33.0/) |
-| `flashinfer-python` | 0.7.0.post1 | Apache-2.0; [upstream license](third_party_licenses/flashinfer-python-0.7.0.post1/) |
 | `nccl-extensions` | 0.1.0 | Apache-2.0; [upstream license](third_party_licenses/nccl-extensions-0.1.0/) |
 | `instanttensor` | 0.2.2 | Apache-2.0; [upstream license](third_party_licenses/instanttensor-0.2.2/) |
 | `quack-kernels` | 0.6.5 | Apache-2.0; [upstream license](third_party_licenses/quack-kernels-0.6.5/) |
 | `protobuf` | 7.36.2 (non-s390x), 7.36.1 (s390x) | BSD-3-Clause; [7.36.2 license](third_party_licenses/protobuf-7.36.2/), [7.36.1 license](third_party_licenses/protobuf-7.36.1/) |
-| `nvidia-cutlass-dsl` | 4.7.1 | NVIDIA Software License Agreement; [upstream EULA](third_party_licenses/nvidia-cutlass-dsl-4.7.1/) |
+| `nvidia-cutlass-dsl` | 4.8.0 | NVIDIA Software License Agreement; [upstream EULA](third_party_licenses/nvidia-cutlass-dsl-4.8.0/) |
 
 `nccl-extensions` is an Apache-2.0 dependency of FlashInfer. CUTLASS DSL is
 proprietary software downloaded by users, rather than part of XR AI's source
-release. Its `libs-base`, `libs-core`, `libs-cu12`, and `libs-cu13` dependencies
-also resolve to 4.7.1; their upstream package metadata identifies the NVIDIA
-proprietary license. The BSD license of CUTLASS C++ does not replace the DSL
-EULA. The vLLM environments preserve protobuf 7.36.2 outside s390x.
-[vLLM 0.31.0's requirements][vllm-031-requirements] pin protobuf to 7.36.1
-only when `platform_machine == "s390x"`. The lock also retains protobuf
+release. Its `libs-base`, `libs-core`, `libs-cu12`, and `libs-cu13` packages
+resolve to 4.8.0. Their upstream license texts and package provenance are
+preserved in their corresponding versioned directories. The BSD license of
+CUTLASS C++ does not replace the DSL EULA. cuDNN is governed by its NVIDIA SDK
+license, recorded separately from the PyTorch and NCCL license resources.
+
+[vLLM 0.33.0's requirements](https://github.com/vllm-project/vllm/blob/v0.33.0/requirements/common.txt)
+pin protobuf to 7.36.1 only when `platform_machine == "s390x"`. The service
+environments require 7.36.2 elsewhere; the aggregate inventory retains
 6.33.5 for a separate dependency branch.
+
+NCCL's bundled wheel license supplies BSD-3-Clause terms and an NVTX
+reference; the matching source tag includes Apache-2.0 and BSD-3-Clause
+terms. XR AI records these permissive license terms. The versioned provenance
+directory separately records the wheel metadata discrepancy, which is also
+present in the previous 2.29.7 wheel.
 
 ### Speaker enrollment runtime and models
 
@@ -212,6 +222,7 @@ this repository.
 | `soxr` 1.0.0 / libsoxr 0.1.3 / PFFFT | Python extension used through `pipecat-ai` and `librosa`; its wheel includes PFFFT and Python-SoXR's modified libsoxr fork | LGPL-2.1-or-later for libsoxr and permissive PFFFT terms; [`license files`](third_party_licenses/soxr-1.0.0/) | [`soxr` 1.0.0 source distribution](https://pypi.org/project/soxr/1.0.0/#files); its `libsoxr/` directory is the applicable fork source |
 | `soundfile` 0.13.1 / libsndfile 1.2.2 | Platform wheels include libsndfile, which statically includes libmp3lame 3.100 and libmpg123 | LGPL-2.1-or-later for libsndfile, LGPL-2.0-or-later for libmp3lame, and LGPL-2.1 for libmpg123; [`COPYING`](third_party_licenses/libsndfile-1.2.2/COPYING), [wrapper license and native-library source notes](third_party_licenses/soundfile-0.13.1/) | [libsndfile 1.2.2 source](https://github.com/libsndfile/libsndfile/releases/tag/1.2.2) and [SoundFile 0.13.1 source distribution](https://pypi.org/project/soundfile/0.13.1/#files) |
 | `opencv-python-headless` 5.0.0.93 / FFmpeg | Platform wheels include FFmpeg shared libraries | LGPL-2.1-or-later; [`OpenCV wheel and bundled-library notices`](third_party_licenses/opencv-python-headless-5.0.0.93/) | [5.0.0.93 source distribution](https://pypi.org/project/opencv-python-headless/5.0.0.93/#files) and [FFmpeg source](https://ffmpeg.org/download.html) |
+| `orjson` 3.13.0 | vLLM HTTP serialization | MPL-2.0 AND MIT (elected); [license texts](third_party_licenses/orjson-3.13.0/) | [3.13.0 source distribution](https://pypi.org/project/orjson/3.13.0/#files) |
 | `certifi` 2026.10.19 | CA certificate bundle used by HTTP clients | MPL-2.0; [`LICENSE`](third_party_licenses/certifi-2026.10.19/LICENSE) | [2026.10.19 source distribution](https://pypi.org/project/certifi/2026.10.19/#files) |
 | `pyzmq` 27.2.0 / libzmq 4.3.5 / libsodium 1.0.22 | Platform wheels include libzmq and libsodium shared libraries | MPL-2.0 for libzmq and ISC for libsodium; [`PyZMQ and bundled-library notices`](third_party_licenses/pyzmq-27.2.0/) | [libzmq 4.3.5 source](https://github.com/zeromq/libzmq/releases/tag/v4.3.5), [libsodium 1.0.22 source](https://github.com/jedisct1/libsodium/releases/tag/1.0.22-RELEASE), and [PyZMQ 27.2.0 source distribution](https://pypi.org/project/pyzmq/27.2.0/#files) |
 
@@ -243,7 +254,7 @@ artifact and SHA-256 hashes for the copied texts.
 | `matplotlib` | 3.11.2 | Matplotlib License 1.3+ and additional font/library terms; [license texts](third_party_licenses/matplotlib-3.11.2/) | Magpie TTS → `nemo-toolkit[tts]` → `matplotlib` |
 | `regex` | 2026.9.29 | Apache-2.0 AND CNRI-Python; [license text](third_party_licenses/regex-2026.9.29/) | Voice SDK → `nltk`; model dependencies → `transformers` / `nemo-text-processing` |
 | `supervisor` | 4.3.0 | BSD-derived Repoze license, including its modification notice clause; [license text](third_party_licenses/supervisor-4.3.0/) | Model services → `vllm` → `model-hosting-container-standards` → `supervisor` |
-| `humming-kernels` | 0.1.16 | Apache-2.0; [license text](third_party_licenses/humming-kernels-0.1.16/) | Model services → `vllm` → `humming-kernels` |
+| `humming-kernels` | 0.1.19 | Apache-2.0; [license text](third_party_licenses/humming-kernels-0.1.19/) | Model services → `vllm` → `humming-kernels` |
 | `quack-kernels` | 0.6.5 | Apache-2.0; [license text](third_party_licenses/quack-kernels-0.6.5/) | Model services → `vllm` → `quack-kernels` |
 | `torchcodec` | 0.17.0 | BSD-3-Clause and platform-specific bundled-library terms, including NVIDIA CUDA EULA for Linux nvJPEG; [license texts and platform scope](third_party_licenses/torchcodec-0.17.0/) | Model services → `vllm` → `torchcodec` |
 
@@ -262,14 +273,14 @@ packages during installation; XR AI does not redistribute their binaries.
 
 | Package | Version | Terms |
 |---|---|---|
-| `nvidia-cutlass-dsl` | 4.7.1 | NVIDIA proprietary CUTLASS DSL EULA |
-| `nvidia-cutlass-dsl-libs-base` | 4.7.1 | NVIDIA proprietary CUTLASS DSL EULA |
-| `nvidia-cutlass-dsl-libs-core` | 4.7.1 | NVIDIA proprietary CUTLASS DSL EULA |
-| `nvidia-cutlass-dsl-libs-cu12` | 4.7.1 | NVIDIA proprietary CUTLASS DSL EULA |
-| `nvidia-cutlass-dsl-libs-cu13` | 4.7.1 | NVIDIA proprietary CUTLASS DSL EULA |
+| `nvidia-cutlass-dsl` | 4.8.0 | NVIDIA proprietary CUTLASS DSL EULA |
+| `nvidia-cutlass-dsl-libs-base` | 4.8.0 | NVIDIA proprietary CUTLASS DSL EULA |
+| `nvidia-cutlass-dsl-libs-core` | 4.8.0 | NVIDIA proprietary CUTLASS DSL EULA |
+| `nvidia-cutlass-dsl-libs-cu12` | 4.8.0 | NVIDIA proprietary CUTLASS DSL EULA |
+| `nvidia-cutlass-dsl-libs-cu13` | 4.8.0 | NVIDIA proprietary CUTLASS DSL EULA |
 
 The [upstream license page](https://docs.nvidia.com/cutlass/latest/media/docs/pythonDSL/license.html)
-and [copied EULA with artifact provenance](third_party_licenses/nvidia-cutlass-dsl-4.7.1/)
+and [copied EULA with artifact provenance](third_party_licenses/nvidia-cutlass-dsl-4.8.0/)
 record the applicable terms. The permissive license elections elsewhere in
 this file do not apply to these proprietary packages.
 
@@ -298,6 +309,10 @@ integrity is recorded in `dependency-manifest/web-xr-build/package-lock.json`;
 the artifact is unchanged from the previously used NGC client tarball. This
 package also carries the NVIDIA CloudXR software license agreement, not an
 open-source license. The generated browser bundle remains gitignored.
+
+orjson includes MPL-2.0-covered code in addition to its Apache-2.0 OR MIT
+license choice. XR AI elects MIT for that choice; MPL-2.0 continues to apply.
+Its matching source is available from the linked upstream source distribution.
 
 ### `text-unidecode` license election
 
@@ -414,7 +429,6 @@ refer to the component disclosures above for applicable license elections.
 | `matplotlib-3.11.2` | [`copying`](third_party_licenses/matplotlib-3.11.2/copying) |
 | `num2words-0.5.14` | [`COPYING`](third_party_licenses/num2words-0.5.14/COPYING) |
 | `nvidia-cloudxr-runtime-6.2.0` | [`LICENSE.txt`](third_party_licenses/nvidia-cloudxr-runtime-6.2.0/LICENSE.txt) |
-| `nvidia-cutlass-dsl-4.7.1` | [`LICENSE`](third_party_licenses/nvidia-cutlass-dsl-4.7.1/LICENSE) |
 | `nvtx-0.2.15` | [`LICENSE.txt`](third_party_licenses/nvtx-0.2.15/LICENSE.txt) |
 | `opencv-python-headless-5.0.0.93` | [`LICENSE-3RD-PARTY.txt`](third_party_licenses/opencv-python-headless-5.0.0.93/LICENSE-3RD-PARTY.txt) |
 | `opencv-python-headless-5.0.0.93` | [`LICENSE.txt`](third_party_licenses/opencv-python-headless-5.0.0.93/LICENSE.txt) |
@@ -449,14 +463,130 @@ refer to the component disclosures above for applicable license elections.
 | `pillow-13.0.0` | [`LICENSE`](third_party_licenses/pillow-13.0.0/LICENSE) |
 | `onnxruntime-1.31.0` | [`LICENSE`](third_party_licenses/onnxruntime-1.31.0/LICENSE) |
 | `onnxruntime-1.31.0` | [`LICENSE.thirdparty`](third_party_licenses/onnxruntime-1.31.0/LICENSE.thirdparty) |
-| `vllm-0.31.0` | [`LICENSE`](third_party_licenses/vllm-0.31.0/LICENSE) |
-| `huggingface-hub-1.33.0` | [`LICENSE`](third_party_licenses/huggingface-hub-1.33.0/LICENSE) |
-| `flashinfer-python-0.7.0.post1` | [`LICENSE`](third_party_licenses/flashinfer-python-0.7.0.post1/LICENSE) |
-| `humming-kernels-0.1.16` | [`LICENSE`](third_party_licenses/humming-kernels-0.1.16/LICENSE) |
 | `protobuf-7.36.1` | [`LICENSE`](third_party_licenses/protobuf-7.36.1/LICENSE) |
 | `nccl-extensions-0.1.0` | [`LICENSE.txt`](third_party_licenses/nccl-extensions-0.1.0/LICENSE.txt) |
 | `oss-harmony-0.0.11` | [`LICENSE`](third_party_licenses/oss-harmony-0.0.11/LICENSE) |
 | `protobuf-7.36.2` | [`LICENSE`](third_party_licenses/protobuf-7.36.2/LICENSE) |
+| `pydantic-2.14.4` | [`LICENSE`](third_party_licenses/pydantic-2.14.4/LICENSE) |
+| `pydantic-core-2.50.5` | [`LICENSE`](third_party_licenses/pydantic-core-2.50.5/LICENSE) |
+| `dnspython-2.9.2` | [`LICENSE`](third_party_licenses/dnspython-2.9.2/LICENSE) |
+| `opentelemetry-api-1.45.2` | [`LICENSE`](third_party_licenses/opentelemetry-api-1.45.2/LICENSE) |
+| `opentelemetry-sdk-1.45.2` | [`LICENSE`](third_party_licenses/opentelemetry-sdk-1.45.2/LICENSE) |
+| `opentelemetry-semantic-conventions-0.66b2` | [`LICENSE`](third_party_licenses/opentelemetry-semantic-conventions-0.66b2/LICENSE) |
+| `flashinfer-python-0.7.2.post1` | [`LICENSE.kda-for-kda.txt`](third_party_licenses/flashinfer-python-0.7.2.post1/licenses/LICENSE.kda-for-kda.txt) |
+| `flashinfer-python-0.7.2.post1` | [`LICENSE`](third_party_licenses/flashinfer-python-0.7.2.post1/licenses/LICENSE) |
+| `flashinfer-python-0.7.2.post1` | [`LICENSE.kda-for-kda`](third_party_licenses/flashinfer-python-0.7.2.post1/licenses/licenses/LICENSE.kda-for-kda) |
+| `huggingface-hub-2.2.0` | [`LICENSE`](third_party_licenses/huggingface-hub-2.2.0/licenses/LICENSE) |
+| `humming-kernels-0.1.19` | [`LICENSE`](third_party_licenses/humming-kernels-0.1.19/licenses/LICENSE) |
+| `nvidia-cudnn-cu13-9.24.0.43` | [`License.txt`](third_party_licenses/nvidia-cudnn-cu13-9.24.0.43/licenses/License.txt) |
+| `nvidia-cutlass-dsl-4.8.0` | [`LICENSE`](third_party_licenses/nvidia-cutlass-dsl-4.8.0/licenses/LICENSE) |
+| `nvidia-cutlass-dsl-libs-base-4.8.0` | [`LICENSE`](third_party_licenses/nvidia-cutlass-dsl-libs-base-4.8.0/licenses/LICENSE) |
+| `nvidia-cutlass-dsl-libs-core-4.8.0` | [`LICENSE`](third_party_licenses/nvidia-cutlass-dsl-libs-core-4.8.0/licenses/LICENSE) |
+| `nvidia-cutlass-dsl-libs-cu12-4.8.0` | [`LICENSE`](third_party_licenses/nvidia-cutlass-dsl-libs-cu12-4.8.0/licenses/LICENSE) |
+| `nvidia-cutlass-dsl-libs-cu13-4.8.0` | [`LICENSE`](third_party_licenses/nvidia-cutlass-dsl-libs-cu13-4.8.0/licenses/LICENSE) |
+| `nvidia-nccl-cu13-2.30.7` | [`License.txt`](third_party_licenses/nvidia-nccl-cu13-2.30.7/licenses/License.txt) |
+| `nvidia-nccl-cu13-2.30.7` | [`LICENSE.upstream.txt`](third_party_licenses/nvidia-nccl-cu13-2.30.7/licenses/LICENSE.upstream.txt) |
+| `orjson-3.13.0` | [`LICENSE-APACHE`](third_party_licenses/orjson-3.13.0/licenses/LICENSE-APACHE) |
+| `orjson-3.13.0` | [`LICENSE-MPL-2.0`](third_party_licenses/orjson-3.13.0/licenses/LICENSE-MPL-2.0) |
+| `orjson-3.13.0` | [`LICENSE-MIT`](third_party_licenses/orjson-3.13.0/licenses/LICENSE-MIT) |
+| `tokenspeed-mla-2.0.3` | [`LICENSE`](third_party_licenses/tokenspeed-mla-2.0.3/licenses/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/torch/_vendor/packaging/LICENSE) |
+| `torch-2.14.0` | [`LICENSE.APACHE`](third_party_licenses/torch-2.14.0/torch/_vendor/packaging/LICENSE.APACHE) |
+| `torch-2.14.0` | [`LICENSE.BSD`](third_party_licenses/torch-2.14.0/torch/_vendor/packaging/LICENSE.BSD) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/torch/_vendor/quack/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/benchmark/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/composable_kernel/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/NNPACK/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/miniz-3.0.2/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/perfetto/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/pthreadpool/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/ideep/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/onnx/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/pybind11/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/fmt/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/gloo/LICENSE) |
+| `torch-2.14.0` | [`LICENSE.txt`](third_party_licenses/torch-2.14.0/licenses/third_party/tensorpipe/LICENSE.txt) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/mimalloc/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/fbgemm/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/kineto/LICENSE) |
+| `torch-2.14.0` | [`LICENSE.rst`](third_party_licenses/torch-2.14.0/licenses/third_party/python-peachpy/LICENSE.rst) |
+| `torch-2.14.0` | [`LICENSE.txt`](third_party_licenses/torch-2.14.0/licenses/third_party/VulkanMemoryAllocator/LICENSE.txt) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/FXdiv/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/aiter/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/XNNPACK/LICENSE) |
+| `torch-2.14.0` | [`LICENSE.txt`](third_party_licenses/torch-2.14.0/licenses/third_party/cudnn_frontend/LICENSE.txt) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/googletest/LICENSE) |
+| `torch-2.14.0` | [`LICENSE.txt`](third_party_licenses/torch-2.14.0/licenses/third_party/sleef/LICENSE.txt) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/flatbuffers/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/psimd/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/flash-attention/LICENSE) |
+| `torch-2.14.0` | [`LICENSE.txt`](third_party_licenses/torch-2.14.0/licenses/third_party/cutlass/LICENSE.txt) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/cpp-httplib/LICENSE) |
+| `torch-2.14.0` | [`LICENSE.txt`](third_party_licenses/torch-2.14.0/licenses/third_party/llvm-openmp/LICENSE.txt) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/cpuinfo/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/FP16/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/mslk/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/protobuf/LICENSE) |
+| `torch-2.14.0` | [`LICENSE.txt`](third_party_licenses/torch-2.14.0/licenses/third_party/NVTX/LICENSE.txt) |
+| `torch-2.14.0` | [`LICENSE.txt`](third_party_licenses/torch-2.14.0/licenses/third_party/NVTX/python/LICENSE.txt) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/NVTX/rust/LICENSE) |
+| `torch-2.14.0` | [`LICENSE.txt`](third_party_licenses/torch-2.14.0/licenses/third_party/NVTX/docs/LICENSE.txt) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/protobuf/third_party/benchmark/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/protobuf/third_party/utf8_range/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/protobuf/third_party/googletest/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/protobuf/third_party/googletest/googletest/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/protobuf/third_party/googletest/googlemock/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/protobuf/third_party/googletest/googlemock/scripts/generator/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/mslk/mslk/attention/flash_attn/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/mslk/external/composable_kernel/LICENSE) |
+| `torch-2.14.0` | [`LICENSE.txt`](third_party_licenses/torch-2.14.0/licenses/third_party/mslk/external/hipify_torch/LICENSE.txt) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/mslk/external/googletest/LICENSE) |
+| `torch-2.14.0` | [`LICENSE.txt`](third_party_licenses/torch-2.14.0/licenses/third_party/mslk/external/cutlass/LICENSE.txt) |
+| `torch-2.14.0` | [`LICENSE.txt`](third_party_licenses/torch-2.14.0/licenses/third_party/mslk/external/cutlass/python/LICENSE.txt) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/cpuinfo/deps/clog/LICENSE) |
+| `torch-2.14.0` | [`LICENSE.txt`](third_party_licenses/torch-2.14.0/licenses/third_party/cutlass/python/LICENSE.txt) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/flash-attention/flash_attn/cute/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/flash-attention/third_party/aiter/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/flash-attention/third_party/aiter/3rdparty/composable_kernel/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/flash-attention/csrc/composable_kernel/LICENSE) |
+| `torch-2.14.0` | [`LICENSE.txt`](third_party_licenses/torch-2.14.0/licenses/third_party/flash-attention/csrc/cutlass/LICENSE.txt) |
+| `torch-2.14.0` | [`LICENSE.txt`](third_party_licenses/torch-2.14.0/licenses/third_party/flash-attention/csrc/cutlass/python/LICENSE.txt) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/flatbuffers/dart/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/flatbuffers/swift/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/aiter/3rdparty/composable_kernel/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/kineto/libkineto/third_party/fmt/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/kineto/libkineto/third_party/dynolog_headers/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/kineto/libkineto/third_party/googletest/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/fbgemm/external/composable_kernel/LICENSE) |
+| `torch-2.14.0` | [`LICENSE.txt`](third_party_licenses/torch-2.14.0/licenses/third_party/fbgemm/external/hipify_torch/LICENSE.txt) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/fbgemm/external/googletest/LICENSE) |
+| `torch-2.14.0` | [`LICENSE.txt`](third_party_licenses/torch-2.14.0/licenses/third_party/fbgemm/external/cutlass/LICENSE.txt) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/fbgemm/external/cpuinfo/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/fbgemm/external/cpuinfo/deps/clog/LICENSE) |
+| `torch-2.14.0` | [`LICENSE.txt`](third_party_licenses/torch-2.14.0/licenses/third_party/fbgemm/external/cutlass/python/LICENSE.txt) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/fbgemm/fbgemm_gpu/src/quantize_ops/mx/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/fbgemm/fbgemm_gpu/test/quantize/mx/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/fbgemm/fbgemm_gpu/experimental/hstu/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/tensorpipe/third_party/libuv/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/tensorpipe/third_party/pybind11/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/tensorpipe/third_party/googletest/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/tensorpipe/third_party/libnop/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/tensorpipe/third_party/googletest/googletest/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/tensorpipe/third_party/googletest/googlemock/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/tensorpipe/third_party/googletest/googlemock/scripts/generator/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/gemmlowp/gemmlowp/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/onnx/third_party/pybind11/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/ideep/mkl-dnn/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/ideep/mkl-dnn/third_party/opencl/LICENSE) |
+| `torch-2.14.0` | [`LICENSE`](third_party_licenses/torch-2.14.0/licenses/third_party/ideep/mkl-dnn/third_party/gtest/LICENSE) |
+| `torchvision-0.29.0` | [`LICENSE`](third_party_licenses/torchvision-0.29.0/LICENSE) |
+| `transformers-5.20.2` | [`LICENSE`](third_party_licenses/transformers-5.20.2/licenses/LICENSE) |
+| `triton-windows-3.8.0.post29` | [`LICENSE`](third_party_licenses/triton-windows-3.8.0.post29/licenses/LICENSE) |
+| `vllm-0.33.0` | [`LICENSE`](third_party_licenses/vllm-0.33.0/licenses/LICENSE) |
+| `vllm-0.33.0` | [`LICENSE`](third_party_licenses/vllm-0.33.0/vllm/third_party/flash_linear_attention/LICENSE) |
+| `xgrammar-0.2.8` | [`LICENSE`](third_party_licenses/xgrammar-0.2.8/licenses/LICENSE) |
+| `tokenspeed-mla-2.0.3` | [`THIRDPARTYNOTICES`](third_party_licenses/tokenspeed-mla-2.0.3/licenses/THIRDPARTYNOTICES) |
 
 ## Updating this file
 
