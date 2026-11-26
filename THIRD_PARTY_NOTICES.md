@@ -117,7 +117,7 @@ the whole artifact or only its license resources were inspected.
 | `huggingface-hub` | 2.2.0 | Apache-2.0; [upstream license](third_party_licenses/huggingface-hub-2.2.0/) |
 | `flashinfer-python` | 0.7.2.post1 | Apache-2.0 and bundled third-party terms; [upstream notices](third_party_licenses/flashinfer-python-0.7.2.post1/) |
 | `humming-kernels` | 0.1.19 | Apache-2.0; [upstream license](third_party_licenses/humming-kernels-0.1.19/) |
-| `tokenspeed-mla` | 2.0.3 | MIT; [upstream license](third_party_licenses/tokenspeed-mla-2.0.3/) |
+| `tokenspeed-mla` | 2.0.3 | MIT, BSD-3-Clause, Apache-2.0, and referenced NVIDIA CUTLASS DSL terms; [upstream license and attribution](third_party_licenses/tokenspeed-mla-2.0.3/) |
 | `xgrammar` | 0.2.8 | Apache-2.0 and bundled third-party terms; [upstream notices](third_party_licenses/xgrammar-0.2.8/) |
 | `triton-windows` | 3.8.0.post29 | MIT; [upstream license](third_party_licenses/triton-windows-3.8.0.post29/) |
 | `orjson` | 3.13.0 | MPL-2.0 AND MIT (elected); [license texts](third_party_licenses/orjson-3.13.0/) |
@@ -468,7 +468,6 @@ refer to the component disclosures above for applicable license elections.
 | `nccl-extensions-0.1.0` | [`LICENSE.txt`](third_party_licenses/nccl-extensions-0.1.0/LICENSE.txt) |
 | `oss-harmony-0.0.11` | [`LICENSE`](third_party_licenses/oss-harmony-0.0.11/LICENSE) |
 | `protobuf-7.36.2` | [`LICENSE`](third_party_licenses/protobuf-7.36.2/LICENSE) |
-
 | `pydantic-2.14.4` | [`LICENSE`](third_party_licenses/pydantic-2.14.4/LICENSE) |
 | `pydantic-core-2.50.5` | [`LICENSE`](third_party_licenses/pydantic-core-2.50.5/LICENSE) |
 | `dnspython-2.9.2` | [`LICENSE`](third_party_licenses/dnspython-2.9.2/LICENSE) |
@@ -481,7 +480,6 @@ refer to the component disclosures above for applicable license elections.
 | `kotlin-gradle-plugin-2.4.21` | [`META-INF/LICENSE`](third_party_licenses/kotlin-gradle-plugin-2.4.21/META-INF/LICENSE) |
 | `kotlin-gradle-plugin-2.4.21` | [`META-INF/LICENSE.txt`](third_party_licenses/kotlin-gradle-plugin-2.4.21/META-INF/LICENSE.txt) |
 | `kotlin-gradle-plugin-2.4.21` | [`driver/package/LICENSE`](third_party_licenses/kotlin-gradle-plugin-2.4.21/driver/package/LICENSE) |
-
 | `flashinfer-python-0.7.2.post1` | [`LICENSE.kda-for-kda.txt`](third_party_licenses/flashinfer-python-0.7.2.post1/licenses/LICENSE.kda-for-kda.txt) |
 | `flashinfer-python-0.7.2.post1` | [`LICENSE`](third_party_licenses/flashinfer-python-0.7.2.post1/licenses/LICENSE) |
 | `flashinfer-python-0.7.2.post1` | [`LICENSE.kda-for-kda`](third_party_licenses/flashinfer-python-0.7.2.post1/licenses/licenses/LICENSE.kda-for-kda) |
@@ -594,6 +592,8 @@ refer to the component disclosures above for applicable license elections.
 | `vllm-0.33.0` | [`LICENSE`](third_party_licenses/vllm-0.33.0/licenses/LICENSE) |
 | `vllm-0.33.0` | [`LICENSE`](third_party_licenses/vllm-0.33.0/vllm/third_party/flash_linear_attention/LICENSE) |
 | `xgrammar-0.2.8` | [`LICENSE`](third_party_licenses/xgrammar-0.2.8/licenses/LICENSE) |
+| `tokenspeed-mla-2.0.3` | [`THIRDPARTYNOTICES`](third_party_licenses/tokenspeed-mla-2.0.3/licenses/THIRDPARTYNOTICES) |
+| `kotlin-gradle-plugin-2.4.21` | [`META-INF/COPYRIGHT`](third_party_licenses/kotlin-gradle-plugin-2.4.21/META-INF/COPYRIGHT) |
 
 ## Updating this file
 

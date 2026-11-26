@@ -10,6 +10,11 @@ name = "vlm-server"
 version = "0.1.0"
 requires-python = ">=3.11,<3.15"
 dependencies = [
+    # Security minimums for transitive dependencies.
+    "dnspython>=2.9.2",
+    "opentelemetry-api>=1.45.2",
+    "opentelemetry-sdk>=1.45.2",
+    "pydantic>=2.14.4",
     # CVE-2026-104874: fixed C-extension items-view reference leak.
     "multidict>=6.9.1",
     # Security floors for vLLM's HTTP and JWT dependencies.

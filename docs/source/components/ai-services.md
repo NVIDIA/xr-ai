@@ -664,6 +664,12 @@ The tag is mutable. The observed multi-architecture manifest digest is
 For reproducible deployments, append `@sha256:<digest>` to the image reference
 in each service configuration and qualify that exact manifest.
 
+For Cosmos3 on SM12, digest-pinning changes the image reference used by the
+automatic attention selection. To retain the default tag's Triton selection,
+set both `attention_backend: TRITON_ATTN` and
+`mm_encoder_attn_backend: TRITON_ATTN` explicitly. Use the same settings when
+retaining an older pinned image that previously received the Triton default.
+
 ::::{important}
 When upgrading an existing checkout, stop the persistent model stack before
 starting it with the new image:

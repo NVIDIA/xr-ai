@@ -53,6 +53,16 @@ def _load_server_module():
         (12, {"model": "other/model"}, None, None),
         (12, {"vllm_backend": "pip"}, None, None),
         (12, {"vllm_image": "custom/image:tag"}, None, None),
+        (12, {"vllm_image": "nvcr.io/nvidia/vllm:26.10.pre1-py3"}, None, None),
+        (12, {"vllm_image": "nvcr.io/nvidia/vllm:26.11-py3@sha256:" + "a" * 64}, None, None),
+        (12, {
+            "vllm_image": "nvcr.io/nvidia/vllm:26.10.pre1-py3",
+            "attention_backend": "TRITON_ATTN", "mm_encoder_attn_backend": "TRITON_ATTN",
+        }, "TRITON_ATTN", "TRITON_ATTN"),
+        (12, {
+            "vllm_image": "nvcr.io/nvidia/vllm:26.11-py3@sha256:" + "a" * 64,
+            "attention_backend": "TRITON_ATTN", "mm_encoder_attn_backend": "TRITON_ATTN",
+        }, "TRITON_ATTN", "TRITON_ATTN"),
         (12, {"vllm_backend": "pip", "attention_backend": "TRITON_ATTN"}, "TRITON_ATTN", None),
         (8, {"attention_backend": "triton_attn"}, "TRITON_ATTN", None),
     ],

@@ -346,6 +346,8 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `opentelemetry-api>=1.45.2`
+  - `pydantic>=2.14.4`
   - `accelerate>=1.2.0`
   - `fastapi>=0.115.0`
   - `huggingface-hub>=0.32.0`
@@ -383,6 +385,8 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `opentelemetry-api>=1.45.2`
+  - `pydantic>=2.14.4`
   - `multidict>=6.9.1`
   - `pyjwt>=2.15.1`
   - `urllib3>=2.8.0`
@@ -411,6 +415,10 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `dnspython>=2.9.2`
+  - `opentelemetry-api>=1.45.2`
+  - `opentelemetry-sdk>=1.45.2`
+  - `pydantic>=2.14.4`
   - `multidict>=6.9.1`
   - `urllib3>=2.8.0`
   - `pyjwt>=2.15.1`
@@ -435,6 +443,9 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `opentelemetry-api>=1.45.2`
+  - `opentelemetry-sdk>=1.45.2`
+  - `pydantic>=2.14.4`
   - `multidict>=6.9.1`
   - `werkzeug>=3.1.9`
   - `pytorch-lightning>=2.6.6`
@@ -460,6 +471,10 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `dnspython>=2.9.2`
+  - `opentelemetry-api>=1.45.2`
+  - `opentelemetry-sdk>=1.45.2`
+  - `pydantic>=2.14.4`
   - `multidict>=6.9.1`
   - `urllib3>=2.8.0`
   - `pyjwt>=2.15.1`
@@ -484,6 +499,10 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `dnspython>=2.9.2`
+  - `opentelemetry-api>=1.45.2`
+  - `opentelemetry-sdk>=1.45.2`
+  - `pydantic>=2.14.4`
   - `multidict>=6.9.1`
   - `urllib3>=2.8.0`
   - `pyjwt>=2.15.1`
@@ -508,6 +527,7 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `pydantic>=2.14.4`
   - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
   - `xr-ai-tools[services]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
@@ -523,6 +543,8 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `opentelemetry-api>=1.45.2`
+  - `pydantic>=2.14.4`
   - `urllib3>=2.8.0`
   - `anyio>=4.0`
   - `pocket-tts==3.1.0`
@@ -543,6 +565,7 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `pydantic>=2.14.4`
   - `numpy>=1.24`
   - `pyyaml>=6.0`
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
@@ -558,6 +581,9 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `opentelemetry-api>=1.45.2`
+  - `opentelemetry-sdk>=1.45.2`
+  - `pydantic>=2.14.4`
   - `multidict>=6.9.1`
   - `werkzeug>=3.1.9`
   - `pytorch-lightning>=2.6.6`
@@ -582,6 +608,9 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `opentelemetry-api>=1.45.2`
+  - `opentelemetry-sdk>=1.45.2`
+  - `pydantic>=2.14.4`
   - `multidict>=6.9.1`
   - `werkzeug>=3.1.9`
   - `pytorch-lightning>=2.6.6`
@@ -606,6 +635,7 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `pydantic>=2.14.4`
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
   - `xr-ai-tools[services]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
   - `numpy>=1.24`
@@ -622,6 +652,10 @@ refer to [Software bill of materials](docs/source/guides/sbom.md).
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `dnspython>=2.9.2`
+  - `opentelemetry-api>=1.45.2`
+  - `opentelemetry-sdk>=1.45.2`
+  - `pydantic>=2.14.4`
   - `multidict>=6.9.1`
   - `urllib3>=2.8.0`
   - `pyjwt>=2.15.1`

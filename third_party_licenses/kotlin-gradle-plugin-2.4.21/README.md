@@ -21,3 +21,4 @@ Unmodified license and attribution resources from the resolved artifact.
 | [driver/package/ThirdPartyNotices.txt](driver/package/ThirdPartyNotices.txt) | `a549d329bad8806fe279f0ecae0fc0270dec7e7c2dc8ec10f90e394f7c32b144` |
 | [driver/package/lib/serverRegistry.js.LICENSE](driver/package/lib/serverRegistry.js.LICENSE) | `5cf540fe55a2ba9bcf0eb76e739b454faa8581e2f1a0f777602ef0855534302e` |
 | [driver/package/lib/utilsBundle.js.LICENSE](driver/package/lib/utilsBundle.js.LICENSE) | `e3f91eea8ba98019d8e65ec61756af34a67e170070005a09d1fc6f49a64b544b` |
+| [META-INF/COPYRIGHT](META-INF/COPYRIGHT) | `44f85b9787bc9bd2ac6e265fddabd969c60e281750226d52e83a9253656c001c` |

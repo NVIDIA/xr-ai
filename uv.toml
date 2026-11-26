@@ -4,23 +4,20 @@
 # Advance only as part of a repository-wide dependency qualification change.
 exclude-newer = "2026-10-22T21:39:43Z"
 
-# CVE-2026-128089 and CVE-2026-126360: constrain transitive dependencies
-# wherever they occur in repository-managed environments.
-constraint-dependencies = ["dnspython>=2.9.2", "opentelemetry-api>=1.45.2"]
-
 # Pipecat 1.14 permits the Pillow 13 security release in voice environments.
 [exclude-newer-package]
 pipecat-ai = "2026-10-24T01:24:20.438725Z"
 
-# Targeted security releases; retain the repository-wide qualification cutoff.
-pydantic = "2026-11-19T12:57:39.767682Z"
-pydantic-core = "2026-11-19T12:56:38.067791Z"
-dnspython = "2026-11-03T23:56:53.601170Z"
-opentelemetry-api = "2026-10-29T17:29:37.888137Z"
-opentelemetry-sdk = "2026-10-29T17:29:54.685750Z"
-opentelemetry-semantic-conventions = "2026-10-29T17:29:55.682731Z"
+# Include every release artifact strictly before these cutoffs.
+# Retain the repository-wide qualification cutoff.
+pydantic = "2026-11-19T12:57:40Z"
+pydantic-core = "2026-11-19T12:56:39Z"
+dnspython = "2026-11-03T23:56:54Z"
+opentelemetry-api = "2026-10-29T17:29:38Z"
+opentelemetry-sdk = "2026-10-29T17:29:55Z"
+opentelemetry-semantic-conventions = "2026-10-29T17:29:56Z"
 
 # Base release aligned with NVIDIA NGC 26.11.
-vllm = "2026-11-02T10:13:42.650733Z"
-flashinfer-python = "2026-10-23T18:49:35.840463Z"
-humming-kernels = "2026-10-30T19:30:57.267648Z"
+vllm = "2026-11-02T10:13:43Z"
+flashinfer-python = "2026-10-23T18:49:36Z"
+humming-kernels = "2026-10-30T19:30:58Z"

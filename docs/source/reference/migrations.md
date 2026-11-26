@@ -28,6 +28,16 @@ in effect. Pip-mode environments now pin upstream vLLM 0.33.0 with Torch
 NVIDIA container.
 Refer to {doc}`/components/ai-services` for image metadata and configuration.
 
+For Cosmos3 on SM12, the automatic Triton selection applies only when
+`vllm_image` exactly matches the default tag. A pinned 26.10 image or a tag
+with an appended digest does not receive that selection. To retain both
+Triton settings for those image references, set:
+
+```yaml
+attention_backend: TRITON_ATTN
+mm_encoder_attn_backend: TRITON_ATTN
+```
+
 ### LLM request defaults
 
 `OpenAICompatLLM` now applies `adapter.default_extras` only when a call omits

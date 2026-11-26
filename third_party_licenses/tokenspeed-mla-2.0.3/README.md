@@ -13,3 +13,4 @@ Unmodified license and attribution resources. Artifact SHA-256 verified against 
 | Copied file | SHA-256 |
 |---|---|
 | [licenses/LICENSE](licenses/LICENSE) | `ef0cb6e89d6bdfb8f9b3f30b707a6c9ad6518b02e6823d1222fcfdb645ca48ff` |
+| [licenses/THIRDPARTYNOTICES](licenses/THIRDPARTYNOTICES) | `c1c51f9e27b933d2ce808bf83f374ef971bf6e7ff59b2b271f3561243389d44e` |

@@ -34,16 +34,16 @@ conflicts = [[
 exclude-newer = "2026-10-22T21:39:43Z"
 
 [options.exclude-newer-package]
-opentelemetry-sdk = "2026-10-29T17:29:54.68575Z"
-vllm = "2026-11-02T10:13:42.650733Z"
-opentelemetry-api = "2026-10-29T17:29:37.888137Z"
-dnspython = "2026-11-03T23:56:53.60117Z"
+opentelemetry-sdk = "2026-10-29T17:29:55Z"
+vllm = "2026-11-02T10:13:43Z"
+opentelemetry-api = "2026-10-29T17:29:38Z"
+dnspython = "2026-11-03T23:56:54Z"
 pipecat-ai = "2026-10-24T01:24:20.438725Z"
-opentelemetry-semantic-conventions = "2026-10-29T17:29:55.682731Z"
-pydantic-core = "2026-11-19T12:56:38.067791Z"
-pydantic = "2026-11-19T12:57:39.767682Z"
-flashinfer-python = "2026-10-23T18:49:35.840463Z"
-humming-kernels = "2026-10-30T19:30:57.267648Z"
+opentelemetry-semantic-conventions = "2026-10-29T17:29:56Z"
+pydantic-core = "2026-11-19T12:56:39Z"
+pydantic = "2026-11-19T12:57:40Z"
+flashinfer-python = "2026-10-23T18:49:36Z"
+humming-kernels = "2026-10-30T19:30:58Z"
 
 [[package]]
 name = "absl-py"
@@ -624,7 +624,9 @@ dependencies = [
     { name = "accelerate" },
     { name = "fastapi" },
     { name = "huggingface-hub" },
+    { name = "opentelemetry-api" },
     { name = "pillow" },
+    { name = "pydantic" },
     { name = "pyyaml" },
     { name = "safetensors" },
     { name = "torch" },
@@ -640,7 +642,9 @@ requires-dist = [
     { name = "accelerate", specifier = ">=1.2.0" },
     { name = "fastapi", specifier = ">=0.115.0" },
     { name = "huggingface-hub", specifier = ">=0.32.0" },
+    { name = "opentelemetry-api", specifier = ">=1.45.2" },
     { name = "pillow", specifier = ">=10.0.0" },
+    { name = "pydantic", specifier = ">=2.14.4" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "safetensors", specifier = ">=0.4.5" },
     { name = "torch", specifier = ">=2.11.0" },
@@ -1328,6 +1332,8 @@ dependencies = [
     { name = "multidict" },
     { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
+    { name = "opentelemetry-api" },
+    { name = "pydantic" },
     { name = "pyjwt" },
     { name = "pynvvideocodec", version = "2.2.3", source = { registry = "https://pypi.org/simple" } },
     { name = "pyyaml" },
@@ -1348,6 +1354,8 @@ requires-dist = [
     { name = "livekit-api", specifier = ">=1.0" },
     { name = "multidict", specifier = ">=6.9.1" },
     { name = "numpy", specifier = ">=1.24" },
+    { name = "opentelemetry-api", specifier = ">=1.45.2" },
+    { name = "pydantic", specifier = ">=2.14.4" },
     { name = "pyjwt", specifier = ">=2.15.1" },
     { name = "pynvvideocodec", specifier = ">=2.2" },
     { name = "pyyaml", specifier = ">=6.0" },
@@ -1458,13 +1466,17 @@ name = "embedding-server"
 version = "0.1.0"
 source = { editable = "../services/embedding-server" }
 dependencies = [
+    { name = "dnspython" },
     { name = "hf-xet" },
     { name = "huggingface-hub" },
     { name = "mcp" },
     { name = "multidict" },
+    { name = "opentelemetry-api" },
+    { name = "opentelemetry-sdk" },
     { name = "pillow" },
     { name = "protobuf", version = "7.36.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine == 's390x' and extra == 'extra-25-xr-ai-dependency-manifest-vllm') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
     { name = "protobuf", version = "7.36.2", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 's390x' and extra == 'extra-25-xr-ai-dependency-manifest-vllm') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
+    { name = "pydantic" },
     { name = "pyjwt" },
     { name = "pyyaml" },
     { name = "transformers" },
@@ -1476,13 +1488,17 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "dnspython", specifier = ">=2.9.2" },
     { name = "hf-xet", specifier = ">=1.1.2,<2.0.0" },
     { name = "huggingface-hub", specifier = ">=0.32.0" },
     { name = "mcp", specifier = ">=2.2.0" },
     { name = "multidict", specifier = ">=6.9.1" },
+    { name = "opentelemetry-api", specifier = ">=1.45.2" },
+    { name = "opentelemetry-sdk", specifier = ">=1.45.2" },
     { name = "pillow", specifier = ">=13.0.0" },
     { name = "protobuf", marker = "platform_machine != 's390x'", specifier = ">=7.36.2" },
     { name = "protobuf", marker = "platform_machine == 's390x'", specifier = "==7.36.1" },
+    { name = "pydantic", specifier = ">=2.14.4" },
     { name = "pyjwt", specifier = ">=2.15.1" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "transformers", specifier = ">=5.17.0" },
@@ -2971,6 +2987,9 @@ dependencies = [
     { name = "nemo-toolkit", extra = ["tts"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
     { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
+    { name = "opentelemetry-api" },
+    { name = "opentelemetry-sdk" },
+    { name = "pydantic" },
     { name = "pytorch-lightning" },
     { name = "pyyaml" },
     { name = "soundfile" },
@@ -2990,6 +3009,9 @@ requires-dist = [
     { name = "multidict", specifier = ">=6.9.1" },
     { name = "nemo-toolkit", extras = ["tts"], specifier = ">=2.5" },
     { name = "numpy", specifier = ">=1.24" },
+    { name = "opentelemetry-api", specifier = ">=1.45.2" },
+    { name = "opentelemetry-sdk", specifier = ">=1.45.2" },
+    { name = "pydantic", specifier = ">=2.14.4" },
     { name = "pytorch-lightning", specifier = ">=2.6.6" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "soundfile", specifier = ">=0.12" },
@@ -3615,13 +3637,17 @@ name = "nemotron-omni-llm-server"
 version = "0.1.0"
 source = { editable = "../services/nemotron-omni-llm" }
 dependencies = [
+    { name = "dnspython" },
     { name = "hf-xet" },
     { name = "huggingface-hub" },
     { name = "mcp" },
     { name = "multidict" },
+    { name = "opentelemetry-api" },
+    { name = "opentelemetry-sdk" },
     { name = "pillow" },
     { name = "protobuf", version = "7.36.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine == 's390x' and extra == 'extra-25-xr-ai-dependency-manifest-vllm') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
     { name = "protobuf", version = "7.36.2", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 's390x' and extra == 'extra-25-xr-ai-dependency-manifest-vllm') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
+    { name = "pydantic" },
     { name = "pyjwt" },
     { name = "pyyaml" },
     { name = "transformers" },
@@ -3633,13 +3659,17 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "dnspython", specifier = ">=2.9.2" },
     { name = "hf-xet", specifier = ">=1.1.2,<2.0.0" },
     { name = "huggingface-hub", specifier = ">=0.32.0" },
     { name = "mcp", specifier = ">=2.2.0" },
     { name = "multidict", specifier = ">=6.9.1" },
+    { name = "opentelemetry-api", specifier = ">=1.45.2" },
+    { name = "opentelemetry-sdk", specifier = ">=1.45.2" },
     { name = "pillow", specifier = ">=13.0.0" },
     { name = "protobuf", marker = "platform_machine != 's390x'", specifier = ">=7.36.2" },
     { name = "protobuf", marker = "platform_machine == 's390x'", specifier = "==7.36.1" },
+    { name = "pydantic", specifier = ">=2.14.4" },
     { name = "pyjwt", specifier = ">=2.15.1" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "transformers", specifier = ">=5.17.0" },
@@ -3654,13 +3684,17 @@ name = "nemotron3-nano-llm-server"
 version = "0.1.0"
 source = { editable = "../services/nemotron3-nano-llm" }
 dependencies = [
+    { name = "dnspython" },
     { name = "hf-xet" },
     { name = "huggingface-hub" },
     { name = "mcp" },
     { name = "multidict" },
+    { name = "opentelemetry-api" },
+    { name = "opentelemetry-sdk" },
     { name = "pillow" },
     { name = "protobuf", version = "7.36.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine == 's390x' and extra == 'extra-25-xr-ai-dependency-manifest-vllm') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
     { name = "protobuf", version = "7.36.2", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 's390x' and extra == 'extra-25-xr-ai-dependency-manifest-vllm') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
+    { name = "pydantic" },
     { name = "pyjwt" },
     { name = "pyyaml" },
     { name = "transformers" },
@@ -3672,13 +3706,17 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "dnspython", specifier = ">=2.9.2" },
     { name = "hf-xet", specifier = ">=1.1.2,<2.0.0" },
     { name = "huggingface-hub", specifier = ">=0.32.0" },
     { name = "mcp", specifier = ">=2.2.0" },
     { name = "multidict", specifier = ">=6.9.1" },
+    { name = "opentelemetry-api", specifier = ">=1.45.2" },
+    { name = "opentelemetry-sdk", specifier = ">=1.45.2" },
     { name = "pillow", specifier = ">=13.0.0" },
     { name = "protobuf", marker = "platform_machine != 's390x'", specifier = ">=7.36.2" },
     { name = "protobuf", marker = "platform_machine == 's390x'", specifier = "==7.36.1" },
+    { name = "pydantic", specifier = ">=2.14.4" },
     { name = "pyjwt", specifier = ">=2.15.1" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "transformers", specifier = ">=5.17.0" },
@@ -5081,7 +5119,9 @@ dependencies = [
     { name = "fastapi" },
     { name = "hf-xet" },
     { name = "huggingface-hub" },
+    { name = "opentelemetry-api" },
     { name = "pocket-tts" },
+    { name = "pydantic" },
     { name = "pyyaml" },
     { name = "torch" },
     { name = "urllib3" },
@@ -5095,7 +5135,9 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.111" },
     { name = "hf-xet", specifier = ">=1.1.2,<2.0.0" },
     { name = "huggingface-hub", specifier = ">=0.32.0" },
+    { name = "opentelemetry-api", specifier = ">=1.45.2" },
     { name = "pocket-tts", specifier = "==3.1.0" },
+    { name = "pydantic", specifier = ">=2.14.4" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "torch", specifier = ">=2.5.0" },
     { name = "urllib3", specifier = ">=2.8.0" },
@@ -6801,6 +6843,9 @@ dependencies = [
     { name = "lightning" },
     { name = "multidict" },
     { name = "nemo-toolkit", extra = ["asr"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
+    { name = "opentelemetry-api" },
+    { name = "opentelemetry-sdk" },
+    { name = "pydantic" },
     { name = "python-multipart" },
     { name = "pytorch-lightning" },
     { name = "pyyaml" },
@@ -6819,6 +6864,9 @@ requires-dist = [
     { name = "lightning", git = "https://github.com/Lightning-AI/pytorch-lightning?tag=2.4.0" },
     { name = "multidict", specifier = ">=6.9.1" },
     { name = "nemo-toolkit", extras = ["asr"], specifier = ">=2.5" },
+    { name = "opentelemetry-api", specifier = ">=1.45.2" },
+    { name = "opentelemetry-sdk", specifier = ">=1.45.2" },
+    { name = "pydantic", specifier = ">=2.14.4" },
     { name = "python-multipart", specifier = ">=0.0.9" },
     { name = "pytorch-lightning", specifier = ">=2.6.6" },
     { name = "pyyaml", specifier = ">=6.0" },
@@ -7588,6 +7636,7 @@ dependencies = [
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/f7/25/aa5684e9c59d6fc75f78926b7f15e8d9adc7de2d9e6e7575b80776ad8169/vllm-0.33.0.tar.gz", hash = "sha256:f4c33c2503d52bb411146afa9618a4f48bed68912f617e6803ac8d76e4c74112", size = 47101396, upload-time = "2026-11-02T10:12:56.222Z" }
 wheels = [
+    { url = "https://files.pythonhosted.org/packages/eb/e0/bfb969e9a03c55402f08684c2691e1e2a4307ebc9c90aae0cebadb43d9b5/vllm-0.33.0-cp38-abi3-manylinux_2_28_aarch64.whl", hash = "sha256:e9e404f52c8494b69bd83fe99fe7ecfa9f6b89fbd156d2a9639c24ea41d6d606", size = 333472621, upload-time = "2026-11-02T10:13:42.65Z" },
     { url = "https://files.pythonhosted.org/packages/8b/a8/92e278093df40fde4c4bfd6572704bb8f398d6a2280d8c82cb5efaf12047/vllm-0.33.0-cp38-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:4b6bdec4ab269990bf70d45a3c1e94c3760a27064513760193b26d6f0da883aa", size = 336361138, upload-time = "2026-11-02T10:13:18.631Z" },
 ]
 
@@ -7596,13 +7645,17 @@ name = "vlm-server"
 version = "0.1.0"
 source = { editable = "../services/vlm-server" }
 dependencies = [
+    { name = "dnspython" },
     { name = "hf-xet" },
     { name = "huggingface-hub" },
     { name = "mcp" },
     { name = "multidict" },
+    { name = "opentelemetry-api" },
+    { name = "opentelemetry-sdk" },
     { name = "pillow" },
     { name = "protobuf", version = "7.36.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine == 's390x' and extra == 'extra-25-xr-ai-dependency-manifest-vllm') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
     { name = "protobuf", version = "7.36.2", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 's390x' and extra == 'extra-25-xr-ai-dependency-manifest-vllm') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
+    { name = "pydantic" },
     { name = "pyjwt" },
     { name = "pyyaml" },
     { name = "transformers" },
@@ -7614,13 +7667,17 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "dnspython", specifier = ">=2.9.2" },
     { name = "hf-xet", specifier = ">=1.1.2,<2.0.0" },
     { name = "huggingface-hub", specifier = ">=0.32.0" },
     { name = "mcp", specifier = ">=2.2.0" },
     { name = "multidict", specifier = ">=6.9.1" },
+    { name = "opentelemetry-api", specifier = ">=1.45.2" },
+    { name = "opentelemetry-sdk", specifier = ">=1.45.2" },
     { name = "pillow", specifier = ">=13.0.0" },
     { name = "protobuf", marker = "platform_machine != 's390x'", specifier = ">=7.36.2" },
     { name = "protobuf", marker = "platform_machine == 's390x'", specifier = "==7.36.1" },
+    { name = "pydantic", specifier = ">=2.14.4" },
     { name = "pyjwt", specifier = ">=2.15.1" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "transformers", specifier = ">=5.17.0" },
@@ -8518,6 +8575,7 @@ version = "0.1.0"
 source = { editable = "../services/openxr-service" }
 dependencies = [
     { name = "isaacteleop" },
+    { name = "pydantic" },
     { name = "pyyaml" },
     { name = "xr-ai-launcher" },
     { name = "xr-ai-logging" },
@@ -8527,6 +8585,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "isaacteleop", specifier = ">=1.3.131" },
+    { name = "pydantic", specifier = ">=2.14.4" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "xr-ai-launcher", editable = "../utils/xr-ai-launcher" },
     { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
@@ -8540,6 +8599,7 @@ source = { editable = "../services/rag-service" }
 dependencies = [
     { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
+    { name = "pydantic" },
     { name = "pyyaml" },
     { name = "xr-ai-logging" },
     { name = "xr-ai-models" },
@@ -8549,6 +8609,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "numpy", specifier = ">=1.24" },
+    { name = "pydantic", specifier = ">=2.14.4" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
     { name = "xr-ai-models", editable = "../agent-sdk/xr-ai-models" },
@@ -8668,6 +8729,7 @@ dependencies = [
     { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
     { name = "pillow" },
+    { name = "pydantic" },
     { name = "pynvvideocodec", version = "2.2.3", source = { registry = "https://pypi.org/simple" } },
     { name = "pyyaml" },
     { name = "xr-ai-logging" },
@@ -8678,6 +8740,7 @@ dependencies = [
 requires-dist = [
     { name = "numpy", specifier = ">=1.24" },
     { name = "pillow", specifier = ">=13.0.0" },
+    { name = "pydantic", specifier = ">=2.14.4" },
     { name = "pynvvideocodec", specifier = ">=2.2" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
