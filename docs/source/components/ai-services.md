@@ -644,9 +644,10 @@ vllm_image:   nvcr.io/nvidia/vllm:26.11-py3
 ```
 
 `vllm_image:` defaults to `nvcr.io/nvidia/vllm:26.11-py3` for all wrappers.
-The independently qualified pip environments remain pinned to vLLM 0.31.0;
-this container update does not upgrade pip-mode installations. Use Docker mode
-for the NVIDIA runtime.
+The four pip environments pin upstream vLLM 0.33.0, matching the base release
+in the NVIDIA container. The pip release requires Torch 2.14.0; NVIDIA ships
+its own Torch and CUDA builds. Validate each backend on its target GPU and
+model workload. Use Docker mode for the NVIDIA runtime.
 
 The [NVIDIA 26.11 release](https://docs.nvidia.com/deeplearning/frameworks/vllm-release-notes/rel-26-11.html)
 uses CUDA 13.5 and reports vLLM `0.33.0+121396e7` on Linux x86_64 and aarch64.

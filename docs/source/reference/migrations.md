@@ -23,7 +23,9 @@ Docker-mode model services now default to `nvcr.io/nvidia/vllm:26.11-py3`
 (CUDA 13.5, NVIDIA vLLM 0.33.0). Stop the running model stack before updating
 and restart it to use the new image. Verify host driver compatibility and
 qualify your GPU and model workload. Explicit `vllm_image` overrides remain
-in effect. Pip-mode environments retain their existing qualified versions.
+in effect. Pip-mode environments now pin upstream vLLM 0.33.0 with Torch
+2.14.0; refresh their environments and qualify them separately from the
+NVIDIA container.
 Refer to {doc}`/components/ai-services` for image metadata and configuration.
 
 ### LLM request defaults

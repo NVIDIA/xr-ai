@@ -31,6 +31,7 @@ _LICENSE_SENSITIVE_PACKAGES = frozenset(
     {
         "certifi",
         "num2words",
+        "orjson",
         "opencv-python-headless",
         "pycountry",
         "pyzmq",
@@ -42,6 +43,13 @@ _LICENSE_SENSITIVE_PACKAGES = frozenset(
 )
 
 _LICENSE_RECORDS = {
+    "orjson": (
+        "3.13.0",
+        (
+            ("orjson-3.13.0/licenses/LICENSE-MPL-2.0", "Mozilla Public License"),
+            ("orjson-3.13.0/licenses/LICENSE-MIT", "Permission is hereby granted"),
+        ),
+    ),
     "certifi": (
         "2026.10.19",
         (("certifi-2026.10.19/LICENSE", "Mozilla Public License"),),

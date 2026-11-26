@@ -19,3 +19,8 @@ dnspython = "2026-11-03T23:56:53.601170Z"
 opentelemetry-api = "2026-10-29T17:29:37.888137Z"
 opentelemetry-sdk = "2026-10-29T17:29:54.685750Z"
 opentelemetry-semantic-conventions = "2026-10-29T17:29:55.682731Z"
+
+# Base release aligned with NVIDIA NGC 26.11.
+vllm = "2026-11-02T10:13:42.650733Z"
+flashinfer-python = "2026-10-23T18:49:35.840463Z"
+humming-kernels = "2026-10-30T19:30:57.267648Z"
