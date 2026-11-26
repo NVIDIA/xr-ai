@@ -22,13 +22,9 @@ wheel license. The matching [NCCL source tag](https://github.com/NVIDIA/nccl/blo
 also contains Apache-2.0 and BSD terms; its unmodified license is preserved
 as `licenses/LICENSE.upstream.txt`. These are permissive license terms.
 
-Both Linux wheel METADATA resources contain the identifier
-`LicenseRef-NVIDIA-Proprietary`. This identifier is recorded as packaging
-metadata, not adopted as XR AI's license classification. The prior 2.29.7
-x86_64 wheel contains the same identifier and byte-identical bundled license
-(SHA-256 `0f0174a6b4e0b33ac26375bf729533075b32f4c51a5b6802a3d742d7dcdc9a76`).
-The discrepancy predates this upgrade; a publisher metadata error has not
-been independently confirmed.
+The wheel metadata discrepancy predates this upgrade: 2.29.7 already used
+`LicenseRef-NVIDIA-Proprietary` alongside the same BSD-3-Clause bundled
+license text. The original metadata and license resources are preserved below.
 
 | Architecture | Artifact | Published artifact SHA-256 | METADATA SHA-256 |
 |---|---|---|---|
