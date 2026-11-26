@@ -136,7 +136,7 @@ release. Its `libs-base`, `libs-core`, `libs-cu12`, and `libs-cu13` packages
 resolve to 4.8.0. Their upstream license texts and package provenance are
 preserved in their corresponding versioned directories. The BSD license of
 CUTLASS C++ does not replace the DSL EULA. cuDNN is governed by its NVIDIA SDK
-license, independently of the permissive terms of PyTorch and NCCL.
+license, recorded separately from the PyTorch and NCCL license resources.
 
 [vLLM 0.33.0's requirements](https://github.com/vllm-project/vllm/blob/v0.33.0/requirements/common.txt)
 pin protobuf to 7.36.1 only when `platform_machine == "s390x"`. The service
