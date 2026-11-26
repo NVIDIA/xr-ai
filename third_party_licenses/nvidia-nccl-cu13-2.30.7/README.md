@@ -14,13 +14,21 @@ Unmodified license and attribution resources. License resources read from the pu
 |---|---|
 | [licenses/License.txt](licenses/License.txt) | `0f0174a6b4e0b33ac26375bf729533075b32f4c51a5b6802a3d742d7dcdc9a76` |
 
-## Published license declarations
+## License classification and metadata provenance
 
-Both Linux wheel METADATA resources declare `License-Expression:
-LicenseRef-NVIDIA-Proprietary`. Their bundled `licenses/License.txt` contains
-BSD-3-Clause text and a reference to NVIDIA NVTX license details. These
-published declarations differ; this record preserves both without resolving
-which terms the publisher intended to govern the binary wheels.
+The wheel's bundled `licenses/License.txt` supplies BSD-3-Clause terms and
+references NVIDIA NVTX license details. XR AI records BSD-3-Clause for that
+wheel license. The matching [NCCL source tag](https://github.com/NVIDIA/nccl/blob/73cf112295c33aee2b895f329f592f2a9b4b0f97/LICENSE.txt)
+also contains Apache-2.0 and BSD terms; its unmodified license is preserved
+as `licenses/LICENSE.upstream.txt`. These are permissive license terms.
+
+Both Linux wheel METADATA resources contain the identifier
+`LicenseRef-NVIDIA-Proprietary`. This identifier is recorded as packaging
+metadata, not adopted as XR AI's license classification. The prior 2.29.7
+x86_64 wheel contains the same identifier and byte-identical bundled license
+(SHA-256 `0f0174a6b4e0b33ac26375bf729533075b32f4c51a5b6802a3d742d7dcdc9a76`).
+The discrepancy predates this upgrade; a publisher metadata error has not
+been independently confirmed.
 
 | Architecture | Artifact | Published artifact SHA-256 | METADATA SHA-256 |
 |---|---|---|---|
@@ -28,3 +36,5 @@ which terms the publisher intended to govern the binary wheels.
 | aarch64 | [nvidia_nccl_cu13-2.30.7-py3-none-manylinux_2_18_aarch64.whl](https://files.pythonhosted.org/packages/d1/21/a73174c6157101bdf1ffc22b517f76ff0082613989dd9bc8f43e8034caac/nvidia_nccl_cu13-2.30.7-py3-none-manylinux_2_18_aarch64.whl) | `ca786ffa5a647c75d4d1f5cc72a6c4f537947e2ba8823d7c8aaf768e7a7b9f77` | [14be4a2df0684114f9c7fb568ae42a4098268a0d35c9747c3a1c8c6f248305a6](metadata/linux-aarch64.METADATA) |
 
 Both bundled license resources have SHA-256 `0f0174a6b4e0b33ac26375bf729533075b32f4c51a5b6802a3d742d7dcdc9a76`.
+
+Source-tag license SHA-256: `c1f53beabe4dbf05bd87c00f7ca6084c0cb541c3f7bf8edab7913f266018b7be` ([preserved text](licenses/LICENSE.upstream.txt)).

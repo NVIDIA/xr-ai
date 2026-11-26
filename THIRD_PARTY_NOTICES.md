@@ -122,7 +122,7 @@ the whole artifact or only its license resources were inspected.
 | `triton-windows` | 3.8.0.post29 | MIT; [upstream license](third_party_licenses/triton-windows-3.8.0.post29/) |
 | `orjson` | 3.13.0 | MPL-2.0 AND MIT (elected); [license texts](third_party_licenses/orjson-3.13.0/) |
 | `nvidia-cudnn-cu13` | 9.24.0.43 | NVIDIA SDK license; [upstream terms](third_party_licenses/nvidia-cudnn-cu13-9.24.0.43/) |
-| `nvidia-nccl-cu13` | 2.30.7 | Wheel metadata: `LicenseRef-NVIDIA-Proprietary`; bundled license: BSD-3-Clause with an NVTX reference; [both declarations](third_party_licenses/nvidia-nccl-cu13-2.30.7/) |
+| `nvidia-nccl-cu13` | 2.30.7 | BSD-3-Clause for the bundled wheel license; Apache-2.0 and BSD-3-Clause in upstream source; [license texts and provenance](third_party_licenses/nvidia-nccl-cu13-2.30.7/) |
 | `oss-harmony` | 0.0.11 | Apache-2.0; [upstream license](third_party_licenses/oss-harmony-0.0.11/) |
 | `nccl-extensions` | 0.1.0 | Apache-2.0; [upstream license](third_party_licenses/nccl-extensions-0.1.0/) |
 | `instanttensor` | 0.2.2 | Apache-2.0; [upstream license](third_party_licenses/instanttensor-0.2.2/) |
@@ -143,11 +143,11 @@ pin protobuf to 7.36.1 only when `platform_machine == "s390x"`. The service
 environments require 7.36.2 elsewhere; the aggregate inventory retains
 6.33.5 for a separate dependency branch.
 
-NCCL 2.30.7's Linux x86_64 and aarch64 wheel metadata declares
-`LicenseRef-NVIDIA-Proprietary`, while each bundled `License.txt` contains
-BSD-3-Clause text and an NVTX reference. The versioned provenance directory
-preserves both METADATA resources and their published artifact hashes. These
-conflicting declarations have not been reconciled.
+NCCL's bundled wheel license supplies BSD-3-Clause terms and an NVTX
+reference; the matching source tag includes Apache-2.0 and BSD-3-Clause
+terms. XR AI records these permissive license terms. The versioned provenance
+directory separately records the wheel metadata discrepancy, which is also
+present in the previous 2.29.7 wheel.
 
 ### Speaker enrollment runtime and models
 
@@ -485,6 +485,7 @@ refer to the component disclosures above for applicable license elections.
 | `nvidia-cutlass-dsl-libs-cu12-4.8.0` | [`LICENSE`](third_party_licenses/nvidia-cutlass-dsl-libs-cu12-4.8.0/licenses/LICENSE) |
 | `nvidia-cutlass-dsl-libs-cu13-4.8.0` | [`LICENSE`](third_party_licenses/nvidia-cutlass-dsl-libs-cu13-4.8.0/licenses/LICENSE) |
 | `nvidia-nccl-cu13-2.30.7` | [`License.txt`](third_party_licenses/nvidia-nccl-cu13-2.30.7/licenses/License.txt) |
+| `nvidia-nccl-cu13-2.30.7` | [`LICENSE.upstream.txt`](third_party_licenses/nvidia-nccl-cu13-2.30.7/licenses/LICENSE.upstream.txt) |
 | `orjson-3.13.0` | [`LICENSE-APACHE`](third_party_licenses/orjson-3.13.0/licenses/LICENSE-APACHE) |
 | `orjson-3.13.0` | [`LICENSE-MPL-2.0`](third_party_licenses/orjson-3.13.0/licenses/LICENSE-MPL-2.0) |
 | `orjson-3.13.0` | [`LICENSE-MIT`](third_party_licenses/orjson-3.13.0/licenses/LICENSE-MIT) |
